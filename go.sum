@@ -690,8 +690,8 @@ github.com/sorairolake/lzip-go v0.3.5 h1:ms5Xri9o1JBIWvOFAorYtUNik6HI3HgBTkISiqu
 github.com/sorairolake/lzip-go v0.3.5/go.mod h1:N0KYq5iWrMXI0ZEXKXaS9hCyOjZUQdBDEIbXfoUwbdk=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
-github.com/speakeasy-api/agenthooks v0.5.0 h1:wKN2cqv0Vi/Nzn/wz3+Xv7IETF+K2b0tPLzws8be1Jw=
-github.com/speakeasy-api/agenthooks v0.5.0/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
+github.com/speakeasy-api/agenthooks v0.6.0 h1:277cBJqcPO4ESBGi7X5M0VroY7/mvxJKkybu0hgyy+c=
+github.com/speakeasy-api/agenthooks v0.6.0/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
 github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.0 h1:y6/KsyZErJegJJR4P9l1PFXU+jyBWKKhnLmzl96ikgc=
@@ -731,6 +731,8 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/stripe/stripe-go/v85 v85.0.1 h1:vlIo5VHrR9GkYneH5D9YGOPwNDRD6LW/THhtx9zNs6M=
+github.com/stripe/stripe-go/v85 v85.0.1/go.mod h1:5P+HGFenpWgak27T5Is6JMsmDfUC1yJnjhhmquz7kXw=
 github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 github.com/superfly/fly-go v0.3.1 h1:XWrxqQOpZhWFP0gpNgKFec1iXxOAwuW7dYWJW+hh8M8=

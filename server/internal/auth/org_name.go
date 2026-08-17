@@ -2,14 +2,10 @@ package auth
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math/big"
-	"regexp"
-	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var orgNameAdjectives = []string{
@@ -77,36 +73,4 @@ func generateLegibleOrgName() string {
 	adj := orgNameAdjectives[adjIdx.Int64()]
 	noun := orgNameNouns[nounIdx.Int64()]
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
-}
-
-// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and
-// underscores.
-//
-// A literal space, not `\s`: Go's `\s` is `[\t\n\f\r ]`, and this runs on an
-// unauthenticated endpoint, so the client's whitespace normalization is not a
-// control. A name carrying a newline would otherwise reach the org record, the
-// identity provider, and every log line that prints an org name.
-var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 _-]+$`)
-
-// maxOrgNameLength bounds the org name. validOrgNameRegex constrains the
-// character set but not the length, and the signup path accepts this value on
-// an unauthenticated endpoint that writes it to Redis.
-const maxOrgNameLength = 100
-
-// validateOrgName is the single org-name rule, shared by the authenticated
-// register endpoint and the unauthenticated signup parameter on login.
-func validateOrgName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
-	}
-
-	if len(name) > maxOrgNameLength {
-		return oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
-	}
-
-	if !validOrgNameRegex.MatchString(name) {
-		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
-	}
-
-	return nil
 }

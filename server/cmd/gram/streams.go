@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -25,12 +25,14 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -104,6 +106,28 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
+		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -201,7 +225,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
-	flags = append(flags, riskFlags()...)
+	flags = append(flags, riskIngestFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -288,7 +312,12 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -297,7 +326,7 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -322,26 +351,12 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse risk_findings writer (sole write path). Only connect
-			// when the kill switch is off so a disabled deployment does not
-			// require ClickHouse reachability.
-			//
-			// A ClickHouse connect/ping failure must NOT abort streams: taking
-			// the process down would also kill every other receiver. Degrade
-			// instead — log the failure and disable only the ClickHouse
-			// receiver.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
-			var chConn clickhouse.Conn
-			if enableCHRiskWrites {
-				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse risk_findings writer", attr.SlogError(err))
-					enableCHRiskWrites = false
-				} else {
-					shutdownFuncs = append(shutdownFuncs, shutdown)
-					chConn = conn
-				}
+			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create clickhouse client: %w", err)
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
@@ -434,6 +449,11 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
+
+				mustReceive(
+					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},
+					authz.NewChallengeCHWriter(logger, chConn),
+				)
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(

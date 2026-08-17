@@ -5,15 +5,17 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
+	"html/template"
 	"mime"
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +37,24 @@ const (
 	platformAccessTokenLifetime  = time.Hour
 	platformRefreshTokenLifetime = 24 * time.Hour
 )
+
+//go:embed oauth_page.html
+var oauthPageHTML string
+
+var oauthPageTemplate = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
+
+type oauthPageData struct {
+	Title            string
+	Kind             string
+	ClientName       string
+	OrganizationName string
+	Organizations    []OrganizationOption
+	RedirectURI      string
+	State            string
+	CSRFToken        string
+	ScriptNonce      string
+	AutoClose        bool
+}
 
 // BrowserIdentity resolves a real Gram user from the product identity provider.
 type BrowserIdentity interface {
@@ -141,6 +161,7 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
 	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
 	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
 }
@@ -333,13 +354,15 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprint(w, `<!doctype html><title>Select Gram organization</title><form method="post"><p><strong>`+templateEscape(client.Name)+`</strong> requests Platform MCP access. After approval, Gram redirects to <code>`+templateEscape(challenge.RedirectURI)+`</code>.</p><p>Select the organization it will administer.</p><input type="hidden" name="state" value="`+templateEscape(challenge.ID)+`"><input type="hidden" name="csrf_token" value="`+templateEscape(challenge.CSRFToken)+`"><select name="organization_id">`)
-	for _, organization := range organizations {
-		_, _ = fmt.Fprint(w, `<option value="`+templateEscape(organization.ID)+`">`+templateEscape(organization.Name)+`</option>`)
-	}
-	_, _ = fmt.Fprint(w, `</select><button type="submit">Continue</button></form>`)
+	s.renderOAuthPage(w, oauthPageData{
+		Title:         "Choose an organization · Speakeasy AICP Platform MCP",
+		Kind:          "organization",
+		ClientName:    client.Name,
+		Organizations: organizations,
+		RedirectURI:   challenge.RedirectURI,
+		State:         challenge.ID,
+		CSRFToken:     challenge.CSRFToken,
+	})
 }
 
 func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Request) {
@@ -399,6 +422,19 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 	return OrganizationOption{}, ErrForbidden
 }
 
+// ProviderSetupCompleteHandler is the fixed server-owned landing page after a
+// reviewed remote-session provider callback persists its tokens. It carries no
+// provider identity, tokens, state, or handoff values.
+func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		s.renderOAuthPage(w, oauthPageData{
+			Title:     "Provider connected · Speakeasy AICP Platform MCP",
+			Kind:      "provider-complete",
+			AutoClose: true,
+		})
+	})
+}
+
 func (s *OAuthHTTP) ConnectHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -429,9 +465,15 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, `<!doctype html><title>Authorize Gram Platform MCP</title><form method="post"><p><strong>%s</strong> will be able to administer <strong>%s</strong>.</p><p>After approval, Gram redirects to <code>%s</code>.</p><input type="hidden" name="state" value="%s"><input type="hidden" name="csrf_token" value="%s"><button name="action" value="approve">Approve</button><button name="action" value="deny">Cancel</button></form>`, templateEscape(client.Name), templateEscape(organization.Name), templateEscape(challenge.RedirectURI), templateEscape(challenge.ID), templateEscape(challenge.CSRFToken))
+	s.renderOAuthPage(w, oauthPageData{
+		Title:            "Connect Platform MCP · Speakeasy AICP Platform MCP",
+		Kind:             "connect",
+		ClientName:       client.Name,
+		OrganizationName: organization.Name,
+		RedirectURI:      challenge.RedirectURI,
+		State:            challenge.ID,
+		CSRFToken:        challenge.CSRFToken,
+	})
 }
 
 func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
@@ -728,6 +770,12 @@ func (s *OAuthHTTP) Audience() string {
 	return s.audience
 }
 
+// ProviderSetupCompletionURL is the only callback landing page accepted for
+// Platform MCP provider authorization. It is server-owned and carries no state.
+func (s *OAuthHTTP) ProviderSetupCompletionURL() string {
+	return s.url("provider-setup-complete")
+}
+
 func (s *OAuthHTTP) ProtectedResourceURL() string {
 	return s.baseURL.JoinPath(".well-known", "oauth-protected-resource", "platform-mcp").String()
 }
@@ -768,6 +816,34 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(status)
 	_, _ = w.Write(encoded)
+}
+
+func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
+	scriptNonce, err := opaqueToken()
+	if err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	data.ScriptNonce = scriptNonce
+
+	var page strings.Builder
+	if err := oauthPageTemplate.Execute(&page, data); err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(page.String()))
+}
+
+func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
+	formAction := "'self'"
+	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
+		formAction += " " + uri.Scheme + "://" + uri.Host
+	}
+	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
@@ -818,5 +894,3 @@ func opaqueToken() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
-
-func templateEscape(value string) string { return html.EscapeString(value) }

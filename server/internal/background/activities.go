@@ -49,8 +49,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -65,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 type Publishers struct {
@@ -99,6 +102,7 @@ type Activities struct {
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
+	syncIdentityMap                 *activities.SyncIdentityMap
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
 	generateChatTitle               *activities.GenerateChatTitle
@@ -139,9 +143,6 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
-	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
-	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
-	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
@@ -155,6 +156,9 @@ type Activities struct {
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
+	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	trialEmails                     *trialemails.Service
 }
 
 func NewActivities(
@@ -201,12 +205,24 @@ func NewActivities(
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
+	trialEmailsService *trialemails.Service,
+	riskFingerprinter risk.Fingerprinter,
+	disableRiskRetroReconcile bool,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
 	var spendRulesCH *spendrulesch.Queries
 	if chConn != nil {
 		spendRulesCH = spendrulesch.New(chConn)
+	}
+
+	// The exclusion reconcile propagates flag changes into ClickHouse;
+	// workers without a ClickHouse connection — or with the kill switch set —
+	// get a nil repo and the activity degrades to its Postgres phases with a
+	// loud log.
+	var riskFindingsCH *riskchrepo.Queries
+	if chConn != nil && !disableRiskRetroReconcile {
+		riskFindingsCH = riskchrepo.New(chConn)
 	}
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
@@ -240,6 +256,13 @@ func NewActivities(
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
+	// Directory changes tighten identity-map staleness via an immediate sync
+	// trigger; workers without a Temporal env fall back to the schedule alone.
+	var identityMapRefresh activities.IdentityMapRefreshSignaler
+	if temporalEnv != nil {
+		identityMapRefresh = NewIdentityMapRefreshSignaler(temporalEnv, logger)
+	}
+
 	// The chat analysis judge roster. Adding a new session analysis is
 	// registering its judge here; enabling it per organization is a
 	// chat_analysis_settings row.
@@ -249,6 +272,19 @@ func NewActivities(
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
+	}
+
+	// The scheduled refresh shares the remotesessions single-flight primitive,
+	// which needs the Redis lock cache; workers wired without one (e.g.
+	// deployment-processing test workers) get a nil activity and the wrapper
+	// fails loudly if the sweep is ever scheduled there.
+	var remoteSessionRefresh *activities.RemoteSessionRefresh
+	if cacheAdapter != nil {
+		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
+			logger,
+			db,
+			remotesessions.NewRefreshService(logger, db, encryption, guardianPolicy, cacheAdapter),
+		)
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
@@ -263,7 +299,7 @@ func NewActivities(
 	return &Activities{
 		db:                              db,
 		temporalEnv:                     temporalEnv,
-		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
+		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
@@ -275,6 +311,7 @@ func NewActivities(
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
+		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -302,7 +339,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
+		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage),
 		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
@@ -315,10 +352,7 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
-		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
-		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
@@ -327,6 +361,7 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger, trialEmailsService),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -340,6 +375,8 @@ func NewActivities(
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		remoteSessionRefresh:    remoteSessionRefresh,
+		trialEmails:             trialEmailsService,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -352,16 +389,30 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
-	return a.listWorkOSOrganizations.Do(ctx)
-}
+func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialEmails == nil {
+		return fmt.Errorf("trial email service is not configured")
+	}
 
-func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
-	return a.backfillWorkOSOrganization.Do(ctx, params)
-}
-
-func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
-	return a.backfillWorkOSGlobalRoles.Do(ctx)
+	switch input.Kind {
+	case TrialStartedEmailKind:
+		if err := a.trialEmails.TrialStarted(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial started: %w", err)
+		}
+		return nil
+	case AdminAddedEmailKind:
+		if err := a.trialEmails.AdminAdded(ctx, input.OrganizationID, input.UserID); err != nil {
+			return fmt.Errorf("admin added: %w", err)
+		}
+		return nil
+	case TrialInactiveEmailKind:
+		if err := a.trialEmails.TrialInactive(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial inactive: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported trial lifecycle email kind %q", input.Kind)
+	}
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
@@ -535,6 +586,10 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 
 func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
 	return a.correlateClaudePrompts.Do(ctx, input)
+}
+
+func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {
+	return a.syncIdentityMap.Do(ctx)
 }
 
 func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activities.PromoteStagedTelemetryArgs) (*activities.PromoteStagedTelemetryResult, error) {
@@ -779,6 +834,46 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
 	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
 		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
+	ctx context.Context,
+	input activities.ClaimDueRemoteSessionRefreshCandidatesInput,
+) ([]activities.RemoteSessionRefreshCandidate, error) {
+	if a.remoteSessionRefresh == nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: refresh service not configured")
+	}
+	candidates, err := a.remoteSessionRefresh.ClaimDueCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.RefreshRemoteSessionInput) (activities.RefreshRemoteSessionResult, error) {
+	if a.remoteSessionRefresh == nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: refresh lock cache not configured")
+	}
+	result, err := a.remoteSessionRefresh.Do(ctx, input)
+	if err != nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
 	}
 	return nil
 }

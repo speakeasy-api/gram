@@ -1,7 +1,7 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
 import { Badge } from "@/components/ui/Badge";
 
-interface ResolvedToolAnnotations {
+export interface ResolvedToolAnnotations {
   readOnly: boolean;
   destructive: boolean;
   idempotent: boolean;
@@ -41,9 +41,10 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
  *
  * Renders the same text labels and variants as the Connect → Catalog → MCP tool
  * cards (`CatalogDetail`), so the permission labels read identically wherever a
- * tool is surfaced — including Distribute → MCP → Tools.
+ * tool is surfaced — including Distribute → MCP → Tools and the role grant
+ * picker's tool rows.
  */
-function AnnotationBadgeIcons({
+export function AnnotationBadgeIcons({
   readOnly,
   destructive,
   idempotent,

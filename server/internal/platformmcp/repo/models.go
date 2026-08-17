@@ -25,6 +25,32 @@ type PlatformMcpAuthorizationGrant struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type PlatformMcpCatalogRegistration struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	SourceKind             string
+	CatalogProvider        string
+	CatalogReference       string
+	Status                 string
+	RemoteMcpServerID      uuid.NullUUID
+	RemoteMcpServerOwned   bool
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerOwned bool
+	McpServerID            uuid.NullUUID
+	McpServerOwned         bool
+	McpEndpointID          uuid.NullUUID
+	McpEndpointOwned       bool
+	ConnectionID           uuid.NullUUID
+	ConnectionGeneration   uuid.NullUUID
+	UserID                 pgtype.Text
+	ActingSurface          pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type PlatformMcpConnection struct {
 	ID               uuid.UUID
 	OrganizationID   string
@@ -36,6 +62,24 @@ type PlatformMcpConnection struct {
 	RevokedAt        pgtype.Timestamptz
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+}
+
+type PlatformMcpDistribution struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	DefaultPluginID      uuid.UUID
+	PluginServerID       uuid.NullUUID
+	State                string
+	Version              int64
+	AttachmentWasCreated bool
+	PublicationState     string
+	PublicationUpdatedAt pgtype.Timestamptz
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type PlatformMcpOauthClient struct {
@@ -51,6 +95,60 @@ type PlatformMcpOauthClient struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type PlatformMcpOnboardingWorkflow struct {
+	ID                         uuid.UUID
+	OrganizationID             string
+	InitiatingSubjectUrn       string
+	SourceSurface              string
+	ClientFamily               string
+	AgentConfigurationCopiedAt pgtype.Timestamptz
+	ConnectionID               uuid.NullUUID
+	ConnectionGeneration       uuid.NullUUID
+	SelectedProjectID          uuid.NullUUID
+	SelectedRegistrationID     uuid.NullUUID
+	Status                     string
+	CorrelationID              uuid.UUID
+	ExpiresAt                  pgtype.Timestamptz
+	ClosedAt                   pgtype.Timestamptz
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+}
+
+type PlatformMcpOperationReceipt struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.NullUUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
+	Operation            string
+	IdempotencyKey       string
+	InputHash            string
+	Status               string
+	ResultCode           pgtype.Text
+	ExpiresAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpReadiness struct {
+	ID                               uuid.UUID
+	OrganizationID                   string
+	ProjectID                        uuid.UUID
+	RegistrationID                   uuid.UUID
+	ConnectionID                     uuid.UUID
+	ConnectionGeneration             uuid.UUID
+	ProviderAuthorizationFingerprint string
+	State                            string
+	EvidenceCode                     pgtype.Text
+	CheckedAt                        pgtype.Timestamptz
+	ExpiresAt                        pgtype.Timestamptz
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+}
+
 type PlatformMcpSession struct {
 	ID                   uuid.UUID
 	OrganizationID       string
@@ -64,6 +162,23 @@ type PlatformMcpSession struct {
 	RotatedAt            pgtype.Timestamptz
 	RevokedAt            pgtype.Timestamptz
 	ReplacedBySessionID  uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpSetupHandoff struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	ProviderKey          string
+	Intent               string
+	HandoffHash          string
+	ExpiresAt            pgtype.Timestamptz
+	RedeemedAt           pgtype.Timestamptz
+	InvalidatedAt        pgtype.Timestamptz
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }

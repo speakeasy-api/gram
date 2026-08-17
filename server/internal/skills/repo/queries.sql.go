@@ -1970,6 +1970,62 @@ func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetS
 	return i, err
 }
 
+const getSharedSkillByTokenForOrganization = `-- name: GetSharedSkillByTokenForOrganization :one
+SELECT
+  s.name,
+  s.display_name,
+  s.summary,
+  latest.content,
+  latest.created_at AS version_created_at
+FROM skill_share_links l
+JOIN projects p
+  ON p.id = l.project_id
+  AND p.organization_id = $1
+  AND NOT p.deleted
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
+  FROM skill_versions sv
+  WHERE sv.skill_id = l.skill_id
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE l.token = $2
+  AND l.revoked_at IS NULL
+`
+
+type GetSharedSkillByTokenForOrganizationParams struct {
+	OrganizationID string
+	Token          string
+}
+
+type GetSharedSkillByTokenForOrganizationRow struct {
+	Name             string
+	DisplayName      string
+	Summary          pgtype.Text
+	Content          string
+	VersionCreatedAt pgtype.Timestamptz
+}
+
+// Custom-domain variant of GetSharedSkillByToken: the extra projects join pins
+// the share link to the organization that owns the serving domain, so one
+// tenant's skill can never be rendered under another tenant's custom domain.
+func (q *Queries) GetSharedSkillByTokenForOrganization(ctx context.Context, arg GetSharedSkillByTokenForOrganizationParams) (GetSharedSkillByTokenForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getSharedSkillByTokenForOrganization, arg.OrganizationID, arg.Token)
+	var i GetSharedSkillByTokenForOrganizationRow
+	err := row.Scan(
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.Content,
+		&i.VersionCreatedAt,
+	)
+	return i, err
+}
+
 const getSkill = `-- name: GetSkill :one
 SELECT id, project_id, name, display_name, summary, source_kind, classification, tags, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
@@ -4647,6 +4703,64 @@ func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkill
 			return nil, err
 		}
 		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillVersionPromptInjectionFindings = `-- name: ListSkillVersionPromptInjectionFindings :many
+SELECT DISTINCT
+  COALESCE(rr.rule_id, 'prompt_injection')::text AS rule_id,
+  COALESCE(rr.description, 'Detected a prompt injection attempt.')::text AS description,
+  COALESCE(rr.confidence, 0)::double precision AS confidence
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+JOIN risk_policies rp
+  ON rp.id = rr.risk_policy_id
+  AND rp.project_id = s.project_id
+  AND rp.enabled IS TRUE
+  AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.id = $3
+  AND rr.project_id = s.project_id
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+ORDER BY 1, 2, 3 DESC
+`
+
+type ListSkillVersionPromptInjectionFindingsParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type ListSkillVersionPromptInjectionFindingsRow struct {
+	RuleID      string
+	Description string
+	Confidence  float64
+}
+
+func (q *Queries) ListSkillVersionPromptInjectionFindings(ctx context.Context, arg ListSkillVersionPromptInjectionFindingsParams) ([]ListSkillVersionPromptInjectionFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionPromptInjectionFindings, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionPromptInjectionFindingsRow
+	for rows.Next() {
+		var i ListSkillVersionPromptInjectionFindingsRow
+		if err := rows.Scan(&i.RuleID, &i.Description, &i.Confidence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

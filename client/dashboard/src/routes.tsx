@@ -18,7 +18,14 @@ import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
-import SkillDetail from "./pages/skills/SkillDetail";
+import SkillContent from "./pages/skills/SkillContent";
+import SkillDetailRoot from "./pages/skills/SkillDetailRoot";
+import SkillFeedback from "./pages/skills/SkillFeedback";
+import SkillOverview from "./pages/skills/SkillOverview";
+import SkillScoredSessions from "./pages/skills/SkillScoredSessions";
+import SkillSettings from "./pages/skills/SkillSettings";
+import SkillUsage from "./pages/skills/SkillUsage";
+import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -66,6 +73,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import PlatformMCP from "./pages/org/PlatformMCP";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -84,6 +92,11 @@ import {
   PlatformRemoteIdentityProvidersRoot,
 } from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders";
 import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
+import PlatformAdminOverview from "./pages/platform-admin/Overview";
+import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
+import PlatformAdminFeatures from "./pages/platform-admin/Features";
+import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
+import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -96,8 +109,8 @@ import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import ApprovalRequests from "./pages/security/ApprovalRequests";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -378,7 +391,51 @@ const ROUTE_STRUCTURE = {
       detail: {
         title: "Skill",
         url: ":skillId",
-        component: SkillDetail,
+        component: SkillDetailRoot,
+        subPages: {
+          overview: {
+            title: "Skill Overview",
+            url: "overview",
+            component: SkillOverview,
+          },
+          content: {
+            title: "Skill Content",
+            url: "content",
+            component: SkillContent,
+          },
+          usage: {
+            title: "Skill Usage",
+            url: "usage",
+            component: SkillUsage,
+          },
+          scoredSessions: {
+            title: "Scored Sessions",
+            url: "scored-sessions",
+            component: SkillScoredSessions,
+          },
+          feedback: {
+            title: "Agent Feedback",
+            url: "feedback",
+            component: SkillFeedback,
+          },
+          versions: {
+            title: "Skill Version History",
+            url: "versions",
+            component: SkillVersionHistory,
+            subPages: {
+              version: {
+                title: "Skill Version",
+                url: ":versionId",
+                component: SkillVersionHistory,
+              },
+            },
+          },
+          settings: {
+            title: "Settings",
+            url: "settings",
+            component: SkillSettings,
+          },
+        },
       },
     },
   },
@@ -438,6 +495,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          sessions: {
+            title: "MCP Server Clients and Sessions",
+            url: "sessions",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -476,6 +537,10 @@ const ROUTE_STRUCTURE = {
           teamAccess: {
             title: "MCP Team Access",
             url: "team-access",
+          },
+          sessions: {
+            title: "MCP Clients and Sessions",
+            url: "sessions",
           },
           settings: {
             title: "MCP Settings",
@@ -562,6 +627,12 @@ const ROUTE_STRUCTURE = {
     stage: "preview",
     component: OrgMemory,
   },
+  watchdog: {
+    title: "Watchdog",
+    url: "watchdog",
+    icon: "radar",
+    component: Watchdog,
+  },
   riskOverview: {
     title: "Risk Overview",
     url: "risk-overview",
@@ -601,12 +672,6 @@ const ROUTE_STRUCTURE = {
     url: "detection-rules",
     icon: "scan-search",
     component: DetectionRules,
-  },
-  approvalRequests: {
-    title: "Approval Requests",
-    url: "approval-requests",
-    icon: "inbox",
-    component: ApprovalRequests,
   },
   policyCenter: {
     title: "Risk Policies",
@@ -953,6 +1018,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "terminal",
     component: OrgSkills,
   },
+  platformMcp: {
+    title: "Platform MCP",
+    url: "platform-mcp",
+    icon: "plug-zap",
+    stage: "preview",
+    component: PlatformMCP,
+  },
   aiIntegrations: {
     title: "AI Integrations",
     url: "ai-integrations",
@@ -1062,10 +1134,43 @@ const ORG_ROUTE_STRUCTURE = {
         component: PlatformRemoteIdentityProviderDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          convergence: { title: "Convergence", url: "convergence" },
           settings: { title: "Settings", url: "settings" },
         },
       },
     },
+  },
+  // Platform Admin pages — the former floating Developer Toolkit, one page per
+  // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.
+  platformAdminOverview: {
+    title: "Platform Admin Overview",
+    url: "platform-admin",
+    icon: "crown",
+    component: PlatformAdminOverview,
+  },
+  platformAdminRbac: {
+    title: "RBAC Override",
+    url: "platform-admin/rbac",
+    icon: "shield",
+    component: PlatformAdminRbacOverride,
+  },
+  platformAdminFeatures: {
+    title: "Platform Features",
+    url: "platform-admin/features",
+    icon: "sliders-horizontal",
+    component: PlatformAdminFeatures,
+  },
+  platformAdminOnboarding: {
+    title: "Enterprise Onboarding",
+    url: "platform-admin/onboarding",
+    icon: "mail",
+    component: PlatformAdminOnboarding,
+  },
+  platformAdminOpenRouterKeys: {
+    title: "OpenRouter Keys",
+    url: "platform-admin/openrouter-keys",
+    icon: "key-round",
+    component: PlatformAdminOpenRouterKeys,
   },
   deviceAgent: {
     title: "Device Agent",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link as RouterLink, useLocation, useNavigate } from "react-router";
+import { Link as RouterLink, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
@@ -225,20 +225,16 @@ function formatMessageTypes(types: Set<PolicyMessageType>): string {
 }
 
 export function ConfigurePoliciesStep({
+  onComplete,
   onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
-  const navigate = useNavigate();
   const location = useLocation();
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
     [location.search],
   );
-
-  const handleComplete = () => {
-    void navigate(`/${orgSlug}/projects/${projectSlug}`);
-  };
   const [configs, setConfigs] = useState<Record<RuleCategory, CategoryConfig>>(
     () => {
       const next = {} as Record<RuleCategory, CategoryConfig>;
@@ -464,8 +460,8 @@ export function ConfigurePoliciesStep({
       }
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
-      onContinue={handleComplete}
-      continueLabel="Complete setup"
+      onContinue={onComplete}
+      continueLabel="Continue"
       showBack
       onBack={onBack}
     >

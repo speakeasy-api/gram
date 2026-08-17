@@ -13,6 +13,7 @@ import { useCreateGlobalRemoteSessionIssuerMutation } from "@gram/client/react-q
 import { invalidateAllGlobalRemoteSessionIssuers } from "@gram/client/react-query/globalRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +27,8 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "../mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDuplicatePreflight";
 import { buildCreateIssuerForm } from "../remote-identity-providers/issuerSettingsForm";
 
 // CreatePlatformIssuerSheet is the catalog's counterpart to the tenant
@@ -52,6 +55,20 @@ export function CreatePlatformIssuerSheet({
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState("");
+
+  // The Issuer URL as it stood when the operator last left the field. Held
+  // separately from the live input so the duplicate preflight runs on a settled
+  // value rather than once per keystroke.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState("");
+  // Platform scope: the catalog only. The global tier is unique on slug but not
+  // on issuer, so nothing but this warning will catch a second catalog entry for
+  // one authorization server. Tenant records naming the same URL are a separate
+  // question, answered by the convergence page.
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "platform",
+    enabled: open,
+  });
 
   const {
     issuerUrl,
@@ -111,6 +128,7 @@ export function CreatePlatformIssuerSheet({
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
     setIssuerUrl("");
+    setSettledIssuerUrl("");
     resetEndpointState();
     clearDiscoverError();
     resetCreateMutation();
@@ -167,8 +185,30 @@ export function CreatePlatformIssuerSheet({
 
             <IssuerUrlField
               issuerUrl={issuerUrl}
+              onIssuerUrlSettled={setSettledIssuerUrl}
+              duplicateWarning={
+                <IssuerDuplicateWarning
+                  viewerScope="platform"
+                  matches={duplicateMatches}
+                  renderLink={(match) => (
+                    <Button asChild variant="secondary">
+                      <Link
+                        to={orgRoutes.platformRemoteIdentityProviders.issuerDetail.href(
+                          match.id,
+                        )}
+                        onClick={() => onOpenChange(false)}
+                      >
+                        View existing provider
+                      </Link>
+                    </Button>
+                  )}
+                />
+              }
               onIssuerUrlChange={(value) => {
                 setIssuerUrl(value);
+                // Any edit invalidates the last blur, so a warning cannot
+                // outlive the URL it describes.
+                setSettledIssuerUrl("");
                 clearDiscoverError();
                 if (!slugDirty) {
                   const derived = deriveSlugFromUrl(value);

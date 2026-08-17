@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -508,8 +509,8 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id may be provided").LogWarn(ctx, logger)
 	}
 
-	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
-		ProjectID:            *authCtx.ProjectID,
+	servers, err := readmodel.New(s.db).ListMCPServers(ctx, *authCtx.ProjectID, repo.ListMCPServersByProjectIDParams{
+		ProjectID:            uuid.Nil,
 		RemoteMcpServerID:    remoteMcpServerID,
 		TunneledMcpServerID:  tunneledMcpServerID,
 		ToolsetID:            toolsetID,
@@ -534,7 +535,7 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	servers, err := repo.New(s.db).ListMCPServersByOrganizationID(ctx, authCtx.ActiveOrganizationID)
+	servers, err := readmodel.New(s.db).ListMCPServersForOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for organization").LogError(ctx, logger)
 	}

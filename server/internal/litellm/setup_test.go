@@ -43,14 +43,6 @@ func (captureEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 	return feature == productfeatures.FeatureSessionCapture, nil
 }
 
-type testProductFeatures struct {
-	enabled bool
-}
-
-func (f *testProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
-	return feature == productfeatures.FeatureAIPlatformPushIntegrations && f.enabled, nil
-}
-
 func TestMain(m *testing.M) {
 	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
@@ -67,11 +59,11 @@ func TestMain(m *testing.M) {
 type realTestInstance struct {
 	service   *Service
 	hooks     *hooks.Service
+	cache     cache.Cache
 	conn      *pgxpool.Pool
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
 	observer  *recordingMessageObserver
-	features  *testProductFeatures
 	keys      *keysservice.Service
 }
 
@@ -115,7 +107,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	redisClient, err := testInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test-"+uuid.NewString()), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	chConn, err := testInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -130,7 +122,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
 		telemetry.NewNoopLogPublisher(logger),
 	)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
@@ -159,10 +151,12 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		captureEnabledFeatures{},
 		nil,
 		scanner,
+		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
+		nil,
 		nil,
 		nil,
 		serverURL,
@@ -186,17 +180,16 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
 		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
-	features := &testProductFeatures{enabled: false}
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, features, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
+		cache:     cacheAdapter,
 		conn:      conn,
 		chConn:    chConn,
 		telemetry: telemetryLogger,
 		observer:  observer,
-		features:  features,
 		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
 	}
 }

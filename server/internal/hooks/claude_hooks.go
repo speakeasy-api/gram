@@ -1138,6 +1138,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		ToolName:        mcpToolName,
 		ToolInput:       payload.ToolInput,
 		RiskPolicyID:    policy.ID,
+		PolicyName:      policy.Name,
 	})
 	matchedURL := ""
 	if matched != nil {
@@ -1389,16 +1390,8 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo: telemetry.ToolInfo{
-			Name:           toolName,
-			OrganizationID: metadata.GramOrgID,
-			ProjectID:      projectID.String(),
-			ID:             "",
-			URN:            "",
-			DeploymentID:   "",
-			FunctionID:     nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})

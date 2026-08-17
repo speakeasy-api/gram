@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { getInitials } from "@/lib/initials";
 import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -14,7 +15,7 @@ import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartLabel } from "@/components/chart/chartUtils";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
@@ -173,10 +174,17 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     isLoading: membersLoading,
     error: membersError,
   } = useMembers();
-  const routeUser = useMemo(
-    () => (userSlug ? decodeURIComponent(userSlug) : ""),
-    [userSlug],
-  );
+  // React Router has already decoded the path param once; this second decode
+  // exists for callers that double-encode. A raw '%' in a telemetry-derived
+  // email makes it throw, so a segment that no longer decodes is used as-is.
+  const routeUser = useMemo(() => {
+    if (!userSlug) return "";
+    try {
+      return decodeURIComponent(userSlug);
+    } catch {
+      return userSlug;
+    }
+  }, [userSlug]);
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const member = useMemo(
     () =>
@@ -429,17 +437,25 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     member?.email ??
     (resolvedUserId?.includes("@") ? resolvedUserId : "Unknown email");
 
-  const totalTokens = getTotalTokens(summary);
-  const totalCost = summary?.totalCost ?? 0;
+  // The stat tiles read the per-user metrics query rather than the
+  // employees-list summary: the list groups a person's rows by identity, so it
+  // reports one identity's slice of their usage, while this query aggregates
+  // them ungrouped (DNO-827).
+  const totalTokens = getTotalTokens(metrics);
+  const totalCost = metrics?.totalCost ?? 0;
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
     (resolvedUserId != null && summaryQuery.isLoading) ||
+    metricsQuery.isLoading ||
     // When an account is scoped, the metric cards read the scoped summary — wait
     // on it too, else they briefly render zeros before it resolves.
     (selectedOrgId !== "" && scopedSummaryQuery.isLoading);
+  // metricsQuery has throwOnError disabled, so without it here a failed usage
+  // query would render as a legitimate-looking zero on the tiles.
   const error =
     summaryQuery.error ??
+    metricsQuery.error ??
     (selectedOrgId !== "" ? scopedSummaryQuery.error : null) ??
     fallbackUserQuery.error ??
     membersError;
@@ -519,14 +535,14 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
             <DetailLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="Total Tokens"
                   value={totalTokens}
                   tone="information"
                   icon="gauge"
                 />
-                <MetricCard
+                <StatTile
                   title="Total Cost"
                   value={totalCost}
                   tone="information"
@@ -538,23 +554,23 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                       : "No cost data reported"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Tool Calls"
-                  value={summary?.totalToolCalls ?? 0}
+                  value={metrics?.totalToolCalls ?? 0}
                   tone="information"
                   icon="wrench"
-                  subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                  subtext={`${(metrics?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(metrics?.toolCallFailure ?? 0).toLocaleString()} failed`}
                   link={toolLogsHref}
                 />
-                <MetricCard
+                <StatTile
                   title="Agent Sessions"
-                  value={summary?.totalChats ?? 0}
+                  value={metrics?.totalChats ?? 0}
                   tone="information"
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}
                 />
-                <MetricCard
+                <StatTile
                   title="Risk Events"
                   value={riskEventsCount}
                   tone={riskEventsCount > 0 ? "destructive" : "neutral"}
@@ -567,7 +583,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   subtext={`Over ${rangeLabel}`}
                   link={riskEventsHref}
                 />
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <section
                 className={cn(
@@ -1834,15 +1850,6 @@ function getTotalTokens(metrics: TokenUsageTotals | null | undefined) {
   const totalTokens = metrics.totalTokens ?? 0;
   if (totalTokens > 0) return totalTokens;
   return (metrics.totalInputTokens ?? 0) + (metrics.totalOutputTokens ?? 0);
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchMatchingUserSummary(

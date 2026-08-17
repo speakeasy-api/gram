@@ -154,6 +154,7 @@ const (
 	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -261,18 +262,38 @@ const (
 	AccessRequestSentCountKey           = attribute.Key("gram.access_request.sent_count")
 	AccessRequestRecipientKey           = attribute.Key("gram.access_request.recipient")
 	McpMethodKey                        = attribute.Key("gram.mcp.method")
-	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
-	McpURLKey                           = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                       = attribute.Key("gram.metric.name")
-	MimeTypeKey                         = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
+	// McpRequestedProtocolVersionKey is the MCP protocol revision a client
+	// asked for in its `initialize` request params, before any negotiation.
+	// Only the handshake-based revisions (2025-11-25 and earlier) have this
+	// concept: 2026-07-28 removed `initialize`, so requests from clients on
+	// that revision carry only McpNegotiatedProtocolVersionKey.
+	McpRequestedProtocolVersionKey = attribute.Key("gram.mcp.requested_protocol_version")
+	// McpNegotiatedProtocolVersionKey is the MCP protocol revision actually in
+	// effect for a request. Under the handshake-based revisions this is what
+	// the serving side answered at `initialize` — which on Gram's own hosted
+	// and platform paths is the surface's mcpversions.Served* constant,
+	// answered unconditionally regardless of what the client asked for, and on
+	// the proxy paths is whatever the upstream server answered. Under
+	// 2026-07-28 there is no negotiation at all and the value is simply what
+	// the client declared on this request.
+	//
+	// Sourced from the `MCP-Protocol-Version` header where present (it carries
+	// the negotiated value per the Streamable HTTP transport spec, and mirrors
+	// the `io.modelcontextprotocol/protocolVersion` `_meta` key under
+	// 2026-07-28), otherwise from the observed `initialize` response.
+	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
+	McpRequestedTagsKey             = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey             = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey             = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                  = attribute.Key("gram.mcp_server.id")
+	McpURLKey                       = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey        = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                   = attribute.Key("gram.metric.name")
+	MimeTypeKey                     = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey   = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey                = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey              = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey   = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -361,49 +382,58 @@ const (
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
-	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
-	RiskPolicyIDKey                   = attribute.Key("gram.risk.policy_id")
-	RiskPolicyNameKey                 = attribute.Key("gram.risk.policy_name")
-	RiskPolicyTypeKey                 = attribute.Key("gram.risk.policy_type")
-	RiskMessageTypeKey                = attribute.Key("gram.risk.message_type")
-	RiskRuleIDKey                     = attribute.Key("gram.risk.rule_id")
-	SpendRuleIDKey                    = attribute.Key("gram.spend.rule_id")
-	RiskSourceKey                     = attribute.Key("gram.risk.source")
-	RiskScanAttemptKey                = attribute.Key("gram.risk.scan.attempt")
-	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
-	RiskScanBatchIndexKey             = attribute.Key("gram.risk.scan.batch_index")
-	RiskScanTextSizeKey               = attribute.Key("gram.risk.scan.text_size_bytes")
-	RiskScanRequestIDKey              = attribute.Key("gram.risk.scan.request_id")
-	RiskScanEngineKey                 = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey             = attribute.Key("gram.risk.scan.gate_reason")
-	SecretNameKey                     = attribute.Key("gram.secret.name")
-	SecurityPlacementKey              = attribute.Key("gram.security.placement")
-	SecuritySchemeKey                 = attribute.Key("gram.security.scheme")
-	SecurityTypeKey                   = attribute.Key("gram.security.type")
-	SessionIDKey                      = attribute.Key("gram.session.id")
-	SlackEventFullKey                 = attribute.Key("gram.slack.event.full")
-	SlackEventTypeKey                 = attribute.Key("gram.slack.event.type")
-	SlackTeamIDKey                    = attribute.Key("gram.slack.team.id")
-	ToolCallDurationKey               = attribute.Key("gram.tool_call.duration")
-	ToolCallKindKey                   = attribute.Key("gram.tool_call.kind")
-	ToolCallSourceKey                 = attribute.Key("gram.tool_call.source")
-	ToolHTTPResponseContentTypeKey    = attribute.Key("gram.tool.http.response.content_type")
-	ToolIDKey                         = attribute.Key("gram.tool.id")
-	ToolURNKey                        = attribute.Key("gram.tool.urn")
-	ToolNameKey                       = attribute.Key("gram.tool.name")
-	ResourceIDKey                     = attribute.Key("gram.resource.id")
-	ResourceNameKey                   = attribute.Key("gram.resource.name")
-	ResourceURNKey                    = attribute.Key("gram.resource.urn")
-	ResourceURIKey                    = attribute.Key("gram.resource.uri")
-	SvixAppIDKey                      = attribute.Key("gram.svix.app_id")
-	SvixMessageIDKey                  = attribute.Key("gram.svix.message_id")
-	WebhookDropReasonKey              = attribute.Key("gram.webhook.drop_reason")
-	SvixPreviousAppIDKey              = attribute.Key("gram.svix.previous_app_id")
-	ToolsetIDKey                      = attribute.Key("gram.toolset.id")
-	ToolsetSlugKey                    = attribute.Key("gram.toolset.slug")
-	ToolsetMCPSlugKey                 = attribute.Key("gram.toolset.mcp_slug")
-	ToolsetMCPEnabledKey              = attribute.Key("gram.toolset.mcp_enabled")
-	VisibilityKey                     = attribute.Key("gram.visibility")
+
+	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
+	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
+	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+
+	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
+	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
+	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
+	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
+	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
+	RiskSourceKey                  = attribute.Key("gram.risk.source")
+	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	SecretNameKey                  = attribute.Key("gram.secret.name")
+	SecurityPlacementKey           = attribute.Key("gram.security.placement")
+	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
+	SecurityTypeKey                = attribute.Key("gram.security.type")
+	SessionIDKey                   = attribute.Key("gram.session.id")
+	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
+	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
+	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
+	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
+	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
+	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
+	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
+	ToolIDKey                      = attribute.Key("gram.tool.id")
+	ToolURNKey                     = attribute.Key("gram.tool.urn")
+	ToolNameKey                    = attribute.Key("gram.tool.name")
+	ResourceIDKey                  = attribute.Key("gram.resource.id")
+	ResourceNameKey                = attribute.Key("gram.resource.name")
+	ResourceURNKey                 = attribute.Key("gram.resource.urn")
+	ResourceURIKey                 = attribute.Key("gram.resource.uri")
+	SvixAppIDKey                   = attribute.Key("gram.svix.app_id")
+	SvixMessageIDKey               = attribute.Key("gram.svix.message_id")
+	WebhookDropReasonKey           = attribute.Key("gram.webhook.drop_reason")
+	SvixPreviousAppIDKey           = attribute.Key("gram.svix.previous_app_id")
+	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
+	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+	ToolsetMCPSlugKey              = attribute.Key("gram.toolset.mcp_slug")
+	ToolsetMCPEnabledKey           = attribute.Key("gram.toolset.mcp_enabled")
+	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	// Hooks
 	// HookDecisionKey carries the policy verdict the hook endpoint returned to
@@ -446,22 +476,26 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
-	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
-	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
-	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
-	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
-	LiteLLMUserEmailKey      = attribute.Key("gram.litellm.user_email")
-	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
-	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
-	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
-	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
-	LiteLLMAPIKeyHashKey     = attribute.Key("gram.litellm.api_key_hash")
-	LiteLLMAPIKeyAliasKey    = attribute.Key("gram.litellm.api_key_alias")
-	LiteLLMInputCostKey      = attribute.Key("litellm.cost.input")
-	LiteLLMOutputCostKey     = attribute.Key("litellm.cost.output")
-	LiteLLMCacheReadCostKey  = attribute.Key("litellm.cost.cache_read")
-	LiteLLMCacheWriteCostKey = attribute.Key("litellm.cost.cache_creation")
+	HookBlockReasonKey             = attribute.Key("gram.hook.block_reason")
+	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
+	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
+	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
+	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey              = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey               = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey            = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey               = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey            = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey            = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey       = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey           = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey          = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey            = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey           = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey        = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey       = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -778,6 +812,27 @@ func SlogHookSource(v string) slog.Attr      { return slog.String(string(HookSou
 
 func HookBlockReason(v string) attribute.KeyValue { return HookBlockReasonKey.String(v) }
 func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(HookBlockReasonKey), v) }
+
+func IdentityFoldCanonicalGroups(v int) attribute.KeyValue {
+	return IdentityFoldCanonicalGroupsKey.Int(v)
+}
+
+func SlogIdentityFoldCanonicalGroups(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldCanonicalGroupsKey), v)
+}
+
+func IdentityFoldCostDelta(v float64) attribute.KeyValue { return IdentityFoldCostDeltaKey.Float64(v) }
+func SlogIdentityFoldCostDelta(v float64) slog.Attr {
+	return slog.Float64(string(IdentityFoldCostDeltaKey), v)
+}
+
+func IdentityFoldLiteralGroups(v int) attribute.KeyValue { return IdentityFoldLiteralGroupsKey.Int(v) }
+func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldLiteralGroupsKey), v)
+}
+
+func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
+func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
 
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }
@@ -1547,6 +1602,26 @@ func SlogUserSessionClientID(v string) slog.Attr {
 	return slog.String(string(UserSessionClientIDKey), v)
 }
 
+func RemoteSessionIssuerID(v string) attribute.KeyValue { return RemoteSessionIssuerIDKey.String(v) }
+func SlogRemoteSessionIssuerID(v string) slog.Attr {
+	return slog.String(string(RemoteSessionIssuerIDKey), v)
+}
+
+func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {
+	return RemoteSessionClientMigratedCountKey.Int64(v)
+}
+func SlogRemoteSessionClientMigratedCount(v int64) slog.Attr {
+	return slog.Int64(string(RemoteSessionClientMigratedCountKey), v)
+}
+
+func RemoteSessionRevokeDroppedCount(v int) attribute.KeyValue {
+	return RemoteSessionRevokeDroppedCountKey.Int(v)
+}
+
+func SlogRemoteSessionRevokeDroppedCount(v int) slog.Attr {
+	return slog.Int(string(RemoteSessionRevokeDroppedCountKey), v)
+}
+
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return UserSessionClientMigratedCountKey.Int64(v)
 }
@@ -1618,6 +1693,26 @@ func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(Ri
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func RiskExclusionID(v string) attribute.KeyValue { return RiskExclusionIDKey.String(v) }
+func SlogRiskExclusionID(v string) slog.Attr      { return slog.String(string(RiskExclusionIDKey), v) }
+
+func RiskExclusionMatchType(v string) attribute.KeyValue {
+	return RiskExclusionMatchTypeKey.String(v)
+}
+func SlogRiskExclusionMatchType(v string) slog.Attr {
+	return slog.String(string(RiskExclusionMatchTypeKey), v)
+}
+
+func RiskReconcileRowCount(v int) attribute.KeyValue { return RiskReconcileRowCountKey.Int(v) }
+func SlogRiskReconcileRowCount(v int) slog.Attr {
+	return slog.Int(string(RiskReconcileRowCountKey), v)
+}
+
+func RiskReconcileRowsKept(v int) attribute.KeyValue { return RiskReconcileRowsKeptKey.Int(v) }
+func SlogRiskReconcileRowsKept(v int) slog.Attr {
+	return slog.Int(string(RiskReconcileRowsKeptKey), v)
+}
 
 func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }
 func SlogSpendRuleID(v string) slog.Attr      { return slog.String(string(SpendRuleIDKey), v) }
@@ -1753,6 +1848,20 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
 
+func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
+	return McpRequestedProtocolVersionKey.String(v)
+}
+func SlogMCPRequestedProtocolVersion(v string) slog.Attr {
+	return slog.String(string(McpRequestedProtocolVersionKey), v)
+}
+
+func MCPNegotiatedProtocolVersion(v string) attribute.KeyValue {
+	return McpNegotiatedProtocolVersionKey.String(v)
+}
+func SlogMCPNegotiatedProtocolVersion(v string) slog.Attr {
+	return slog.String(string(McpNegotiatedProtocolVersionKey), v)
+}
+
 func MCPRequestedTags(v []string) attribute.KeyValue { return McpRequestedTagsKey.StringSlice(v) }
 func SlogMCPRequestedTags(v []string) slog.Attr {
 	return slog.Any(string(McpRequestedTagsKey), v)
@@ -1855,6 +1964,11 @@ func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 
 func MCPRegistryID(v string) attribute.KeyValue { return MCPRegistryIDKey.String(v) }
 func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPRegistryIDKey), v) }
+
+func MCPApprovalRequestID(v string) attribute.KeyValue { return MCPApprovalRequestIDKey.String(v) }
+func SlogMCPApprovalRequestID(v string) slog.Attr {
+	return slog.String(string(MCPApprovalRequestIDKey), v)
+}
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }

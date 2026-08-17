@@ -120,7 +120,7 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 			"TUM must count input + output + cache writes, never cache reads")
 	}, 15*time.Second, 200*time.Millisecond)
 
-	rows, err := chQueries.GetTumBreakdownDimByDay(ctx, params, "hook_source")
+	rows, err := chQueries.GetTumBreakdownDimByDay(ctx, params, "hook_source", "")
 	require.NoError(t, err)
 	bySurface := map[string]int64{}
 	for _, r := range rows {

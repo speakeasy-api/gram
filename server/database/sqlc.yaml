@@ -321,6 +321,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/openrouterkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/openrouterkeys/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/chat/queries.sql
     engine: postgresql
     gen:
@@ -617,6 +627,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/mcpapproval/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpapproval/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/risk/queries.sql
     engine: postgresql
     gen:
@@ -746,5 +766,15 @@ sql:
       go:
         package: "repo"
         out: "../internal/platformmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/trials/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/trials/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

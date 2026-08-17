@@ -106,8 +106,14 @@ import {
 } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
+import { policyStatusLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 import {
   ALL_CATEGORIES,
+  AVAILABLE_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
   PRESIDIO_CATEGORIES,
@@ -281,7 +287,20 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
 // ── Create page (serves both standard and prompt policies) ───────────────────
 
 export function PolicyNew(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyNewContent />
+    </RequireScope>
+  );
+}
+
+function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const [category] = useQueryState("category");
+  const initialCategories =
+    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
+      ? new Set<RuleCategory>([category as RuleCategory])
+      : undefined;
   if (kind === "standard") {
     return (
       <Page>
@@ -289,7 +308,10 @@ export function PolicyNew(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} />
+          <StandardPolicyEditor
+            policy={null}
+            initialCategories={initialCategories}
+          />
         </Page.Body>
       </Page>
     );
@@ -513,6 +535,7 @@ function PolicyHeader({
   const isCreate = policy === null;
   const routes = useRoutes();
   const [editingName, setEditingName] = useState(false);
+  const toggleEnabledMutation = useTogglePolicyEnabled();
 
   return (
     <Stack
@@ -558,11 +581,32 @@ function PolicyHeader({
               <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           )}
-          {policy ? <StatusBadge /> : null}
+          {policy ? (
+            <>
+              <StatusBadge enabled={policy.enabled} />
+              <Switch
+                checked={policy.enabled}
+                disabled={saving || toggleEnabledMutation.isPending}
+                onCheckedChange={(checked) =>
+                  toggleEnabledMutation.mutate(
+                    togglePolicyEnabledVariables(
+                      policy.id,
+                      policy.name,
+                      checked,
+                    ),
+                  )
+                }
+                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
+              />
+            </>
+          ) : null}
         </Stack>
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
+            {policy.enabled
+              ? null
+              : " · Inactive — new messages are not scanned"}
           </Text>
         ) : (
           <Text small muted>
@@ -614,8 +658,12 @@ function CreateButton({
   );
 }
 
-function StatusBadge(): JSX.Element {
-  return <Badge variant="success">Enforcing</Badge>;
+function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
+  return (
+    <Badge variant={enabled ? "success" : "neutral"}>
+      {policyStatusLabel(enabled)}
+    </Badge>
+  );
 }
 
 // Vertical section header — title stacked over subtext with breathing room.
@@ -772,7 +820,6 @@ function PromptPolicyEditor({
         updateRiskPolicyRequestBody: {
           id: policy.id,
           name: name.trim() || policy.name,
-          enabled: true,
           prompt,
           modelConfig: {
             model: model || undefined,
@@ -3447,8 +3494,10 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
+  initialCategories,
 }: {
   policy: RiskPolicy | null;
+  initialCategories?: ReadonlySet<RuleCategory>;
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
@@ -3491,7 +3540,7 @@ export function StandardPolicyEditor({
   const [name, setName] = useState(policy?.name ?? "");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => orig?.categories ?? new Set<RuleCategory>());
+  >(() => new Set(orig?.categories ?? initialCategories));
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
@@ -3752,7 +3801,6 @@ export function StandardPolicyEditor({
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
-            enabled: true,
             sources,
             presidioEntities,
             promptInjectionRules,

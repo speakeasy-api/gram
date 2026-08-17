@@ -18,6 +18,7 @@ import (
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
 	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
+	adminopenrouterkeysc "github.com/speakeasy-api/gram/server/gen/http/admin_open_router_keys/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -46,6 +47,7 @@ import (
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
+	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
@@ -57,6 +59,7 @@ import (
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
@@ -94,8 +97,8 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -104,7 +107,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -122,6 +125,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
+		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -131,19 +135,21 @@ func UsageCommands() []string {
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
+		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
+		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
-		"features (get-product-features|set-product-feature)",
+		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
-		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
-		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
+		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
+		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
+		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -151,15 +157,15 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
-		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
-		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer|migrate-legacy-gram-registrations)",
-		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
+		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
+		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -260,25 +266,6 @@ func ParseEndpoint(
 		accessListShadowMCPInventoryUsersCursorFlag       = accessListShadowMCPInventoryUsersFlags.String("cursor", "", "")
 		accessListShadowMCPInventoryUsersSessionTokenFlag = accessListShadowMCPInventoryUsersFlags.String("session-token", "", "")
 
-		accessUpsertShadowMCPInventoryPolicyBypassFlags            = flag.NewFlagSet("upsert-shadow-mcp-inventory-policy-bypass", flag.ExitOnError)
-		accessUpsertShadowMCPInventoryPolicyBypassBodyFlag         = accessUpsertShadowMCPInventoryPolicyBypassFlags.String("body", "REQUIRED", "")
-		accessUpsertShadowMCPInventoryPolicyBypassSessionTokenFlag = accessUpsertShadowMCPInventoryPolicyBypassFlags.String("session-token", "", "")
-
-		accessDeleteShadowMCPInventoryPolicyBypassFlags            = flag.NewFlagSet("delete-shadow-mcp-inventory-policy-bypass", flag.ExitOnError)
-		accessDeleteShadowMCPInventoryPolicyBypassProjectIDFlag    = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("project-id", "REQUIRED", "")
-		accessDeleteShadowMCPInventoryPolicyBypassServerURLFlag    = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("server-url", "REQUIRED", "")
-		accessDeleteShadowMCPInventoryPolicyBypassSessionTokenFlag = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("session-token", "", "")
-
-		accessBlockShadowMCPInventoryServerFlags            = flag.NewFlagSet("block-shadow-mcp-inventory-server", flag.ExitOnError)
-		accessBlockShadowMCPInventoryServerBodyFlag         = accessBlockShadowMCPInventoryServerFlags.String("body", "REQUIRED", "")
-		accessBlockShadowMCPInventoryServerSessionTokenFlag = accessBlockShadowMCPInventoryServerFlags.String("session-token", "", "")
-
-		accessUnblockShadowMCPInventoryServerFlags            = flag.NewFlagSet("unblock-shadow-mcp-inventory-server", flag.ExitOnError)
-		accessUnblockShadowMCPInventoryServerProjectIDFlag    = accessUnblockShadowMCPInventoryServerFlags.String("project-id", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerServerURLFlag    = accessUnblockShadowMCPInventoryServerFlags.String("server-url", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerPolicyIDFlag     = accessUnblockShadowMCPInventoryServerFlags.String("policy-id", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerSessionTokenFlag = accessUnblockShadowMCPInventoryServerFlags.String("session-token", "", "")
-
 		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
 		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
 		accessResolveShadowMCPInventoryRequestSessionTokenFlag = accessResolveShadowMCPInventoryRequestFlags.String("session-token", "", "")
@@ -340,6 +327,18 @@ func ParseEndpoint(
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
 		adminUpdateOrganizationAdminSessionTokenFlag = adminUpdateOrganizationFlags.String("admin-session-token", "", "")
 
+		adminBulkUpdateAccountTypeFlags                 = flag.NewFlagSet("bulk-update-account-type", flag.ExitOnError)
+		adminBulkUpdateAccountTypeBodyFlag              = adminBulkUpdateAccountTypeFlags.String("body", "REQUIRED", "")
+		adminBulkUpdateAccountTypeAdminSessionTokenFlag = adminBulkUpdateAccountTypeFlags.String("admin-session-token", "", "")
+
+		adminDisableOrganizationFlags                 = flag.NewFlagSet("disable-organization", flag.ExitOnError)
+		adminDisableOrganizationBodyFlag              = adminDisableOrganizationFlags.String("body", "REQUIRED", "")
+		adminDisableOrganizationAdminSessionTokenFlag = adminDisableOrganizationFlags.String("admin-session-token", "", "")
+
+		adminEnableOrganizationFlags                 = flag.NewFlagSet("enable-organization", flag.ExitOnError)
+		adminEnableOrganizationBodyFlag              = adminEnableOrganizationFlags.String("body", "REQUIRED", "")
+		adminEnableOrganizationAdminSessionTokenFlag = adminEnableOrganizationFlags.String("admin-session-token", "", "")
+
 		adminGetOrganizationFlags                 = flag.NewFlagSet("get-organization", flag.ExitOnError)
 		adminGetOrganizationIDOrSlugFlag          = adminGetOrganizationFlags.String("id-or-slug", "REQUIRED", "")
 		adminGetOrganizationAdminSessionTokenFlag = adminGetOrganizationFlags.String("admin-session-token", "", "")
@@ -355,10 +354,31 @@ func ParseEndpoint(
 		adminListOrganizationsFlags                 = flag.NewFlagSet("list-organizations", flag.ExitOnError)
 		adminListOrganizationsQFlag                 = adminListOrganizationsFlags.String("q", "", "")
 		adminListOrganizationsAccountTypeFlag       = adminListOrganizationsFlags.String("account-type", "", "")
+		adminListOrganizationsAccountTypesFlag      = adminListOrganizationsFlags.String("account-types", "", "")
+		adminListOrganizationsTrialStatesFlag       = adminListOrganizationsFlags.String("trial-states", "", "")
+		adminListOrganizationsDisabledStatesFlag    = adminListOrganizationsFlags.String("disabled-states", "", "")
 		adminListOrganizationsIncludeDisabledFlag   = adminListOrganizationsFlags.String("include-disabled", "", "")
 		adminListOrganizationsCursorFlag            = adminListOrganizationsFlags.String("cursor", "", "")
 		adminListOrganizationsLimitFlag             = adminListOrganizationsFlags.String("limit", "", "")
+		adminListOrganizationsSortFlag              = adminListOrganizationsFlags.String("sort", "", "")
+		adminListOrganizationsDirectionFlag         = adminListOrganizationsFlags.String("direction", "", "")
+		adminListOrganizationsPageFlag              = adminListOrganizationsFlags.String("page", "", "")
 		adminListOrganizationsAdminSessionTokenFlag = adminListOrganizationsFlags.String("admin-session-token", "", "")
+
+		adminExtendTrialFlags                 = flag.NewFlagSet("extend-trial", flag.ExitOnError)
+		adminExtendTrialBodyFlag              = adminExtendTrialFlags.String("body", "REQUIRED", "")
+		adminExtendTrialAdminSessionTokenFlag = adminExtendTrialFlags.String("admin-session-token", "", "")
+
+		adminCreateOrganizationFlags                 = flag.NewFlagSet("create-organization", flag.ExitOnError)
+		adminCreateOrganizationBodyFlag              = adminCreateOrganizationFlags.String("body", "REQUIRED", "")
+		adminCreateOrganizationAdminSessionTokenFlag = adminCreateOrganizationFlags.String("admin-session-token", "", "")
+
+		adminRearmTrialFlags                 = flag.NewFlagSet("rearm-trial", flag.ExitOnError)
+		adminRearmTrialBodyFlag              = adminRearmTrialFlags.String("body", "REQUIRED", "")
+		adminRearmTrialAdminSessionTokenFlag = adminRearmTrialFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationStatsFlags                 = flag.NewFlagSet("get-organization-stats", flag.ExitOnError)
+		adminGetOrganizationStatsAdminSessionTokenFlag = adminGetOrganizationStatsFlags.String("admin-session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -624,6 +644,7 @@ func ParseEndpoint(
 		chatListChatsFlags                 = flag.NewFlagSet("list-chats", flag.ExitOnError)
 		chatListChatsSearchFlag            = chatListChatsFlags.String("search", "", "")
 		chatListChatsExternalUserIDFlag    = chatListChatsFlags.String("external-user-id", "", "")
+		chatListChatsUserIDFlag            = chatListChatsFlags.String("user-id", "", "")
 		chatListChatsSourceFlag            = chatListChatsFlags.String("source", "", "")
 		chatListChatsAssistantIDFlag       = chatListChatsFlags.String("assistant-id", "", "")
 		chatListChatsSourceKindFlag        = chatListChatsFlags.String("source-kind", "", "")
@@ -641,6 +662,13 @@ func ParseEndpoint(
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
 		chatListChatsChatSessionsTokenFlag = chatListChatsFlags.String("chat-sessions-token", "", "")
+
+		chatGetAssistantSessionSummaryFlags                = flag.NewFlagSet("get-assistant-session-summary", flag.ExitOnError)
+		chatGetAssistantSessionSummaryAssistantIDFlag      = chatGetAssistantSessionSummaryFlags.String("assistant-id", "REQUIRED", "")
+		chatGetAssistantSessionSummaryFromFlag             = chatGetAssistantSessionSummaryFlags.String("from", "REQUIRED", "")
+		chatGetAssistantSessionSummaryToFlag               = chatGetAssistantSessionSummaryFlags.String("to", "REQUIRED", "")
+		chatGetAssistantSessionSummarySessionTokenFlag     = chatGetAssistantSessionSummaryFlags.String("session-token", "", "")
+		chatGetAssistantSessionSummaryProjectSlugInputFlag = chatGetAssistantSessionSummaryFlags.String("project-slug-input", "", "")
 
 		chatGetWorkUnitsTrendFlags                = flag.NewFlagSet("get-work-units-trend", flag.ExitOnError)
 		chatGetWorkUnitsTrendFromFlag             = chatGetWorkUnitsTrendFlags.String("from", "", "")
@@ -685,6 +713,11 @@ func ParseEndpoint(
 		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
 		chatSummarizeSessionTokenFlag     = chatSummarizeFlags.String("session-token", "", "")
 		chatSummarizeProjectSlugInputFlag = chatSummarizeFlags.String("project-slug-input", "", "")
+
+		chatSummarizeToolCallFlags                = flag.NewFlagSet("summarize-tool-call", flag.ExitOnError)
+		chatSummarizeToolCallBodyFlag             = chatSummarizeToolCallFlags.String("body", "REQUIRED", "")
+		chatSummarizeToolCallSessionTokenFlag     = chatSummarizeToolCallFlags.String("session-token", "", "")
+		chatSummarizeToolCallProjectSlugInputFlag = chatSummarizeToolCallFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -1223,6 +1256,51 @@ func ParseEndpoint(
 		litellmTracesApikeyTokenFlag      = litellmTracesFlags.String("apikey-token", "", "")
 		litellmTracesProjectSlugInputFlag = litellmTracesFlags.String("project-slug-input", "", "")
 
+		mcpApprovalFlags = flag.NewFlagSet("mcp-approval", flag.ContinueOnError)
+
+		mcpApprovalListRequestsFlags                = flag.NewFlagSet("list-requests", flag.ExitOnError)
+		mcpApprovalListRequestsStatusFlag           = mcpApprovalListRequestsFlags.String("status", "", "")
+		mcpApprovalListRequestsLimitFlag            = mcpApprovalListRequestsFlags.String("limit", "", "")
+		mcpApprovalListRequestsSessionTokenFlag     = mcpApprovalListRequestsFlags.String("session-token", "", "")
+		mcpApprovalListRequestsApikeyTokenFlag      = mcpApprovalListRequestsFlags.String("apikey-token", "", "")
+		mcpApprovalListRequestsProjectSlugInputFlag = mcpApprovalListRequestsFlags.String("project-slug-input", "", "")
+
+		mcpApprovalGetRequestFlags                = flag.NewFlagSet("get-request", flag.ExitOnError)
+		mcpApprovalGetRequestIDFlag               = mcpApprovalGetRequestFlags.String("id", "REQUIRED", "")
+		mcpApprovalGetRequestSessionTokenFlag     = mcpApprovalGetRequestFlags.String("session-token", "", "")
+		mcpApprovalGetRequestApikeyTokenFlag      = mcpApprovalGetRequestFlags.String("apikey-token", "", "")
+		mcpApprovalGetRequestProjectSlugInputFlag = mcpApprovalGetRequestFlags.String("project-slug-input", "", "")
+
+		mcpApprovalEnsureServerReviewFlags                = flag.NewFlagSet("ensure-server-review", flag.ExitOnError)
+		mcpApprovalEnsureServerReviewBodyFlag             = mcpApprovalEnsureServerReviewFlags.String("body", "REQUIRED", "")
+		mcpApprovalEnsureServerReviewSessionTokenFlag     = mcpApprovalEnsureServerReviewFlags.String("session-token", "", "")
+		mcpApprovalEnsureServerReviewApikeyTokenFlag      = mcpApprovalEnsureServerReviewFlags.String("apikey-token", "", "")
+		mcpApprovalEnsureServerReviewProjectSlugInputFlag = mcpApprovalEnsureServerReviewFlags.String("project-slug-input", "", "")
+
+		mcpApprovalCreateRequestFlags                = flag.NewFlagSet("create-request", flag.ExitOnError)
+		mcpApprovalCreateRequestBodyFlag             = mcpApprovalCreateRequestFlags.String("body", "REQUIRED", "")
+		mcpApprovalCreateRequestSessionTokenFlag     = mcpApprovalCreateRequestFlags.String("session-token", "", "")
+		mcpApprovalCreateRequestApikeyTokenFlag      = mcpApprovalCreateRequestFlags.String("apikey-token", "", "")
+		mcpApprovalCreateRequestProjectSlugInputFlag = mcpApprovalCreateRequestFlags.String("project-slug-input", "", "")
+
+		mcpApprovalPromoteFlags                = flag.NewFlagSet("promote", flag.ExitOnError)
+		mcpApprovalPromoteBodyFlag             = mcpApprovalPromoteFlags.String("body", "REQUIRED", "")
+		mcpApprovalPromoteSessionTokenFlag     = mcpApprovalPromoteFlags.String("session-token", "", "")
+		mcpApprovalPromoteApikeyTokenFlag      = mcpApprovalPromoteFlags.String("apikey-token", "", "")
+		mcpApprovalPromoteProjectSlugInputFlag = mcpApprovalPromoteFlags.String("project-slug-input", "", "")
+
+		mcpApprovalRefreshEvidenceFlags                = flag.NewFlagSet("refresh-evidence", flag.ExitOnError)
+		mcpApprovalRefreshEvidenceIDFlag               = mcpApprovalRefreshEvidenceFlags.String("id", "REQUIRED", "")
+		mcpApprovalRefreshEvidenceSessionTokenFlag     = mcpApprovalRefreshEvidenceFlags.String("session-token", "", "")
+		mcpApprovalRefreshEvidenceApikeyTokenFlag      = mcpApprovalRefreshEvidenceFlags.String("apikey-token", "", "")
+		mcpApprovalRefreshEvidenceProjectSlugInputFlag = mcpApprovalRefreshEvidenceFlags.String("project-slug-input", "", "")
+
+		mcpApprovalRecordDecisionFlags                = flag.NewFlagSet("record-decision", flag.ExitOnError)
+		mcpApprovalRecordDecisionBodyFlag             = mcpApprovalRecordDecisionFlags.String("body", "REQUIRED", "")
+		mcpApprovalRecordDecisionSessionTokenFlag     = mcpApprovalRecordDecisionFlags.String("session-token", "", "")
+		mcpApprovalRecordDecisionApikeyTokenFlag      = mcpApprovalRecordDecisionFlags.String("apikey-token", "", "")
+		mcpApprovalRecordDecisionProjectSlugInputFlag = mcpApprovalRecordDecisionFlags.String("project-slug-input", "", "")
+
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
 		mcpEndpointsCreateMcpEndpointFlags                = flag.NewFlagSet("create-mcp-endpoint", flag.ExitOnError)
@@ -1527,6 +1605,64 @@ func ParseEndpoint(
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
 
+		adminOpenRouterKeysFlags = flag.NewFlagSet("admin-open-router-keys", flag.ContinueOnError)
+
+		adminOpenRouterKeysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		adminOpenRouterKeysListKeysSessionTokenFlag = adminOpenRouterKeysListKeysFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysGetKeyUsageFlags              = flag.NewFlagSet("get-key-usage", flag.ExitOnError)
+		adminOpenRouterKeysGetKeyUsageOrganizationIDFlag = adminOpenRouterKeysGetKeyUsageFlags.String("organization-id", "REQUIRED", "")
+		adminOpenRouterKeysGetKeyUsageKeyTypeFlag        = adminOpenRouterKeysGetKeyUsageFlags.String("key-type", "REQUIRED", "")
+		adminOpenRouterKeysGetKeyUsageSessionTokenFlag   = adminOpenRouterKeysGetKeyUsageFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysEncryptKeyFlags            = flag.NewFlagSet("encrypt-key", flag.ExitOnError)
+		adminOpenRouterKeysEncryptKeyBodyFlag         = adminOpenRouterKeysEncryptKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysEncryptKeySessionTokenFlag = adminOpenRouterKeysEncryptKeyFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysDisableKeyFlags            = flag.NewFlagSet("disable-key", flag.ExitOnError)
+		adminOpenRouterKeysDisableKeyBodyFlag         = adminOpenRouterKeysDisableKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysDisableKeySessionTokenFlag = adminOpenRouterKeysDisableKeyFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysEnableKeyFlags            = flag.NewFlagSet("enable-key", flag.ExitOnError)
+		adminOpenRouterKeysEnableKeyBodyFlag         = adminOpenRouterKeysEnableKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysEnableKeySessionTokenFlag = adminOpenRouterKeysEnableKeyFlags.String("session-token", "", "")
+
+		platformMcpFlags = flag.NewFlagSet("platform-mcp", flag.ContinueOnError)
+
+		platformMcpGetOnboardingFlags            = flag.NewFlagSet("get-onboarding", flag.ExitOnError)
+		platformMcpGetOnboardingSessionTokenFlag = platformMcpGetOnboardingFlags.String("session-token", "", "")
+
+		platformMcpStartOnboardingFlags            = flag.NewFlagSet("start-onboarding", flag.ExitOnError)
+		platformMcpStartOnboardingSessionTokenFlag = platformMcpStartOnboardingFlags.String("session-token", "", "")
+
+		platformMcpRecordInstallIntentFlags            = flag.NewFlagSet("record-install-intent", flag.ExitOnError)
+		platformMcpRecordInstallIntentBodyFlag         = platformMcpRecordInstallIntentFlags.String("body", "REQUIRED", "")
+		platformMcpRecordInstallIntentSessionTokenFlag = platformMcpRecordInstallIntentFlags.String("session-token", "", "")
+
+		platformMcpRecordAgentConfigurationCopiedFlags            = flag.NewFlagSet("record-agent-configuration-copied", flag.ExitOnError)
+		platformMcpRecordAgentConfigurationCopiedSessionTokenFlag = platformMcpRecordAgentConfigurationCopiedFlags.String("session-token", "", "")
+
+		platformMcpStartOnboardingSetupFlags            = flag.NewFlagSet("start-onboarding-setup", flag.ExitOnError)
+		platformMcpStartOnboardingSetupSessionTokenFlag = platformMcpStartOnboardingSetupFlags.String("session-token", "", "")
+
+		platformMcpRecheckOnboardingReadinessFlags            = flag.NewFlagSet("recheck-onboarding-readiness", flag.ExitOnError)
+		platformMcpRecheckOnboardingReadinessSessionTokenFlag = platformMcpRecheckOnboardingReadinessFlags.String("session-token", "", "")
+
+		platformMcpDistributeOnboardingCandidateFlags            = flag.NewFlagSet("distribute-onboarding-candidate", flag.ExitOnError)
+		platformMcpDistributeOnboardingCandidateBodyFlag         = platformMcpDistributeOnboardingCandidateFlags.String("body", "REQUIRED", "")
+		platformMcpDistributeOnboardingCandidateSessionTokenFlag = platformMcpDistributeOnboardingCandidateFlags.String("session-token", "", "")
+
+		platformMcpRemoveOnboardingDistributionFlags            = flag.NewFlagSet("remove-onboarding-distribution", flag.ExitOnError)
+		platformMcpRemoveOnboardingDistributionBodyFlag         = platformMcpRemoveOnboardingDistributionFlags.String("body", "REQUIRED", "")
+		platformMcpRemoveOnboardingDistributionSessionTokenFlag = platformMcpRemoveOnboardingDistributionFlags.String("session-token", "", "")
+
+		platformMcpRepairOnboardingPublicationFlags            = flag.NewFlagSet("repair-onboarding-publication", flag.ExitOnError)
+		platformMcpRepairOnboardingPublicationBodyFlag         = platformMcpRepairOnboardingPublicationFlags.String("body", "REQUIRED", "")
+		platformMcpRepairOnboardingPublicationSessionTokenFlag = platformMcpRepairOnboardingPublicationFlags.String("session-token", "", "")
+
+		platformMcpDismissOnboardingFlags            = flag.NewFlagSet("dismiss-onboarding", flag.ExitOnError)
+		platformMcpDismissOnboardingSessionTokenFlag = platformMcpDismissOnboardingFlags.String("session-token", "", "")
+
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
 		pluginsListPluginsFlags                = flag.NewFlagSet("list-plugins", flag.ExitOnError)
@@ -1615,6 +1751,10 @@ func ParseEndpoint(
 		featuresSetProductFeatureFlags            = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
 		featuresSetProductFeatureSessionTokenFlag = featuresSetProductFeatureFlags.String("session-token", "", "")
+
+		featuresSetRemoteSessionAutoRefreshPolicyFlags            = flag.NewFlagSet("set-remote-session-auto-refresh-policy", flag.ExitOnError)
+		featuresSetRemoteSessionAutoRefreshPolicyBodyFlag         = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("body", "REQUIRED", "")
+		featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("session-token", "", "")
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
@@ -1796,12 +1936,6 @@ func ParseEndpoint(
 		remoteSessionClientsCreateCimdApikeyTokenFlag      = remoteSessionClientsCreateCimdFlags.String("apikey-token", "", "")
 		remoteSessionClientsCreateCimdProjectSlugInputFlag = remoteSessionClientsCreateCimdFlags.String("project-slug-input", "", "")
 
-		remoteSessionClientsCloneClientFromOAuthProxyProviderFlags                = flag.NewFlagSet("clone-client-fromoauth-proxy-provider", flag.ExitOnError)
-		remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag             = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("body", "REQUIRED", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag     = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("session-token", "", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag      = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("apikey-token", "", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("project-slug-input", "", "")
-
 		remoteSessionClientsUpdateRemoteSessionClientFlags                = flag.NewFlagSet("update-remote-session-client", flag.ExitOnError)
 		remoteSessionClientsUpdateRemoteSessionClientBodyFlag             = remoteSessionClientsUpdateRemoteSessionClientFlags.String("body", "REQUIRED", "")
 		remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsUpdateRemoteSessionClientFlags.String("session-token", "", "")
@@ -1863,6 +1997,11 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersGetIssuerDeletePreflightIDFlag           = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.String("id", "REQUIRED", "")
 		organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags            = flag.NewFlagSet("get-issuer-duplicate-preflight", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuerFlag       = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("apikey-token", "", "")
 
 		organizationRemoteSessionIssuersUpdateIssuerFlags            = flag.NewFlagSet("update-issuer", flag.ExitOnError)
 		organizationRemoteSessionIssuersUpdateIssuerBodyFlag         = organizationRemoteSessionIssuersUpdateIssuerFlags.String("body", "REQUIRED", "")
@@ -1941,6 +2080,12 @@ func ParseEndpoint(
 		remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("apikey-token", "", "")
 		remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("project-slug-input", "", "")
 
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags                = flag.NewFlagSet("get-remote-session-issuer-duplicate-preflight", flag.ExitOnError)
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuerFlag           = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionTokenFlag     = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("session-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyTokenFlag      = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("apikey-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInputFlag = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("project-slug-input", "", "")
+
 		remoteSessionIssuersDeleteRemoteSessionIssuerFlags                = flag.NewFlagSet("delete-remote-session-issuer", flag.ExitOnError)
 		remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag               = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
 		remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("session-token", "", "")
@@ -1952,6 +2097,10 @@ func ParseEndpoint(
 		adminRemoteSessionsCreateGlobalIssuerFlags            = flag.NewFlagSet("create-global-issuer", flag.ExitOnError)
 		adminRemoteSessionsCreateGlobalIssuerBodyFlag         = adminRemoteSessionsCreateGlobalIssuerFlags.String("body", "REQUIRED", "")
 		adminRemoteSessionsCreateGlobalIssuerSessionTokenFlag = adminRemoteSessionsCreateGlobalIssuerFlags.String("session-token", "", "")
+
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags            = flag.NewFlagSet("get-global-issuer-duplicate-preflight", flag.ExitOnError)
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuerFlag       = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionTokenFlag = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.String("session-token", "", "")
 
 		adminRemoteSessionsListGlobalIssuersFlags            = flag.NewFlagSet("list-global-issuers", flag.ExitOnError)
 		adminRemoteSessionsListGlobalIssuersCursorFlag       = adminRemoteSessionsListGlobalIssuersFlags.String("cursor", "", "")
@@ -1999,6 +2148,21 @@ func ParseEndpoint(
 		adminRemoteSessionsDeleteGlobalClientFlags            = flag.NewFlagSet("delete-global-client", flag.ExitOnError)
 		adminRemoteSessionsDeleteGlobalClientIDFlag           = adminRemoteSessionsDeleteGlobalClientFlags.String("id", "REQUIRED", "")
 		adminRemoteSessionsDeleteGlobalClientSessionTokenFlag = adminRemoteSessionsDeleteGlobalClientFlags.String("session-token", "", "")
+
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags            = flag.NewFlagSet("list-global-issuer-convergence-candidates", flag.ExitOnError)
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag     = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag       = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("cursor", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag        = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("limit", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("session-token", "", "")
+
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags            = flag.NewFlagSet("get-global-issuer-migrate-preflight", flag.ExitOnError)
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("session-token", "", "")
+
+		adminRemoteSessionsMigrateToGlobalIssuerFlags            = flag.NewFlagSet("migrate-to-global-issuer", flag.ExitOnError)
+		adminRemoteSessionsMigrateToGlobalIssuerBodyFlag         = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("body", "REQUIRED", "")
+		adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("session-token", "", "")
 
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
@@ -2186,6 +2350,13 @@ func ParseEndpoint(
 		riskGetRiskRuleBreakdownSessionTokenFlag     = riskGetRiskRuleBreakdownFlags.String("session-token", "", "")
 		riskGetRiskRuleBreakdownProjectSlugInputFlag = riskGetRiskRuleBreakdownFlags.String("project-slug-input", "", "")
 
+		riskGetRiskSignalsFlags                = flag.NewFlagSet("get-risk-signals", flag.ExitOnError)
+		riskGetRiskSignalsFromFlag             = riskGetRiskSignalsFlags.String("from", "", "")
+		riskGetRiskSignalsToFlag               = riskGetRiskSignalsFlags.String("to", "", "")
+		riskGetRiskSignalsApikeyTokenFlag      = riskGetRiskSignalsFlags.String("apikey-token", "", "")
+		riskGetRiskSignalsSessionTokenFlag     = riskGetRiskSignalsFlags.String("session-token", "", "")
+		riskGetRiskSignalsProjectSlugInputFlag = riskGetRiskSignalsFlags.String("project-slug-input", "", "")
+
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
 		riskGetRiskPolicyStatusApikeyTokenFlag      = riskGetRiskPolicyStatusFlags.String("apikey-token", "", "")
@@ -2195,6 +2366,7 @@ func ParseEndpoint(
 		riskCreateRiskPolicyBypassRequestFlags            = flag.NewFlagSet("create-risk-policy-bypass-request", flag.ExitOnError)
 		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskCreateRiskPolicyBypassRequestApikeyTokenFlag  = riskCreateRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
 
 		riskAcknowledgeRiskPolicyChallengeFlags            = flag.NewFlagSet("acknowledge-risk-policy-challenge", flag.ExitOnError)
 		riskAcknowledgeRiskPolicyChallengeBodyFlag         = riskAcknowledgeRiskPolicyChallengeFlags.String("body", "REQUIRED", "")
@@ -2893,20 +3065,6 @@ func ParseEndpoint(
 		toolsetsRemoveOAuthServerApikeyTokenFlag      = toolsetsRemoveOAuthServerFlags.String("apikey-token", "", "")
 		toolsetsRemoveOAuthServerProjectSlugInputFlag = toolsetsRemoveOAuthServerFlags.String("project-slug-input", "", "")
 
-		toolsetsAddOAuthProxyServerFlags                = flag.NewFlagSet("addoauth-proxy-server", flag.ExitOnError)
-		toolsetsAddOAuthProxyServerBodyFlag             = toolsetsAddOAuthProxyServerFlags.String("body", "REQUIRED", "")
-		toolsetsAddOAuthProxyServerSlugFlag             = toolsetsAddOAuthProxyServerFlags.String("slug", "REQUIRED", "")
-		toolsetsAddOAuthProxyServerSessionTokenFlag     = toolsetsAddOAuthProxyServerFlags.String("session-token", "", "")
-		toolsetsAddOAuthProxyServerApikeyTokenFlag      = toolsetsAddOAuthProxyServerFlags.String("apikey-token", "", "")
-		toolsetsAddOAuthProxyServerProjectSlugInputFlag = toolsetsAddOAuthProxyServerFlags.String("project-slug-input", "", "")
-
-		toolsetsUpdateOAuthProxyServerFlags                = flag.NewFlagSet("updateoauth-proxy-server", flag.ExitOnError)
-		toolsetsUpdateOAuthProxyServerBodyFlag             = toolsetsUpdateOAuthProxyServerFlags.String("body", "REQUIRED", "")
-		toolsetsUpdateOAuthProxyServerSlugFlag             = toolsetsUpdateOAuthProxyServerFlags.String("slug", "REQUIRED", "")
-		toolsetsUpdateOAuthProxyServerSessionTokenFlag     = toolsetsUpdateOAuthProxyServerFlags.String("session-token", "", "")
-		toolsetsUpdateOAuthProxyServerApikeyTokenFlag      = toolsetsUpdateOAuthProxyServerFlags.String("apikey-token", "", "")
-		toolsetsUpdateOAuthProxyServerProjectSlugInputFlag = toolsetsUpdateOAuthProxyServerFlags.String("project-slug-input", "", "")
-
 		toolsetsSetUserSessionIssuerFlags                = flag.NewFlagSet("set-user-session-issuer", flag.ExitOnError)
 		toolsetsSetUserSessionIssuerBodyFlag             = toolsetsSetUserSessionIssuerFlags.String("body", "REQUIRED", "")
 		toolsetsSetUserSessionIssuerSlugFlag             = toolsetsSetUserSessionIssuerFlags.String("slug", "REQUIRED", "")
@@ -2930,6 +3088,12 @@ func ParseEndpoint(
 		triggersListTriggerInstancesFlags                = flag.NewFlagSet("list-trigger-instances", flag.ExitOnError)
 		triggersListTriggerInstancesSessionTokenFlag     = triggersListTriggerInstancesFlags.String("session-token", "", "")
 		triggersListTriggerInstancesProjectSlugInputFlag = triggersListTriggerInstancesFlags.String("project-slug-input", "", "")
+
+		triggersListTriggerEventsFlags                = flag.NewFlagSet("list-trigger-events", flag.ExitOnError)
+		triggersListTriggerEventsIDFlag               = triggersListTriggerEventsFlags.String("id", "REQUIRED", "")
+		triggersListTriggerEventsLimitFlag            = triggersListTriggerEventsFlags.String("limit", "50", "")
+		triggersListTriggerEventsSessionTokenFlag     = triggersListTriggerEventsFlags.String("session-token", "", "")
+		triggersListTriggerEventsProjectSlugInputFlag = triggersListTriggerEventsFlags.String("project-slug-input", "", "")
 
 		triggersGetTriggerInstanceFlags                = flag.NewFlagSet("get-trigger-instance", flag.ExitOnError)
 		triggersGetTriggerInstanceIDFlag               = triggersGetTriggerInstanceFlags.String("id", "REQUIRED", "")
@@ -3133,12 +3297,6 @@ func ParseEndpoint(
 		userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag      = userSessionIssuersDeleteUserSessionIssuerFlags.String("apikey-token", "", "")
 		userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag = userSessionIssuersDeleteUserSessionIssuerFlags.String("project-slug-input", "", "")
 
-		userSessionIssuersMigrateLegacyGramRegistrationsFlags                = flag.NewFlagSet("migrate-legacy-gram-registrations", flag.ExitOnError)
-		userSessionIssuersMigrateLegacyGramRegistrationsBodyFlag             = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("body", "REQUIRED", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsSessionTokenFlag     = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("session-token", "", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag      = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("apikey-token", "", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("project-slug-input", "", "")
-
 		userSessionIssuersCimdClientsFlags = flag.NewFlagSet("user-session-issuers-cimd-clients", flag.ContinueOnError)
 
 		userSessionIssuersCimdClientsListPresetsFlags                = flag.NewFlagSet("list-presets", flag.ExitOnError)
@@ -3151,6 +3309,12 @@ func ParseEndpoint(
 		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientSessionTokenFlag     = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("session-token", "", "")
 		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag      = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("apikey-token", "", "")
 		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("project-slug-input", "", "")
+
+		userSessionIssuersCimdClientsVerifyURLFlags                = flag.NewFlagSet("verify-url", flag.ExitOnError)
+		userSessionIssuersCimdClientsVerifyURLBodyFlag             = userSessionIssuersCimdClientsVerifyURLFlags.String("body", "REQUIRED", "")
+		userSessionIssuersCimdClientsVerifyURLSessionTokenFlag     = userSessionIssuersCimdClientsVerifyURLFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsVerifyURLApikeyTokenFlag      = userSessionIssuersCimdClientsVerifyURLFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsVerifyURLProjectSlugInputFlag = userSessionIssuersCimdClientsVerifyURLFlags.String("project-slug-input", "", "")
 
 		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags                   = flag.NewFlagSet("list-user-session-issuer-cimd-clients", flag.ExitOnError)
 		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("user-session-issuer-id", "REQUIRED", "")
@@ -3250,10 +3414,6 @@ func ParseEndpoint(
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
 	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
-	accessUpsertShadowMCPInventoryPolicyBypassFlags.Usage = accessUpsertShadowMCPInventoryPolicyBypassUsage
-	accessDeleteShadowMCPInventoryPolicyBypassFlags.Usage = accessDeleteShadowMCPInventoryPolicyBypassUsage
-	accessBlockShadowMCPInventoryServerFlags.Usage = accessBlockShadowMCPInventoryServerUsage
-	accessUnblockShadowMCPInventoryServerFlags.Usage = accessUnblockShadowMCPInventoryServerUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessRequestAccessFlags.Usage = accessRequestAccessUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
@@ -3266,10 +3426,17 @@ func ParseEndpoint(
 	adminLogoutFlags.Usage = adminLogoutUsage
 	adminGetProjectFlags.Usage = adminGetProjectUsage
 	adminUpdateOrganizationFlags.Usage = adminUpdateOrganizationUsage
+	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
+	adminDisableOrganizationFlags.Usage = adminDisableOrganizationUsage
+	adminEnableOrganizationFlags.Usage = adminEnableOrganizationUsage
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
 	adminListOrganizationMembersFlags.Usage = adminListOrganizationMembersUsage
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
+	adminExtendTrialFlags.Usage = adminExtendTrialUsage
+	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
+	adminRearmTrialFlags.Usage = adminRearmTrialUsage
+	adminGetOrganizationStatsFlags.Usage = adminGetOrganizationStatsUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -3335,6 +3502,7 @@ func ParseEndpoint(
 
 	chatFlags.Usage = chatUsage
 	chatListChatsFlags.Usage = chatListChatsUsage
+	chatGetAssistantSessionSummaryFlags.Usage = chatGetAssistantSessionSummaryUsage
 	chatGetWorkUnitsTrendFlags.Usage = chatGetWorkUnitsTrendUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
@@ -3342,6 +3510,7 @@ func ParseEndpoint(
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
 	chatSummarizeFlags.Usage = chatSummarizeUsage
+	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
 
@@ -3481,6 +3650,15 @@ func ParseEndpoint(
 	litellmIngestFlags.Usage = litellmIngestUsage
 	litellmTracesFlags.Usage = litellmTracesUsage
 
+	mcpApprovalFlags.Usage = mcpApprovalUsage
+	mcpApprovalListRequestsFlags.Usage = mcpApprovalListRequestsUsage
+	mcpApprovalGetRequestFlags.Usage = mcpApprovalGetRequestUsage
+	mcpApprovalEnsureServerReviewFlags.Usage = mcpApprovalEnsureServerReviewUsage
+	mcpApprovalCreateRequestFlags.Usage = mcpApprovalCreateRequestUsage
+	mcpApprovalPromoteFlags.Usage = mcpApprovalPromoteUsage
+	mcpApprovalRefreshEvidenceFlags.Usage = mcpApprovalRefreshEvidenceUsage
+	mcpApprovalRecordDecisionFlags.Usage = mcpApprovalRecordDecisionUsage
+
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
 	mcpEndpointsGetMcpEndpointFlags.Usage = mcpEndpointsGetMcpEndpointUsage
@@ -3556,6 +3734,25 @@ func ParseEndpoint(
 	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
 	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
 
+	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
+	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
+	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
+	adminOpenRouterKeysEncryptKeyFlags.Usage = adminOpenRouterKeysEncryptKeyUsage
+	adminOpenRouterKeysDisableKeyFlags.Usage = adminOpenRouterKeysDisableKeyUsage
+	adminOpenRouterKeysEnableKeyFlags.Usage = adminOpenRouterKeysEnableKeyUsage
+
+	platformMcpFlags.Usage = platformMcpUsage
+	platformMcpGetOnboardingFlags.Usage = platformMcpGetOnboardingUsage
+	platformMcpStartOnboardingFlags.Usage = platformMcpStartOnboardingUsage
+	platformMcpRecordInstallIntentFlags.Usage = platformMcpRecordInstallIntentUsage
+	platformMcpRecordAgentConfigurationCopiedFlags.Usage = platformMcpRecordAgentConfigurationCopiedUsage
+	platformMcpStartOnboardingSetupFlags.Usage = platformMcpStartOnboardingSetupUsage
+	platformMcpRecheckOnboardingReadinessFlags.Usage = platformMcpRecheckOnboardingReadinessUsage
+	platformMcpDistributeOnboardingCandidateFlags.Usage = platformMcpDistributeOnboardingCandidateUsage
+	platformMcpRemoveOnboardingDistributionFlags.Usage = platformMcpRemoveOnboardingDistributionUsage
+	platformMcpRepairOnboardingPublicationFlags.Usage = platformMcpRepairOnboardingPublicationUsage
+	platformMcpDismissOnboardingFlags.Usage = platformMcpDismissOnboardingUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3577,6 +3774,7 @@ func ParseEndpoint(
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
+	featuresSetRemoteSessionAutoRefreshPolicyFlags.Usage = featuresSetRemoteSessionAutoRefreshPolicyUsage
 
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
@@ -3616,7 +3814,6 @@ func ParseEndpoint(
 	remoteSessionClientsFlags.Usage = remoteSessionClientsUsage
 	remoteSessionClientsCreateRemoteSessionClientFlags.Usage = remoteSessionClientsCreateRemoteSessionClientUsage
 	remoteSessionClientsCreateCimdFlags.Usage = remoteSessionClientsCreateCimdUsage
-	remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.Usage = remoteSessionClientsCloneClientFromOAuthProxyProviderUsage
 	remoteSessionClientsUpdateRemoteSessionClientFlags.Usage = remoteSessionClientsUpdateRemoteSessionClientUsage
 	remoteSessionClientsAttachUserSessionIssuerFlags.Usage = remoteSessionClientsAttachUserSessionIssuerUsage
 	remoteSessionClientsDetachUserSessionIssuerFlags.Usage = remoteSessionClientsDetachUserSessionIssuerUsage
@@ -3629,6 +3826,7 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersListIssuersFlags.Usage = organizationRemoteSessionIssuersListIssuersUsage
 	organizationRemoteSessionIssuersGetIssuerFlags.Usage = organizationRemoteSessionIssuersGetIssuerUsage
 	organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerDeletePreflightUsage
+	organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightUsage
 	organizationRemoteSessionIssuersUpdateIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateIssuerUsage
 	organizationRemoteSessionIssuersDeleteIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteIssuerUsage
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
@@ -3644,10 +3842,12 @@ func ParseEndpoint(
 	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
 	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
 	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
+	remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightUsage
 	remoteSessionIssuersDeleteRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDeleteRemoteSessionIssuerUsage
 
 	adminRemoteSessionsFlags.Usage = adminRemoteSessionsUsage
 	adminRemoteSessionsCreateGlobalIssuerFlags.Usage = adminRemoteSessionsCreateGlobalIssuerUsage
+	adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.Usage = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage
 	adminRemoteSessionsListGlobalIssuersFlags.Usage = adminRemoteSessionsListGlobalIssuersUsage
 	adminRemoteSessionsGetGlobalIssuerFlags.Usage = adminRemoteSessionsGetGlobalIssuerUsage
 	adminRemoteSessionsUpdateGlobalIssuerFlags.Usage = adminRemoteSessionsUpdateGlobalIssuerUsage
@@ -3659,6 +3859,9 @@ func ParseEndpoint(
 	adminRemoteSessionsGetGlobalClientFlags.Usage = adminRemoteSessionsGetGlobalClientUsage
 	adminRemoteSessionsUpdateGlobalClientFlags.Usage = adminRemoteSessionsUpdateGlobalClientUsage
 	adminRemoteSessionsDeleteGlobalClientFlags.Usage = adminRemoteSessionsDeleteGlobalClientUsage
+	adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.Usage = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage
+	adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.Usage = adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage
+	adminRemoteSessionsMigrateToGlobalIssuerFlags.Usage = adminRemoteSessionsMigrateToGlobalIssuerUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -3692,6 +3895,7 @@ func ParseEndpoint(
 	riskCompileExprFlags.Usage = riskCompileExprUsage
 	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
+	riskGetRiskSignalsFlags.Usage = riskGetRiskSignalsUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
 	riskAcknowledgeRiskPolicyChallengeFlags.Usage = riskAcknowledgeRiskPolicyChallengeUsage
@@ -3823,14 +4027,13 @@ func ParseEndpoint(
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
-	toolsetsAddOAuthProxyServerFlags.Usage = toolsetsAddOAuthProxyServerUsage
-	toolsetsUpdateOAuthProxyServerFlags.Usage = toolsetsUpdateOAuthProxyServerUsage
 	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
 
 	triggersFlags.Usage = triggersUsage
 	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
 	triggersListTriggerInstancesFlags.Usage = triggersListTriggerInstancesUsage
+	triggersListTriggerEventsFlags.Usage = triggersListTriggerEventsUsage
 	triggersGetTriggerInstanceFlags.Usage = triggersGetTriggerInstanceUsage
 	triggersCreateTriggerInstanceFlags.Usage = triggersCreateTriggerInstanceUsage
 	triggersUpdateTriggerInstanceFlags.Usage = triggersUpdateTriggerInstanceUsage
@@ -3878,11 +4081,11 @@ func ParseEndpoint(
 	userSessionIssuersListUserSessionIssuersFlags.Usage = userSessionIssuersListUserSessionIssuersUsage
 	userSessionIssuersGetUserSessionIssuerFlags.Usage = userSessionIssuersGetUserSessionIssuerUsage
 	userSessionIssuersDeleteUserSessionIssuerFlags.Usage = userSessionIssuersDeleteUserSessionIssuerUsage
-	userSessionIssuersMigrateLegacyGramRegistrationsFlags.Usage = userSessionIssuersMigrateLegacyGramRegistrationsUsage
 
 	userSessionIssuersCimdClientsFlags.Usage = userSessionIssuersCimdClientsUsage
 	userSessionIssuersCimdClientsListPresetsFlags.Usage = userSessionIssuersCimdClientsListPresetsUsage
 	userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage
+	userSessionIssuersCimdClientsVerifyURLFlags.Usage = userSessionIssuersCimdClientsVerifyURLUsage
 	userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.Usage = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage
 	userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientUsage
 	userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientUsage
@@ -3975,6 +4178,8 @@ func ParseEndpoint(
 			svcf = keysFlags
 		case "litellm":
 			svcf = litellmFlags
+		case "mcp-approval":
+			svcf = mcpApprovalFlags
 		case "mcp-endpoints":
 			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
@@ -3993,6 +4198,10 @@ func ParseEndpoint(
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
 			svcf = adminExternalCredentialsFlags
+		case "admin-open-router-keys":
+			svcf = adminOpenRouterKeysFlags
+		case "platform-mcp":
+			svcf = platformMcpFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -4125,18 +4334,6 @@ func ParseEndpoint(
 			case "list-shadow-mcp-inventory-users":
 				epf = accessListShadowMCPInventoryUsersFlags
 
-			case "upsert-shadow-mcp-inventory-policy-bypass":
-				epf = accessUpsertShadowMCPInventoryPolicyBypassFlags
-
-			case "delete-shadow-mcp-inventory-policy-bypass":
-				epf = accessDeleteShadowMCPInventoryPolicyBypassFlags
-
-			case "block-shadow-mcp-inventory-server":
-				epf = accessBlockShadowMCPInventoryServerFlags
-
-			case "unblock-shadow-mcp-inventory-server":
-				epf = accessUnblockShadowMCPInventoryServerFlags
-
 			case "resolve-shadow-mcp-inventory-request":
 				epf = accessResolveShadowMCPInventoryRequestFlags
 
@@ -4171,6 +4368,15 @@ func ParseEndpoint(
 			case "update-organization":
 				epf = adminUpdateOrganizationFlags
 
+			case "bulk-update-account-type":
+				epf = adminBulkUpdateAccountTypeFlags
+
+			case "disable-organization":
+				epf = adminDisableOrganizationFlags
+
+			case "enable-organization":
+				epf = adminEnableOrganizationFlags
+
 			case "get-organization":
 				epf = adminGetOrganizationFlags
 
@@ -4182,6 +4388,18 @@ func ParseEndpoint(
 
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
+
+			case "extend-trial":
+				epf = adminExtendTrialFlags
+
+			case "create-organization":
+				epf = adminCreateOrganizationFlags
+
+			case "rearm-trial":
+				epf = adminRearmTrialFlags
+
+			case "get-organization-stats":
+				epf = adminGetOrganizationStatsFlags
 
 			}
 
@@ -4360,6 +4578,9 @@ func ParseEndpoint(
 			case "list-chats":
 				epf = chatListChatsFlags
 
+			case "get-assistant-session-summary":
+				epf = chatGetAssistantSessionSummaryFlags
+
 			case "get-work-units-trend":
 				epf = chatGetWorkUnitsTrendFlags
 
@@ -4380,6 +4601,9 @@ func ParseEndpoint(
 
 			case "summarize":
 				epf = chatSummarizeFlags
+
+			case "summarize-tool-call":
+				epf = chatSummarizeToolCallFlags
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
@@ -4763,6 +4987,31 @@ func ParseEndpoint(
 
 			}
 
+		case "mcp-approval":
+			switch epn {
+			case "list-requests":
+				epf = mcpApprovalListRequestsFlags
+
+			case "get-request":
+				epf = mcpApprovalGetRequestFlags
+
+			case "ensure-server-review":
+				epf = mcpApprovalEnsureServerReviewFlags
+
+			case "create-request":
+				epf = mcpApprovalCreateRequestFlags
+
+			case "promote":
+				epf = mcpApprovalPromoteFlags
+
+			case "refresh-evidence":
+				epf = mcpApprovalRefreshEvidenceFlags
+
+			case "record-decision":
+				epf = mcpApprovalRecordDecisionFlags
+
+			}
+
 		case "mcp-endpoints":
 			switch epn {
 			case "create-mcp-endpoint":
@@ -4970,6 +5219,59 @@ func ParseEndpoint(
 
 			}
 
+		case "admin-open-router-keys":
+			switch epn {
+			case "list-keys":
+				epf = adminOpenRouterKeysListKeysFlags
+
+			case "get-key-usage":
+				epf = adminOpenRouterKeysGetKeyUsageFlags
+
+			case "encrypt-key":
+				epf = adminOpenRouterKeysEncryptKeyFlags
+
+			case "disable-key":
+				epf = adminOpenRouterKeysDisableKeyFlags
+
+			case "enable-key":
+				epf = adminOpenRouterKeysEnableKeyFlags
+
+			}
+
+		case "platform-mcp":
+			switch epn {
+			case "get-onboarding":
+				epf = platformMcpGetOnboardingFlags
+
+			case "start-onboarding":
+				epf = platformMcpStartOnboardingFlags
+
+			case "record-install-intent":
+				epf = platformMcpRecordInstallIntentFlags
+
+			case "record-agent-configuration-copied":
+				epf = platformMcpRecordAgentConfigurationCopiedFlags
+
+			case "start-onboarding-setup":
+				epf = platformMcpStartOnboardingSetupFlags
+
+			case "recheck-onboarding-readiness":
+				epf = platformMcpRecheckOnboardingReadinessFlags
+
+			case "distribute-onboarding-candidate":
+				epf = platformMcpDistributeOnboardingCandidateFlags
+
+			case "remove-onboarding-distribution":
+				epf = platformMcpRemoveOnboardingDistributionFlags
+
+			case "repair-onboarding-publication":
+				epf = platformMcpRepairOnboardingPublicationFlags
+
+			case "dismiss-onboarding":
+				epf = platformMcpDismissOnboardingFlags
+
+			}
+
 		case "plugins":
 			switch epn {
 			case "list-plugins":
@@ -5029,6 +5331,9 @@ func ParseEndpoint(
 
 			case "set-product-feature":
 				epf = featuresSetProductFeatureFlags
+
+			case "set-remote-session-auto-refresh-policy":
+				epf = featuresSetRemoteSessionAutoRefreshPolicyFlags
 
 			}
 
@@ -5139,9 +5444,6 @@ func ParseEndpoint(
 			case "create-cimd":
 				epf = remoteSessionClientsCreateCimdFlags
 
-			case "clone-client-fromoauth-proxy-provider":
-				epf = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags
-
 			case "update-remote-session-client":
 				epf = remoteSessionClientsUpdateRemoteSessionClientFlags
 
@@ -5175,6 +5477,9 @@ func ParseEndpoint(
 
 			case "get-issuer-delete-preflight":
 				epf = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags
+
+			case "get-issuer-duplicate-preflight":
+				epf = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags
 
 			case "update-issuer":
 				epf = organizationRemoteSessionIssuersUpdateIssuerFlags
@@ -5219,6 +5524,9 @@ func ParseEndpoint(
 			case "get-remote-session-issuer":
 				epf = remoteSessionIssuersGetRemoteSessionIssuerFlags
 
+			case "get-remote-session-issuer-duplicate-preflight":
+				epf = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags
+
 			case "delete-remote-session-issuer":
 				epf = remoteSessionIssuersDeleteRemoteSessionIssuerFlags
 
@@ -5228,6 +5536,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-global-issuer":
 				epf = adminRemoteSessionsCreateGlobalIssuerFlags
+
+			case "get-global-issuer-duplicate-preflight":
+				epf = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags
 
 			case "list-global-issuers":
 				epf = adminRemoteSessionsListGlobalIssuersFlags
@@ -5261,6 +5572,15 @@ func ParseEndpoint(
 
 			case "delete-global-client":
 				epf = adminRemoteSessionsDeleteGlobalClientFlags
+
+			case "list-global-issuer-convergence-candidates":
+				epf = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags
+
+			case "get-global-issuer-migrate-preflight":
+				epf = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags
+
+			case "migrate-to-global-issuer":
+				epf = adminRemoteSessionsMigrateToGlobalIssuerFlags
 
 			}
 
@@ -5352,6 +5672,9 @@ func ParseEndpoint(
 
 			case "get-risk-rule-breakdown":
 				epf = riskGetRiskRuleBreakdownFlags
+
+			case "get-risk-signals":
+				epf = riskGetRiskSignalsFlags
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
@@ -5730,12 +6053,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
 
-			case "addoauth-proxy-server":
-				epf = toolsetsAddOAuthProxyServerFlags
-
-			case "updateoauth-proxy-server":
-				epf = toolsetsUpdateOAuthProxyServerFlags
-
 			case "set-user-session-issuer":
 				epf = toolsetsSetUserSessionIssuerFlags
 
@@ -5751,6 +6068,9 @@ func ParseEndpoint(
 
 			case "list-trigger-instances":
 				epf = triggersListTriggerInstancesFlags
+
+			case "list-trigger-events":
+				epf = triggersListTriggerEventsFlags
 
 			case "get-trigger-instance":
 				epf = triggersGetTriggerInstanceFlags
@@ -5881,9 +6201,6 @@ func ParseEndpoint(
 			case "delete-user-session-issuer":
 				epf = userSessionIssuersDeleteUserSessionIssuerFlags
 
-			case "migrate-legacy-gram-registrations":
-				epf = userSessionIssuersMigrateLegacyGramRegistrationsFlags
-
 			}
 
 		case "user-session-issuers-cimd-clients":
@@ -5893,6 +6210,9 @@ func ParseEndpoint(
 
 			case "create-user-session-issuer-cimd-client":
 				epf = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags
+
+			case "verify-url":
+				epf = userSessionIssuersCimdClientsVerifyURLFlags
 
 			case "list-user-session-issuer-cimd-clients":
 				epf = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags
@@ -6018,18 +6338,6 @@ func ParseEndpoint(
 			case "list-shadow-mcp-inventory-users":
 				endpoint = c.ListShadowMCPInventoryUsers()
 				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
-			case "upsert-shadow-mcp-inventory-policy-bypass":
-				endpoint = c.UpsertShadowMCPInventoryPolicyBypass()
-				data, err = accessc.BuildUpsertShadowMCPInventoryPolicyBypassPayload(*accessUpsertShadowMCPInventoryPolicyBypassBodyFlag, *accessUpsertShadowMCPInventoryPolicyBypassSessionTokenFlag)
-			case "delete-shadow-mcp-inventory-policy-bypass":
-				endpoint = c.DeleteShadowMCPInventoryPolicyBypass()
-				data, err = accessc.BuildDeleteShadowMCPInventoryPolicyBypassPayload(*accessDeleteShadowMCPInventoryPolicyBypassProjectIDFlag, *accessDeleteShadowMCPInventoryPolicyBypassServerURLFlag, *accessDeleteShadowMCPInventoryPolicyBypassSessionTokenFlag)
-			case "block-shadow-mcp-inventory-server":
-				endpoint = c.BlockShadowMCPInventoryServer()
-				data, err = accessc.BuildBlockShadowMCPInventoryServerPayload(*accessBlockShadowMCPInventoryServerBodyFlag, *accessBlockShadowMCPInventoryServerSessionTokenFlag)
-			case "unblock-shadow-mcp-inventory-server":
-				endpoint = c.UnblockShadowMCPInventoryServer()
-				data, err = accessc.BuildUnblockShadowMCPInventoryServerPayload(*accessUnblockShadowMCPInventoryServerProjectIDFlag, *accessUnblockShadowMCPInventoryServerServerURLFlag, *accessUnblockShadowMCPInventoryServerPolicyIDFlag, *accessUnblockShadowMCPInventoryServerSessionTokenFlag)
 			case "resolve-shadow-mcp-inventory-request":
 				endpoint = c.ResolveShadowMCPInventoryRequest()
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
@@ -6064,6 +6372,15 @@ func ParseEndpoint(
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
+			case "bulk-update-account-type":
+				endpoint = c.BulkUpdateAccountType()
+				data, err = adminc.BuildBulkUpdateAccountTypePayload(*adminBulkUpdateAccountTypeBodyFlag, *adminBulkUpdateAccountTypeAdminSessionTokenFlag)
+			case "disable-organization":
+				endpoint = c.DisableOrganization()
+				data, err = adminc.BuildDisableOrganizationPayload(*adminDisableOrganizationBodyFlag, *adminDisableOrganizationAdminSessionTokenFlag)
+			case "enable-organization":
+				endpoint = c.EnableOrganization()
+				data, err = adminc.BuildEnableOrganizationPayload(*adminEnableOrganizationBodyFlag, *adminEnableOrganizationAdminSessionTokenFlag)
 			case "get-organization":
 				endpoint = c.GetOrganization()
 				data, err = adminc.BuildGetOrganizationPayload(*adminGetOrganizationIDOrSlugFlag, *adminGetOrganizationAdminSessionTokenFlag)
@@ -6075,7 +6392,19 @@ func ParseEndpoint(
 				data, err = adminc.BuildListOrganizationProjectsPayload(*adminListOrganizationProjectsOrganizationIDFlag, *adminListOrganizationProjectsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
-				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatesFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
+			case "extend-trial":
+				endpoint = c.ExtendTrial()
+				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
+			case "create-organization":
+				endpoint = c.CreateOrganization()
+				data, err = adminc.BuildCreateOrganizationPayload(*adminCreateOrganizationBodyFlag, *adminCreateOrganizationAdminSessionTokenFlag)
+			case "rearm-trial":
+				endpoint = c.RearmTrial()
+				data, err = adminc.BuildRearmTrialPayload(*adminRearmTrialBodyFlag, *adminRearmTrialAdminSessionTokenFlag)
+			case "get-organization-stats":
+				endpoint = c.GetOrganizationStats()
+				data, err = adminc.BuildGetOrganizationStatsPayload(*adminGetOrganizationStatsAdminSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6264,7 +6593,10 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+			case "get-assistant-session-summary":
+				endpoint = c.GetAssistantSessionSummary()
+				data, err = chatc.BuildGetAssistantSessionSummaryPayload(*chatGetAssistantSessionSummaryAssistantIDFlag, *chatGetAssistantSessionSummaryFromFlag, *chatGetAssistantSessionSummaryToFlag, *chatGetAssistantSessionSummarySessionTokenFlag, *chatGetAssistantSessionSummaryProjectSlugInputFlag)
 			case "get-work-units-trend":
 				endpoint = c.GetWorkUnitsTrend()
 				data, err = chatc.BuildGetWorkUnitsTrendPayload(*chatGetWorkUnitsTrendFromFlag, *chatGetWorkUnitsTrendToFlag, *chatGetWorkUnitsTrendSessionTokenFlag, *chatGetWorkUnitsTrendProjectSlugInputFlag)
@@ -6286,6 +6618,9 @@ func ParseEndpoint(
 			case "summarize":
 				endpoint = c.Summarize()
 				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
+			case "summarize-tool-call":
+				endpoint = c.SummarizeToolCall()
+				data, err = chatc.BuildSummarizeToolCallPayload(*chatSummarizeToolCallBodyFlag, *chatSummarizeToolCallSessionTokenFlag, *chatSummarizeToolCallProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -6667,6 +7002,31 @@ func ParseEndpoint(
 				endpoint = c.Traces()
 				data, err = litellmc.BuildTracesPayload(*litellmTracesBodyFlag, *litellmTracesApikeyTokenFlag, *litellmTracesProjectSlugInputFlag)
 			}
+		case "mcp-approval":
+			c := mcpapprovalc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-requests":
+				endpoint = c.ListRequests()
+				data, err = mcpapprovalc.BuildListRequestsPayload(*mcpApprovalListRequestsStatusFlag, *mcpApprovalListRequestsLimitFlag, *mcpApprovalListRequestsSessionTokenFlag, *mcpApprovalListRequestsApikeyTokenFlag, *mcpApprovalListRequestsProjectSlugInputFlag)
+			case "get-request":
+				endpoint = c.GetRequest()
+				data, err = mcpapprovalc.BuildGetRequestPayload(*mcpApprovalGetRequestIDFlag, *mcpApprovalGetRequestSessionTokenFlag, *mcpApprovalGetRequestApikeyTokenFlag, *mcpApprovalGetRequestProjectSlugInputFlag)
+			case "ensure-server-review":
+				endpoint = c.EnsureServerReview()
+				data, err = mcpapprovalc.BuildEnsureServerReviewPayload(*mcpApprovalEnsureServerReviewBodyFlag, *mcpApprovalEnsureServerReviewSessionTokenFlag, *mcpApprovalEnsureServerReviewApikeyTokenFlag, *mcpApprovalEnsureServerReviewProjectSlugInputFlag)
+			case "create-request":
+				endpoint = c.CreateRequest()
+				data, err = mcpapprovalc.BuildCreateRequestPayload(*mcpApprovalCreateRequestBodyFlag, *mcpApprovalCreateRequestSessionTokenFlag, *mcpApprovalCreateRequestApikeyTokenFlag, *mcpApprovalCreateRequestProjectSlugInputFlag)
+			case "promote":
+				endpoint = c.Promote()
+				data, err = mcpapprovalc.BuildPromotePayload(*mcpApprovalPromoteBodyFlag, *mcpApprovalPromoteSessionTokenFlag, *mcpApprovalPromoteApikeyTokenFlag, *mcpApprovalPromoteProjectSlugInputFlag)
+			case "refresh-evidence":
+				endpoint = c.RefreshEvidence()
+				data, err = mcpapprovalc.BuildRefreshEvidencePayload(*mcpApprovalRefreshEvidenceIDFlag, *mcpApprovalRefreshEvidenceSessionTokenFlag, *mcpApprovalRefreshEvidenceApikeyTokenFlag, *mcpApprovalRefreshEvidenceProjectSlugInputFlag)
+			case "record-decision":
+				endpoint = c.RecordDecision()
+				data, err = mcpapprovalc.BuildRecordDecisionPayload(*mcpApprovalRecordDecisionBodyFlag, *mcpApprovalRecordDecisionSessionTokenFlag, *mcpApprovalRecordDecisionApikeyTokenFlag, *mcpApprovalRecordDecisionProjectSlugInputFlag)
+			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -6874,6 +7234,59 @@ func ParseEndpoint(
 				endpoint = c.DeleteGcpIamPlatformCredential()
 				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
 			}
+		case "admin-open-router-keys":
+			c := adminopenrouterkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = adminopenrouterkeysc.BuildListKeysPayload(*adminOpenRouterKeysListKeysSessionTokenFlag)
+			case "get-key-usage":
+				endpoint = c.GetKeyUsage()
+				data, err = adminopenrouterkeysc.BuildGetKeyUsagePayload(*adminOpenRouterKeysGetKeyUsageOrganizationIDFlag, *adminOpenRouterKeysGetKeyUsageKeyTypeFlag, *adminOpenRouterKeysGetKeyUsageSessionTokenFlag)
+			case "encrypt-key":
+				endpoint = c.EncryptKey()
+				data, err = adminopenrouterkeysc.BuildEncryptKeyPayload(*adminOpenRouterKeysEncryptKeyBodyFlag, *adminOpenRouterKeysEncryptKeySessionTokenFlag)
+			case "disable-key":
+				endpoint = c.DisableKey()
+				data, err = adminopenrouterkeysc.BuildDisableKeyPayload(*adminOpenRouterKeysDisableKeyBodyFlag, *adminOpenRouterKeysDisableKeySessionTokenFlag)
+			case "enable-key":
+				endpoint = c.EnableKey()
+				data, err = adminopenrouterkeysc.BuildEnableKeyPayload(*adminOpenRouterKeysEnableKeyBodyFlag, *adminOpenRouterKeysEnableKeySessionTokenFlag)
+			}
+		case "platform-mcp":
+			c := platformmcpc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-onboarding":
+				endpoint = c.GetOnboarding()
+				data, err = platformmcpc.BuildGetOnboardingPayload(*platformMcpGetOnboardingSessionTokenFlag)
+			case "start-onboarding":
+				endpoint = c.StartOnboarding()
+				data, err = platformmcpc.BuildStartOnboardingPayload(*platformMcpStartOnboardingSessionTokenFlag)
+			case "record-install-intent":
+				endpoint = c.RecordInstallIntent()
+				data, err = platformmcpc.BuildRecordInstallIntentPayload(*platformMcpRecordInstallIntentBodyFlag, *platformMcpRecordInstallIntentSessionTokenFlag)
+			case "record-agent-configuration-copied":
+				endpoint = c.RecordAgentConfigurationCopied()
+				data, err = platformmcpc.BuildRecordAgentConfigurationCopiedPayload(*platformMcpRecordAgentConfigurationCopiedSessionTokenFlag)
+			case "start-onboarding-setup":
+				endpoint = c.StartOnboardingSetup()
+				data, err = platformmcpc.BuildStartOnboardingSetupPayload(*platformMcpStartOnboardingSetupSessionTokenFlag)
+			case "recheck-onboarding-readiness":
+				endpoint = c.RecheckOnboardingReadiness()
+				data, err = platformmcpc.BuildRecheckOnboardingReadinessPayload(*platformMcpRecheckOnboardingReadinessSessionTokenFlag)
+			case "distribute-onboarding-candidate":
+				endpoint = c.DistributeOnboardingCandidate()
+				data, err = platformmcpc.BuildDistributeOnboardingCandidatePayload(*platformMcpDistributeOnboardingCandidateBodyFlag, *platformMcpDistributeOnboardingCandidateSessionTokenFlag)
+			case "remove-onboarding-distribution":
+				endpoint = c.RemoveOnboardingDistribution()
+				data, err = platformmcpc.BuildRemoveOnboardingDistributionPayload(*platformMcpRemoveOnboardingDistributionBodyFlag, *platformMcpRemoveOnboardingDistributionSessionTokenFlag)
+			case "repair-onboarding-publication":
+				endpoint = c.RepairOnboardingPublication()
+				data, err = platformmcpc.BuildRepairOnboardingPublicationPayload(*platformMcpRepairOnboardingPublicationBodyFlag, *platformMcpRepairOnboardingPublicationSessionTokenFlag)
+			case "dismiss-onboarding":
+				endpoint = c.DismissOnboarding()
+				data, err = platformmcpc.BuildDismissOnboardingPayload(*platformMcpDismissOnboardingSessionTokenFlag)
+			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -6935,6 +7348,9 @@ func ParseEndpoint(
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
+			case "set-remote-session-auto-refresh-policy":
+				endpoint = c.SetRemoteSessionAutoRefreshPolicy()
+				data, err = featuresc.BuildSetRemoteSessionAutoRefreshPolicyPayload(*featuresSetRemoteSessionAutoRefreshPolicyBodyFlag, *featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7044,9 +7460,6 @@ func ParseEndpoint(
 			case "create-cimd":
 				endpoint = c.CreateCimd()
 				data, err = remotesessionclientsc.BuildCreateCimdPayload(*remoteSessionClientsCreateCimdBodyFlag, *remoteSessionClientsCreateCimdSessionTokenFlag, *remoteSessionClientsCreateCimdApikeyTokenFlag, *remoteSessionClientsCreateCimdProjectSlugInputFlag)
-			case "clone-client-fromoauth-proxy-provider":
-				endpoint = c.CloneClientFromOAuthProxyProvider()
-				data, err = remotesessionclientsc.BuildCloneClientFromOAuthProxyProviderPayload(*remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag)
 			case "update-remote-session-client":
 				endpoint = c.UpdateRemoteSessionClient()
 				data, err = remotesessionclientsc.BuildUpdateRemoteSessionClientPayload(*remoteSessionClientsUpdateRemoteSessionClientBodyFlag, *remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientProjectSlugInputFlag)
@@ -7081,6 +7494,9 @@ func ParseEndpoint(
 			case "get-issuer-delete-preflight":
 				endpoint = c.GetIssuerDeletePreflight()
 				data, err = organizationremotesessionissuersc.BuildGetIssuerDeletePreflightPayload(*organizationRemoteSessionIssuersGetIssuerDeletePreflightIDFlag, *organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyTokenFlag)
+			case "get-issuer-duplicate-preflight":
+				endpoint = c.GetIssuerDuplicatePreflight()
+				data, err = organizationremotesessionissuersc.BuildGetIssuerDuplicatePreflightPayload(*organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuerFlag, *organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyTokenFlag)
 			case "update-issuer":
 				endpoint = c.UpdateIssuer()
 				data, err = organizationremotesessionissuersc.BuildUpdateIssuerPayload(*organizationRemoteSessionIssuersUpdateIssuerBodyFlag, *organizationRemoteSessionIssuersUpdateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersUpdateIssuerApikeyTokenFlag)
@@ -7124,6 +7540,9 @@ func ParseEndpoint(
 			case "get-remote-session-issuer":
 				endpoint = c.GetRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerPayload(*remoteSessionIssuersGetRemoteSessionIssuerIDFlag, *remoteSessionIssuersGetRemoteSessionIssuerSlugFlag, *remoteSessionIssuersGetRemoteSessionIssuerIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag)
+			case "get-remote-session-issuer-duplicate-preflight":
+				endpoint = c.GetRemoteSessionIssuerDuplicatePreflight()
+				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerDuplicatePreflightPayload(*remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInputFlag)
 			case "delete-remote-session-issuer":
 				endpoint = c.DeleteRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildDeleteRemoteSessionIssuerPayload(*remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag)
@@ -7134,6 +7553,9 @@ func ParseEndpoint(
 			case "create-global-issuer":
 				endpoint = c.CreateGlobalIssuer()
 				data, err = adminremotesessionsc.BuildCreateGlobalIssuerPayload(*adminRemoteSessionsCreateGlobalIssuerBodyFlag, *adminRemoteSessionsCreateGlobalIssuerSessionTokenFlag)
+			case "get-global-issuer-duplicate-preflight":
+				endpoint = c.GetGlobalIssuerDuplicatePreflight()
+				data, err = adminremotesessionsc.BuildGetGlobalIssuerDuplicatePreflightPayload(*adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuerFlag, *adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionTokenFlag)
 			case "list-global-issuers":
 				endpoint = c.ListGlobalIssuers()
 				data, err = adminremotesessionsc.BuildListGlobalIssuersPayload(*adminRemoteSessionsListGlobalIssuersCursorFlag, *adminRemoteSessionsListGlobalIssuersLimitFlag, *adminRemoteSessionsListGlobalIssuersSessionTokenFlag)
@@ -7167,6 +7589,15 @@ func ParseEndpoint(
 			case "delete-global-client":
 				endpoint = c.DeleteGlobalClient()
 				data, err = adminremotesessionsc.BuildDeleteGlobalClientPayload(*adminRemoteSessionsDeleteGlobalClientIDFlag, *adminRemoteSessionsDeleteGlobalClientSessionTokenFlag)
+			case "list-global-issuer-convergence-candidates":
+				endpoint = c.ListGlobalIssuerConvergenceCandidates()
+				data, err = adminremotesessionsc.BuildListGlobalIssuerConvergenceCandidatesPayload(*adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag)
+			case "get-global-issuer-migrate-preflight":
+				endpoint = c.GetGlobalIssuerMigratePreflight()
+				data, err = adminremotesessionsc.BuildGetGlobalIssuerMigratePreflightPayload(*adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag)
+			case "migrate-to-global-issuer":
+				endpoint = c.MigrateToGlobalIssuer()
+				data, err = adminremotesessionsc.BuildMigrateToGlobalIssuerPayload(*adminRemoteSessionsMigrateToGlobalIssuerBodyFlag, *adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7258,12 +7689,15 @@ func ParseEndpoint(
 			case "get-risk-rule-breakdown":
 				endpoint = c.GetRiskRuleBreakdown()
 				data, err = riskc.BuildGetRiskRuleBreakdownPayload(*riskGetRiskRuleBreakdownCategoryFlag, *riskGetRiskRuleBreakdownFromFlag, *riskGetRiskRuleBreakdownToFlag, *riskGetRiskRuleBreakdownApikeyTokenFlag, *riskGetRiskRuleBreakdownSessionTokenFlag, *riskGetRiskRuleBreakdownProjectSlugInputFlag)
+			case "get-risk-signals":
+				endpoint = c.GetRiskSignals()
+				data, err = riskc.BuildGetRiskSignalsPayload(*riskGetRiskSignalsFromFlag, *riskGetRiskSignalsToFlag, *riskGetRiskSignalsApikeyTokenFlag, *riskGetRiskSignalsSessionTokenFlag, *riskGetRiskSignalsProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
-				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
+				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag, *riskCreateRiskPolicyBypassRequestApikeyTokenFlag)
 			case "acknowledge-risk-policy-challenge":
 				endpoint = c.AcknowledgeRiskPolicyChallenge()
 				data, err = riskc.BuildAcknowledgeRiskPolicyChallengePayload(*riskAcknowledgeRiskPolicyChallengeBodyFlag, *riskAcknowledgeRiskPolicyChallengeSessionTokenFlag)
@@ -7635,12 +8069,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerApikeyTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
-			case "addoauth-proxy-server":
-				endpoint = c.AddOAuthProxyServer()
-				data, err = toolsetsc.BuildAddOAuthProxyServerPayload(*toolsetsAddOAuthProxyServerBodyFlag, *toolsetsAddOAuthProxyServerSlugFlag, *toolsetsAddOAuthProxyServerSessionTokenFlag, *toolsetsAddOAuthProxyServerApikeyTokenFlag, *toolsetsAddOAuthProxyServerProjectSlugInputFlag)
-			case "updateoauth-proxy-server":
-				endpoint = c.UpdateOAuthProxyServer()
-				data, err = toolsetsc.BuildUpdateOAuthProxyServerPayload(*toolsetsUpdateOAuthProxyServerBodyFlag, *toolsetsUpdateOAuthProxyServerSlugFlag, *toolsetsUpdateOAuthProxyServerSessionTokenFlag, *toolsetsUpdateOAuthProxyServerApikeyTokenFlag, *toolsetsUpdateOAuthProxyServerProjectSlugInputFlag)
 			case "set-user-session-issuer":
 				endpoint = c.SetUserSessionIssuer()
 				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
@@ -7657,6 +8085,9 @@ func ParseEndpoint(
 			case "list-trigger-instances":
 				endpoint = c.ListTriggerInstances()
 				data, err = triggersc.BuildListTriggerInstancesPayload(*triggersListTriggerInstancesSessionTokenFlag, *triggersListTriggerInstancesProjectSlugInputFlag)
+			case "list-trigger-events":
+				endpoint = c.ListTriggerEvents()
+				data, err = triggersc.BuildListTriggerEventsPayload(*triggersListTriggerEventsIDFlag, *triggersListTriggerEventsLimitFlag, *triggersListTriggerEventsSessionTokenFlag, *triggersListTriggerEventsProjectSlugInputFlag)
 			case "get-trigger-instance":
 				endpoint = c.GetTriggerInstance()
 				data, err = triggersc.BuildGetTriggerInstancePayload(*triggersGetTriggerInstanceIDFlag, *triggersGetTriggerInstanceSessionTokenFlag, *triggersGetTriggerInstanceProjectSlugInputFlag)
@@ -7785,9 +8216,6 @@ func ParseEndpoint(
 			case "delete-user-session-issuer":
 				endpoint = c.DeleteUserSessionIssuer()
 				data, err = usersessionissuersc.BuildDeleteUserSessionIssuerPayload(*userSessionIssuersDeleteUserSessionIssuerIDFlag, *userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag, *userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag, *userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag)
-			case "migrate-legacy-gram-registrations":
-				endpoint = c.MigrateLegacyGramRegistrations()
-				data, err = usersessionissuersc.BuildMigrateLegacyGramRegistrationsPayload(*userSessionIssuersMigrateLegacyGramRegistrationsBodyFlag, *userSessionIssuersMigrateLegacyGramRegistrationsSessionTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag)
 			}
 		case "user-session-issuers-cimd-clients":
 			c := usersessionissuerscimdclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7798,6 +8226,9 @@ func ParseEndpoint(
 			case "create-user-session-issuer-cimd-client":
 				endpoint = c.CreateUserSessionIssuerCimdClient()
 				data, err = usersessionissuerscimdclientsc.BuildCreateUserSessionIssuerCimdClientPayload(*userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientBodyFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientSessionTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag)
+			case "verify-url":
+				endpoint = c.VerifyURL()
+				data, err = usersessionissuerscimdclientsc.BuildVerifyURLPayload(*userSessionIssuersCimdClientsVerifyURLBodyFlag, *userSessionIssuersCimdClientsVerifyURLSessionTokenFlag, *userSessionIssuersCimdClientsVerifyURLApikeyTokenFlag, *userSessionIssuersCimdClientsVerifyURLProjectSlugInputFlag)
 			case "list-user-session-issuer-cimd-clients":
 				endpoint = c.ListUserSessionIssuerCimdClients()
 				data, err = usersessionissuerscimdclientsc.BuildListUserSessionIssuerCimdClientsPayload(*userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsCursorFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsLimitFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsSessionTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsApikeyTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsProjectSlugInputFlag)
@@ -7926,10 +8357,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
-	fmt.Fprintln(os.Stderr, `    upsert-shadow-mcp-inventory-policy-bypass: Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
-	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-inventory-policy-bypass: Remove a Shadow MCP URL allow decision.`)
-	fmt.Fprintln(os.Stderr, `    block-shadow-mcp-inventory-server: Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.`)
-	fmt.Fprintln(os.Stderr, `    unblock-shadow-mcp-inventory-server: Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
@@ -8221,92 +8648,6 @@ func accessListShadowMCPInventoryUsersUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
 }
 
-func accessUpsertShadowMCPInventoryPolicyBypassUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-shadow-mcp-inventory-policy-bypass", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-shadow-mcp-inventory-policy-bypass --body '{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessDeleteShadowMCPInventoryPolicyBypassUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access delete-shadow-mcp-inventory-policy-bypass", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-url STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a Shadow MCP URL allow decision.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-shadow-mcp-inventory-policy-bypass --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --session-token \"abc123\"")
-}
-
-func accessBlockShadowMCPInventoryServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access block-shadow-mcp-inventory-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access block-shadow-mcp-inventory-server --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessUnblockShadowMCPInventoryServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access unblock-shadow-mcp-inventory-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-url STRING")
-	fmt.Fprint(os.Stderr, " -policy-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
-	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access unblock-shadow-mcp-inventory-server --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
 func accessResolveShadowMCPInventoryRequestUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-shadow-mcp-inventory-request", os.Args[0])
@@ -8451,10 +8792,17 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
 	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
+	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
+	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
+	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
+	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
+	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-stats: Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -8560,7 +8908,67 @@ func adminUpdateOrganizationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBulkUpdateAccountTypeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin bulk-update-account-type", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin bulk-update-account-type --body '{\n      \"account_type\": \"pro\",\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminDisableOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin disable-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin disable-organization --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminEnableOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin enable-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin enable-organization --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetOrganizationUsage() {
@@ -8628,9 +9036,15 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organizations", os.Args[0])
 	fmt.Fprint(os.Stderr, " -q STRING")
 	fmt.Fprint(os.Stderr, " -account-type STRING")
+	fmt.Fprint(os.Stderr, " -account-types JSON")
+	fmt.Fprint(os.Stderr, " -trial-states JSON")
+	fmt.Fprint(os.Stderr, " -disabled-states JSON")
 	fmt.Fprint(os.Stderr, " -include-disabled BOOL")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -sort STRING")
+	fmt.Fprint(os.Stderr, " -direction STRING")
+	fmt.Fprint(os.Stderr, " -page INT")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -8641,14 +9055,98 @@ func adminListOrganizationsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -q STRING: `)
 	fmt.Fprintln(os.Stderr, `    -account-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -account-types JSON: `)
+	fmt.Fprintln(os.Stderr, `    -trial-states JSON: `)
+	fmt.Fprintln(os.Stderr, `    -disabled-states JSON: `)
 	fmt.Fprintln(os.Stderr, `    -include-disabled BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
+	fmt.Fprintln(os.Stderr, `    -direction STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page INT: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --include-disabled false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-states '[\n      \"abc123\"\n   ]' --include-disabled false --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
+}
+
+func adminExtendTrialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin extend-trial", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin extend-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminCreateOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-organization --body '{\n      \"name\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminRearmTrialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin rearm-trial", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin rearm-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationStatsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-stats", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-stats --admin-session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.
@@ -8658,7 +9156,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
-	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
+	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -8714,7 +9212,7 @@ func agentGetConfigurationUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
+	fmt.Fprintln(os.Stderr, `Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -9466,7 +9964,7 @@ func assistantsSendMessageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\",\n      \"skill_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"attachments\": [\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         }\n      ],\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aaa\",\n      \"skill_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsGetManagedAssistantUsage() {
@@ -9818,6 +10316,7 @@ func chatUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] chat COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
+	fmt.Fprintln(os.Stderr, `    get-assistant-session-summary: Get assistant session activity totals for a time range.`)
 	fmt.Fprintln(os.Stderr, `    get-work-units-trend: Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
 	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
@@ -9825,6 +10324,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
 	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
+	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
 	fmt.Fprintln(os.Stderr)
@@ -9836,6 +10336,7 @@ func chatListChatsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] chat list-chats", os.Args[0])
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -external-user-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
 	fmt.Fprint(os.Stderr, " -source STRING")
 	fmt.Fprint(os.Stderr, " -assistant-id STRING")
 	fmt.Fprint(os.Stderr, " -source-kind STRING")
@@ -9862,6 +10363,7 @@ func chatListChatsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -source STRING: `)
 	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -source-kind STRING: `)
@@ -9882,7 +10384,33 @@ func chatListChatsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatGetAssistantSessionSummaryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat get-assistant-session-summary", os.Args[0])
+	fmt.Fprint(os.Stderr, " -assistant-id STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get assistant session activity totals for a time range.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-assistant-session-summary --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatGetWorkUnitsTrendUsage() {
@@ -10055,6 +10583,28 @@ func chatSummarizeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatSummarizeToolCallUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat summarize-tool-call", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize-tool-call --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_call_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
@@ -11386,16 +11936,16 @@ func externalKeysUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-keys COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-aws-kms-key: Create an AWS KMS external key. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 	fmt.Fprintln(os.Stderr, `    create-gcp-kms-key: Create a GCP KMS external key. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 	fmt.Fprintln(os.Stderr, `    list-external-keys: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-aws-kms-keys: List the organization's AWS KMS external keys. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s external-keys COMMAND --help\n", os.Args[0])
@@ -11429,7 +11979,7 @@ func externalKeysUpdateAwsKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11437,7 +11987,7 @@ func externalKeysUpdateAwsKmsKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func externalKeysCreateGcpKmsKeyUsage() {
@@ -11469,7 +12019,7 @@ func externalKeysUpdateGcpKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11477,7 +12027,7 @@ func externalKeysUpdateGcpKmsKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func externalKeysListExternalKeysUsage() {
@@ -11585,7 +12135,7 @@ func externalKeysDeleteAwsKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -11605,7 +12155,7 @@ func externalKeysDeleteGcpKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -12576,6 +13126,193 @@ func litellmTracesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm traces --body '{\n      \"resourceSpans\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpApprovalUsage displays the usage of the mcp-approval command and its
+// subcommands.
+func mcpApprovalUsage() {
+	fmt.Fprintln(os.Stderr, `Dashboard API for reviewing and deciding MCP server approval requests.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-approval COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-requests: List MCP approval requests for a project.`)
+	fmt.Fprintln(os.Stderr, `    get-request: Fetch one MCP approval request with its evidence and decision history.`)
+	fmt.Fprintln(os.Stderr, `    ensure-server-review: Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.`)
+	fmt.Fprintln(os.Stderr, `    create-request: Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.`)
+	fmt.Fprintln(os.Stderr, `    promote: Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.`)
+	fmt.Fprintln(os.Stderr, `    refresh-evidence: Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.`)
+	fmt.Fprintln(os.Stderr, `    record-decision: Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-approval COMMAND --help\n", os.Args[0])
+}
+func mcpApprovalListRequestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval list-requests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List MCP approval requests for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval list-requests --status \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalGetRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval get-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch one MCP approval request with its evidence and decision history.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval get-request --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalEnsureServerReviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval ensure-server-review", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval ensure-server-review --body '{\n      \"target\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalCreateRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval create-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval create-request --body '{\n      \"note\": \"aaa\",\n      \"target\": \"aaa\",\n      \"target_kind\": \"stdio_command\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalPromoteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval promote", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval promote --body '{\n      \"risk_policy_bypass_request_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalRefreshEvidenceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval refresh-evidence", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval refresh-evidence --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalRecordDecisionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval record-decision", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval record-decision --body '{\n      \"decision\": \"denied\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its
@@ -13980,6 +14717,329 @@ func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
+// adminOpenRouterKeysUsage displays the usage of the admin-open-router-keys
+// command and its subcommands.
+func adminOpenRouterKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-open-router-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-key-usage: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    encrypt-key: Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    disable-key: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    enable-key: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-open-router-keys COMMAND --help\n", os.Args[0])
+}
+func adminOpenRouterKeysListKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys list-keys --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysGetKeyUsageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys get-key-usage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -key-type STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -key-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys get-key-usage --organization-id \"abc123\" --key-type \"internal\" --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysEncryptKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys encrypt-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys encrypt-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysDisableKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys disable-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys disable-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysEnableKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys enable-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys enable-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+// platformMcpUsage displays the usage of the platform-mcp command and its
+// subcommands.
+func platformMcpUsage() {
+	fmt.Fprintln(os.Stderr, `Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] platform-mcp COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-onboarding: Get the current user's safe Platform MCP onboarding projection for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    start-onboarding: Create or resume the current user's durable Platform MCP onboarding workflow.`)
+	fmt.Fprintln(os.Stderr, `    record-install-intent: Record a selected manual-install client family for the current user's Platform MCP workflow.`)
+	fmt.Fprintln(os.Stderr, `    record-agent-configuration-copied: Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.`)
+	fmt.Fprintln(os.Stderr, `    start-onboarding-setup: Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.`)
+	fmt.Fprintln(os.Stderr, `    recheck-onboarding-readiness: Force a rate-limited authenticated readiness recheck for the workflow-bound local registration.`)
+	fmt.Fprintln(os.Stderr, `    distribute-onboarding-candidate: Attach the workflow-bound ready local MCP to the selected project's existing Default plugin. The caller supplies only the selected project slug and its opaque server-issued version token.`)
+	fmt.Fprintln(os.Stderr, `    remove-onboarding-distribution: Remove only the workflow-bound MCP from the selected project's existing Default plugin. Registration, readiness, connection, and prior evidence remain intact.`)
+	fmt.Fprintln(os.Stderr, `    repair-onboarding-publication: Retry in-memory local package publication for the workflow-bound distribution without changing its attachment or version.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-onboarding: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s platform-mcp COMMAND --help\n", os.Args[0])
+}
+func platformMcpGetOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp get-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the current user's safe Platform MCP onboarding projection for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp get-onboarding --session-token \"abc123\"")
+}
+
+func platformMcpStartOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp start-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or resume the current user's durable Platform MCP onboarding workflow.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding --session-token \"abc123\"")
+}
+
+func platformMcpRecordInstallIntentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp record-install-intent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record a selected manual-install client family for the current user's Platform MCP workflow.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp record-install-intent --body '{\n      \"client_family\": \"claude_cowork\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRecordAgentConfigurationCopiedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp record-agent-configuration-copied", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp record-agent-configuration-copied --session-token \"abc123\"")
+}
+
+func platformMcpStartOnboardingSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp start-onboarding-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding-setup --session-token \"abc123\"")
+}
+
+func platformMcpRecheckOnboardingReadinessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp recheck-onboarding-readiness", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Force a rate-limited authenticated readiness recheck for the workflow-bound local registration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp recheck-onboarding-readiness --session-token \"abc123\"")
+}
+
+func platformMcpDistributeOnboardingCandidateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp distribute-onboarding-candidate", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Attach the workflow-bound ready local MCP to the selected project's existing Default plugin. The caller supplies only the selected project slug and its opaque server-issued version token.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp distribute-onboarding-candidate --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRemoveOnboardingDistributionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp remove-onboarding-distribution", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove only the workflow-bound MCP from the selected project's existing Default plugin. Registration, readiness, connection, and prior evidence remain intact.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp remove-onboarding-distribution --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRepairOnboardingPublicationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp repair-onboarding-publication", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Retry in-memory local package publication for the workflow-bound distribution without changing its attachment or version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp repair-onboarding-publication --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpDismissOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp dismiss-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp dismiss-onboarding --session-token \"abc123\"")
+}
+
 // pluginsUsage displays the usage of the plugins command and its subcommands.
 func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage distributable plugin bundles of MCP servers and hooks.`)
@@ -14360,6 +15420,7 @@ func featuresUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
 	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `    set-remote-session-auto-refresh-policy: Set the organization policy for automatic remote-session refresh.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s features COMMAND --help\n", os.Args[0])
@@ -14400,6 +15461,26 @@ func featuresSetProductFeatureUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+}
+
+func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features set-remote-session-auto-refresh-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the organization policy for automatic remote-session refresh.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -15136,7 +16217,6 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.`)
-	fmt.Fprintln(os.Stderr, `    clone-client-fromoauth-proxy-provider: Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.`)
 	fmt.Fprintln(os.Stderr, `    attach-user-session-issuer: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    detach-user-session-issuer: Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.`)
@@ -15193,30 +16273,6 @@ func remoteSessionClientsCreateCimdUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-cimd --body '{\n      \"audience\": \"aaa\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func remoteSessionClientsCloneClientFromOAuthProxyProviderUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients clone-client-fromoauth-proxy-provider", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients clone-client-fromoauth-proxy-provider --body '{\n      \"audience\": \"aaa\",\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsUpdateRemoteSessionClientUsage() {
@@ -15379,11 +16435,16 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-issuers: List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer-duplicate-preflight: Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+	
+	Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+	
+	Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -15409,7 +16470,7 @@ func organizationRemoteSessionIssuersCreateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersListIssuersUsage() {
@@ -15480,6 +16541,32 @@ func organizationRemoteSessionIssuersGetIssuerDeletePreflightUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-delete-preflight --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+func organizationRemoteSessionIssuersGetIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+	
+	Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+	
+	Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers update-issuer", os.Args[0])
@@ -15499,7 +16586,7 @@ func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersDeleteIssuerUsage() {
@@ -15580,7 +16667,7 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15652,6 +16739,11 @@ func remoteSessionIssuersUsage() {
 	Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
 	
 	The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.`)
+	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer-duplicate-preflight: Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+	
+	Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+	
+	Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.`)
 	fmt.Fprintln(os.Stderr, `    delete-remote-session-issuer: Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15726,7 +16818,7 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
@@ -15750,7 +16842,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -15811,6 +16903,34 @@ func remoteSessionIssuersGetRemoteSessionIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers get-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers get-remote-session-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+	
+	Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+	
+	Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers get-remote-session-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionIssuersDeleteRemoteSessionIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers delete-remote-session-issuer", os.Args[0])
@@ -15842,6 +16962,11 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-global-issuer: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-global-issuer-duplicate-preflight: Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+	
+	Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+	
+	The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.`)
 	fmt.Fprintln(os.Stderr, `    list-global-issuers: List global remote_session_issuers. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-issuer: Get a global remote_session_issuer by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-issuer: Update a global remote_session_issuer. Requires platform admin.`)
@@ -15853,6 +16978,9 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-global-client: Get a global remote_session_client by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-client: Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-global-client: Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-global-issuer-convergence-candidates: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-global-issuer-migrate-preflight: Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-to-global-issuer: Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin-remote-sessions COMMAND --help\n", os.Args[0])
@@ -15874,7 +17002,31 @@ func adminRemoteSessionsCreateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions get-global-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+	
+	Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+	
+	The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions get-global-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsListGlobalIssuersUsage() {
@@ -15936,7 +17088,7 @@ func adminRemoteSessionsUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsDeleteGlobalIssuerUsage() {
@@ -16101,6 +17253,72 @@ func adminRemoteSessionsDeleteGlobalClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions delete-global-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions list-global-issuer-convergence-candidates", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions list-global-issuer-convergence-candidates --target-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions get-global-issuer-migrate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-id STRING")
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions get-global-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsMigrateToGlobalIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions migrate-to-global-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions migrate-to-global-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the
@@ -16335,6 +17553,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    compile-expr: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).`)
 	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-signals: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).`)
@@ -16851,6 +18070,32 @@ func riskGetRiskRuleBreakdownUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-rule-breakdown --category \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func riskGetRiskSignalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-signals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-signals --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func riskGetRiskPolicyStatusUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-policy-status", os.Args[0])
@@ -16880,6 +18125,7 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy-bypass-request", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -16889,10 +18135,11 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func riskAcknowledgeRiskPolicyChallengeUsage() {
@@ -19511,8 +20758,6 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
-	fmt.Fprintln(os.Stderr, `    addoauth-proxy-server: Associate an OAuth proxy server with a toolset (admin only)`)
-	fmt.Fprintln(os.Stderr, `    updateoauth-proxy-server: Update an existing OAuth proxy server associated with a toolset`)
 	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
@@ -19781,58 +21026,6 @@ func toolsetsRemoveOAuthServerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets removeoauth-server --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func toolsetsAddOAuthProxyServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets addoauth-proxy-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Associate an OAuth proxy server with a toolset (admin only)`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets addoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"provider_type\": \"gram\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"slug\": \"aaa\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func toolsetsUpdateOAuthProxyServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets updateoauth-proxy-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an existing OAuth proxy server associated with a toolset`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets updateoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func toolsetsSetUserSessionIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] toolsets set-user-session-issuer", os.Args[0])
@@ -19892,6 +21085,7 @@ func triggersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-trigger-definitions: List static trigger definitions available to a project.`)
 	fmt.Fprintln(os.Stderr, `    list-trigger-instances: List trigger instances for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-trigger-events: List recent dispatch events for a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    get-trigger-instance: Get a trigger instance by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-trigger-instance: Create a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    update-trigger-instance: Update a trigger instance.`)
@@ -19940,6 +21134,30 @@ func triggersListTriggerInstancesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersListTriggerEventsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers list-trigger-events", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List recent dispatch events for a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-events --id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersGetTriggerInstanceUsage() {
@@ -20537,12 +21755,12 @@ func usageCreateTopUpCheckoutUsage() {
 // userSessionClientsUsage displays the usage of the user-session-clients
 // command and its subcommands.
 func userSessionClientsUsage() {
-	fmt.Fprintln(os.Stderr, `Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.`)
+	fmt.Fprintln(os.Stderr, `Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-session-clients: List user_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-client: Get a user_session_client by id.`)
-	fmt.Fprintln(os.Stderr, `    revoke-user-session-client: Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.`)
+	fmt.Fprintln(os.Stderr, `    revoke-user-session-client: Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-session-clients COMMAND --help\n", os.Args[0])
@@ -20610,7 +21828,7 @@ func userSessionClientsRevokeUserSessionClientUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -20702,7 +21920,6 @@ func userSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuers: List user_session_issuers in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer: Get a user_session_issuer by id or by slug. Provide exactly one.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer: Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.`)
-	fmt.Fprintln(os.Stderr, `    migrate-legacy-gram-registrations: One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-session-issuers COMMAND --help\n", os.Args[0])
@@ -20831,30 +22048,6 @@ func userSessionIssuersDeleteUserSessionIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers delete-user-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func userSessionIssuersMigrateLegacyGramRegistrationsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers migrate-legacy-gram-registrations", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers migrate-legacy-gram-registrations --body '{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 // userSessionIssuersCimdClientsUsage displays the usage of the
 // user-session-issuers-cimd-clients command and its subcommands.
 func userSessionIssuersCimdClientsUsage() {
@@ -20862,7 +22055,8 @@ func userSessionIssuersCimdClientsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-issuers-cimd-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-presets: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
-	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.`)
+	fmt.Fprintln(os.Stderr, `    verify-url: Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuer-cimd-clients: List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer-cimd-client: Get a single custom CIMD document URL entry by id.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer-cimd-client: Remove a custom CIMD document URL from a user_session_issuer. New authorization requests from that client are denied immediately; sessions already issued to it are unaffected and continue until they expire.`)
@@ -20903,7 +22097,7 @@ func userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+	fmt.Fprintln(os.Stderr, `Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20914,6 +22108,30 @@ func userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients create-user-session-issuer-cimd-client --body '{\n      \"client_id_metadata_uri\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsVerifyURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients verify-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients verify-url --body '{\n      \"client_id_metadata_uri\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage() {

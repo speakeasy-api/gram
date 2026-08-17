@@ -23,22 +23,12 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
-func TestCreateInstanceRequiresFeature(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
-
-	_, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "production", FailurePosture: "fail_closed"})
-	requireOops(t, err, oops.CodeForbidden)
-}
-
 func TestInstanceLifecycle(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newRealTestService(t, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	ti.features.enabled = true
 
 	first, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "production", FailurePosture: ""})
 	require.NoError(t, err)
@@ -129,7 +119,6 @@ func TestManagedKeyLastAccessedOnlyAfterProjectAuthorization(t *testing.T) {
 	ctx, ti := newRealTestService(t, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.features.enabled = true
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "access-time", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other", Slug: "last-access-other", OrganizationID: authCtx.ActiveOrganizationID})
@@ -168,7 +157,6 @@ func TestInstanceProjectAndOrganizationIsolation(t *testing.T) {
 	ctx, ti := newRealTestService(t, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.features.enabled = true
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "isolated", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 

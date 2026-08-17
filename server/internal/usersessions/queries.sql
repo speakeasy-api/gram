@@ -137,8 +137,9 @@ WHERE cli.user_session_issuer_id = @user_session_issuer_id
   AND cli.deleted IS FALSE;
 
 -- name: ListUserSessionClientsByProjectID :many
--- Operator visibility into all DCR-issued clients in the project, with optional
--- filter by user_session_issuer_id. Joins through issuers for project scoping.
+-- Operator visibility into every client registered against an issuer in the
+-- project -- DCR-registered and CIMD-resolved alike -- with optional filter by
+-- user_session_issuer_id. Joins through issuers for project scoping.
 SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
@@ -149,6 +150,28 @@ WHERE iss.project_id = @project_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR cli.id < sqlc.narg('cursor')::uuid)
 ORDER BY cli.id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: CountActiveUserSessionsByClientIDs :many
+-- Active-session tallies for a set of clients, so the clients listing can show
+-- how many live sessions each registration holds without a round trip per row.
+-- "Active" is defined exactly as the 'active' branch of
+-- ListUserSessionsByProjectID defines it: not revoked, and keyed off
+-- refresh_expires_at (the authorization deadline) rather than expires_at (the
+-- ~1h access-token lifetime), so a live connection that has not refreshed
+-- recently still counts.
+--
+-- Project scoping is intentionally NOT applied: callers pass ids they already
+-- resolved through a project-scoped client query, and re-joining issuers here
+-- would only repeat that check.
+--
+-- Clients with no active sessions are absent from the result rather than
+-- returning zero; callers treat a missing id as zero.
+SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
+FROM user_sessions AS s
+WHERE s.user_session_client_id = ANY(@user_session_client_ids::uuid[])
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > now()
+GROUP BY s.user_session_client_id;
 
 -- name: RevokeUserSessionClient :one
 UPDATE user_session_clients AS cli
@@ -300,8 +323,10 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
+       u.photo_url AS user_photo_url,
        k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
@@ -316,8 +341,8 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = @project_id
   AND iss.deleted IS FALSE
-  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
-  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- "active"/"expired" are keyed off refresh_expires_at (the authorization
+  -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
   -- connection only refreshes its access token on demand, so a live session
   -- routinely has a past expires_at while its refresh token is still valid;
   -- keying "active" off expires_at would drop those sessions and make the
@@ -416,9 +441,14 @@ RETURNING *;
 -- Lazy upsert for a client resolved from a Client ID Metadata Document at
 -- authorize time. For CIMD rows the document URL IS the client_id, so the
 -- conflict target is the same partial unique index that serves DCR lookups.
--- On refresh the mutable metadata (client_name, redirect_uris) and the fetch
--- stamp are replaced wholesale — the document is refetched on every
--- authorize.
+-- On refresh the mutable metadata (client_name, redirect_uris) and every
+-- cache column are replaced wholesale, including the ETag, which is set to
+-- NULL when the response carried no usable validator so the next refresh is
+-- unconditional rather than replaying a stale one.
+--
+-- The cache expiry is derived from the database clock rather than the
+-- application's, so it can never land before the client_id_metadata_fetched_at
+-- written in the same statement.
 --
 -- Two deliberate behaviors:
 --   - A soft-deleted row does not conflict (partial index), so revoking a
@@ -439,7 +469,9 @@ INSERT INTO user_session_clients (
     redirect_uris,
     client_secret_expires_at,
     client_id_metadata_uri,
-    client_id_metadata_fetched_at
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -450,7 +482,9 @@ VALUES (
     @redirect_uris,
     NULL,
     @client_id,
-    clock_timestamp()
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    sqlc.narg('client_id_metadata_etag')
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -458,8 +492,61 @@ DO UPDATE SET
     redirect_uris = EXCLUDED.redirect_uris,
     client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
     client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
+RETURNING *;
+
+-- name: UpdateUserSessionClientCIMDCache :one
+-- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+-- host answered 304 Not Modified. The stored client_name and redirect_uris
+-- are current by definition of the 304, so they are deliberately untouched;
+-- only the fetch stamp, the expiry, and the validator move.
+--
+-- The guards mirror UpsertUserSessionClientFromCIMD's. A secret-bearing DCR
+-- row, or a row that is not CIMD-resolved at all, is never written, so this
+-- statement cannot push a row into violating the client_id_metadata_uri
+-- CHECK constraints; such a collision surfaces as no-rows, which handlers
+-- already map to invalid_client. Project scoping is intentionally absent for
+-- the same reason as GetUserSessionClientByClientID: the OAuth surface is
+-- public, and the id comes from a row the caller already resolved through
+-- the issuer.
+UPDATE user_session_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: PurgeUserSessionClientCIMDCache :one
+-- Forces the next authorize to re-read, re-parse, and re-validate a CIMD
+-- client's metadata document instead of serving the stored copy.
+--
+-- This is the purge lever for the cache: a document whose contents must stop
+-- being honoured before its TTL lapses — a compromised or mistakenly
+-- published redirect_uris set, a validation rule tightened after the row was
+-- written — is dealt with by running this and letting the next authorize
+-- refetch. The validator is cleared along with the expiry on purpose: leaving
+-- it would make the refresh conditional, and a 304 would confirm the very
+-- document being purged without the body ever being re-validated.
+--
+-- Revoking the client purges its cache as a side effect, since the lookup
+-- behind every authorize filters on deleted IS FALSE and a miss forces an
+-- unconditional fetch. This query exists for the case where the client should
+-- keep working and only its stored document is suspect. It has no endpoint
+-- yet and is run by hand; AIS-211 wires it to a per-client refresh action.
+UPDATE user_session_clients
+SET client_id_metadata_cache_expires_at = NULL,
+    client_id_metadata_etag = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: CreateUserSession :one
@@ -531,3 +618,18 @@ WHERE iss.project_id = @project_id AND iss.deleted IS FALSE AND s.deleted IS FAL
   AND s.subject_urn::text LIKE 'user:%'
 GROUP BY s.subject_urn, u.display_name, u.email
 ORDER BY count DESC, display_name ASC;
+
+-- name: TouchUserSessionLastUsed :exec
+-- Records that this session's access token was presented on an MCP request.
+-- Runs on the per-request auth path, so it is deliberately coalesced: the
+-- cutoff means a session writes at most one row per cutoff window however many
+-- requests it makes, and every other request matches no rows and only probes
+-- user_sessions_user_session_issuer_id_jti_idx. Mirrors the claim-cutoff shape
+-- used by the remote_sessions keepalive sweep.
+UPDATE user_sessions
+SET last_used_at = @now_ts::timestamptz
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);

@@ -1,8 +1,6 @@
 name: Pull Request
 on:
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize, reopened]
   push:
     branches:
@@ -56,19 +54,50 @@ jobs:
         id: filter
         with:
           filters: .github/filters.yaml
+      - id: stacked
+        name: Compare preview image components against main
+        if: github.event_name == 'pull_request' && github.base_ref != 'main' && !github.event.pull_request.head.repo.fork
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin main
+          check() {
+            local name=$1
+            local pathspecs=()
+            local path
+            while IFS= read -r path; do
+              pathspecs+=(":(glob)${path}")
+            done < <(python3 -c 'import sys, yaml; print("\n".join(yaml.safe_load(open(".github/filters.yaml"))[sys.argv[1]]))' "$name")
+            if [ "${#pathspecs[@]}" -eq 0 ]; then
+              echo "::error::No watched paths resolved from .github/filters.yaml for ${name}"
+              exit 1
+            fi
+            if git diff --quiet origin/main HEAD -- "${pathspecs[@]}"; then
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+              echo "${name} matches main; the preview retag fallback can cover it."
+            else
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+              echo "${name} differs from main; its jobs will run."
+            fi
+          }
+          check server
+          check client
+          check pystreams
       - id: gates
         name: Set outputs
         env:
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          STACKED_SERVER: ${{ steps.stacked.outputs.server }}
+          STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
+          STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
@@ -124,7 +153,7 @@ jobs:
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
@@ -186,14 +215,15 @@ jobs:
           # Components whose docker build jobs are skipped this run still need
           # a preview image tag; each entry names the image and the
           # .github/filters.yaml keys whose paths gate its builds. The
-          # dashboard image is built by docker-build-client whenever client OR
-          # server changes.
+          # dashboard and admin dashboard images are both built by
+          # docker-build-client whenever client OR server changes.
           components='[]'
           add() {
             components=$(jq -c --arg component "$1" --arg filters "$2" '. + [{component: $component, filters: $filters}]' <<< "$components")
           }
           [[ "$SERVER" == "true" ]] || add gram server
           [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-dashboard "server client"
+          [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-admin-dashboard "server client"
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
@@ -229,7 +259,7 @@ jobs:
           # keep this job's cache separate from the full-install caches.
           install_args: yq
           cache: true
-          cache_key_prefix: mise-yq-v1
+          cache_key_prefix: mise-yq-blacksmith-v1
           env: false
 
       - id: "auth"
@@ -266,33 +296,34 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
-      # hk's oxfmt step shells out to `pnpm oxfmt`, so node_modules must exist.
+      # hk's oxfmt step shells out to `aube exec oxfmt`, so node_modules must exist.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Check formatting
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: hk check --all
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -431,6 +462,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -576,10 +608,25 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Cache aube store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      # fly:init-runner is a .mts task that imports zx from the workspace.
+      - name: Install dependencies
+        run: aube install --frozen-lockfile
 
       - name: "[DEV] Create fly app"
         id: collectorFlyCreateDev
@@ -717,6 +764,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Run ClickHouse migrations with golang-migrate
@@ -749,6 +797,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       # The ordering check needs both the checked-out head and the base commit
@@ -816,6 +865,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Lint PostgreSQL migrations
@@ -931,7 +981,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -939,7 +989,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -963,6 +1013,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Fetch main branch
@@ -1025,6 +1076,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1121,6 +1173,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1146,15 +1199,15 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      - name: Fetch main branch
-        run: git fetch --depth=1 origin main
+      - name: Fetch base branch
+        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
 
-      # buf breaking against main is what catches a wire-incompatible proto
-      # change (field renumbering, type change) that would corrupt already
-      # published messages — including outbox rows, which store marshaled bytes
-      # and republish them verbatim after a deploy.
+      # buf breaking against the PR base is what catches a wire-incompatible
+      # proto change (field renumbering, type change) that would corrupt
+      # already published messages. Stacked PRs compare against their feature
+      # base; that base's own PR re-checks the full stack against main.
       - name: Lint proto files
-        run: mise run lint:infra --against ".git#ref=origin/main"
+        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
       - name: Install uv dependencies
         run: mise run install:uv --all-packages --locked
@@ -1187,6 +1240,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1242,6 +1296,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1296,6 +1351,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1339,6 +1395,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1403,6 +1460,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1446,6 +1504,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1471,7 +1530,8 @@ jobs:
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    # Build dashboard docker image when server OR client changes exist (needed for preview environments)
+    # Build the dashboard and admin docker images when server OR client changes
+    # exist (the dashboard image is needed for preview environments)
     if: |
       !cancelled() &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
@@ -1486,28 +1546,29 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- aube run build
 
       # Published for upload-dashboard-assets so the CDN bucket receives the
       # exact assets this image ships with (a rebuild there could hash
@@ -1549,6 +1610,32 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
+      # The Gram admin dashboard. It ships as its own image because it is
+      # served from the admin origin (same host as the admin API) rather than
+      # the app origin. The `pnpm build` step above already produced its dist,
+      # so this only packages it; it needs no CDN asset upload.
+      # The image name must stay in step with adminDashboard.repository in the
+      # deployment Helm chart. "gram-admin" would be ambiguous: the admin API
+      # itself runs from the main "gram" image, not from an image of its own.
+      # Keep this ahead of the dashboard image push. A failure here fails the
+      # job, which skips upload-dashboard-assets; if the dashboard image were
+      # already pushed it would reference hashed assets that never reached the
+      # CDN bucket.
+      - name: Build and Push Admin Dashboard image to GCR
+        id: build-admin-dashboard
+        uses: ./.github/workflows/composite/build-push
+        with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+          context: ./client/admin
+          file: client/admin/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/admin-dashboard-image
+
       - name: Build and Push Registry image to GCR
         id: build
         uses: ./.github/workflows/composite/build-push
@@ -1564,9 +1651,9 @@ jobs:
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
           cache-key: gram/dashboard-image
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   upload-dashboard-assets:
     name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
@@ -1643,43 +1730,48 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- aube run build
 
       - name: Lint
-        run: pnpm lint
+        run: aube run lint
         working-directory: client/dashboard
 
+      - name: Lint admin
+        run: pnpm lint
+        working-directory: client/admin
+
       - name: Knip (dead code / unused deps)
-        run: pnpm knip
+        run: aube run knip
         working-directory: client/dashboard
 
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   client-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1696,31 +1788,36 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test
-        run: pnpm test
+        run: aube run test
         working-directory: client/dashboard
 
-      - name: Prune PNPM store
+      - name: Test admin
+        run: aube run test
+        working-directory: client/admin
+
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   sdk-gen-check:
     name: Check SDK is up-to-date
@@ -1738,23 +1835,24 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Regenerate SDK
         run: mise run gen:sdk
@@ -1766,9 +1864,9 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   functions-build-host:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1783,6 +1881,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1799,21 +1898,21 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install Go tools
         run: go install tool
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test functions runner
         working-directory: functions
@@ -1821,11 +1920,11 @@ jobs:
 
       - name: Test functions entrypoint
         working-directory: functions
-        run: pnpm test
+        run: aube run test
 
       - name: Type check functions entrypoint
         working-directory: functions
-        run: pnpm type-check
+        run: aube run type-check
 
       - name: Lint Go server
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1859,9 +1958,9 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   functions-image:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1883,23 +1982,24 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Download melange packages artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -2012,9 +2112,9 @@ jobs:
           fly auth docker
           docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   ts-framework-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -2029,33 +2129,34 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test TypeScript framework
-        run: pnpm --filter "./ts-framework/**" test
+        run: aube run --filter "./ts-framework/**" --if-present test
 
       - name: Build TypeScript framework
-        run: pnpm --filter "./ts-framework/**" build
+        run: aube run --filter "./ts-framework/**" --if-present build
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   # Scans the frontend for UI anti-patterns and "AI slop" tells (side-tab accent
   # borders, gradient headings, bounce easing, AI-favourite color palettes, ...)
@@ -2088,6 +2189,10 @@ jobs:
         with:
           install: true
           cache: true
+          # This job only needs npx; avoid restoring the full ~606 MiB toolchain
+          # into a job with a five-minute timeout.
+          install_args: node
+          cache_key_prefix: mise-node-blacksmith-v1
           env: false
 
       - name: Run impeccable

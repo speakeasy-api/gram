@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const abandonAssistantMCPOAuthClientRegistration = `-- name: AbandonAssistantMCPOAuthClientRegistration :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  registration_started_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+  AND registration_owner = $4
+  AND client_id IS NULL
+  AND deleted IS FALSE
+`
+
+type AbandonAssistantMCPOAuthClientRegistrationParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	RegistrationOwner uuid.NullUUID
+}
+
+func (q *Queries) AbandonAssistantMCPOAuthClientRegistration(ctx context.Context, arg AbandonAssistantMCPOAuthClientRegistrationParams) error {
+	_, err := q.db.Exec(ctx, abandonAssistantMCPOAuthClientRegistration,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RegistrationOwner,
+	)
+	return err
+}
+
 const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
 SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
 `
@@ -167,6 +197,78 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 	return ok, err
 }
 
+const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  registration_owner,
+  registration_started_at
+) SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  clock_timestamp()
+FROM assistants owner
+WHERE owner.id = $2
+  AND owner.project_id = $1
+  AND owner.deleted IS FALSE
+FOR UPDATE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = NULL,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  redirect_uri = EXCLUDED.redirect_uri,
+  registration_owner = EXCLUDED.registration_owner,
+  registration_started_at = EXCLUDED.registration_started_at,
+  updated_at = clock_timestamp()
+WHERE
+  (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - $6::interval
+  )
+  OR
+  (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= $7
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
+`
+
+type ClaimAssistantMCPOAuthClientRegistrationParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	RedirectUri       string
+	RegistrationOwner uuid.NullUUID
+	ClaimLease        pgtype.Interval
+	UsableAfter       pgtype.Timestamptz
+}
+
+func (q *Queries) ClaimAssistantMCPOAuthClientRegistration(ctx context.Context, arg ClaimAssistantMCPOAuthClientRegistrationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimAssistantMCPOAuthClientRegistration,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RedirectUri,
+		arg.RegistrationOwner,
+		arg.ClaimLease,
+		arg.UsableAfter,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id, t.skill_set_snapshot
@@ -275,6 +377,56 @@ type ClearAssistantToolsetsParams struct {
 func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
 	return err
+}
+
+const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
+UPDATE assistant_mcp_oauth_clients AS clients
+SET
+  client_id = $1,
+  client_secret_encrypted = $2,
+  client_secret_expires_at = $3,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND clients.registration_owner = $7
+  AND clients.client_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
+`
+
+type CompleteAssistantMCPOAuthClientRegistrationParams struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientSecretExpiresAt pgtype.Timestamptz
+	ProjectID             uuid.UUID
+	AssistantID           uuid.UUID
+	OauthServerIssuer     string
+	RegistrationOwner     uuid.NullUUID
+}
+
+func (q *Queries) CompleteAssistantMCPOAuthClientRegistration(ctx context.Context, arg CompleteAssistantMCPOAuthClientRegistrationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeAssistantMCPOAuthClientRegistration,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ClientSecretExpiresAt,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RegistrationOwner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
@@ -889,6 +1041,100 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
+SELECT
+  client_id,
+  client_secret_encrypted,
+  (
+    client_id IS NOT NULL
+    AND client_secret_encrypted IS NOT NULL
+    AND redirect_uri = $1
+    AND (client_secret_expires_at IS NULL OR client_secret_expires_at > $2)
+  ) AS usable,
+  (
+    (
+      client_id IS NULL
+      AND registration_started_at < clock_timestamp() - $3::interval
+    )
+    OR
+    (
+      client_id IS NOT NULL
+      AND client_secret_expires_at IS NOT NULL
+      AND client_secret_expires_at <= $2
+    )
+    OR (client_id IS NOT NULL AND redirect_uri <> $1)
+  ) AS claimable
+FROM assistant_mcp_oauth_clients clients
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
+`
+
+type GetAssistantMCPOAuthClientParams struct {
+	RedirectUri       string
+	UsableAfter       pgtype.Timestamptz
+	ClaimLease        pgtype.Interval
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+}
+
+type GetAssistantMCPOAuthClientRow struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	Usable                pgtype.Bool
+	Claimable             pgtype.Bool
+}
+
+func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssistantMCPOAuthClientParams) (GetAssistantMCPOAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClient,
+		arg.RedirectUri,
+		arg.UsableAfter,
+		arg.ClaimLease,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+	)
+	var i GetAssistantMCPOAuthClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.Usable,
+		&i.Claimable,
+	)
+	return i, err
+}
+
+const getAssistantMCPOAuthClientDeleted = `-- name: GetAssistantMCPOAuthClientDeleted :one
+SELECT deleted
+FROM assistant_mcp_oauth_clients
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+`
+
+type GetAssistantMCPOAuthClientDeletedParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+}
+
+// Test-only helper for verifying credential retirement on assistant deletion.
+func (q *Queries) GetAssistantMCPOAuthClientDeleted(ctx context.Context, arg GetAssistantMCPOAuthClientDeletedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClientDeleted, arg.ProjectID, arg.AssistantID, arg.OauthServerIssuer)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
@@ -1267,6 +1513,36 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
+const invalidateAssistantMCPOAuthClient = `-- name: InvalidateAssistantMCPOAuthClient :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  client_secret_expires_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+  AND client_id = $4
+  AND client_id IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type InvalidateAssistantMCPOAuthClientParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	ClientID          pgtype.Text
+}
+
+func (q *Queries) InvalidateAssistantMCPOAuthClient(ctx context.Context, arg InvalidateAssistantMCPOAuthClientParams) error {
+	_, err := q.db.Exec(ctx, invalidateAssistantMCPOAuthClient,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.ClientID,
+	)
+	return err
+}
+
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -1493,6 +1769,56 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
+SELECT id, name, url, content_type, content_length
+FROM assets
+WHERE project_id = $1::uuid
+  AND id = ANY($2::uuid[])
+  AND kind = 'chat_attachment'
+  AND deleted IS FALSE
+`
+
+type ListChatAttachmentAssetsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type ListChatAttachmentAssetsRow struct {
+	ID            uuid.UUID
+	Name          string
+	Url           string
+	ContentType   string
+	ContentLength int64
+}
+
+// Resolves the chat attachments a dashboard turn carries, scoped to the
+// project so a leaked asset id from another project cannot be attached.
+func (q *Queries) ListChatAttachmentAssets(ctx context.Context, arg ListChatAttachmentAssetsParams) ([]ListChatAttachmentAssetsRow, error) {
+	rows, err := q.db.Query(ctx, listChatAttachmentAssets, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatAttachmentAssetsRow
+	for rows.Next() {
+		var i ListChatAttachmentAssetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.ContentType,
+			&i.ContentLength,
 		); err != nil {
 			return nil, err
 		}
@@ -3094,6 +3420,24 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 		return nil, err
 	}
 	return items, nil
+}
+
+const retireAssistantMCPOAuthClients = `-- name: RetireAssistantMCPOAuthClients :exec
+UPDATE assistant_mcp_oauth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type RetireAssistantMCPOAuthClientsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) RetireAssistantMCPOAuthClients(ctx context.Context, arg RetireAssistantMCPOAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, retireAssistantMCPOAuthClients, arg.AssistantID, arg.ProjectID)
+	return err
 }
 
 const revertExpireAssistantRuntimeToActive = `-- name: RevertExpireAssistantRuntimeToActive :exec

@@ -141,7 +141,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 
 	chatID, ok := src.chatIDs["11111111-2222-4333-8444-555555555555"]
 	require.True(t, ok, "web session must be upserted")
-	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	// The feed carries no titles: the first prompt seeds the chat title.
 	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String)
@@ -198,7 +198,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
-	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String,
 		"a mid-session prompt from a later window must not retitle the chat")
@@ -300,7 +300,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 
 	chatID, ok := src.chatIDs["22222222-3333-4444-8555-666666666666"]
 	require.True(t, ok)
-	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Now update the rollback plan", chatRow.Title.String)
 	// The link row is created once; the title refresh only re-upserts.
@@ -320,7 +320,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 		downloads:  map[string][]byte{fileC.ID: []byte(promptAgain)},
 	}
 	require.NoError(t, src.ProcessPage(ctx, []codexapi.LogFile{fileC}))
-	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Now update the rollback plan", chatRow.Title.String,
 		"a later prompt in the same run must not retitle the chat")
@@ -379,7 +379,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 
 	chatID, ok := src.chatIDs["33333333-4444-4555-8666-777777777777"]
 	require.True(t, ok)
-	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	// Chat and message share the one resolved import-time fallback.
 	require.WithinDuration(t, time.Now().UTC(), chatRow.CreatedAt.Time.UTC(), time.Minute)

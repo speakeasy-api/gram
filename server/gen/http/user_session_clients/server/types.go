@@ -28,9 +28,17 @@ type GetUserSessionClientResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
@@ -39,6 +47,10 @@ type GetUserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -618,9 +630,17 @@ type UserSessionClientResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
@@ -629,6 +649,10 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // NewListUserSessionClientsResponseBody builds the HTTP response body from the
@@ -661,11 +685,13 @@ func NewGetUserSessionClientResponseBody(res *types.UserSessionClient) *GetUserS
 		ID:                    res.ID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ClientID:              res.ClientID,
+		ClientIDMetadataURI:   res.ClientIDMetadataURI,
 		ClientName:            res.ClientName,
 		ClientIDIssuedAt:      res.ClientIDIssuedAt,
 		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+		ActiveSessionCount:    res.ActiveSessionCount,
 	}
 	if res.RedirectUris != nil {
 		body.RedirectUris = make([]string, len(res.RedirectUris))

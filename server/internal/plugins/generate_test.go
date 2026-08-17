@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -18,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -75,7 +79,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, platformMCPPluginName, meta.Name)
-	require.Equal(t, "Gram Platform MCP", meta.DisplayName)
+	require.Equal(t, "Speakeasy AICP Platform MCP", meta.DisplayName)
 	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
 
 	var mcpConfig claudeMCPConfig
@@ -103,9 +107,9 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
 	require.Equal(t, marketplaceEntry{
 		Name:        platformMCPPluginName,
-		DisplayName: "Gram Platform MCP",
+		DisplayName: "Speakeasy AICP Platform MCP",
 		Source:      "./platform-mcp",
-		Description: "Read-only organization administration through the Gram Platform MCP.",
+		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
 	}, claude.Plugins[1])
 
 	var cursor marketplaceManifest
@@ -947,8 +951,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.NotNil(t, cursorManifest.Metadata)
-	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, &marketplaceMetadata{PluginRoot: cursorPluginRoot}, cursorManifest.Metadata)
 	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
@@ -1172,22 +1175,34 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		case "SessionEnd":
 			timeoutSeconds = 3
 		}
-		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		if async {
-			expectedSuffix += " --async"
-			expectedWindowsSuffix += " --async"
-		}
-		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
-		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		require.Equal(t, codexHooksBootstrapCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].Command)
+		require.Contains(t, groups[0].Hooks[0].Command, fmt.Sprintf(`agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds))
+		require.Contains(t, groups[0].Hooks[0].Command, `r="$PLUGIN_ROOT"`, "the shell must expand Codex's runtime environment safely")
+		require.Equal(t, codexHooksPowerShellCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].CommandWindows)
 		if event == "SessionEnd" {
 			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
 		} else {
 			require.Zero(t, groups[0].Hooks[0].Timeout)
 		}
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
+		// The Unix command wraps the script in `bash -c '...'`, so --async is
+		// the last thing inside the quotes rather than the last thing on the line.
+		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async'"))
+		require.Equal(t, async, strings.Contains(decodePowerShellCommand(t, groups[0].Hooks[0].CommandWindows), " --async"))
 	}
+}
+
+func decodePowerShellCommand(t *testing.T, command string) string {
+	t.Helper()
+	const prefix = `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand `
+	require.True(t, strings.HasPrefix(command, prefix))
+	encoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(command, prefix))
+	require.NoError(t, err)
+	require.Zero(t, len(encoded)%2)
+	units := make([]uint16, len(encoded)/2)
+	for i := range units {
+		units[i] = binary.LittleEndian.Uint16(encoded[2*i:])
+	}
+	return string(utf16.Decode(units))
 }
 
 func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T) {
@@ -1196,7 +1211,7 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	sessionStartPrefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_start:0:"
@@ -1217,7 +1232,7 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
@@ -1230,6 +1245,65 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	require.Len(t, sessionEndApprovals, 1)
 	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
 	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
+}
+
+// Codex hashes the bytes of its own serde_json serialization, which leaves <, >
+// and & unescaped. Go's json.Marshal escapes them, so a command containing any
+// of the three would hash to a value no Codex install computes and every hook
+// would be discarded as modified — silently, with no output at all.
+func TestComputeCodexHookHashDoesNotEscapeShellRedirections(t *testing.T) {
+	t.Parallel()
+	const command = `bash -c 'a 2>/dev/null && b >&2'`
+
+	hash, err := computeCodexHookHash("SessionStart", command)
+	require.NoError(t, err)
+
+	canonical := fmt.Sprintf(
+		`{"event_name":"session_start","hooks":[{"async":false,"command":%s,"timeout":600,"type":"command"}],"matcher":""}`,
+		mustJSONStringUnescaped(t, command),
+	)
+	require.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(canonical))), hash)
+	require.NotContains(t, canonical, `\u003e`)
+}
+
+// The trust identity is an external contract: Codex only runs a hook whose
+// trusted_hash in config.toml equals the hash it recomputes from hooks.json, and
+// nothing re-approves an install whose hash drifted. These digests were verified
+// against codex-cli 0.147.0 by installing the generated plugin and confirming
+// SessionStart and UserPromptSubmit were invoked without bypassing hook trust.
+// Any change to the hook commands or hashed identity must be re-verified before
+// these expectations are updated.
+func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Inc", ServerURL: "https://app.example.com"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	require.NoError(t, err)
+
+	want := map[string]string{
+		"session_start":      "sha256:01aa9026f9191e84ba6d993afb74f7d0415e84714b6abe9663e732bfdf341677",
+		"session_end":        "sha256:a9a6220fdd0aebc83248da0b91f500784fb48e19437d97f92c493cd264c96d05",
+		"pre_tool_use":       "sha256:f1d673b42ef2ce2d16a93d2509fe08cbce64942de1ba4fab0eabe94e0bc39cbd",
+		"permission_request": "sha256:ea2d44b06d6c36971d5fb9121aaedc64b1e49a65e854e284f0c6f164f60fa897",
+		"post_tool_use":      "sha256:d0e7d5c001f156a748ad7471930012a6c9d3d726ceffe9d17e893a5fa743ef97",
+		"user_prompt_submit": "sha256:4e18decc3bc5d57114130d3b2bb80b7c8999cc654e92a5590b489762a98878c9",
+		"stop":               "sha256:a2ff79157b9cdf19f1342772f4d25ab0cc58e141d9426681c5708f00feeb3a4b",
+	}
+	got := make(map[string]string, len(approvals))
+	for _, approval := range approvals {
+		event := strings.TrimSuffix(strings.TrimPrefix(approval.StateKey, plugin+"@"+marketplace+":hooks/hooks.json:"), ":0:0")
+		got[event] = approval.TrustedHash
+	}
+	require.Equal(t, want, got)
+}
+
+func mustJSONStringUnescaped(t *testing.T, s string) string {
+	t.Helper()
+	encoded, err := marshalUnescapedJSON(s)
+	require.NoError(t, err)
+	return string(encoded)
 }
 
 // runCodexInstallScript executes the generated install script under an
@@ -1413,6 +1487,90 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 	}
 }
 
+func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
+	sum := sha256.Sum256(archive)
+	var downloads atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		downloads.Add(1)
+		_, _ = w.Write(archive)
+	}))
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	base := t.TempDir()
+	root := filepath.Join(base, "plugins", "cache", "acme-speakeasy", "acme-observability-codex", "0.29.100")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hooks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), script, 0o755))
+	config := []byte("{\"deployment\":\"test\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), config, 0o600))
+	data := filepath.Join(base, "plugins", "data", "acme-observability-codex-acme-speakeasy")
+	cache := filepath.Join(base, "hooks-binary-cache")
+	command := codexHookCommandString(60, false, false)
+
+	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
+	currentGeneration := strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration := filepath.Join(stable, "generations", currentGeneration)
+	stableConfig := filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the first relay execution must no longer depend on the disposable config")
+	require.Equal(t, script, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, config, requireFileBytes(t, stableConfig))
+	configInfo, err := os.Stat(stableConfig)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), configInfo.Mode().Perm())
+
+	refreshedScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'refreshed-bootstrap\\n' >&2\n"), 1)
+	refreshedConfig := []byte("{\"deployment\":\"refreshed\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), refreshedScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), refreshedConfig, 0o600))
+	persistLock := filepath.Join(stable, ".persist-unix.lock")
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), fmt.Appendf(nil, "%d\n", os.Getpid()), 0o600))
+	old := time.Now().Add(-10 * time.Minute)
+	require.NoError(t, os.Chtimes(persistLock, old, old))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stderr, "refreshed-bootstrap",
+		"the hook that refreshes the bundle must immediately execute the new bootstrap")
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the refreshed bootstrap must execute with the config from its immutable generation")
+	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, refreshedConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an expired lock must be reclaimed even if its PID was reused")
+
+	newestScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'newest-bootstrap\\n' >&2\n"), 1)
+	newestConfig := []byte("{\"deployment\":\"newest\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), newestScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), newestConfig, 0o600))
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), []byte("99999999\n"), 0o600))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, newestScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, newestConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an old ownerless persistence lock must be reclaimed")
+
+	require.NoError(t, os.RemoveAll(filepath.Dir(filepath.Dir(root))))
+	server.Close()
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, int64(1), downloads.Load(), "stable fallback must reuse the verified binary cache")
+}
+
 func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -1460,6 +1618,14 @@ func TestHooksBootstrapBakesInstallFailurePolicy(t *testing.T) {
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{InstallFailOpen: true})), "$InstallFailureExit = 0")
 	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{})), "install_failure_exit=1")
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{})), "$InstallFailureExit = 1")
+}
+
+func TestHooksPowerShellBootstrapRecoversStalePersistenceLock(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksPowerShellBootstrap(GenerateConfig{}))
+	require.Contains(t, script, `function Enter-PersistenceLock`)
+	require.Contains(t, script, `Get-Process -Id $OwnerPID`)
+	require.Contains(t, script, `Move-Item -LiteralPath $LockPath -Destination $Reap`)
 }
 
 func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
@@ -1678,6 +1844,8 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "--provider=opencode")
 	require.Contains(t, string(shim), "speakeasy.json")
 	require.Contains(t, string(shim), "bootstrap.sh")
+	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
+	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
@@ -1697,7 +1865,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 	target := approvals[0]
@@ -1878,7 +2046,7 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 

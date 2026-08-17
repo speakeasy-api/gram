@@ -1,6 +1,6 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { Page } from "@/components/page-layout";
+import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
@@ -21,7 +21,6 @@ import {
   SheetDescription,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import { DismissedFindingsTab } from "./DismissedFindingsTab";
 import { Badge } from "@/components/ui/Badge";
@@ -30,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
@@ -45,6 +45,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  Fragment,
   useState,
   useCallback,
   useEffect,
@@ -99,6 +100,11 @@ import {
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
+import { policyEnabledActionLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's
@@ -500,7 +506,14 @@ function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
   return (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
-        <span className="truncate">{row.policy.name}</span>
+        <span
+          className={cn(
+            "truncate",
+            !row.policy.enabled && "text-muted-foreground",
+          )}
+        >
+          {row.policy.name}
+        </span>
         {row.kind === "prompt" && (
           <SimpleTooltip tooltip="Prompt-based policy">
             <Sparkles
@@ -539,13 +552,6 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
 }
 
 const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
-type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
-
-function toPolicyCenterTab(value: string): PolicyCenterTab {
-  return (POLICY_CENTER_TABS as readonly string[]).includes(value)
-    ? (value as PolicyCenterTab)
-    : "policies";
-}
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -585,7 +591,7 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useQueryState(
+  const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
@@ -612,6 +618,18 @@ function PolicyCenterContent() {
       invalidate();
     },
   });
+
+  const toggleEnabledMutation = useTogglePolicyEnabled();
+
+  const handleToggleEnabled = (row: PolicyRow) => {
+    toggleEnabledMutation.mutate(
+      togglePolicyEnabledVariables(
+        row.policy.id,
+        row.policy.name,
+        !row.policy.enabled,
+      ),
+    );
+  };
 
   // Redirect a deep-linked policy to its detail page once its data has loaded.
   // Guarded by a ref so it fires once per id (not on every policies re-fetch),
@@ -650,8 +668,16 @@ function PolicyCenterContent() {
         ]
       : []),
     {
+      label: policyEnabledActionLabel(row.policy.enabled),
+      disabled: toggleEnabledMutation.isPending,
+      onClick: () => {
+        setTimeout(() => handleToggleEnabled(row), 0);
+      },
+    },
+    {
       label: "Delete",
       destructive: true,
+      separatorBefore: true,
       onClick: () => {
         setTimeout(() => handleDelete(row), 0);
       },
@@ -661,6 +687,15 @@ function PolicyCenterContent() {
   const confirmDelete = () => {
     if (!policyToDelete) return;
     deleteMutation.mutate({ request: { id: policyToDelete.policy.id } });
+  };
+
+  const confirmDisableInstead = () => {
+    if (!policyToDelete) return;
+    const row = policyToDelete;
+    setPolicyToDelete(null);
+    toggleEnabledMutation.mutate(
+      togglePolicyEnabledVariables(row.policy.id, row.policy.name, false),
+    );
   };
 
   // Empty state for the Policies tab only. It must NOT short-circuit the whole
@@ -722,7 +757,8 @@ function PolicyCenterContent() {
   const insightsContext = [
     "Page: Policy Center.",
     `Total policies: ${policyRows.length}.`,
-    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action})`).join(", ") || "none"}.`,
+    `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
+    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
     "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
@@ -742,6 +778,29 @@ function PolicyCenterContent() {
         <span className="inline-flex">
           <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
         </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.5fr",
+      render: (row) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={row.policy.enabled}
+            disabled={toggleEnabledMutation.isPending}
+            onCheckedChange={(checked) =>
+              toggleEnabledMutation.mutate(
+                togglePolicyEnabledVariables(
+                  row.policy.id,
+                  row.policy.name,
+                  checked,
+                ),
+              )
+            }
+            aria-label={row.policy.enabled ? "Disable policy" : "Enable policy"}
+          />
+        </div>
       ),
     },
     {
@@ -829,17 +888,20 @@ function PolicyCenterContent() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {policyActions(row).map((action) => (
-                <DropdownMenuItem
-                  key={action.label}
-                  className={cn(
-                    "cursor-pointer",
-                    action.destructive &&
-                      "text-destructive focus:text-destructive",
-                  )}
-                  onSelect={() => action.onClick()}
-                >
-                  {action.label}
-                </DropdownMenuItem>
+                <Fragment key={action.label}>
+                  {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuItem
+                    disabled={action.disabled}
+                    className={cn(
+                      "cursor-pointer",
+                      action.destructive &&
+                        "text-destructive focus:text-destructive",
+                    )}
+                    onSelect={() => action.onClick()}
+                  >
+                    {action.label}
+                  </DropdownMenuItem>
+                </Fragment>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -894,133 +956,137 @@ function PolicyCenterContent() {
     policiesBody = policiesEmptyState;
   }
 
-  const cta = isLoading ? null : (
-    <Page.Section.CTA>
-      <Button onClick={headerAction.onClick}>
-        <Button.LeftIcon>
-          <Plus className="mr-2 h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>{headerAction.label}</Button.Text>
-      </Button>
-    </Page.Section.CTA>
+  const primaryAction = isLoading ? undefined : (
+    <Button onClick={headerAction.onClick}>
+      <Button.LeftIcon>
+        <Plus className="mr-2 h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>{headerAction.label}</Button.Text>
+    </Button>
   );
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <InsightsConfig
-          contextInfo={insightsContext}
-          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
-          title="Policy insights"
-          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+    <TabbedPage
+      title="Policies"
+      stage="beta"
+      description="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+      primaryAction={primaryAction}
+      activeTab={activeTab}
+      tabs={[
+        { value: "policies", label: "Policies", href: "?tab=policies" },
+        {
+          value: "exclusions",
+          label: "Exclusion rules",
+          href: "?tab=exclusions",
+        },
+        {
+          value: "dismissed",
+          label: "False Positives",
+          href: "?tab=dismissed",
+        },
+      ]}
+    >
+      <InsightsConfig
+        contextInfo={insightsContext}
+        suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
+        title="Policy insights"
+        subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+      />
+      {activeTab === "policies" && policiesBody}
+      {activeTab === "exclusions" && (
+        <ExclusionsTab
+          policies={data?.policies ?? []}
+          sheet={exclusionSheet}
+          onSheetChange={setExclusionSheet}
         />
-        <Page.Section>
-          <Page.Section.Title stage="beta">Policies</Page.Section.Title>
-          <Page.Section.Description>
-            Configure policies to detect secrets, sensitive information, and
-            prompt-defined risks in agent session interactions.
-          </Page.Section.Description>
-          {cta}
-          <Page.Section.Body>
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) =>
-                void setActiveTab(toPolicyCenterTab(value))
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="policies">Policies</TabsTrigger>
-                <TabsTrigger value="exclusions">Exclusion rules</TabsTrigger>
-                <TabsTrigger value="dismissed">False Positives</TabsTrigger>
-              </TabsList>
-              <TabsContent value="policies" className="mt-6">
-                {policiesBody}
-              </TabsContent>
-              <TabsContent value="exclusions" className="mt-6">
-                <ExclusionsTab
-                  policies={data?.policies ?? []}
-                  sheet={exclusionSheet}
-                  onSheetChange={setExclusionSheet}
-                />
-              </TabsContent>
-              <TabsContent value="dismissed" className="mt-6">
-                <DismissedFindingsTab />
-              </TabsContent>
-            </Tabs>
-          </Page.Section.Body>
-        </Page.Section>
+      )}
+      {activeTab === "dismissed" && <DismissedFindingsTab />}
 
-        {/* View Run Panel */}
-        <Sheet
-          open={!!runPanelPolicy}
-          onOpenChange={(open) => {
-            if (!open) setRunPanelPolicy(null);
-          }}
-        >
-          <SheetContent side="right" className="sm:max-w-md">
-            {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
-          </SheetContent>
-        </Sheet>
+      {/* View Run Panel */}
+      <Sheet
+        open={!!runPanelPolicy}
+        onOpenChange={(open) => {
+          if (!open) setRunPanelPolicy(null);
+        }}
+      >
+        <SheetContent side="right" className="sm:max-w-md">
+          {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
+        </SheetContent>
+      </Sheet>
 
-        {/* Delete Policy Confirmation */}
-        <Dialog
-          open={!!policyToDelete}
-          onOpenChange={(open) => {
-            if (!open) setPolicyToDelete(null);
-          }}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Policy</Dialog.Title>
-            </Dialog.Header>
-            <Stack gap={4}>
+      {/* Delete Policy Confirmation */}
+      <Dialog
+        open={!!policyToDelete}
+        onOpenChange={(open) => {
+          if (!open) setPolicyToDelete(null);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete Policy</Dialog.Title>
+          </Dialog.Header>
+          <Stack gap={4}>
+            <Text variant="body">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
+                {policyToDelete?.policy.name}
+              </code>{" "}
+              policy will be permanently deleted.
+            </Text>
+            {policyToDelete?.policy.enabled ? (
               <Text variant="body">
-                <code className="bg-muted px-1 py-0.5 font-mono font-bold">
-                  {policyToDelete?.policy.name}
-                </code>{" "}
-                policy will be permanently deleted.
+                To stop scanning without losing this policy, disable it instead.
               </Text>
-              {policyDeleteImpactText && (
-                <Text variant="body">{policyDeleteImpactText}</Text>
-              )}
-              {policyDeleteRuleListItems.length > 0 && (
-                <div className="space-y-2">
-                  <ul className="list-disc space-y-1 pl-5">
-                    {policyDeleteRuleListItems.map((ruleName, index) => (
-                      <li key={`${ruleName}-${index}`}>
-                        <Text variant="body" muted as="span">
-                          {ruleName}
-                        </Text>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Stack>
-            <Dialog.Footer>
-              <div className="flex justify-end gap-2">
+            ) : null}
+            {policyDeleteImpactText && (
+              <Text variant="body">{policyDeleteImpactText}</Text>
+            )}
+            {policyDeleteRuleListItems.length > 0 && (
+              <div className="space-y-2">
+                <ul className="list-disc space-y-1 pl-5">
+                  {policyDeleteRuleListItems.map((ruleName, index) => (
+                    <li key={`${ruleName}-${index}`}>
+                      <Text variant="body" muted as="span">
+                        {ruleName}
+                      </Text>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Stack>
+          <Dialog.Footer>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setPolicyToDelete(null)}
+              >
+                Cancel
+              </Button>
+              {policyToDelete?.policy.enabled ? (
                 <Button
                   variant="secondary"
-                  onClick={() => setPolicyToDelete(null)}
+                  onClick={confirmDisableInstead}
+                  disabled={
+                    deleteMutation.isPending || toggleEnabledMutation.isPending
+                  }
                 >
-                  Cancel
+                  Disable instead
                 </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={confirmDelete}
-                  disabled={deleteMutation.isPending}
-                >
-                  Delete Policy
-                </Button>
-              </div>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-      </Page.Body>
-    </Page>
+              ) : null}
+              <Button
+                variant="destructive-primary"
+                onClick={confirmDelete}
+                disabled={
+                  deleteMutation.isPending || toggleEnabledMutation.isPending
+                }
+              >
+                Delete Policy
+              </Button>
+            </div>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </TabbedPage>
   );
 }
 

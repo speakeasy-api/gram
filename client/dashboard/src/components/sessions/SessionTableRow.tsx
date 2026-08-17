@@ -16,6 +16,7 @@ import {
   sessionTimeLabel,
   subjectLabel,
 } from "@/lib/user-session-status";
+import { ClientSourceBadge } from "./ClientSourceBadge";
 import { SessionStatusBadge } from "./SessionStatusBadge";
 import { RevokeSessionDialog } from "./RevokeSessionDialog";
 
@@ -73,11 +74,18 @@ export function SessionTableRow({
         </Text>
       </td>
 
-      {/* Client */}
+      {/* Client. The source badge sits inline rather than in its own column so
+          the table keeps its existing header set. */}
       <td className="px-3 py-3">
-        <Text small muted>
-          {session.clientName ?? "—"}
-        </Text>
+        <div className="flex items-center gap-2">
+          {/* min-w-0: a flex item defaults to min-width:auto, which stops
+              `truncate` engaging. client_name is client-supplied and up to
+              256 bytes, so without this it widens the whole table. */}
+          <Text small muted className="min-w-0 truncate">
+            {session.clientName ?? "—"}
+          </Text>
+          {session.clientName && <ClientSourceBadge client={session} />}
+        </div>
       </td>
 
       {/* MCP server */}

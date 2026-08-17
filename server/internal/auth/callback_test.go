@@ -3,16 +3,22 @@ package auth_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestService_Callback(t *testing.T) {
@@ -636,11 +642,49 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
 		require.NoError(t, err)
 		require.NotEmpty(t, session.ActiveOrganizationID, "the signup org must be active on the session")
+		require.Equal(t, []string{session.ActiveOrganizationID}, instance.trialNotifier.trialStarted)
 
 		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)
 		require.Equal(t, "Acme Inc", org.Name)
-		require.False(t, org.Whitelisted, "signup orgs match register and stay gated")
+		require.True(t, org.Whitelisted, "signup orgs match register and clear the demo gate")
+		require.Equal(t, "enterprise", org.GramAccountType)
+
+		platformMCPEnabled, err := featurerepo.New(instance.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: session.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeaturePlatformMCP),
+		})
+		require.NoError(t, err)
+		require.True(t, platformMCPEnabled)
+
+		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, "enterprise", trial.Tier)
+
+		// Callback is unauthenticated, so the audit actor cannot come from an
+		// auth context. The email has to be threaded through provisioning.
+		entry, err := audittest.LatestAuditLogByAction(ctx, instance.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+		require.NoError(t, err)
+		require.NotEmpty(t, entry.ActorDisplay, "signup must attribute the trial to the user who signed up")
+		require.Equal(t, userInfo.Email, entry.ActorDisplay)
+	})
+
+	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+		instance.trialNotifier.trialStartedErr = errors.New("notify failed")
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, result.SessionToken)
+		require.Len(t, instance.trialNotifier.trialStarted, 1)
 	})
 
 	t.Run("intent is consumed so it cannot be replayed", func(t *testing.T) {

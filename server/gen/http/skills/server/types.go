@@ -342,6 +342,8 @@ type GetResponseBody struct {
 	Drift *SkillDriftResponseBody `form:"drift" json:"drift" xml:"drift"`
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64 `form:"assistant_count" json:"assistant_count" xml:"assistant_count"`
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFindingResponseBody `form:"prompt_injection_findings" json:"prompt_injection_findings" xml:"prompt_injection_findings"`
 }
 
 // ListUnknownActivationsResponseBody is the type of the "skills" service
@@ -4889,6 +4891,17 @@ type SkillDriftResponseBody struct {
 	IndeterminateMachines int64 `form:"indeterminate_machines" json:"indeterminate_machines" xml:"indeterminate_machines"`
 }
 
+// SkillPromptInjectionFindingResponseBody is used to define fields on response
+// body types.
+type SkillPromptInjectionFindingResponseBody struct {
+	// The rule that produced the finding.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Why the current skill version was flagged.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The classifier confidence from 0 to 1.
+	Confidence float64 `form:"confidence" json:"confidence" xml:"confidence"`
+}
+
 // UnknownSkillActivationResponseBody is used to define fields on response body
 // types.
 type UnknownSkillActivationResponseBody struct {
@@ -5235,6 +5248,18 @@ func NewGetResponseBody(res *skills.GetSkillResult) *GetResponseBody {
 	}
 	if res.Drift != nil {
 		body.Drift = marshalSkillsSkillDriftToSkillDriftResponseBody(res.Drift)
+	}
+	if res.PromptInjectionFindings != nil {
+		body.PromptInjectionFindings = make([]*SkillPromptInjectionFindingResponseBody, len(res.PromptInjectionFindings))
+		for i, val := range res.PromptInjectionFindings {
+			if val == nil {
+				body.PromptInjectionFindings[i] = nil
+				continue
+			}
+			body.PromptInjectionFindings[i] = marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody(val)
+		}
+	} else {
+		body.PromptInjectionFindings = []*SkillPromptInjectionFindingResponseBody{}
 	}
 	return body
 }

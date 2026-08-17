@@ -1,6 +1,7 @@
 package aiintegrations
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -171,9 +172,64 @@ func TestBuildCodexCostLogParamsRoutesMissingProductToChatGPTURN(t *testing.T) {
 	require.Equal(t, chatgptHookSource, logParams[0].Attributes[attr.HookSourceKey])
 }
 
+// A timestamp-less event must land on a time intrinsic to the event, not on
+// the delivering file's end time. The feed repeats an event_id across files, so
+// a file-derived time would place two copies of one event at different times
+// and the dedupe lookup would miss the copy already written.
+func TestBuildCodexCostLogParamsFallsBackToPayloadBucketNotFileEndTime(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"event_1","type":"COSTS","payload":{"day":"2026-07-15","hour":22,"product":"codex","client":"web","model":"gpt-5.5","measures":{"usage":{"text_input_tokens":10,"text_cached_input_tokens":0,"text_output_tokens":5},"billing":[]}}}` + "\n")
+	cfg := codexCostConfig()
+
+	// The same event delivered by two files with different end times.
+	first, err := buildCodexCostLogParams(cfg, codexapi.LogFile{
+		ID:        "eclf_first",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   time.Date(2026, 7, 16, 0, 27, 13, 0, time.UTC),
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	second, err := buildCodexCostLogParams(cfg, codexapi.LogFile{
+		ID:        "eclf_second",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   time.Date(2026, 7, 18, 9, 3, 44, 0, time.UTC),
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+
+	bucket := time.Date(2026, 7, 15, 22, 0, 0, 0, time.UTC)
+	require.Equal(t, bucket, first[0].Timestamp)
+	require.Equal(t, second[0].Timestamp, first[0].Timestamp, "both deliveries must agree on event time")
+	require.Equal(t,
+		second[0].Attributes[attr.CodexComplianceEventHashKey],
+		first[0].Attributes[attr.CodexComplianceEventHashKey],
+	)
+}
+
+// With neither a timestamp nor a usable day/hour bucket there is nothing
+// intrinsic left, and the file's end time is the last resort.
+func TestBuildCodexCostLogParamsFallsBackToFileEndTimeWithoutBucket(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"event_1","type":"COSTS","payload":{"hour":22,"product":"codex","client":"web","model":"gpt-5.5","measures":{"usage":{"text_input_tokens":10,"text_cached_input_tokens":0,"text_output_tokens":5},"billing":[]}}}` + "\n")
+	endTime := time.Date(2026, 7, 16, 0, 27, 13, 0, time.UTC)
+
+	logParams, err := buildCodexCostLogParams(codexCostConfig(), codexapi.LogFile{
+		ID:        "eclf_123",
+		EventType: codexComplianceCostsEventType,
+		EndTime:   endTime,
+	}, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 1)
+	require.Equal(t, endTime, logParams[0].Timestamp)
+}
+
 func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	t.Parallel()
 
+	body := []byte("{}\n")
 	cfg := codexCostConfig()
 	file := codexapi.LogFile{
 		ID:         "eclf_123",
@@ -183,9 +239,15 @@ func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 		FileSize:   3,
 		FileSHA256: "not-the-right-hash",
 	}
-	_, err := buildCodexCostLogParams(cfg, file, []byte("{}\n"))
+	_, err := buildCodexCostLogParams(cfg, file, body)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "sha256 mismatch")
+	require.Contains(t, err.Error(), "failed sha256 verification")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentSHA256Mismatch, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Empty(t, contentErr.Payload)
 }
 
 func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
@@ -206,6 +268,93 @@ func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing event_id")
+	// The message names the log file so a poisoned file in a multi-file
+	// window is identifiable from the stored poll error alone.
+	require.Contains(t, err.Error(), "eclf_123")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentMissingEventID, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, bytes.TrimSpace(body), contentErr.Payload)
+}
+
+func TestBuildCodexCostLogParamsClassifiesInvalidTimestamp(t *testing.T) {
+	t.Parallel()
+
+	file := codexapi.LogFile{
+		ID:         "eclf_bad_timestamp",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+	body := []byte(`{"event_id":"event_1","type":"COSTS","timestamp":"not-a-timestamp","payload":{"identity":{"email":"dev@example.com"},"measures":{"usage":{},"billing":[]}}}` + "\n")
+
+	_, err := buildCodexCostLogParams(codexCostConfig(), file, body)
+
+	require.Error(t, err)
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentInvalidTimestamp, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, bytes.TrimSpace(body), contentErr.Payload)
+	require.Error(t, contentErr.Cause)
+}
+
+func TestBuildCodexCostLogParamsDecodeErrorNamesLogAndCause(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_bad",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+
+	body := []byte("\x1f\x8b not json")
+	_, err := buildCodexCostLogParams(cfg, file, body)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode codex compliance cost log eclf_bad")
+	require.Contains(t, err.Error(), "invalid character")
+	require.NotContains(t, err.Error(), "not json")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentInvalidJSON, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, body, contentErr.Payload)
+}
+
+// The compliance feed sends identity.groups as objects ({"id","name"}), not
+// strings. This mirrors the feed's COSTS record shape — including the
+// principal and actor envelope fields we ignore — to pin that such rows
+// decode.
+func TestBuildCodexCostLogParamsDecodesGroupObjects(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"11111111-2222-4333-8444-555555555555","type":"COSTS","principal":{"id":"org-openai","type":"API_PLATFORM_ORG"},"actor":{"type":"SYSTEM","id":"costs_compliance"},"timestamp":"2026-07-15T14:59:59Z","payload":{"day":"2026-07-15","hour":14,"organization_id":"org-openai","identity":{"user_id":"user_1","email":"Dev@Example.com","name":"Dev User","groups":[{"id":"00000000000000000000000000000abc","name":"Example_Group"}]},"product":"ChatGPT","client":"web","surface":"chatgpt","model":"gpt-5-thinking","reasoning":"high","measures":{"billing":[{"sku":"gpt-5-thinking","quantity":{"value":2,"unit":"counts"},"cost":{"value":20,"unit":"CREDITS"}}]}}}` + "\n")
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_groups",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 15, 15, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-15T15:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 1)
+	require.Equal(t, "dev@example.com", logParams[0].UserInfo.Email())
+	require.Equal(t, chatgptUsageMetricsURN, logParams[0].ToolInfo.URN)
 }
 
 // Pagination edge cases (empty windows, non-advancing last_end_time, window
@@ -230,8 +379,8 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 		client:    client,
 		cfg:       cfg,
 		pageLimit: codexCompliancePageLimit,
-		processPage: func(context.Context, []telemetry.LogParams) error {
-			return fmt.Errorf("process page should not be called")
+		processPage: func(context.Context, []telemetry.LogParams) (int, int, error) {
+			return 0, 0, fmt.Errorf("process page should not be called")
 		},
 		progress: &CodexCostSyncProgress{},
 	}

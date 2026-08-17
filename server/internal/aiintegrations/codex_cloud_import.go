@@ -25,7 +25,6 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -143,10 +142,10 @@ func NewCodexCloudImportService(logger *slog.Logger, store *Store, db *pgxpool.P
 // here too would double count.
 func (s *CodexCloudImportService) SyncCodexCloudSessions(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderChatGPTCompliance {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for codex cloud import: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for codex cloud import: %s", cfg.Provider)
 	}
 	if cfg.ExternalOrganizationID == nil {
-		return oops.E(oops.CodeInvalid, nil, "external_organization_id (workspace id) is required for codex cloud import")
+		return fmt.Errorf("external_organization_id (workspace id) is required for codex cloud import")
 	}
 
 	progress := &CodexCloudSyncProgress{
@@ -500,7 +499,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write codex cloud messages")
+		return fmt.Errorf("write codex cloud messages: %w", err)
 	}
 	return nil
 }
@@ -552,14 +551,15 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		PreferStoredTitle: true,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "upsert codex cloud chat")
+		return fmt.Errorf("upsert codex cloud chat: %w", err)
 	}
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,
 			ChatID:                chatID,
+			ProjectID:             src.cfg.ProjectID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "link codex cloud chat")
+			return fmt.Errorf("link codex cloud chat: %w", err)
 		}
 		src.progressMu.Lock()
 		src.progress.ChatsUpserted++
@@ -602,7 +602,7 @@ func parseCodexCloudEvents(file codexapi.LogFile, body []byte) ([]codexCloudEven
 		sum := sha256.Sum256(body)
 		actual := hex.EncodeToString(sum[:])
 		if !strings.EqualFold(actual, file.FileSHA256) {
-			return nil, oops.E(oops.CodeUnexpected, nil, "codex cloud log sha256 mismatch for %s", file.ID)
+			return nil, fmt.Errorf("codex cloud log sha256 mismatch for %s", file.ID)
 		}
 	}
 
@@ -614,7 +614,7 @@ func parseCodexCloudEvents(file codexapi.LogFile, body []byte) ([]codexCloudEven
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "decode codex cloud log event in %s", file.ID)
+			return nil, fmt.Errorf("decode codex cloud log event in %s: %w", file.ID, err)
 		}
 		if event.Type != "" && event.Type != codexCloudEventType {
 			continue

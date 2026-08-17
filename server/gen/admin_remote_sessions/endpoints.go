@@ -16,18 +16,22 @@ import (
 
 // Endpoints wraps the "adminRemoteSessions" service endpoints.
 type Endpoints struct {
-	CreateGlobalIssuer          goa.Endpoint
-	ListGlobalIssuers           goa.Endpoint
-	GetGlobalIssuer             goa.Endpoint
-	UpdateGlobalIssuer          goa.Endpoint
-	DeleteGlobalIssuer          goa.Endpoint
-	FetchGlobalIssuerMetadata   goa.Endpoint
-	RefreshGlobalIssuerMetadata goa.Endpoint
-	CreateGlobalClient          goa.Endpoint
-	ListGlobalClients           goa.Endpoint
-	GetGlobalClient             goa.Endpoint
-	UpdateGlobalClient          goa.Endpoint
-	DeleteGlobalClient          goa.Endpoint
+	CreateGlobalIssuer                    goa.Endpoint
+	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
+	ListGlobalIssuers                     goa.Endpoint
+	GetGlobalIssuer                       goa.Endpoint
+	UpdateGlobalIssuer                    goa.Endpoint
+	DeleteGlobalIssuer                    goa.Endpoint
+	FetchGlobalIssuerMetadata             goa.Endpoint
+	RefreshGlobalIssuerMetadata           goa.Endpoint
+	CreateGlobalClient                    goa.Endpoint
+	ListGlobalClients                     goa.Endpoint
+	GetGlobalClient                       goa.Endpoint
+	UpdateGlobalClient                    goa.Endpoint
+	DeleteGlobalClient                    goa.Endpoint
+	ListGlobalIssuerConvergenceCandidates goa.Endpoint
+	GetGlobalIssuerMigratePreflight       goa.Endpoint
+	MigrateToGlobalIssuer                 goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "adminRemoteSessions" service with
@@ -36,18 +40,22 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateGlobalIssuer:          NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		ListGlobalIssuers:           NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuer:             NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateGlobalIssuer:          NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteGlobalIssuer:          NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		FetchGlobalIssuerMetadata:   NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		RefreshGlobalIssuerMetadata: NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		CreateGlobalClient:          NewCreateGlobalClientEndpoint(s, a.APIKeyAuth),
-		ListGlobalClients:           NewListGlobalClientsEndpoint(s, a.APIKeyAuth),
-		GetGlobalClient:             NewGetGlobalClientEndpoint(s, a.APIKeyAuth),
-		UpdateGlobalClient:          NewUpdateGlobalClientEndpoint(s, a.APIKeyAuth),
-		DeleteGlobalClient:          NewDeleteGlobalClientEndpoint(s, a.APIKeyAuth),
+		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuer:                       NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		CreateGlobalClient:                    NewCreateGlobalClientEndpoint(s, a.APIKeyAuth),
+		ListGlobalClients:                     NewListGlobalClientsEndpoint(s, a.APIKeyAuth),
+		GetGlobalClient:                       NewGetGlobalClientEndpoint(s, a.APIKeyAuth),
+		UpdateGlobalClient:                    NewUpdateGlobalClientEndpoint(s, a.APIKeyAuth),
+		DeleteGlobalClient:                    NewDeleteGlobalClientEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -55,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateGlobalIssuer = m(e.CreateGlobalIssuer)
+	e.GetGlobalIssuerDuplicatePreflight = m(e.GetGlobalIssuerDuplicatePreflight)
 	e.ListGlobalIssuers = m(e.ListGlobalIssuers)
 	e.GetGlobalIssuer = m(e.GetGlobalIssuer)
 	e.UpdateGlobalIssuer = m(e.UpdateGlobalIssuer)
@@ -66,6 +75,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetGlobalClient = m(e.GetGlobalClient)
 	e.UpdateGlobalClient = m(e.UpdateGlobalClient)
 	e.DeleteGlobalClient = m(e.DeleteGlobalClient)
+	e.ListGlobalIssuerConvergenceCandidates = m(e.ListGlobalIssuerConvergenceCandidates)
+	e.GetGlobalIssuerMigratePreflight = m(e.GetGlobalIssuerMigratePreflight)
+	e.MigrateToGlobalIssuer = m(e.MigrateToGlobalIssuer)
 }
 
 // NewCreateGlobalIssuerEndpoint returns an endpoint function that calls the
@@ -88,6 +100,30 @@ func NewCreateGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.CreateGlobalIssuer(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerDuplicatePreflightEndpoint returns an endpoint function
+// that calls the method "getGlobalIssuerDuplicatePreflight" of service
+// "adminRemoteSessions".
+func NewGetGlobalIssuerDuplicatePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerDuplicatePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuerDuplicatePreflight(ctx, p)
 	}
 }
 
@@ -342,5 +378,76 @@ func NewDeleteGlobalClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return nil, s.DeleteGlobalClient(ctx, p)
+	}
+}
+
+// NewListGlobalIssuerConvergenceCandidatesEndpoint returns an endpoint
+// function that calls the method "listGlobalIssuerConvergenceCandidates" of
+// service "adminRemoteSessions".
+func NewListGlobalIssuerConvergenceCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListGlobalIssuerConvergenceCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListGlobalIssuerConvergenceCandidates(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerMigratePreflightEndpoint returns an endpoint function that
+// calls the method "getGlobalIssuerMigratePreflight" of service
+// "adminRemoteSessions".
+func NewGetGlobalIssuerMigratePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerMigratePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuerMigratePreflight(ctx, p)
+	}
+}
+
+// NewMigrateToGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "migrateToGlobalIssuer" of service "adminRemoteSessions".
+func NewMigrateToGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateToGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateToGlobalIssuer(ctx, p)
 	}
 }

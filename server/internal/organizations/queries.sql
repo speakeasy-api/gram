@@ -339,6 +339,14 @@ WHERE workos_membership_id = @workos_membership_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: UpsertWorkOSMembership :exec
 -- Upsert a membership row from a WorkOS organization_membership event. Caller
 -- must have already passed the row through ShouldProcessEvent.
@@ -733,11 +741,3 @@ LEFT JOIN global_roles gr
 WHERE ora.organization_id = @organization_id
   AND ora.user_id IS NOT NULL
   AND ora.deleted_at IS NULL;
-
--- name: GetActiveTrial :one
-SELECT organization_id, created_at, ends_at
-FROM trials
-WHERE organization_id = @organization_id
-  AND converted_at IS NULL
-  AND demoted_at IS NULL
-  AND ends_at > now();

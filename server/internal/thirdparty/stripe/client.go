@@ -1,0 +1,238 @@
+// Package stripe provides the narrow Stripe boundary used by PAYG billing.
+package stripe
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strconv"
+	"time"
+
+	stripesdk "github.com/stripe/stripe-go/v85"
+	stripewebhook "github.com/stripe/stripe-go/v85/webhook"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+)
+
+const (
+	organizationIDMetadataKey   = "organization_id"
+	organizationSlugMetadataKey = "organization_slug"
+	meterCustomerPayloadKey     = "stripe_customer_id"
+	meterValuePayloadKey        = "value"
+)
+
+var errMissingIdempotencyKey = errors.New("idempotency key is required")
+
+// Catalog contains the Stripe object identifiers used by PAYG billing.
+type Catalog struct {
+	PriceIDTUM     string
+	MeterEventName string
+}
+
+// Validate checks that every required Stripe catalog value is configured.
+func (c Catalog) Validate() error {
+	if !IsConfigured(c.PriceIDTUM) {
+		return errors.New("missing TUM price id in catalog")
+	}
+	if !IsConfigured(c.MeterEventName) {
+		return errors.New("missing meter event name in catalog")
+	}
+	return nil
+}
+
+// IsConfigured reports whether a Stripe config value is present.
+func IsConfigured(value string) bool {
+	return value != "" && value != "unset"
+}
+
+// Client is the Stripe surface used by PAYG billing.
+type Client interface {
+	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
+	CreateMeterEvent(context.Context, CreateMeterEventInput) error
+	VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error)
+	Catalog() Catalog
+}
+
+// CreateCustomerInput identifies the organization represented by a new Stripe customer.
+type CreateCustomerInput struct {
+	OrganizationID   string
+	OrganizationSlug string
+	IdempotencyKey   string
+}
+
+// Customer is the Stripe customer data needed by billing callers.
+type Customer struct {
+	ID string
+}
+
+// CreateMeterEventInput reports a TUM delta for one Stripe customer.
+type CreateMeterEventInput struct {
+	CustomerID     string
+	Value          int64
+	Timestamp      time.Time
+	IdempotencyKey string
+}
+
+// WebhookEvent is the verified Stripe event envelope consumed by webhook handlers.
+type WebhookEvent struct {
+	ID      string
+	Type    string
+	Created time.Time
+	Data    json.RawMessage
+}
+
+type stripeAPI interface {
+	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
+	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
+}
+
+type sdkAPI struct {
+	client *stripesdk.Client
+}
+
+func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
+	customer, err := s.client.V1Customers.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create customer: %w", err)
+	}
+	return customer, nil
+}
+
+func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
+	event, err := s.client.V1BillingMeterEvents.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create meter event: %w", err)
+	}
+	return event, nil
+}
+
+type client struct {
+	api           stripeAPI
+	catalog       Catalog
+	webhookSecret string
+}
+
+// NewClient creates a real Stripe client using the repository HTTP policy.
+func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret string, catalog Catalog) Client {
+	retries := guardian.DefaultRetryConfig()
+	retries.WaitMax = 10 * time.Second
+	retries.MaxAttempts = 1
+	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retries))
+	httpClient.Timeout = 30 * time.Second
+
+	backendConfig := new(stripesdk.BackendConfig)
+	backendConfig.HTTPClient = httpClient
+	// Guardian owns retries so the two retry layers cannot amplify each other.
+	backendConfig.MaxNetworkRetries = stripesdk.Int64(0)
+	backends := stripesdk.NewBackendsWithConfig(backendConfig)
+	sdkClient := stripesdk.NewClient(apiKey, stripesdk.WithBackends(backends))
+
+	return &client{
+		api:           &sdkAPI{client: sdkClient},
+		catalog:       catalog,
+		webhookSecret: webhookSecret,
+	}
+}
+
+func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) (*Customer, error) {
+	if input.IdempotencyKey == "" {
+		return nil, errMissingIdempotencyKey
+	}
+
+	params := new(stripesdk.CustomerCreateParams)
+	params.Metadata = map[string]string{
+		organizationIDMetadataKey:   input.OrganizationID,
+		organizationSlugMetadataKey: input.OrganizationSlug,
+	}
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	customer, err := c.api.createCustomer(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe customer: %w", err)
+	}
+	return &Customer{ID: customer.ID}, nil
+}
+
+func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInput) error {
+	if input.IdempotencyKey == "" {
+		return errMissingIdempotencyKey
+	}
+
+	params := new(stripesdk.BillingMeterEventCreateParams)
+	params.EventName = stripesdk.String(c.catalog.MeterEventName)
+	params.Identifier = stripesdk.String(input.IdempotencyKey)
+	params.Payload = map[string]string{
+		meterCustomerPayloadKey: input.CustomerID,
+		meterValuePayloadKey:    strconv.FormatInt(input.Value, 10),
+	}
+	if !input.Timestamp.IsZero() {
+		params.Timestamp = new(input.Timestamp.Unix())
+	}
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	if _, err := c.api.createMeterEvent(ctx, params); err != nil {
+		return fmt.Errorf("create Stripe meter event: %w", err)
+	}
+	return nil
+}
+
+func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error) {
+	if !IsConfigured(c.webhookSecret) {
+		return nil, errors.New("verify Stripe webhook: webhook secret is not configured")
+	}
+
+	event, err := stripewebhook.ConstructEvent(payload, signature, c.webhookSecret)
+	if err != nil {
+		return nil, fmt.Errorf("verify Stripe webhook: %w", err)
+	}
+	if event.APIVersion != stripesdk.APIVersion {
+		return nil, fmt.Errorf("verify Stripe webhook: expected API version %s, got %s", stripesdk.APIVersion, event.APIVersion)
+	}
+
+	var data json.RawMessage
+	if event.Data != nil {
+		data = event.Data.Raw
+	}
+	return &WebhookEvent{
+		ID:      event.ID,
+		Type:    string(event.Type),
+		Created: time.Unix(event.Created, 0),
+		Data:    data,
+	}, nil
+}
+
+func (c *client) Catalog() Catalog {
+	return c.catalog
+}
+
+type stubClient struct {
+	logger *slog.Logger
+}
+
+// NewStubClient returns a local no-op Stripe client.
+func NewStubClient(logger *slog.Logger) Client {
+	return &stubClient{logger: logger}
+}
+
+func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) (*Customer, error) {
+	s.logger.DebugContext(ctx, "stub Stripe customer creation skipped")
+	return &Customer{ID: "cus_local_stub"}, nil
+}
+
+func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {
+	s.logger.DebugContext(ctx, "stub Stripe meter event skipped")
+	return nil
+}
+
+func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
+	return nil, errors.New("verify Stripe webhook: Stripe is not configured")
+}
+
+func (s *stubClient) Catalog() Catalog {
+	return Catalog{
+		PriceIDTUM:     "",
+		MeterEventName: "",
+	}
+}

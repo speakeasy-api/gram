@@ -31,6 +31,8 @@ func (c *evaluationClient) GetAllFlags(payload posthoggo.FeatureFlagPayloadNoKey
 	return c.flags, c.err
 }
 
+const testFeatureFlag feature.Flag = "test-feature"
+
 func TestPosthogEvaluateFlag(t *testing.T) {
 	t.Parallel()
 
@@ -49,10 +51,10 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 		{name: "nil result", want: feature.EvaluationIndeterminate},
 		{name: "variant", result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("control")}, want: feature.EvaluationIndeterminate},
 		{name: "provider failure", err: errors.New("unavailable"), want: feature.EvaluationIndeterminate, isErr: true},
-		{name: "local enabled", localEvaluation: true, flags: map[string]any{string(feature.FlagPlatformMCPRollout): true}, want: feature.EvaluationEnabled},
-		{name: "local disabled", localEvaluation: true, flags: map[string]any{string(feature.FlagPlatformMCPRollout): false}, want: feature.EvaluationDisabled},
+		{name: "local enabled", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): true}, want: feature.EvaluationEnabled},
+		{name: "local disabled", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): false}, want: feature.EvaluationDisabled},
 		{name: "local missing", localEvaluation: true, flags: map[string]any{}, want: feature.EvaluationIndeterminate},
-		{name: "local variant", localEvaluation: true, flags: map[string]any{string(feature.FlagPlatformMCPRollout): "control"}, want: feature.EvaluationIndeterminate},
+		{name: "local variant", localEvaluation: true, flags: map[string]any{string(testFeatureFlag): "control"}, want: feature.EvaluationIndeterminate},
 	}
 
 	for _, test := range tests {
@@ -68,7 +70,7 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 
 			got, err := provider.EvaluateFlag(
 				t.Context(),
-				feature.FlagPlatformMCPRollout,
+				testFeatureFlag,
 				"organization-id",
 				map[string]string{"organization": "organization-slug"},
 			)
@@ -89,4 +91,15 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A nil provider is the shape callers hold before wiring completes; resolving a
+// variant on it must yield "no variant", not a nil-pointer panic on the logger.
+func TestPosthogFlagVariantNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var p *Posthog
+	variant, err := p.FlagVariant(t.Context(), feature.FlagAssistantPlatformMCP, "org-test", nil)
+	require.NoError(t, err)
+	require.Empty(t, variant)
 }

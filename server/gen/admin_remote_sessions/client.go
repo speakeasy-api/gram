@@ -16,36 +16,44 @@ import (
 
 // Client is the "adminRemoteSessions" service client.
 type Client struct {
-	CreateGlobalIssuerEndpoint          goa.Endpoint
-	ListGlobalIssuersEndpoint           goa.Endpoint
-	GetGlobalIssuerEndpoint             goa.Endpoint
-	UpdateGlobalIssuerEndpoint          goa.Endpoint
-	DeleteGlobalIssuerEndpoint          goa.Endpoint
-	FetchGlobalIssuerMetadataEndpoint   goa.Endpoint
-	RefreshGlobalIssuerMetadataEndpoint goa.Endpoint
-	CreateGlobalClientEndpoint          goa.Endpoint
-	ListGlobalClientsEndpoint           goa.Endpoint
-	GetGlobalClientEndpoint             goa.Endpoint
-	UpdateGlobalClientEndpoint          goa.Endpoint
-	DeleteGlobalClientEndpoint          goa.Endpoint
+	CreateGlobalIssuerEndpoint                    goa.Endpoint
+	GetGlobalIssuerDuplicatePreflightEndpoint     goa.Endpoint
+	ListGlobalIssuersEndpoint                     goa.Endpoint
+	GetGlobalIssuerEndpoint                       goa.Endpoint
+	UpdateGlobalIssuerEndpoint                    goa.Endpoint
+	DeleteGlobalIssuerEndpoint                    goa.Endpoint
+	FetchGlobalIssuerMetadataEndpoint             goa.Endpoint
+	RefreshGlobalIssuerMetadataEndpoint           goa.Endpoint
+	CreateGlobalClientEndpoint                    goa.Endpoint
+	ListGlobalClientsEndpoint                     goa.Endpoint
+	GetGlobalClientEndpoint                       goa.Endpoint
+	UpdateGlobalClientEndpoint                    goa.Endpoint
+	DeleteGlobalClientEndpoint                    goa.Endpoint
+	ListGlobalIssuerConvergenceCandidatesEndpoint goa.Endpoint
+	GetGlobalIssuerMigratePreflightEndpoint       goa.Endpoint
+	MigrateToGlobalIssuerEndpoint                 goa.Endpoint
 }
 
 // NewClient initializes a "adminRemoteSessions" service client given the
 // endpoints.
-func NewClient(createGlobalIssuer, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, createGlobalClient, listGlobalClients, getGlobalClient, updateGlobalClient, deleteGlobalClient goa.Endpoint) *Client {
+func NewClient(createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, createGlobalClient, listGlobalClients, getGlobalClient, updateGlobalClient, deleteGlobalClient, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer goa.Endpoint) *Client {
 	return &Client{
-		CreateGlobalIssuerEndpoint:          createGlobalIssuer,
-		ListGlobalIssuersEndpoint:           listGlobalIssuers,
-		GetGlobalIssuerEndpoint:             getGlobalIssuer,
-		UpdateGlobalIssuerEndpoint:          updateGlobalIssuer,
-		DeleteGlobalIssuerEndpoint:          deleteGlobalIssuer,
-		FetchGlobalIssuerMetadataEndpoint:   fetchGlobalIssuerMetadata,
-		RefreshGlobalIssuerMetadataEndpoint: refreshGlobalIssuerMetadata,
-		CreateGlobalClientEndpoint:          createGlobalClient,
-		ListGlobalClientsEndpoint:           listGlobalClients,
-		GetGlobalClientEndpoint:             getGlobalClient,
-		UpdateGlobalClientEndpoint:          updateGlobalClient,
-		DeleteGlobalClientEndpoint:          deleteGlobalClient,
+		CreateGlobalIssuerEndpoint:                    createGlobalIssuer,
+		GetGlobalIssuerDuplicatePreflightEndpoint:     getGlobalIssuerDuplicatePreflight,
+		ListGlobalIssuersEndpoint:                     listGlobalIssuers,
+		GetGlobalIssuerEndpoint:                       getGlobalIssuer,
+		UpdateGlobalIssuerEndpoint:                    updateGlobalIssuer,
+		DeleteGlobalIssuerEndpoint:                    deleteGlobalIssuer,
+		FetchGlobalIssuerMetadataEndpoint:             fetchGlobalIssuerMetadata,
+		RefreshGlobalIssuerMetadataEndpoint:           refreshGlobalIssuerMetadata,
+		CreateGlobalClientEndpoint:                    createGlobalClient,
+		ListGlobalClientsEndpoint:                     listGlobalClients,
+		GetGlobalClientEndpoint:                       getGlobalClient,
+		UpdateGlobalClientEndpoint:                    updateGlobalClient,
+		DeleteGlobalClientEndpoint:                    deleteGlobalClient,
+		ListGlobalIssuerConvergenceCandidatesEndpoint: listGlobalIssuerConvergenceCandidates,
+		GetGlobalIssuerMigratePreflightEndpoint:       getGlobalIssuerMigratePreflight,
+		MigrateToGlobalIssuerEndpoint:                 migrateToGlobalIssuer,
 	}
 }
 
@@ -70,6 +78,30 @@ func (c *Client) CreateGlobalIssuer(ctx context.Context, p *CreateGlobalIssuerPa
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// GetGlobalIssuerDuplicatePreflight calls the
+// "getGlobalIssuerDuplicatePreflight" endpoint of the "adminRemoteSessions"
+// service.
+// GetGlobalIssuerDuplicatePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGlobalIssuerDuplicatePreflight(ctx context.Context, p *GetGlobalIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error) {
+	var ires any
+	ires, err = c.GetGlobalIssuerDuplicatePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerDuplicatePreflight), nil
 }
 
 // ListGlobalIssuers calls the "listGlobalIssuers" endpoint of the
@@ -315,4 +347,74 @@ func (c *Client) UpdateGlobalClient(ctx context.Context, p *UpdateGlobalClientPa
 func (c *Client) DeleteGlobalClient(ctx context.Context, p *DeleteGlobalClientPayload) (err error) {
 	_, err = c.DeleteGlobalClientEndpoint(ctx, p)
 	return
+}
+
+// ListGlobalIssuerConvergenceCandidates calls the
+// "listGlobalIssuerConvergenceCandidates" endpoint of the
+// "adminRemoteSessions" service.
+// ListGlobalIssuerConvergenceCandidates may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListGlobalIssuerConvergenceCandidates(ctx context.Context, p *ListGlobalIssuerConvergenceCandidatesPayload) (res *ListIssuerConvergenceCandidatesResult, err error) {
+	var ires any
+	ires, err = c.ListGlobalIssuerConvergenceCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListIssuerConvergenceCandidatesResult), nil
+}
+
+// GetGlobalIssuerMigratePreflight calls the "getGlobalIssuerMigratePreflight"
+// endpoint of the "adminRemoteSessions" service.
+// GetGlobalIssuerMigratePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGlobalIssuerMigratePreflight(ctx context.Context, p *GetGlobalIssuerMigratePreflightPayload) (res *IssuerMigratePreflight, err error) {
+	var ires any
+	ires, err = c.GetGlobalIssuerMigratePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*IssuerMigratePreflight), nil
+}
+
+// MigrateToGlobalIssuer calls the "migrateToGlobalIssuer" endpoint of the
+// "adminRemoteSessions" service.
+// MigrateToGlobalIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateToGlobalIssuer(ctx context.Context, p *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error) {
+	var ires any
+	ires, err = c.MigrateToGlobalIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MigrateRemoteSessionIssuerResult), nil
 }

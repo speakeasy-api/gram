@@ -49,6 +49,25 @@ func TestSigner_MintAndValidateBearer(t *testing.T) {
 	require.Equal(t, "client-abc", session.ClientID)
 }
 
+func TestSigner_ExactExpirationOverridesLifetime(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	expiresAt := time.Now().Add(20 * time.Minute).Truncate(time.Second)
+	token, _, err := signer.Mint(sessiontokens.MintParams{
+		Subject:   urn.NewUserSubject("user-1"),
+		Audience:  "platform-mcp",
+		Issuer:    "https://example.test",
+		Lifetime:  time.Hour,
+		ExpiresAt: &expiresAt,
+	})
+	require.NoError(t, err)
+
+	claims, err := signer.Validate(token, "platform-mcp")
+	require.NoError(t, err)
+	require.Equal(t, expiresAt, claims.ExpiresAt.Time)
+}
+
 func TestSigner_UsesProvidedJTI(t *testing.T) {
 	t.Parallel()
 

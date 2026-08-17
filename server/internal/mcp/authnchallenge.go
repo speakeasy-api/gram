@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -127,13 +128,35 @@ var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
 // CacheKey implements cache.CacheableObject.
 func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID }
 
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out. (Per the Cleanup ticket in project.md, AdditionalCacheKeys is
-// itself slated for removal from the interface.)
-func (a AuthnChallengeState) AdditionalCacheKeys() []string { return []string{} }
-
 // TTL implements cache.CacheableObject.
 func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
+
+// mintOriginOr returns the public origin this challenge was minted under: the
+// mint-time snapshot when present, the supplied fallback otherwise.
+//
+// Every URL a resuming handler builds — the consent redirect and the RFC 9207
+// `iss` on the authorization response — hangs off this origin rather than off
+// the resuming request, because a challenge can be resumed on an origin other
+// than the one it was minted under. HandleIDPCallback is mounted at the global
+// server URL and carries no customdomains.Context at all, and the upstream
+// remote-session login returns the user to the platform origin, so even the
+// consent POST — which does carry a custom-domain context — can be serving a
+// challenge minted under a different one. A client that recorded
+// https://<custom-domain>/mcp/<slug> as the issuer rejects a response carrying
+// the platform origin and is forbidden from displaying the error it discarded,
+// so a wrong origin here surfaces as nothing at all.
+//
+// The fallback is per-caller because the right one differs: a handler holding
+// the request's custom-domain context falls back to that origin, while
+// HandleIDPCallback can only fall back to the server default. It covers states
+// carrying no snapshot at all, the one case where the true mint origin is
+// unrecoverable.
+func (a AuthnChallengeState) mintOriginOr(fallback string) string {
+	if a.Endpoint.BaseURL == "" {
+		return fallback
+	}
+	return a.Endpoint.BaseURL
+}
 
 // UserSessionGrant is the short-lived OAuth authorization grant minted by
 // HandleConsent's POST and consumed by HandleToken's authorization_code
@@ -153,7 +176,12 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
-	CreatedAt           time.Time          `json:"created_at"`
+	// DesiredSessionDurationHours is the subject's consent-screen session
+	// length choice. Token minting clamps it to the issuer maximum. Zero means
+	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
+	// stable so grants survive rolling deploys.
+	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -162,10 +190,6 @@ var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 func (g UserSessionGrant) CacheKey() string {
 	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
 }
-
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out.
-func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
@@ -177,6 +201,35 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // endpoint's organization could not be described, so the resulting 401 is
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
+// userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
+// at most one write per window regardless of request volume. Every other
+// request matches no rows and costs one index probe. The window is therefore
+// also the resolution of the liveness readout — "used 4m ago" is accurate to
+// within this much.
+const userSessionLastUsedCutoff = 5 * time.Minute
+
+// touchUserSessionLastUsed records that a validated session just carried a
+// request. Best-effort by design: this runs on the per-request MCP auth path,
+// where a bookkeeping write must never turn a good credential into a failed
+// call, so a failure is logged and swallowed.
+func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) {
+	if jti == "" {
+		return
+	}
+
+	now := time.Now()
+	err := usersessions_repo.New(s.db).TouchUserSessionLastUsed(ctx, usersessions_repo.TouchUserSessionLastUsedParams{
+		NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		ProjectID:           endpoint.ProjectID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Jti:                 jti,
+		UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-userSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to stamp user session last_used_at", attr.SlogError(err))
+	}
+}
 
 // validateUserSessionToken delegates the JWT verify + revocation check to
 // usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
@@ -216,6 +269,11 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	if session.ClientID != "" {
 		ctx = contextvalues.SetOAuthClientID(ctx, session.ClientID)
 	}
+
+	// Stamped for every subject kind, anonymous included: liveness describes
+	// the connection, and an anonymous session is a real connection whose
+	// principal happens to be unknown.
+	s.touchUserSessionLastUsed(ctx, endpoint, session.JTI)
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
 		return ctx, &subject, nil

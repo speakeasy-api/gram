@@ -132,7 +132,6 @@ func TestManagedInstanceIngestUpdatesHealth(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	ti.features.enabled = true
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "health", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 
@@ -180,7 +179,6 @@ func TestHealthProcessorPersistsAcceptedUpdatesAcrossLifecycleChanges(t *testing
 	t.Parallel()
 
 	ctx, ti := newRealTestService(t, nil)
-	ti.features.enabled = true
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "health-lifecycle", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 

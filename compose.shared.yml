@@ -6,7 +6,7 @@
 # a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
 # by compose.yml.
 #
-# (Jaeger/Prometheus/OTel-collector are intentionally NOT shared: their signals
+# (LGTM/OTel-collector are intentionally NOT shared: their signals
 # would collide across worktrees — same-commit worktrees emit identical
 # Prometheus series and intermixed traces — so they stay per-worktree in
 # compose.yml.)

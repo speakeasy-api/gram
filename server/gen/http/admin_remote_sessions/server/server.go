@@ -18,19 +18,23 @@ import (
 
 // Server lists the adminRemoteSessions service endpoint HTTP handlers.
 type Server struct {
-	Mounts                      []*MountPoint
-	CreateGlobalIssuer          http.Handler
-	ListGlobalIssuers           http.Handler
-	GetGlobalIssuer             http.Handler
-	UpdateGlobalIssuer          http.Handler
-	DeleteGlobalIssuer          http.Handler
-	FetchGlobalIssuerMetadata   http.Handler
-	RefreshGlobalIssuerMetadata http.Handler
-	CreateGlobalClient          http.Handler
-	ListGlobalClients           http.Handler
-	GetGlobalClient             http.Handler
-	UpdateGlobalClient          http.Handler
-	DeleteGlobalClient          http.Handler
+	Mounts                                []*MountPoint
+	CreateGlobalIssuer                    http.Handler
+	GetGlobalIssuerDuplicatePreflight     http.Handler
+	ListGlobalIssuers                     http.Handler
+	GetGlobalIssuer                       http.Handler
+	UpdateGlobalIssuer                    http.Handler
+	DeleteGlobalIssuer                    http.Handler
+	FetchGlobalIssuerMetadata             http.Handler
+	RefreshGlobalIssuerMetadata           http.Handler
+	CreateGlobalClient                    http.Handler
+	ListGlobalClients                     http.Handler
+	GetGlobalClient                       http.Handler
+	UpdateGlobalClient                    http.Handler
+	DeleteGlobalClient                    http.Handler
+	ListGlobalIssuerConvergenceCandidates http.Handler
+	GetGlobalIssuerMigratePreflight       http.Handler
+	MigrateToGlobalIssuer                 http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -61,6 +65,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateGlobalIssuer", "POST", "/rpc/adminRemoteSessions.createGlobalIssuer"},
+			{"GetGlobalIssuerDuplicatePreflight", "GET", "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight"},
 			{"ListGlobalIssuers", "GET", "/rpc/adminRemoteSessions.listGlobalIssuers"},
 			{"GetGlobalIssuer", "GET", "/rpc/adminRemoteSessions.getGlobalIssuer"},
 			{"UpdateGlobalIssuer", "POST", "/rpc/adminRemoteSessions.updateGlobalIssuer"},
@@ -72,19 +77,26 @@ func New(
 			{"GetGlobalClient", "GET", "/rpc/adminRemoteSessions.getGlobalClient"},
 			{"UpdateGlobalClient", "POST", "/rpc/adminRemoteSessions.updateGlobalClient"},
 			{"DeleteGlobalClient", "DELETE", "/rpc/adminRemoteSessions.deleteGlobalClient"},
+			{"ListGlobalIssuerConvergenceCandidates", "GET", "/rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates"},
+			{"GetGlobalIssuerMigratePreflight", "GET", "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight"},
+			{"MigrateToGlobalIssuer", "POST", "/rpc/adminRemoteSessions.migrateToGlobalIssuer"},
 		},
-		CreateGlobalIssuer:          NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalIssuers:           NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalIssuer:             NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateGlobalIssuer:          NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteGlobalIssuer:          NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		FetchGlobalIssuerMetadata:   NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
-		RefreshGlobalIssuerMetadata: NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
-		CreateGlobalClient:          NewCreateGlobalClientHandler(e.CreateGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalClients:           NewListGlobalClientsHandler(e.ListGlobalClients, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalClient:             NewGetGlobalClientHandler(e.GetGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		UpdateGlobalClient:          NewUpdateGlobalClientHandler(e.UpdateGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		DeleteGlobalClient:          NewDeleteGlobalClientHandler(e.DeleteGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalIssuer:                    NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuers:                     NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuer:                       NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalClient:                    NewCreateGlobalClientHandler(e.CreateGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalClients:                     NewListGlobalClientsHandler(e.ListGlobalClients, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalClient:                       NewGetGlobalClientHandler(e.GetGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalClient:                    NewUpdateGlobalClientHandler(e.UpdateGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalClient:                    NewDeleteGlobalClientHandler(e.DeleteGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesHandler(e.ListGlobalIssuerConvergenceCandidates, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightHandler(e.GetGlobalIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerHandler(e.MigrateToGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -94,6 +106,7 @@ func (s *Server) Service() string { return "adminRemoteSessions" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateGlobalIssuer = m(s.CreateGlobalIssuer)
+	s.GetGlobalIssuerDuplicatePreflight = m(s.GetGlobalIssuerDuplicatePreflight)
 	s.ListGlobalIssuers = m(s.ListGlobalIssuers)
 	s.GetGlobalIssuer = m(s.GetGlobalIssuer)
 	s.UpdateGlobalIssuer = m(s.UpdateGlobalIssuer)
@@ -105,6 +118,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetGlobalClient = m(s.GetGlobalClient)
 	s.UpdateGlobalClient = m(s.UpdateGlobalClient)
 	s.DeleteGlobalClient = m(s.DeleteGlobalClient)
+	s.ListGlobalIssuerConvergenceCandidates = m(s.ListGlobalIssuerConvergenceCandidates)
+	s.GetGlobalIssuerMigratePreflight = m(s.GetGlobalIssuerMigratePreflight)
+	s.MigrateToGlobalIssuer = m(s.MigrateToGlobalIssuer)
 }
 
 // MethodNames returns the methods served.
@@ -113,6 +129,7 @@ func (s *Server) MethodNames() []string { return adminremotesessions.MethodNames
 // Mount configures the mux to serve the adminRemoteSessions endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateGlobalIssuerHandler(mux, h.CreateGlobalIssuer)
+	MountGetGlobalIssuerDuplicatePreflightHandler(mux, h.GetGlobalIssuerDuplicatePreflight)
 	MountListGlobalIssuersHandler(mux, h.ListGlobalIssuers)
 	MountGetGlobalIssuerHandler(mux, h.GetGlobalIssuer)
 	MountUpdateGlobalIssuerHandler(mux, h.UpdateGlobalIssuer)
@@ -124,6 +141,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetGlobalClientHandler(mux, h.GetGlobalClient)
 	MountUpdateGlobalClientHandler(mux, h.UpdateGlobalClient)
 	MountDeleteGlobalClientHandler(mux, h.DeleteGlobalClient)
+	MountListGlobalIssuerConvergenceCandidatesHandler(mux, h.ListGlobalIssuerConvergenceCandidates)
+	MountGetGlobalIssuerMigratePreflightHandler(mux, h.GetGlobalIssuerMigratePreflight)
+	MountMigrateToGlobalIssuerHandler(mux, h.MigrateToGlobalIssuer)
 }
 
 // Mount configures the mux to serve the adminRemoteSessions endpoints.
@@ -162,6 +182,61 @@ func NewCreateGlobalIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerDuplicatePreflightHandler configures the mux to serve
+// the "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight"
+// endpoint.
+func MountGetGlobalIssuerDuplicatePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight", f)
+}
+
+// NewGetGlobalIssuerDuplicatePreflightHandler creates a HTTP handler which
+// loads the HTTP request and calls the "adminRemoteSessions" service
+// "getGlobalIssuerDuplicatePreflight" endpoint.
+func NewGetGlobalIssuerDuplicatePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerDuplicatePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerDuplicatePreflightResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerDuplicatePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuerDuplicatePreflight")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -756,6 +831,169 @@ func NewDeleteGlobalClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteGlobalClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListGlobalIssuerConvergenceCandidatesHandler configures the mux to
+// serve the "adminRemoteSessions" service
+// "listGlobalIssuerConvergenceCandidates" endpoint.
+func MountListGlobalIssuerConvergenceCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates", f)
+}
+
+// NewListGlobalIssuerConvergenceCandidatesHandler creates a HTTP handler which
+// loads the HTTP request and calls the "adminRemoteSessions" service
+// "listGlobalIssuerConvergenceCandidates" endpoint.
+func NewListGlobalIssuerConvergenceCandidatesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListGlobalIssuerConvergenceCandidatesRequest(mux, decoder)
+		encodeResponse = EncodeListGlobalIssuerConvergenceCandidatesResponse(encoder)
+		encodeError    = EncodeListGlobalIssuerConvergenceCandidatesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listGlobalIssuerConvergenceCandidates")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerMigratePreflightHandler configures the mux to serve the
+// "adminRemoteSessions" service "getGlobalIssuerMigratePreflight" endpoint.
+func MountGetGlobalIssuerMigratePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight", f)
+}
+
+// NewGetGlobalIssuerMigratePreflightHandler creates a HTTP handler which loads
+// the HTTP request and calls the "adminRemoteSessions" service
+// "getGlobalIssuerMigratePreflight" endpoint.
+func NewGetGlobalIssuerMigratePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerMigratePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerMigratePreflightResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerMigratePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuerMigratePreflight")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateToGlobalIssuerHandler configures the mux to serve the
+// "adminRemoteSessions" service "migrateToGlobalIssuer" endpoint.
+func MountMigrateToGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/adminRemoteSessions.migrateToGlobalIssuer", f)
+}
+
+// NewMigrateToGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "adminRemoteSessions" service "migrateToGlobalIssuer"
+// endpoint.
+func NewMigrateToGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateToGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeMigrateToGlobalIssuerResponse(encoder)
+		encodeError    = EncodeMigrateToGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateToGlobalIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

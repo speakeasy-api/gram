@@ -13,7 +13,7 @@ import (
 )
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
-SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
 WHERE organization_id = $1
 `
@@ -24,6 +24,8 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
@@ -219,7 +221,7 @@ ON CONFLICT (organization_id) DO UPDATE SET
   -- field (dashboard TUM form, older SDKs) must not silently clear it.
   , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {
@@ -242,6 +244,8 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,

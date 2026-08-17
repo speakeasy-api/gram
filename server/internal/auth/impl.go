@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -42,9 +43,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const dispositionAssistants = "assistants"
@@ -114,6 +118,10 @@ type Service struct {
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
 	authzProvisioner    *authz.Provisioner
+	organizationSeeder  OrganizationFeatureSeeder
+	trialBundleSeeder   EnterpriseTrialBundleSeeder
+	auditLogger         *audit.Logger
+	trialNotifier       trialemails.Notifier
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -131,8 +139,15 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
+	organizationSeeder OrganizationFeatureSeeder,
+	trialBundleSeeder EnterpriseTrialBundleSeeder,
+	auditLogger *audit.Logger,
+	trialNotifier trialemails.Notifier,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	return &Service{
 		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
@@ -150,6 +165,10 @@ func NewService(
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
 		authzProvisioner:    authzProvisioner,
+		organizationSeeder:  organizationSeeder,
+		trialBundleSeeder:   trialBundleSeeder,
+		auditLogger:         auditLogger,
+		trialNotifier:       trialNotifier,
 	}
 }
 
@@ -171,6 +190,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Wrap Callback handler: read the binding cookie and inject it into the
 	// context so validateAuthNonce() can verify it.
 	server.Callback = callbackNonceBindingMiddleware(server.Callback)
+
+	// Wrap Logout handler: have the browser drop the origin's cookies and
+	// client-side storage once the session has been invalidated server-side.
+	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
 
 	srv.Mount(mux, server)
 }
@@ -316,7 +339,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		// A user-typed name beats a generated one, so this wins over the
 		// assistants disposition below.
 		if intent != nil && intent.OrgName != "" {
-			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, false)
+			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, orgProvisionOptions{
+				Whitelisted:    true,
+				ProvisionTrial: true,
+				ActorEmail:     userInfo.Email,
+			})
 			if err != nil {
 				return s.redirectSignupError(ctx, err)
 			}
@@ -324,6 +351,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSession(ctx, session); err != nil {
 				return s.redirectSignupError(ctx, err)
+			}
+
+			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
+				s.logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
@@ -483,11 +514,15 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// nonce behind — and so a bad name fails before the identity-provider hop
 	// rather than after it. Only when the parameter is present: a malformed
 	// value must never be able to block an ordinary login.
-	orgName := strings.TrimSpace(conv.PtrValOr(payload.OrgName, ""))
-	if orgName != "" {
-		if err := validateOrgName(orgName); err != nil {
+	orgName := conv.PtrValOr(payload.OrgName, "")
+	if strings.TrimSpace(orgName) != "" {
+		validated, err := orgprovision.ValidateName(orgName)
+		if err != nil {
 			return nil, err
 		}
+		orgName = validated
+	} else {
+		orgName = ""
 	}
 
 	// An email means the sign-up page collected one to pre-fill on the identity
@@ -734,10 +769,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	trial := loadActiveTrial(
+	trial := loadTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
-		s.orgRepo.GetActiveTrial,
+		trialsRepo.New(s.db).GetSessionTrial,
 		s.logger,
 	)
 
@@ -866,10 +901,14 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}, nil
 }
 
-func loadActiveTrial(
+// loadTrial returns the organization's trial unless it converted, including
+// trials that have ended or been demoted so the dashboard can tell an expired
+// trial apart from an organization that never trialed. A lookup failure is
+// logged and reported as no trial rather than failing the whole session.
+func loadTrial(
 	ctx context.Context,
 	organizationID string,
-	getTrial func(context.Context, string) (orgRepo.GetActiveTrialRow, error),
+	getTrial func(context.Context, string) (trialsRepo.GetSessionTrialRow, error),
 	logger *slog.Logger,
 ) *gen.Trial {
 	trial, err := getTrial(ctx, organizationID)
@@ -879,7 +918,7 @@ func loadActiveTrial(
 	case err != nil:
 		logger.ErrorContext(
 			ctx,
-			"error loading active trial; continuing without trial status",
+			"error loading trial; continuing without trial status",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)
@@ -892,6 +931,25 @@ func loadActiveTrial(
 	}
 }
 
+// orgProvisionOptions carries the per-caller choices for a new organization.
+// The choices are a struct rather than positional booleans because every call
+// site then names what it asks for, and exhaustruct forces a new field to be
+// answered everywhere instead of defaulting to false.
+type orgProvisionOptions struct {
+	// Whitelisted clears the dashboard's book-a-demo gate for the organization.
+	Whitelisted bool
+
+	// ProvisionTrial arms a 14-day enterprise trial in the same transaction
+	// that creates the organization.
+	ProvisionTrial bool
+
+	// ActorEmail names the human this provisioning is attributed to in the
+	// audit log. It travels explicitly because the signup path runs on the
+	// unauthenticated callback, which has no auth context to read it from.
+	// Empty stores no display name, leaving the entry showing a bare actor id.
+	ActorEmail string
+}
+
 // provisionOrgForUser creates an organization and attaches a user to it as the
 // first member. Shared by the three paths that create orgs: self-serve register,
 // signup with a company name carried through login, and assistants
@@ -900,13 +958,14 @@ func loadActiveTrial(
 // Session mutation is deliberately left to the caller. Register updates an
 // already-stored session; the callback-side callers assign
 // ActiveOrganizationID on an in-memory session before storing it once.
-//
-// whitelisted is a parameter because the callers disagree: register and signup
-// create gated orgs, assistants auto-provisioning does not.
-func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, whitelisted bool) (orgRepo.OrganizationMetadatum, error) {
+func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
 
-	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
+	base, err := orgslug.Base(orgName)
+	if err != nil {
+		return empty, fmt.Errorf("derive slug base: %w", err)
+	}
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, base)
 	if err != nil {
 		return empty, fmt.Errorf("find unique slug: %w", err)
 	}
@@ -917,10 +976,10 @@ func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName strin
 		return empty, fmt.Errorf("provision org in WorkOS: %w", err)
 	}
 
-	// Metadata, the user relationship, and the admin grant all land in one
-	// transaction, so a failure part-way cannot leave an organization a user
-	// can authenticate into without access control.
-	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userID, whitelisted)
+	// Metadata, the user relationship, the admin grant, and any trial all land
+	// in one transaction, so a failure part-way cannot leave an organization a
+	// user can authenticate into without access control.
+	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userID, opts)
 	if err != nil {
 		return empty, fmt.Errorf("persist provisioned organization: %w", err)
 	}
@@ -942,11 +1001,16 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
 	}
 
-	if err := validateOrgName(payload.OrgName); err != nil {
+	orgName, err := orgprovision.ValidateName(payload.OrgName)
+	if err != nil {
 		return err
 	}
 
-	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, false)
+	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, orgName, orgProvisionOptions{
+		Whitelisted:    true,
+		ProvisionTrial: true,
+		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
 	}
@@ -966,7 +1030,13 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
-	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, true)
+	// Assistants is a live product for users who never asked for a trial, so a
+	// trial armed here would strip their entitlements two weeks later.
+	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, orgProvisionOptions{
+		Whitelisted:    true,
+		ProvisionTrial: false,
+		ActorEmail:     userInfo.Email,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -1012,13 +1082,17 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
 }
 
+// persistProvisionedOrganization writes the Gram-side records for an
+// organization that already exists in WorkOS, and returns the row as it stood
+// before any trial arming. A trial armed under opts.ProvisionTrial joins the
+// same transaction, so a failure leaves neither behind.
 func (s *Service) persistProvisionedOrganization(
 	ctx context.Context,
 	provisionedOrg identity.ProvisionedOrganization,
 	orgName string,
 	slug string,
 	userID string,
-	whitelisted bool,
+	opts orgProvisionOptions,
 ) (orgRepo.OrganizationMetadatum, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1032,7 +1106,7 @@ func (s *Service) persistProvisionedOrganization(
 		Name:        orgName,
 		Slug:        slug,
 		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
-		Whitelisted: pgtype.Bool{Bool: whitelisted, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: opts.Whitelisted, Valid: true},
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
@@ -1051,6 +1125,19 @@ func (s *Service) persistProvisionedOrganization(
 		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
 	}); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
+	}
+
+	if s.organizationSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	}
+	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
+	}
+
+	if opts.ProvisionTrial {
+		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID, opts.ActorEmail); err != nil {
+			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("arm enterprise trial: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1299,10 +1386,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
 	if s.cfg.Environment == "local" {
 		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
-	}
-
-	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
-		returnAddress = "https://" + requestCtx.Host
 	}
 
 	return returnAddress + "/rpc/auth.callback"

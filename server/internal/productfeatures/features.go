@@ -22,14 +22,24 @@ const (
 	FeatureSkills                     Feature = "skills"
 	FeatureSkillCaptureMetadataOnly   Feature = "skill_capture_metadata_only"
 	FeatureAIPlatformPushIntegrations Feature = "ai_platform_push_integrations"
-	// FeaturePlatformMCP enables the organization-level Platform MCP capability.
-	// The runtime also requires a separate rollout gate before admitting traffic.
+	// FeaturePlatformMCP enables the organization-level Platform MCP capability,
+	// including manual setup and authenticated MCP access.
 	FeaturePlatformMCP Feature = "platform_mcp"
+
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
 	// own cloud KMS keys: the external credentials Gram uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
+	FeatureRemoteSessionAutoRefresh      Feature = "remote_session_auto_refresh"
+	// FeatureRemoteSessionAutoRefreshEnforced makes automatic remote-session
+	// refresh the organization default: it is forced on for every user, the
+	// consent-screen control is shown locked (users cannot opt out), and the
+	// keepalive refreshes every eligible session in the organization regardless
+	// of its persisted per-session preference. Distinct from
+	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
+	// control is visible and leaves the choice to each user.
+	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
 )
 
 type FeatureCache struct {
@@ -50,8 +60,4 @@ func FeatureCacheKey(organizationID string, feature Feature) string {
 
 func (f FeatureCache) TTL() time.Duration {
 	return 15 * time.Minute
-}
-
-func (c FeatureCache) AdditionalCacheKeys() []string {
-	return []string{}
 }

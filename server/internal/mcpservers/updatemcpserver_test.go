@@ -479,7 +479,7 @@ func TestUpdateMcpServer_RenameUpdatesPublishedPluginName(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, *authCtx.ProjectID)
+	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, publishRows, 1)
 	require.Equal(t, "Original Server Name", publishRows[0].ServerDisplayName)
@@ -498,7 +498,7 @@ func TestUpdateMcpServer_RenameUpdatesPublishedPluginName(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	publishRows, err = pluginsQueries.ListPluginsWithMcpServersForProject(ctx, *authCtx.ProjectID)
+	publishRows, err = pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, publishRows, 1)
 	require.Equal(t, renamed, publishRows[0].ServerDisplayName)
@@ -563,7 +563,7 @@ func TestUpdateMcpServer_RenamePreservesCustomizedPluginName(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, *authCtx.ProjectID)
+	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, publishRows, 1)
 	require.Equal(t, customName, publishRows[0].ServerDisplayName)

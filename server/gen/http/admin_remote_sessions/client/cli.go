@@ -25,7 +25,7 @@ func BuildCreateGlobalIssuerPayload(adminRemoteSessionsCreateGlobalIssuerBody st
 	{
 		err = json.Unmarshal([]byte(adminRemoteSessionsCreateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
@@ -48,6 +48,7 @@ func BuildCreateGlobalIssuerPayload(adminRemoteSessionsCreateGlobalIssuerBody st
 		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
+		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
 		ServiceDocumentation:              body.ServiceDocumentation,
@@ -81,6 +82,29 @@ func BuildCreateGlobalIssuerPayload(adminRemoteSessionsCreateGlobalIssuerBody st
 			v.TokenEndpointAuthMethodsSupported[i] = val
 		}
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetGlobalIssuerDuplicatePreflightPayload builds the payload for the
+// adminRemoteSessions getGlobalIssuerDuplicatePreflight endpoint from CLI
+// flags.
+func BuildGetGlobalIssuerDuplicatePreflightPayload(adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer string, adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken string) (*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload, error) {
+	var issuer *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer != "" {
+			issuer = &adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken != "" {
+			sessionToken = &adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken
+		}
+	}
+	v := &adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload{}
+	v.Issuer = issuer
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -155,7 +179,7 @@ func BuildUpdateGlobalIssuerPayload(adminRemoteSessionsUpdateGlobalIssuerBody st
 	{
 		err = json.Unmarshal([]byte(adminRemoteSessionsUpdateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.LogoAssetID != nil {
@@ -180,6 +204,7 @@ func BuildUpdateGlobalIssuerPayload(adminRemoteSessionsUpdateGlobalIssuerBody st
 		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
+		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
 		ServiceDocumentation:              body.ServiceDocumentation,
@@ -502,6 +527,117 @@ func BuildDeleteGlobalClientPayload(adminRemoteSessionsDeleteGlobalClientID stri
 	}
 	v := &adminremotesessions.DeleteGlobalClientPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListGlobalIssuerConvergenceCandidatesPayload builds the payload for the
+// adminRemoteSessions listGlobalIssuerConvergenceCandidates endpoint from CLI
+// flags.
+func BuildListGlobalIssuerConvergenceCandidatesPayload(adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetID string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken string) (*adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload, error) {
+	var err error
+	var targetID string
+	{
+		targetID = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor != "" {
+			cursor = &adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor
+		}
+	}
+	var limit *int
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken != "" {
+			sessionToken = &adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken
+		}
+	}
+	v := &adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload{}
+	v.TargetID = targetID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetGlobalIssuerMigratePreflightPayload builds the payload for the
+// adminRemoteSessions getGlobalIssuerMigratePreflight endpoint from CLI flags.
+func BuildGetGlobalIssuerMigratePreflightPayload(adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceID string, adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetID string, adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken string) (*adminremotesessions.GetGlobalIssuerMigratePreflightPayload, error) {
+	var err error
+	var sourceID string
+	{
+		sourceID = adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var targetID string
+	{
+		targetID = adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken != "" {
+			sessionToken = &adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken
+		}
+	}
+	v := &adminremotesessions.GetGlobalIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildMigrateToGlobalIssuerPayload builds the payload for the
+// adminRemoteSessions migrateToGlobalIssuer endpoint from CLI flags.
+func BuildMigrateToGlobalIssuerPayload(adminRemoteSessionsMigrateToGlobalIssuerBody string, adminRemoteSessionsMigrateToGlobalIssuerSessionToken string) (*adminremotesessions.MigrateToGlobalIssuerPayload, error) {
+	var err error
+	var body MigrateToGlobalIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsMigrateToGlobalIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsMigrateToGlobalIssuerSessionToken != "" {
+			sessionToken = &adminRemoteSessionsMigrateToGlobalIssuerSessionToken
+		}
+	}
+	v := &adminremotesessions.MigrateToGlobalIssuerPayload{
+		SourceID: body.SourceID,
+		TargetID: body.TargetID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

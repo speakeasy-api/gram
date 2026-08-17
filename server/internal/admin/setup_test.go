@@ -9,13 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -34,7 +37,8 @@ func TestMain(m *testing.M) {
 // newTestAdminService builds the minimum Service needed to exercise read-only
 // handlers like ListOrganizations. Auth, sessions, and OIDC fields are left nil
 // because the test invokes the handler directly without going through the HTTP
-// transport layer.
+// transport layer. The WorkOS field is left nil too: a handler that needs it
+// gets a service from newTestAdminServiceWithWorkOS instead.
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
@@ -47,7 +51,40 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	svc := &Service{
 		logger: logger,
 		db:     conn,
+		audit:  audit.NewLogger(),
+		trial:  trialemails.NoopNotifier{},
 	}
 
 	return ctx, svc, conn
+}
+
+// newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider
+// attached, for the handlers that write to one.
+func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrganizationCreator) (context.Context, *Service, *pgxpool.Pool) {
+	t.Helper()
+
+	ctx, svc, conn := newTestAdminService(t)
+	svc.workos = workos
+
+	return ctx, svc, conn
+}
+
+type fakeTrialNotifier struct {
+	started     []string
+	inactive    []string
+	inactiveErr error
+}
+
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.started = append(f.started, organizationID)
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	f.inactive = append(f.inactive, organizationID)
+	return f.inactiveErr
 }

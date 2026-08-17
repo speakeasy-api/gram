@@ -56,7 +56,39 @@ function useCalBranding() {
   }, []);
 }
 
-export function DemoBookingFlow(): JSX.Element {
+// Sits above the card on the cold-signup gate. The expired-trial gate passes
+// its own header instead.
+const DEFAULT_INTRO = (
+  <div className="text-center mb-4">
+    <p className="text-[16px] tracking-[0.0025em]">
+      Looks like your company is new to Speakeasy.
+    </p>
+    <p className="mt-1.5 text-sm tracking-[0.0025em] text-(--muted-strong)">
+      Book time with our team to activate your account and get started.
+    </p>
+  </div>
+);
+
+/**
+ * Values to prefill on the booking form, keyed by the question's identifier on
+ * the Cal event. The form carries more questions than any one caller fills:
+ * `source` ("How'd you hear about us?"), `notes` ("Additional notes"), `title`,
+ * `attendeePhoneNumber`. Name, email and `Company-Name` come from the session
+ * and are always sent. Anything omitted is left for the user to answer.
+ */
+export type BookingFormDefaults = Record<string, string | undefined>;
+
+export function DemoBookingFlow({
+  intro = DEFAULT_INTRO,
+  eventLabel = "AI transformation — 30 min",
+  formDefaults,
+}: {
+  /** Rendered above the booking card. Pass `null` to omit it entirely. */
+  intro?: React.ReactNode;
+  /** Names the meeting in the card header, which the embed itself hides. */
+  eventLabel?: string;
+  formDefaults?: BookingFormDefaults;
+} = {}): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
 
@@ -98,41 +130,40 @@ export function DemoBookingFlow(): JSX.Element {
   const prefill = [email, companyName].filter(Boolean).join(" · ");
 
   return (
-    <div className="flex w-full flex-col items-center gap-6">
-      <div className="text-center">
-        <p className="text-[16px] tracking-[0.0025em]">
-          Looks like your company is new to Speakeasy.
-        </p>
-        <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
-          Book time with our team to activate your account and get started.
-        </p>
-      </div>
+    <div className="flex w-full flex-col items-center gap-2">
+      {intro}
 
-      <div className="w-full overflow-hidden border border-[var(--edge)] bg-[var(--card)]">
+      <div className="w-full overflow-hidden border border-(--edge) bg-(--card)">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
             names the meeting — as in the design frame. */}
-        <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-[18px]">
-          <span className="auth-mono text-[12px]">
-            AI transformation — 30 min
-          </span>
-          <span className="auth-mono-text text-[12px] text-[var(--muted)]">
+        <div className="flex h-11 items-center justify-between border-b border-(--edge-soft) px-[18px]">
+          <span className="auth-mono text-xs">{eventLabel}</span>
+          <span className="auth-mono-text text-xs text-(--muted)">
             Google Meet
           </span>
         </div>
 
         {/* Tall enough for a six-row month without clipping the last week,
             capped so the card still clears the fold on a laptop viewport. */}
-        <div className="h-[clamp(500px,58vh,600px)] w-full overflow-auto">
+        <div className="h-[clamp(500px,54vh,600px)] w-full overflow-auto">
           <Cal
             calLink={CAL_DEMO_LINK}
             config={{
+              // Caller defaults go first so the identity below wins: the type
+              // is an open record and cannot stop a caller passing `email`,
+              // but attendee details are this component's to set.
+              // Empty entries are dropped rather than sent, so an unset
+              // default leaves the field open instead of blanking it.
+              ...Object.fromEntries(
+                Object.entries(formDefaults ?? {}).filter(([, v]) => v),
+              ),
               layout: "month_view",
               theme: "light",
               name,
               email,
-              // Prefill key must match the booking question's identifier on the
-              // Cal event (see CAL_DEMO_LINK).
-              company: companyName,
+              // Key must match the booking question's identifier on the Cal
+              // event.
+              "Company-Name": companyName,
             }}
             style={{ width: "100%", height: "100%", overflow: "auto" }}
           />
@@ -140,7 +171,7 @@ export function DemoBookingFlow(): JSX.Element {
       </div>
 
       {prefill && (
-        <p className="auth-mono-text text-center text-[11px] tracking-[0.02em] text-[var(--muted)]">
+        <p className="auth-mono-text text-center text-[11px] tracking-[0.02em] text-(--muted)">
           Details prefilled from your account: {prefill}
         </p>
       )}

@@ -87,6 +87,32 @@ WITH existing_alias AS (
 SELECT COUNT(*) = 1 AS known
 FROM resolved;
 
+-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = @project_id
+    AND srh.raw_sha256 = @raw_sha256
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean;
+
 -- name: HasSkillObservationRawHash :one
 SELECT EXISTS (
   SELECT 1
@@ -241,6 +267,16 @@ SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts
 WHERE organization_id = @organization_id
   AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
+-- name: ListUserAccountsByEmails :many
+-- Resolves account emails back to their directory owner. This supports telemetry
+-- rows whose only identity is a linked personal/provider account email.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
   AND deleted_at IS NULL
 ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 

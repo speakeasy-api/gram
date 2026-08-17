@@ -28,10 +28,6 @@ func (s Session) CacheKey() string {
 	return SessionCacheKey(s.SessionID)
 }
 
-func (s Session) AdditionalCacheKeys() []string {
-	return []string{}
-}
-
 func (s Session) TTL() time.Duration {
 	return sessionCacheExpiry
 }
@@ -67,10 +63,6 @@ func UserInfoCacheKey(userID string) string {
 
 func (c CachedUserInfo) CacheKey() string {
 	return UserInfoCacheKey(c.UserID)
-}
-
-func (c CachedUserInfo) AdditionalCacheKeys() []string {
-	return []string{}
 }
 
 func (c CachedUserInfo) TTL() time.Duration {

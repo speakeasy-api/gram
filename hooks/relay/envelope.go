@@ -11,7 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-const schemaVersion = "hook.ingest.v1"
+const (
+	schemaVersion   = "hook.ingest.v1"
+	agentTurnPrefix = "agent-turn:v1:"
+)
 
 // adapterSlug maps an agenthooks provider onto the stable Gram adapter slug the
 // backend expects (it keys its provider-style telemetry vocabulary on these).
@@ -140,6 +143,17 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	case *agenthooks.ModelEvent:
 		applyModelResponse(data, base)
 	}
+	// The server records an activation for every event carrying data.skill, so
+	// an implicit (inferred) activation is attached only to the completed
+	// event: its tool output carries the manifest the content registry hashes,
+	// and marking the pre event too would double-count. Explicit Skill tool
+	// calls keep the provider's own event classification on both sides.
+	if activation := agenthooks.SkillActivationOf(typed); activation != nil && (activation.Explicit || base.Kind == agenthooks.KindToolPost) {
+		data.Skill = &components.HookSkillData{Name: activation.Name, Source: nil}
+		if activation.Explicit {
+			eventType = components.TypeSkillActivated
+		}
+	}
 
 	payload := components.IngestRequestBody{
 		SchemaVersion: schemaVersion,
@@ -264,25 +278,6 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 		data.Mcp = m
 	}
 
-	if base.Provider == agenthooks.ProviderClaudeCode && strings.EqualFold(tool.Name, "Skill") {
-		if name := skillNameOf(tool.Input); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-			return components.TypeSkillActivated
-		}
-	}
-	// Codex and Cursor skill activations are inferred from ordinary tool
-	// payloads, so the event keeps its true type: only pre-tool events count
-	// (completions must not re-report, permission previews may be denied).
-	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindToolPre {
-		if name := codexToolSkillName(tool); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-		}
-	}
-	if base.Provider == agenthooks.ProviderCursor && base.Kind == agenthooks.KindToolPre {
-		if name := cursorToolSkillName(tool, base.Session.CWD, base.Session.WorkspaceRoots); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-		}
-	}
 	return eventType
 }
 
@@ -320,9 +315,22 @@ func applyModelResponse(data *components.HookIngestData, base *agenthooks.Event)
 }
 
 func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
+	turnID := base.Session.TurnID
+	if turnID == "" && base.Provider == agenthooks.ProviderOpenCode && base.Kind == agenthooks.KindPromptSubmitted {
+		for _, path := range []string{"output.message.id", "input.messageID"} {
+			var messageID string
+			if raw := base.RawField(path); len(raw) > 0 && json.Unmarshal(raw, &messageID) == nil && strings.TrimSpace(messageID) != "" {
+				turnID = strings.TrimSpace(messageID)
+				break
+			}
+		}
+	}
+	if turnID != "" && (base.Provider == agenthooks.ProviderCodex || base.Provider == agenthooks.ProviderOpenCode) {
+		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
+	}
 	s := &components.HookIngestSession{
 		ID:     optStr(base.Session.ID),
-		TurnID: optStr(base.Session.TurnID),
+		TurnID: optStr(turnID),
 		Cwd:    optStr(base.Session.CWD),
 		Model:  optStr(base.Session.Model),
 	}
@@ -400,20 +408,6 @@ func toolErrorPayload(ev *agenthooks.ToolPostEvent) json.RawMessage {
 		}
 	}
 	return nil
-}
-
-func skillNameOf(input json.RawMessage) string {
-	var obj struct {
-		Skill string `json:"skill"`
-		Name  string `json:"name"`
-	}
-	if json.Unmarshal(input, &obj) == nil {
-		if obj.Skill != "" {
-			return obj.Skill
-		}
-		return obj.Name
-	}
-	return ""
 }
 
 func isEmptyData(d *components.HookIngestData) bool {

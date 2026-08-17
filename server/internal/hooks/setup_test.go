@@ -69,6 +69,28 @@ type testInstance struct {
 	sessionManager  *sessions.Manager
 	assetStorage    assets.BlobStore
 	efficacySignals *recordingEfficacySignaler
+	identitySignals *recordingIdentityMapSignaler
+}
+
+// recordingIdentityMapSignaler captures identity map refresh requests emitted
+// after attributed account-link writes. Called synchronously by the producer,
+// so a test reads the count straight after the call under test.
+type recordingIdentityMapSignaler struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (r *recordingIdentityMapSignaler) SignalIdentityMapRefresh(context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.count++
+	return nil
+}
+
+func (r *recordingIdentityMapSignaler) refreshCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.count
 }
 
 // recordingEfficacySignaler captures the skill efficacy wakes a hook path
@@ -172,7 +194,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
@@ -181,6 +203,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
+	identitySignals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
@@ -201,12 +224,14 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		nil,
+		nil,
 		policyBypass,
 		spendGate,
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
 		nil,
+		identitySignals,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
@@ -221,6 +246,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager:  sessionManager,
 		assetStorage:    assetStorage,
 		efficacySignals: efficacySignals,
+		identitySignals: identitySignals,
 	}
 }
 

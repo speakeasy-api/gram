@@ -201,26 +201,27 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         if: ${{ steps.check.outputs.lint == 'true' }}
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         if: ${{ steps.check.outputs.lint == 'true' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
         if: ${{ steps.check.outputs.lint == 'true' }}
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Lint changesets
         if: ${{ steps.check.outputs.lint == 'true' }}
@@ -229,7 +230,7 @@ jobs:
           set -e
 
           mkdir -p scratch
-          pnpm changeset status --output scratch/changeset-status.json
+          aube exec changeset -- status --output scratch/changeset-status.json
           cat scratch/changeset-status.json
           echo ""
           echo ""
@@ -242,7 +243,7 @@ jobs:
             echo "Changesets help us track what's changed and generate release notes."
             echo ""
             echo "To fix this, run one of this command locally:"
-            echo "  pnpm changeset"
+            echo "  aube exec changeset"
             echo ""
             echo "Then commit the generated .changeset/*.md file with your changes."
             exit 1
@@ -250,6 +251,6 @@ jobs:
 
           echo "✅ Changeset validation passed!"
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: ${{ steps.check.outputs.lint == 'true' }}
-        run: pnpm store prune
+        run: aube store prune

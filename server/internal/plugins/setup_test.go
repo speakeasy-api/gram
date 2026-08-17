@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -97,18 +99,35 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+func createTestRolePrincipal(t *testing.T, ctx context.Context, ti *testInstance, slug string) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+	role, err := accessrepo.New(ti.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		WorkosSlug:        slug,
+		WorkosName:        slug,
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	return role.RoleUrn
 }
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
@@ -155,9 +174,6 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		InstallationID: 12345,
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := plugins.NewService(
@@ -166,7 +182,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		conn,
 		sessionManager,
 		cache.NewRedisCacheAdapter(redisClient),
-		authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		auditLogger,
 		ghConfig,
 		"local",
@@ -316,11 +332,12 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 // server stands in for a Remote MCP-backed one without the remote_mcp_server /
 // user_session_issuer fixture weight.
 type mcpServerFixture struct {
-	id           uuid.UUID
-	idStr        string
-	name         string
-	slug         string
-	endpointSlug string
+	id                 uuid.UUID
+	idStr              string
+	name               string
+	slug               string
+	endpointSlug       string
+	backingToolsetSlug string
 }
 
 // createTestMcpServer creates an mcp_server in the active project with a single
@@ -340,6 +357,10 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
 	backing := createTestToolset(t, ctx, conn, name+"-backing")
+	if visibility == mcpservers.VisibilityPublic {
+		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
+		require.NoError(t, err)
+	}
 
 	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
 	serverID := uuid.New()
@@ -354,7 +375,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	})
 	require.NoError(t, err)
 
-	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
+	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug, backingToolsetSlug: backing.Slug}
 
 	if withEndpoint {
 		endpointSlug := slug + "-endpoint"

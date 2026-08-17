@@ -98,7 +98,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
 	provisioner.baseURL = upstream.server.URL
 
 	return provisioner, upstream, repo.New(conn)

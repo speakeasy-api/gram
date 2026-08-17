@@ -3,13 +3,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
-import { Link, Outlet, useNavigate, useParams } from "react-router";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import { ActiveChatTitle, Chat } from "@/elements";
+import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
 import {
   ChevronLeft,
   Home,
@@ -35,6 +42,10 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
 import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -52,6 +63,8 @@ import {
 import { useChatLaunch } from "@/lib/chat-launch";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 
 // Shared square icon button used by the page chrome (back affordances).
@@ -72,7 +85,13 @@ export function ChatRoot(): ReactElement {
 export function ChatHome(): ReactElement {
   const routes = useRoutes();
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
+    // Same brand-mesh surface as the project home assistant card, scaled to
+    // the page: neutral theme-following gradient with the rainbow edge and
+    // grain. Scrolling lives on an inner wrapper so the mesh (and the back
+    // affordance) stay pinned to the viewport instead of scrolling away with
+    // the content.
+    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
+      <BrandMeshLayers />
       <div className="absolute top-4 left-4 z-10">
         <Link
           to={routes.home.href()}
@@ -83,8 +102,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </div>
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
-        <ChatLanding autoFocusInput />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+          <ChatLanding autoFocusInput />
+        </div>
       </div>
     </div>
   );
@@ -148,7 +169,8 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
+    useInsightsState();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -232,8 +254,9 @@ export function ChatLanding({
       <div className="flex flex-col gap-4">
         <h1
           className={cn(
-            "text-foreground font-display font-thin",
+            "font-display font-thin",
             compact ? "text-2xl" : "text-4xl",
+            "text-foreground",
           )}
         >
           {greetingLead}{" "}
@@ -246,13 +269,42 @@ export function ChatLanding({
           <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
+        ) : assistantReady ? (
+          // The real AUI composer, bound to the shared runtime: sending happens
+          // in the runtime itself, so this entry point has dictation,
+          // attachments, tool mentions and skill context like every other one.
+          // Navigation to the conversation view is driven by the first message
+          // landing in the thread, not by this component sending.
+          // `gram-chat-landing` is read from inside the Elements shadow root
+          // via :host-context, so it must sit on an ancestor of the host — not
+          // on anything ChatComposer renders inside it.
+          <div
+            className="gram-chat-landing border-border bg-card border"
+            // Cycling example prompts ride in as custom properties: they
+            // inherit into the Elements shadow root, so the placeholder can
+            // crossfade without re-rendering the composer (see
+            // CHAT_LANDING_COMPOSER_CSS).
+            style={
+              {
+                "--gram-composer-placeholder": JSON.stringify(placeholder),
+                "--gram-composer-placeholder-opacity": placeholderVisible
+                  ? 1
+                  : 0,
+              } as CSSProperties
+            }
+          >
+            <ChatComposer />
+            <StartFreshThread />
+            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
+            <NavigateOnFirstMessage />
+          </div>
         ) : (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               submit();
             }}
-            className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
+            className="border-border bg-card focus-within:border-foreground relative border px-4 py-3 transition-colors"
           >
             <input
               value={value}
@@ -324,6 +376,78 @@ export function ChatLanding({
       )}
     </div>
   );
+}
+
+/**
+ * Carries a draft typed into the fallback input over to the shared composer.
+ *
+ * The fallback renders only until the assistant runtime is ready; the two
+ * controls keep their drafts in different places, so without this a message
+ * typed during that window vanishes when the composer swaps in. Runs after
+ * StartFreshThread so the text lands on the new thread, not the old one.
+ */
+function SeedComposerDraft({
+  value,
+  onSeeded,
+}: {
+  value: string;
+  onSeeded: () => void;
+}): null {
+  const aui = useAui();
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !value.trim()) return;
+    seededRef.current = true;
+    aui.composer().setText(value);
+    onSeeded();
+  }, [aui, value, onSeeded]);
+  return null;
+}
+
+/**
+ * The landing widgets always start a NEW conversation: they share one runtime
+ * with the dock, and the dock is the only surface that deliberately continues
+ * an existing chat. Without this, opening /chat (or project home) after a dock
+ * conversation would drop the next message into that thread.
+ */
+function StartFreshThread(): null {
+  const aui = useAui();
+  // Switch unconditionally, exactly once, as soon as the thread list has
+  // loaded. Reacting to "the thread has messages" instead would fire on the
+  // user's OWN send — switching the just-sent message out from under them and
+  // leaving an empty /chat/new. Thread ids are minted lazily
+  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
+  const switchedRef = useRef(false);
+  useEffect(() => {
+    if (switchedRef.current || listLoading) return;
+    switchedRef.current = true;
+    aui.threads().switchToNewThread();
+  }, [aui, listLoading]);
+  return null;
+}
+
+/**
+ * Drops into the full-page conversation when the landing composer sends. The
+ * composer submits through the runtime directly, so there is no submit handler
+ * to navigate from — the turn starting is the signal. `/chat/new` then syncs
+ * to `/chat/:id` once the server mints the id.
+ */
+function NavigateOnFirstMessage(): null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  // A run starting is the signal. Watching the message count instead would
+  // also fire when an existing conversation hydrates into the shared runtime
+  // (history loading grows the count), bouncing the user into a chat they
+  // never opened; `isRunning` only goes true for an actual stream.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
+  useEffect(() => {
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted) void navigate(routes.chat.conversation.href("new"));
+  }, [isRunning, navigate, routes]);
+  return null;
 }
 
 /**
@@ -744,7 +868,7 @@ function RecentRow({
   // container (not a Link) so the pin button isn't nested inside an anchor; the
   // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <div className="group/row hover:bg-accent flex items-center gap-3 px-3 py-1.5 transition-colors">
+    <div className="group/row hover:border-foreground flex items-center gap-3 border border-transparent px-3 py-1.5 transition-colors">
       <Link
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
@@ -843,7 +967,7 @@ function ChatHomeSuggestions({
               key={suggestion.title}
               type="button"
               onClick={(event) => launchChat(suggestion, event.currentTarget)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
+              className="border-border bg-card text-foreground hover:border-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}
@@ -942,6 +1066,14 @@ function ConversationSurface({
 }: {
   chatId: string | undefined;
 }): ReactElement {
+  const { pathname } = useLocation();
+  const threadTitle = useAuiState((s) => s.threadListItem.title);
+  // Recents would otherwise keep the section title ("Project Assistant") because
+  // the conversation is keyed by an opaque chat id.
+  useRecentLabelOverride(
+    pathname,
+    threadTitle?.trim() || (chatId === "new" ? FALLBACK_TITLE : undefined),
+  );
   const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );

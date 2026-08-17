@@ -2,10 +2,11 @@ package auth
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 )
 
 func TestGenerateLegibleOrgName_Format(t *testing.T) {
@@ -28,34 +29,13 @@ func TestGenerateLegibleOrgName_Distribution(t *testing.T) {
 	require.Greater(t, len(seen), 100, "expected diverse names, got %d unique of 200", len(seen))
 }
 
-func TestValidateOrgName(t *testing.T) {
+func TestGenerateLegibleOrgName_PassesValidation(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		input   string
-		wantErr string
-	}{
-		{name: "simple", input: "Acme Inc", wantErr: ""},
-		{name: "hyphens and underscores", input: "acme-corp_2", wantErr: ""},
-		{name: "at the length limit", input: strings.Repeat("a", 100), wantErr: ""},
-		{name: "empty", input: "", wantErr: "org name is required"},
-		{name: "whitespace only", input: "   ", wantErr: "org name is required"},
-		{name: "apostrophe", input: "Bob's Bakery", wantErr: "organization name contains invalid characters"},
-		{name: "over the length limit", input: strings.Repeat("a", 101), wantErr: "organization name is too long"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := validateOrgName(tt.input)
-			if tt.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tt.wantErr)
-		})
+	for range 200 {
+		name := generateLegibleOrgName()
+		validated, err := orgprovision.ValidateName(name)
+		require.NoError(t, err, "generated name %q must pass validation", name)
+		require.Equal(t, name, validated, "generated name %q must survive normalization unchanged", name)
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
@@ -43,7 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -191,7 +192,6 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
@@ -204,7 +204,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(
@@ -218,6 +218,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
+		nil,
 	)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
@@ -230,8 +231,8 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter))
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{})
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	feedbackRecorder := feedbackrecorder.NewRecorder(conn, logger, nil)
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, feedbackRecorder)
@@ -240,10 +241,11 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		AssistantSkillTools:           assistantSkillTools,
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
+		PlatformMCPReadTools:          platformtoolsruntime.PlatformMCPReadTools(platformmcp.NewPostgresReader(conn)),
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 

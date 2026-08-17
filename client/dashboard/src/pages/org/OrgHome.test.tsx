@@ -37,16 +37,16 @@ vi.mock("@/components/ui/ContextMenu", () => ({
 vi.mock("@/components/auditlogs/feed", () => ({
   ActionIconTile: () => null,
 }));
-vi.mock("@/pages/access/ChallengesTab", () => ({
-  ChallengesEmptyState: () => null,
-}));
-
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org-1",
     name: "Acme",
     slug: "acme",
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
+  }),
+  useSession: () => ({
+    rawGramAccountType: "enterprise",
+    hasActiveSubscription: true,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -81,6 +81,13 @@ vi.mock("@/routes", () => ({
       Link: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
     team: { goTo: vi.fn() },
+    // Used by the welcome banner's route cards.
+    home: { href: () => "/acme" },
+    setup: { href: () => "/acme/setup" },
+  }),
+  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
+    exploreDemo: { href: () => "/explore-demo" },
+    home: { href: () => `/acme/projects/${projectSlug}` },
   }),
 }));
 
@@ -108,6 +115,8 @@ vi.mock("react-router", () => ({
     <a {...props}>{children}</a>
   ),
   useNavigate: () => vi.fn(),
+  // Org root path, so the welcome banner's route check passes.
+  useLocation: () => ({ pathname: "/acme" }),
 }));
 vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -124,13 +133,18 @@ vi.mock("@/components/ui/Icon", () => ({
   Icon: () => null,
 }));
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import OrgHome from "./OrgHome";
 
 afterEach(cleanup);
 
 describe("OrgHome", () => {
   it("does not wrap project list rows in a full-height element", () => {
-    render(<OrgHome />);
+    render(
+      <TooltipProvider>
+        <OrgHome />
+      </TooltipProvider>,
+    );
 
     const projectName = screen.getByText("Project One");
     expect(projectName.closest(".h-full")).toBeNull();

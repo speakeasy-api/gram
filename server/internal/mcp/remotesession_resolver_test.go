@@ -232,6 +232,7 @@ func insertRemoteSessionAccessToken(
 		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
 		RefreshExpiresAt:      pgtype.Timestamptz{Valid: false},
 		Scopes:                []string{},
+		Resource:              pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	return session

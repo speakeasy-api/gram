@@ -93,7 +93,6 @@ func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metr
 		telemetry: nil,
 		instances: resolver,
 		authz:     nil,
-		features:  nil,
 		audit:     nil,
 		keyPrefix: "",
 	}, processor
@@ -807,7 +806,6 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 		telemetry: nil,
 		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
 		authz:     nil,
-		features:  nil,
 		audit:     nil,
 		keyPrefix: "",
 	}
@@ -1386,12 +1384,13 @@ func TestEnrichTraceAttributionUsesPreCallCache(t *testing.T) {
 	projectID := uuid.New()
 	calls := callcache.New(newMemoryCache())
 	require.NoError(t, calls.Store(t.Context(), callcache.Record{
-		ProjectID: projectID,
-		CallID:    "call-id",
-		TraceID:   "cached-trace",
-		SessionID: "cached-session",
-		UserID:    "cached-user",
-		Email:     "cached@example.test",
+		ProjectID:         projectID,
+		CallID:            "call-id",
+		TraceID:           "cached-trace",
+		SessionID:         "cached-session",
+		UserID:            "cached-user",
+		Email:             "cached@example.test",
+		OriginatingClient: "",
 	}))
 	spans := []telemetry.LogParams{{
 		Timestamp: time.Time{},
@@ -1433,12 +1432,13 @@ func TestEnrichTraceAttributionPreservesOTLPActorWhenCachedActorIsEmpty(t *testi
 	projectID := uuid.New()
 	calls := callcache.New(newMemoryCache())
 	require.NoError(t, calls.Store(t.Context(), callcache.Record{
-		ProjectID: projectID,
-		CallID:    "call-id",
-		TraceID:   "cached-trace",
-		SessionID: "cached-session",
-		UserID:    "",
-		Email:     "",
+		ProjectID:         projectID,
+		CallID:            "call-id",
+		TraceID:           "cached-trace",
+		SessionID:         "cached-session",
+		UserID:            "",
+		Email:             "",
+		OriginatingClient: "",
 	}))
 	spans := []telemetry.LogParams{{
 		Timestamp: time.Time{},

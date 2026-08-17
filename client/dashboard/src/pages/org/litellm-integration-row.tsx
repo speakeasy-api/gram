@@ -324,7 +324,9 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                 data={instances}
                 rowKey={(instance) => instance.id}
                 noResultsMessage={
-                  <Text muted>No LiteLLM instances in this project.</Text>
+                  <div className="px-4 py-6">
+                    <Text muted>No LiteLLM instances in this project.</Text>
+                  </div>
                 }
               />
             ) : null}

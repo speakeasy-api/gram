@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -60,6 +61,7 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
+	siteURL  *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -74,6 +76,7 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -86,6 +89,7 @@ func NewService(
 		features: features,
 		audit:    auditLogger,
 		signaler: signaler,
+		siteURL:  siteURL,
 	}
 }
 
@@ -97,6 +101,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, skillsRequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public share pages, served outside Goa like the MCP install pages so
+	// they resolve on custom domains (which point at this server, not at the
+	// dashboard host).
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}", oops.ErrHandle(service.logger, service.ServeSharedSkillPage).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/SKILL.md", oops.ErrHandle(service.logger, service.ServeSharedSkillMarkdown).ServeHTTP)
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
@@ -1033,6 +1042,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	var latestView *types.SkillVersion
+	promptInjectionFindings := make([]*gen.SkillPromptInjectionFinding, 0)
 	if details.LatestVersionID != uuid.Nil {
 		latest, latestErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
 			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
@@ -1045,6 +1055,18 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		})
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
+		}
+		findingRows, findingErr := queries.ListSkillVersionPromptInjectionFindings(ctx, repo.ListSkillVersionPromptInjectionFindingsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
+		})
+		if findingErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, findingErr, "list skill prompt injection findings").LogError(ctx, logger)
+		}
+		promptInjectionFindings = make([]*gen.SkillPromptInjectionFinding, len(findingRows))
+		for i, row := range findingRows {
+			promptInjectionFindings[i] = &gen.SkillPromptInjectionFinding{
+				RuleID: row.RuleID, Description: row.Description, Confidence: row.Confidence,
+			}
 		}
 	}
 
@@ -1109,9 +1131,10 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
-		LatestVersion:  latestView,
-		AssistantCount: details.AssistantCount,
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		LatestVersion:           latestView,
+		AssistantCount:          details.AssistantCount,
+		PromptInjectionFindings: promptInjectionFindings,
 		Adoption: &gen.SkillAdoption{
 			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
 			DistinctHostnames: adoption.DistinctHostnames, ActivationsInWindow: adoption.ActivationsInWindow,

@@ -355,28 +355,6 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 	return items, nil
 }
 
-const getActiveTrial = `-- name: GetActiveTrial :one
-SELECT organization_id, created_at, ends_at
-FROM trials
-WHERE organization_id = $1
-  AND converted_at IS NULL
-  AND demoted_at IS NULL
-  AND ends_at > now()
-`
-
-type GetActiveTrialRow struct {
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-	EndsAt         pgtype.Timestamptz
-}
-
-func (q *Queries) GetActiveTrial(ctx context.Context, organizationID string) (GetActiveTrialRow, error) {
-	row := q.db.QueryRow(ctx, getActiveTrial, organizationID)
-	var i GetActiveTrialRow
-	err := row.Scan(&i.OrganizationID, &i.CreatedAt, &i.EndsAt)
-	return i, err
-}
-
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations
@@ -1285,6 +1263,32 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOrganizationRelationshipWorkOSCursor = `-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND user_id = $4
+`
+
+type SetOrganizationRelationshipWorkOSCursorParams struct {
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	UserID            pgtype.Text
+}
+
+func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, arg SetOrganizationRelationshipWorkOSCursorParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRelationshipWorkOSCursor,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	return err
 }
 
 const setSCIMEnabled = `-- name: SetSCIMEnabled :exec

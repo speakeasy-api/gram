@@ -54,9 +54,6 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue
@@ -117,6 +114,47 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 	return nil
 }
 
+// RevokePolicyURLGrantVariants revokes every grant held on the policy whose
+// persisted selector names this canonical server URL — whatever else the
+// selector carries. Legacy access-request approvals stored a
+// {server_url, server_identity} selector pair that evaluates URL-only at
+// runtime, so revoking by the exact URL-only selector alone would leave those
+// variants standing and still enforcing.
+func RevokePolicyURLGrantVariants(
+	ctx context.Context,
+	db riskrepo.DBTX,
+	organizationID string,
+	scope authz.Scope,
+	policyID string,
+	canonicalURL string,
+) error {
+	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
+		OrganizationID: organizationID,
+		Scope:          scope,
+		ResourceID:     policyID,
+	})
+	if err != nil {
+		return fmt.Errorf("list policy url grants: %w", err)
+	}
+
+	matching := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		serverURL := grant.Selector[authz.SelectorKeyServerURL]
+		if serverURL == "" {
+			continue
+		}
+		if serverURL != canonicalURL {
+			inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
+			if !ok || inventoryURL.CanonicalURL != canonicalURL {
+				continue
+			}
+		}
+		matching = append(matching, grant)
+	}
+
+	return revokePolicyURLGrants(ctx, db, organizationID, scope, policyID, matching)
+}
+
 func revokePolicyURLGrants(
 	ctx context.Context,
 	db riskrepo.DBTX,
@@ -136,7 +174,6 @@ func revokePolicyURLGrants(
 				Scope:          scope,
 				ResourceID:     policyID,
 			},
-			Effect:     authz.PolicyEffectAllow,
 			Principals: []urn.Principal{principal},
 			Selector:   grant.Selector,
 		}); err != nil {
@@ -162,7 +199,6 @@ func ReplacePolicyURLAudience(
 			Scope:          scope,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {
@@ -186,7 +222,6 @@ func RevokePolicyURL(
 			Scope:          scope,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: nil,
 		Selector:   URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {

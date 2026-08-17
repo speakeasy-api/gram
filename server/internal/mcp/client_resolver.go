@@ -1,9 +1,9 @@
 // Client resolution seam for the issuer-gated OAuth surface. Every handler
 // that resolves a user_session_clients row from a presented client_id —
 // authorize, token, consent GET/POST — funnels through
-// resolveUserSessionClient, so inbound CIMD resolution (and its future
-// layers: document caching, per-origin rate limits, admission control) has
-// exactly one home instead of per-handler branches.
+// resolveUserSessionClient, so inbound CIMD resolution and the layers around
+// it (admission control, document caching, and the per-origin rate limiting
+// AIS-215 adds) have exactly one home instead of per-handler branches.
 
 package mcp
 
@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -40,10 +41,10 @@ const (
 
 	// resolveClientCIMD additionally treats a URL-shaped client_id as a
 	// Client ID Metadata Document reference when the issuer organization's
-	// gram-user-session-cimd flag is on: the document is fetched and
-	// validated on every call (no caching) and the row lazily
-	// upserted. Authorize-time only — the consent GET/POST re-resolve the
-	// client by client_id, so the row must exist before the flow leaves
+	// gram-user-session-cimd flag is on: the row is read, the document
+	// fetched and validated when that row's cache has lapsed, and the row
+	// lazily upserted. Authorize-time only — the consent GET/POST re-resolve
+	// the client by client_id, so the row must exist before the flow leaves
 	// /authorize.
 	resolveClientCIMD clientIDResolveMode = "resolve_cimd"
 )
@@ -102,30 +103,102 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 			return nil, err
 		}
 
-		doc, err := s.cimdResolver.Resolve(ctx, clientID)
+		// The persisted row doubles as the document cache, so it is read
+		// before the fetch rather than only written after one. A miss is
+		// the ordinary first-contact case, not an error.
+		var cachedRow *usersessions_repo.UserSessionClient
+		existing, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			ClientID:            clientID,
+		})
+		switch {
+		case err == nil:
+			cachedRow = &existing
+		case errors.Is(err, pgx.ErrNoRows):
+		default:
+			return nil, fmt.Errorf("lookup cimd user session client: %w", err)
+		}
+
+		// Only a CIMD-resolved row is a cache. A secret-bearing DCR row
+		// that happens to share this client_id must still force a fetch:
+		// its metadata never came from a document, and the upsert's guard
+		// will refuse to rewrite it anyway.
+		//
+		// A row with no expiry still contributes its validator. The two
+		// columns are independent: a host may serve an ETag with no
+		// freshness directives at all, and clearing only the expiry is a
+		// request to revalidate now, not to discard what revalidation
+		// needs. Discarding both is what a purge is for.
+		var cache cimd.CacheState
+		if cachedRow != nil && cachedRow.ClientIDMetadataUri.Valid {
+			cache = cimd.CacheState{
+				ExpiresAt: cachedRow.ClientIDMetadataCacheExpiresAt.Time,
+				ETag:      cachedRow.ClientIDMetadataEtag.String,
+			}
+		}
+
+		result, err := s.cimdResolver.Resolve(ctx, clientID, cache)
 		if err != nil {
+			// Fail closed on every refresh failure, leaving the cached row
+			// as it was: -02 §5.1 says a fetch failure SHOULD abort the
+			// authorization request, so an expired document is never served
+			// stale to keep a flow alive.
 			if _, ok := errors.AsType[*oauthwire.Error](err); ok {
 				return nil, fmt.Errorf("resolve cimd client: %w", err)
 			}
 			return nil, fmt.Errorf("%w: %w", errCIMDFetchFailed, err)
 		}
 
-		row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			ClientID:            clientID,
-			ClientName:          doc.ClientName,
-			RedirectUris:        doc.RedirectURIs,
-		})
-		if err != nil {
-			// No-rows here means the DO UPDATE guard refused to rewrite a
-			// secret-bearing row sharing this client_id; surface it as an
-			// unknown client rather than a 500.
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, pgx.ErrNoRows
-			}
-			return nil, fmt.Errorf("upsert cimd user session client: %w", err)
+		if result.Outcome != cimd.CacheOutcomeRefreshed && cachedRow == nil {
+			// Unreachable: the resolver reports a cache outcome only for
+			// cache state this function passed in, and it passes none
+			// without a row. Checked rather than dereferenced because the
+			// alternative is a panic on an unauthenticated endpoint.
+			return nil, fmt.Errorf("cimd resolver reported %q outcome with no cached client", result.Outcome)
 		}
-		return &row, nil
+
+		switch result.Outcome {
+		case cimd.CacheOutcomeCached:
+			return cachedRow, nil
+		case cimd.CacheOutcomeNotModified:
+			row, err := queries.UpdateUserSessionClientCIMDCache(ctx, usersessions_repo.UpdateUserSessionClientCIMDCacheParams{
+				ID:                   cachedRow.ID,
+				CacheTtlSeconds:      result.TTL.Seconds(),
+				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+			})
+			if err != nil {
+				// No-rows means the row stopped being an updatable CIMD row
+				// between the read and the write (revoked, or replaced by a
+				// secret-bearing registration); treat it as unknown rather
+				// than serving the row the 304 was about.
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, pgx.ErrNoRows
+				}
+				return nil, fmt.Errorf("update cimd user session client cache: %w", err)
+			}
+			return &row, nil
+		case cimd.CacheOutcomeRefreshed:
+			row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
+				UserSessionIssuerID:  endpoint.UserSessionIssuerID,
+				ClientID:             clientID,
+				ClientName:           result.Document.ClientName,
+				RedirectUris:         result.Document.RedirectURIs,
+				CacheTtlSeconds:      result.TTL.Seconds(),
+				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+			})
+			if err != nil {
+				// No-rows here means the DO UPDATE guard refused to rewrite a
+				// secret-bearing row sharing this client_id; surface it as an
+				// unknown client rather than a 500.
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, pgx.ErrNoRows
+				}
+				return nil, fmt.Errorf("upsert cimd user session client: %w", err)
+			}
+			return &row, nil
+		default:
+			return nil, fmt.Errorf("unknown cimd resolve outcome %q", result.Outcome)
+		}
 	}
 
 	row, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{

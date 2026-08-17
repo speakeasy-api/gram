@@ -152,31 +152,6 @@ var _ = Service("userSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteUserSessionIssuer"}`)
 	})
-
-	Method("migrateLegacyGramRegistrations", func() {
-		Description("One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.")
-
-		Payload(func() {
-			Extend(MigrateLegacyGramRegistrationsForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(MigrateLegacyGramRegistrationsResult)
-
-		HTTP(func() {
-			POST("/rpc/userSessionIssuers.migrateLegacyGramRegistrations")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "migrateLegacyGramRegistrations")
-		Meta("openapi:extension:x-speakeasy-name-override", "migrateLegacyGramRegistrations")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateLegacyGramRegistrations"}`)
-	})
 })
 
 var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
@@ -186,7 +161,7 @@ var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented: chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
 
 	Required("slug", "authn_challenge_mode", "session_duration_hours")
 })
@@ -201,33 +176,12 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
 	Attribute("client_id_metadata_admission_mode", String, "Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.", func() {
 		Enum("disabled", "presets", "open")
 	})
 
 	Required("id")
-})
-
-var MigrateLegacyGramRegistrationsForm = Type("MigrateLegacyGramRegistrationsForm", func() {
-	Description("Form for migrating legacy gram OAuth-proxy client registrations onto a user_session_issuer.")
-
-	Attribute("oauth_proxy_provider_id", String, "The gram-type oauth_proxy_provider whose Redis registrations are migrated.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The target user_session_issuer the migrated user_session_clients attach to.", func() {
-		Format(FormatUUID)
-	})
-
-	Required("oauth_proxy_provider_id", "user_session_issuer_id")
-})
-
-var MigrateLegacyGramRegistrationsResult = Type("MigrateLegacyGramRegistrationsResult", func() {
-	Description("Result of a legacy gram registration migration.")
-
-	Attribute("migrated_count", Int, "Number of user_session_clients newly inserted; already-migrated registrations count as zero.")
-
-	Required("migrated_count")
 })
 
 var UserSessionIssuer = Type("UserSessionIssuer", func() {
@@ -243,7 +197,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	})
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("authn_challenge_mode", String, "chain | interactive.")
-	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
 	Attribute("client_id_metadata_admission_mode", String, "The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.", func() {
 		Enum("disabled", "presets", "reporting", "open")
 	})

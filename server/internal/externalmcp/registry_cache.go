@@ -21,7 +21,7 @@ const registryCacheTTL = 24 * time.Hour
 // to its zero value rather than erroring — without this version, adding
 // `supports_dcr` made every cached server read back as supports_dcr=false (i.e.
 // "manual") for up to the 24h TTL.
-const registryCacheSchemaVersion = "v2"
+const registryCacheSchemaVersion = "v4"
 
 // CachedListServers wraps the full, deduplicated list of external MCP server
 // summaries for a registry. The catalog is small and stable, so the whole list
@@ -33,9 +33,8 @@ type CachedListServers struct {
 
 var _ cache.CacheableObject[CachedListServers] = (*CachedListServers)(nil)
 
-func (c CachedListServers) CacheKey() string              { return c.Key }
-func (c CachedListServers) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedListServers) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedListServers) CacheKey() string   { return c.Key }
+func (c CachedListServers) TTL() time.Duration { return registryCacheTTL }
 
 // CachedServerDetailsResponse wraps server details for caching.
 type CachedServerDetailsResponse struct {
@@ -45,9 +44,8 @@ type CachedServerDetailsResponse struct {
 
 var _ cache.CacheableObject[CachedServerDetailsResponse] = (*CachedServerDetailsResponse)(nil)
 
-func (c CachedServerDetailsResponse) CacheKey() string              { return c.Key }
-func (c CachedServerDetailsResponse) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedServerDetailsResponse) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedServerDetailsResponse) CacheKey() string   { return c.Key }
+func (c CachedServerDetailsResponse) TTL() time.Duration { return registryCacheTTL }
 
 // registryCacheKey builds a cache key from a prefix and the request's URL + headers.
 // Headers are sorted and hashed with SHA-256 to capture tenant/auth identity.

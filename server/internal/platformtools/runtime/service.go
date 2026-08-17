@@ -7,16 +7,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
@@ -24,6 +27,7 @@ import (
 	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
+	platformplatform "github.com/speakeasy-api/gram/server/internal/platformtools/platform"
 	platformplugins "github.com/speakeasy-api/gram/server/internal/platformtools/plugins"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -62,6 +66,16 @@ func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 	}
 }
 
+// WithFileURLMinting enables tools that mint short-lived asset download URLs
+// (e.g. platform_slack_get_file_url) by supplying the sealing client and the
+// public base URL the minted URLs point at.
+func WithFileURLMinting(enc *encryption.Client, serverURL *url.URL) Option {
+	return func(c *config) {
+		c.deps.Encryption = enc
+		c.deps.ServerURL = serverURL
+	}
+}
+
 func WithExternalTools(extras []platformtools.ExternalTool) Option {
 	return func(c *config) {
 		c.extras = extras
@@ -91,6 +105,8 @@ func NewService(
 			Audit:            auditLogger,
 			TriggerApp:       nil,
 			SlackHTTPClient:  nil,
+			Encryption:       nil,
+			ServerURL:        nil,
 		},
 		extras:         nil,
 		featureChecker: nil,
@@ -239,6 +255,19 @@ func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insight
 		{Executor: platformskills.NewDistributeTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewUndistributeTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills"},
+	}
+}
+
+// PlatformMCPReadTools returns the Platform MCP read tools re-served to the
+// project's managed assistant over the assistant runtime channel. The reader
+// is the same Postgres reader backing the OAuth-facing Platform MCP surface,
+// so both channels return identical data.
+func PlatformMCPReadTools(reader platformmcp.Reader) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformplatform.NewGetPlatformContextTool(), RequiredFeature: ""},
+		{Executor: platformplatform.NewListProjectsTool(reader), RequiredFeature: ""},
+		{Executor: platformplatform.NewListProjectMCPsTool(reader), RequiredFeature: ""},
+		{Executor: platformplatform.NewGetMCPTool(reader), RequiredFeature: ""},
 	}
 }
 

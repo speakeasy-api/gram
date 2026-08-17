@@ -208,6 +208,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 						ToolName:        toolName,
 						ToolInput:       ev.ToolInput,
 						RiskPolicyID:    policy.ID,
+						PolicyName:      policy.Name,
 					})
 					isToolCallBlock = true
 					blockToolName = toolName

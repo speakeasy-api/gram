@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -128,12 +129,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authContext.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler)
+	siteURL, err := url.Parse("https://app.getgram.test")
+	require.NoError(t, err)
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, siteURL)
 
 	ti := &testInstance{
 		service:        service,
@@ -160,17 +161,6 @@ func enableSkills(t *testing.T, ctx context.Context, ti *testInstance) {
 	})
 	require.NoError(t, err)
 	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkills, true)
-}
-
-func disableSkills(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureSkills),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkills, false)
 }
 
 func createProjectContext(t *testing.T, ctx context.Context, ti *testInstance, grants ...authz.Scope) (context.Context, uuid.UUID) {

@@ -850,6 +850,39 @@ type GetRiskRuleBreakdownResponseBody struct {
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
+// GetRiskSignalsResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body.
+type GetRiskSignalsResponseBody struct {
+	// Inclusive start of the signals window.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Exclusive end of the signals window.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Heuristic organization risk score on the 0.1-10 scale, blended from the top
+	// signal scores and finding volume. Zero when the window has no findings.
+	OrgRiskScore *float64 `form:"org_risk_score,omitempty" json:"org_risk_score,omitempty" xml:"org_risk_score,omitempty"`
+	// Organization risk score computed the same way over the equal-length window
+	// immediately before from.
+	PreviousOrgRiskScore *float64 `form:"previous_org_risk_score,omitempty" json:"previous_org_risk_score,omitempty" xml:"previous_org_risk_score,omitempty"`
+	// Deduplicated live findings in the window.
+	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings *int64 `form:"previous_findings,omitempty" json:"previous_findings,omitempty" xml:"previous_findings,omitempty"`
+	// Signals with at least one live finding in the window.
+	OpenSignals *int64 `form:"open_signals,omitempty" json:"open_signals,omitempty" xml:"open_signals,omitempty"`
+	// Signals rated critical in the window.
+	CriticalSignals *int64 `form:"critical_signals,omitempty" json:"critical_signals,omitempty" xml:"critical_signals,omitempty"`
+	// Distinct users with at least one finding in the window.
+	UsersExposed *int64 `form:"users_exposed,omitempty" json:"users_exposed,omitempty" xml:"users_exposed,omitempty"`
+	// Distinct users with at least one finding in the equal-length window
+	// immediately before from.
+	PreviousUsersExposed *int64 `form:"previous_users_exposed,omitempty" json:"previous_users_exposed,omitempty" xml:"previous_users_exposed,omitempty"`
+	// Finding counts by category, largest first.
+	Exposure []*RiskExposureSliceResponseBody `form:"exposure,omitempty" json:"exposure,omitempty" xml:"exposure,omitempty"`
+	// Signals ranked by risk score, highest first.
+	Signals []*RiskSignalResponseBody `form:"signals,omitempty" json:"signals,omitempty" xml:"signals,omitempty"`
+}
+
 // GetRiskPolicyStatusResponseBody is the type of the "risk" service
 // "getRiskPolicyStatus" endpoint HTTP response body.
 type GetRiskPolicyStatusResponseBody struct {
@@ -872,36 +905,12 @@ type GetRiskPolicyStatusResponseBody struct {
 // CreateRiskPolicyBypassRequestResponseBody is the type of the "risk" service
 // "createRiskPolicyBypassRequest" endpoint HTTP response body.
 type CreateRiskPolicyBypassRequestResponseBody struct {
-	// The bypass request ID.
+	// The kind of request the token redeemed into.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The id of the created or refreshed request.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The risk policy ID.
-	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
-	// Optional target namespace for the request, such as server_url.
-	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// Optional display label for the target.
-	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	// Canonical key for the target.
-	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
-	// Selector dimensions for the request target.
-	TargetDimensions map[string]string `form:"target_dimensions,omitempty" json:"target_dimensions,omitempty" xml:"target_dimensions,omitempty"`
-	// Requester user ID.
-	RequesterUserID *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
-	// Requester email when known.
-	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
-	// Requester note.
-	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
-	// Current request status.
+	// The request's current status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// User ID that approved, denied, or revoked the request.
-	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
-	// Principal URNs granted when approved.
-	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
-	// Decision timestamp.
-	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
-	// Creation timestamp.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// Last update timestamp.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeResponseBody is the type of the "risk" service
@@ -4642,6 +4651,188 @@ type GetRiskRuleBreakdownUnexpectedResponseBody struct {
 // service "getRiskRuleBreakdown" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetRiskRuleBreakdownGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsUnauthorizedResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "unauthorized" error.
+type GetRiskSignalsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsForbiddenResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "forbidden" error.
+type GetRiskSignalsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsBadRequestResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "bad_request" error.
+type GetRiskSignalsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsNotFoundResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "not_found" error.
+type GetRiskSignalsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsConflictResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "conflict" error.
+type GetRiskSignalsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsUnsupportedMediaResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetRiskSignalsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsInvalidResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "invalid" error.
+type GetRiskSignalsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsInvariantViolationResponseBody is the type of the "risk"
+// service "getRiskSignals" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskSignalsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsUnexpectedResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "unexpected" error.
+type GetRiskSignalsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskSignalsGatewayErrorResponseBody is the type of the "risk" service
+// "getRiskSignals" endpoint HTTP response body for the "gateway_error" error.
+type GetRiskSignalsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10301,6 +10492,73 @@ type RiskCategoryDefinitionResponseBody struct {
 	RecommendedScopeApplicable *bool `form:"recommended_scope_applicable,omitempty" json:"recommended_scope_applicable,omitempty" xml:"recommended_scope_applicable,omitempty"`
 }
 
+// RiskExposureSliceResponseBody is used to define fields on response body
+// types.
+type RiskExposureSliceResponseBody struct {
+	// Canonical risk category key.
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// Deduplicated finding count for this category in the window.
+	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
+	// Fraction of the window's findings in this category (0-1).
+	Share *float64 `form:"share,omitempty" json:"share,omitempty" xml:"share,omitempty"`
+}
+
+// RiskSignalResponseBody is used to define fields on response body types.
+type RiskSignalResponseBody struct {
+	// Stable client identity for the signal. Currently 'rule:<rule_id>'.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Rule identifier the signal clusters on (e.g. 'secret.aws_access_token',
+	// 'pii.email_address').
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Canonical risk category of the rule (secrets, pii, ...).
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// Representative finding description for this rule. Empty when findings carry
+	// no description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Detector sources that produced findings in this signal (gitleaks, presidio,
+	// prompt_injection, ...).
+	DetectionSources []string `form:"detection_sources,omitempty" json:"detection_sources,omitempty" xml:"detection_sources,omitempty"`
+	// Source apps (chat surfaces) the findings were observed in. Empty until app
+	// attribution is recorded on findings.
+	Apps []string `form:"apps,omitempty" json:"apps,omitempty" xml:"apps,omitempty"`
+	// Severity rating derived from the risk score.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+	// Heuristic severity score on the 0.1-10 scale used across risk surfaces.
+	RiskScore *float64 `form:"risk_score,omitempty" json:"risk_score,omitempty" xml:"risk_score,omitempty"`
+	// Deduplicated finding count in the window.
+	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
+	// Finding count in the equal-length window immediately before from.
+	PreviousFindings *int64 `form:"previous_findings,omitempty" json:"previous_findings,omitempty" xml:"previous_findings,omitempty"`
+	// Distinct users with at least one finding in the window.
+	Users *int64 `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Distinct teams with at least one finding in the window. Zero until team
+	// attribution is recorded on findings.
+	Teams *int64 `form:"teams,omitempty" json:"teams,omitempty" xml:"teams,omitempty"`
+	// Event time of the earliest finding in the window.
+	FirstSeen *string `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
+	// Event time of the latest finding in the window.
+	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+	// Top users by finding count within the signal.
+	TopUsers []*RiskSignalTopUserResponseBody `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	// Deduplicated finding counts per equal-width time bucket across the window,
+	// oldest bucket first. Powers the per-signal trend sparkline.
+	Sparkline []int64 `form:"sparkline,omitempty" json:"sparkline,omitempty" xml:"sparkline,omitempty"`
+}
+
+// RiskSignalTopUserResponseBody is used to define fields on response body
+// types.
+type RiskSignalTopUserResponseBody struct {
+	// User email, or Unknown user when unavailable.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// WorkOS directory department of the user when known; empty otherwise.
+	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Finding count for this user within the signal and window.
+	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
+}
+
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
 // body types.
 type RiskPolicyBypassRequestResponseBody struct {
@@ -14210,6 +14468,191 @@ func NewGetRiskRuleBreakdownGatewayError(body *GetRiskRuleBreakdownGatewayErrorR
 	return v
 }
 
+// NewGetRiskSignalsRiskSignalsResultOK builds a "risk" service
+// "getRiskSignals" endpoint result from a HTTP "OK" response.
+func NewGetRiskSignalsRiskSignalsResultOK(body *GetRiskSignalsResponseBody) *risk.RiskSignalsResult {
+	v := &risk.RiskSignalsResult{
+		From:                 *body.From,
+		To:                   *body.To,
+		OrgRiskScore:         *body.OrgRiskScore,
+		PreviousOrgRiskScore: *body.PreviousOrgRiskScore,
+		Findings:             *body.Findings,
+		PreviousFindings:     *body.PreviousFindings,
+		OpenSignals:          *body.OpenSignals,
+		CriticalSignals:      *body.CriticalSignals,
+		UsersExposed:         *body.UsersExposed,
+		PreviousUsersExposed: *body.PreviousUsersExposed,
+	}
+	v.Exposure = make([]*risk.RiskExposureSlice, len(body.Exposure))
+	for i, val := range body.Exposure {
+		if val == nil {
+			v.Exposure[i] = nil
+			continue
+		}
+		v.Exposure[i] = unmarshalRiskExposureSliceResponseBodyToRiskRiskExposureSlice(val)
+	}
+	v.Signals = make([]*risk.RiskSignal, len(body.Signals))
+	for i, val := range body.Signals {
+		if val == nil {
+			v.Signals[i] = nil
+			continue
+		}
+		v.Signals[i] = unmarshalRiskSignalResponseBodyToRiskRiskSignal(val)
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsUnauthorized builds a risk service getRiskSignals endpoint
+// unauthorized error.
+func NewGetRiskSignalsUnauthorized(body *GetRiskSignalsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsForbidden builds a risk service getRiskSignals endpoint
+// forbidden error.
+func NewGetRiskSignalsForbidden(body *GetRiskSignalsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsBadRequest builds a risk service getRiskSignals endpoint
+// bad_request error.
+func NewGetRiskSignalsBadRequest(body *GetRiskSignalsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsNotFound builds a risk service getRiskSignals endpoint
+// not_found error.
+func NewGetRiskSignalsNotFound(body *GetRiskSignalsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsConflict builds a risk service getRiskSignals endpoint
+// conflict error.
+func NewGetRiskSignalsConflict(body *GetRiskSignalsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsUnsupportedMedia builds a risk service getRiskSignals
+// endpoint unsupported_media error.
+func NewGetRiskSignalsUnsupportedMedia(body *GetRiskSignalsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsInvalid builds a risk service getRiskSignals endpoint
+// invalid error.
+func NewGetRiskSignalsInvalid(body *GetRiskSignalsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsInvariantViolation builds a risk service getRiskSignals
+// endpoint invariant_violation error.
+func NewGetRiskSignalsInvariantViolation(body *GetRiskSignalsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsUnexpected builds a risk service getRiskSignals endpoint
+// unexpected error.
+func NewGetRiskSignalsUnexpected(body *GetRiskSignalsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskSignalsGatewayError builds a risk service getRiskSignals endpoint
+// gateway_error error.
+func NewGetRiskSignalsGatewayError(body *GetRiskSignalsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetRiskPolicyStatusRiskPolicyStatusOK builds a "risk" service
 // "getRiskPolicyStatus" endpoint result from a HTTP "OK" response.
 func NewGetRiskPolicyStatusRiskPolicyStatusOK(body *GetRiskPolicyStatusResponseBody) *types.RiskPolicyStatus {
@@ -14376,34 +14819,14 @@ func NewGetRiskPolicyStatusGatewayError(body *GetRiskPolicyStatusGatewayErrorRes
 	return v
 }
 
-// NewCreateRiskPolicyBypassRequestRiskPolicyBypassRequestCreated builds a
+// NewCreateRiskPolicyBypassRequestPolicyBypassRedemptionCreated builds a
 // "risk" service "createRiskPolicyBypassRequest" endpoint result from a HTTP
 // "Created" response.
-func NewCreateRiskPolicyBypassRequestRiskPolicyBypassRequestCreated(body *CreateRiskPolicyBypassRequestResponseBody) *risk.RiskPolicyBypassRequest {
-	v := &risk.RiskPolicyBypassRequest{
-		ID:              *body.ID,
-		PolicyID:        *body.PolicyID,
-		TargetKind:      body.TargetKind,
-		TargetLabel:     body.TargetLabel,
-		TargetKey:       body.TargetKey,
-		RequesterUserID: *body.RequesterUserID,
-		RequesterEmail:  body.RequesterEmail,
-		Note:            body.Note,
-		Status:          *body.Status,
-		DecidedBy:       body.DecidedBy,
-		DecidedAt:       body.DecidedAt,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-	}
-	v.TargetDimensions = make(map[string]string, len(body.TargetDimensions))
-	for key, val := range body.TargetDimensions {
-		tk := key
-		tv := val
-		v.TargetDimensions[tk] = tv
-	}
-	v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
-	for i, val := range body.GrantedPrincipalUrns {
-		v.GrantedPrincipalUrns[i] = val
+func NewCreateRiskPolicyBypassRequestPolicyBypassRedemptionCreated(body *CreateRiskPolicyBypassRequestResponseBody) *risk.PolicyBypassRedemption {
+	v := &risk.PolicyBypassRedemption{
+		Kind:   *body.Kind,
+		ID:     *body.ID,
+		Status: *body.Status,
 	}
 
 	return v
@@ -19493,6 +19916,68 @@ func ValidateGetRiskRuleBreakdownResponseBody(body *GetRiskRuleBreakdownResponse
 	return
 }
 
+// ValidateGetRiskSignalsResponseBody runs the validations defined on
+// GetRiskSignalsResponseBody
+func ValidateGetRiskSignalsResponseBody(body *GetRiskSignalsResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.OrgRiskScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_risk_score", "body"))
+	}
+	if body.PreviousOrgRiskScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_org_risk_score", "body"))
+	}
+	if body.Findings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
+	}
+	if body.PreviousFindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_findings", "body"))
+	}
+	if body.OpenSignals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("open_signals", "body"))
+	}
+	if body.CriticalSignals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("critical_signals", "body"))
+	}
+	if body.UsersExposed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users_exposed", "body"))
+	}
+	if body.PreviousUsersExposed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_users_exposed", "body"))
+	}
+	if body.Exposure == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("exposure", "body"))
+	}
+	if body.Signals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signals", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Exposure {
+		if e != nil {
+			if err2 := ValidateRiskExposureSliceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Signals {
+		if e != nil {
+			if err2 := ValidateRiskSignalResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetRiskPolicyStatusResponseBody runs the validations defined on
 // GetRiskPolicyStatusResponseBody
 func ValidateGetRiskPolicyStatusResponseBody(body *GetRiskPolicyStatusResponseBody) (err error) {
@@ -19531,49 +20016,19 @@ func ValidateGetRiskPolicyStatusResponseBody(body *GetRiskPolicyStatusResponseBo
 // ValidateCreateRiskPolicyBypassRequestResponseBody runs the validations
 // defined on CreateRiskPolicyBypassRequestResponseBody
 func ValidateCreateRiskPolicyBypassRequestResponseBody(body *CreateRiskPolicyBypassRequestResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.PolicyID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
-	}
-	if body.TargetDimensions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("target_dimensions", "body"))
-	}
-	if body.RequesterUserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("requester_user_id", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
-	if body.GrantedPrincipalUrns == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("granted_principal_urns", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.PolicyID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "revoked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "approved", "denied", "revoked"}))
+	if body.Kind != nil {
+		if !(*body.Kind == "approval_request" || *body.Kind == "bypass_request") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"approval_request", "bypass_request"}))
 		}
-	}
-	if body.DecidedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -24592,6 +25047,246 @@ func ValidateGetRiskRuleBreakdownUnexpectedResponseBody(body *GetRiskRuleBreakdo
 // ValidateGetRiskRuleBreakdownGatewayErrorResponseBody runs the validations
 // defined on getRiskRuleBreakdown_gateway_error_response_body
 func ValidateGetRiskRuleBreakdownGatewayErrorResponseBody(body *GetRiskRuleBreakdownGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsUnauthorizedResponseBody runs the validations defined
+// on getRiskSignals_unauthorized_response_body
+func ValidateGetRiskSignalsUnauthorizedResponseBody(body *GetRiskSignalsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsForbiddenResponseBody runs the validations defined on
+// getRiskSignals_forbidden_response_body
+func ValidateGetRiskSignalsForbiddenResponseBody(body *GetRiskSignalsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsBadRequestResponseBody runs the validations defined on
+// getRiskSignals_bad_request_response_body
+func ValidateGetRiskSignalsBadRequestResponseBody(body *GetRiskSignalsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsNotFoundResponseBody runs the validations defined on
+// getRiskSignals_not_found_response_body
+func ValidateGetRiskSignalsNotFoundResponseBody(body *GetRiskSignalsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsConflictResponseBody runs the validations defined on
+// getRiskSignals_conflict_response_body
+func ValidateGetRiskSignalsConflictResponseBody(body *GetRiskSignalsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsUnsupportedMediaResponseBody runs the validations
+// defined on getRiskSignals_unsupported_media_response_body
+func ValidateGetRiskSignalsUnsupportedMediaResponseBody(body *GetRiskSignalsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsInvalidResponseBody runs the validations defined on
+// getRiskSignals_invalid_response_body
+func ValidateGetRiskSignalsInvalidResponseBody(body *GetRiskSignalsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsInvariantViolationResponseBody runs the validations
+// defined on getRiskSignals_invariant_violation_response_body
+func ValidateGetRiskSignalsInvariantViolationResponseBody(body *GetRiskSignalsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsUnexpectedResponseBody runs the validations defined on
+// getRiskSignals_unexpected_response_body
+func ValidateGetRiskSignalsUnexpectedResponseBody(body *GetRiskSignalsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskSignalsGatewayErrorResponseBody runs the validations defined
+// on getRiskSignals_gateway_error_response_body
+func ValidateGetRiskSignalsGatewayErrorResponseBody(body *GetRiskSignalsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -31771,6 +32466,111 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	}
 	if body.RecommendedScopeApplicable == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_applicable", "body"))
+	}
+	return
+}
+
+// ValidateRiskExposureSliceResponseBody runs the validations defined on
+// RiskExposureSliceResponseBody
+func ValidateRiskExposureSliceResponseBody(body *RiskExposureSliceResponseBody) (err error) {
+	if body.Category == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	if body.Findings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
+	}
+	if body.Share == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("share", "body"))
+	}
+	return
+}
+
+// ValidateRiskSignalResponseBody runs the validations defined on
+// RiskSignalResponseBody
+func ValidateRiskSignalResponseBody(body *RiskSignalResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.RuleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id", "body"))
+	}
+	if body.Category == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.DetectionSources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("detection_sources", "body"))
+	}
+	if body.Apps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("apps", "body"))
+	}
+	if body.Severity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
+	}
+	if body.RiskScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_score", "body"))
+	}
+	if body.Findings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
+	}
+	if body.PreviousFindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_findings", "body"))
+	}
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	if body.Teams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("teams", "body"))
+	}
+	if body.FirstSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen", "body"))
+	}
+	if body.LastSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
+	}
+	if body.TopUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
+	}
+	if body.Sparkline == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sparkline", "body"))
+	}
+	if body.Severity != nil {
+		if !(*body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"low", "medium", "high", "critical"}))
+		}
+	}
+	if body.FirstSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
+	}
+	if body.LastSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen", *body.LastSeen, goa.FormatDateTime))
+	}
+	for _, e := range body.TopUsers {
+		if e != nil {
+			if err2 := ValidateRiskSignalTopUserResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskSignalTopUserResponseBody runs the validations defined on
+// RiskSignalTopUserResponseBody
+func ValidateRiskSignalTopUserResponseBody(body *RiskSignalTopUserResponseBody) (err error) {
+	if body.Email == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.ExternalUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_user_id", "body"))
+	}
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.Findings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
 	}
 	return
 }

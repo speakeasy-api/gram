@@ -141,7 +141,7 @@ const DecisionRow = memo(function DecisionRow({
         <span className="text-[14px]">{step.label}</span>
         <span
           className={cn(
-            "auth-mono rounded-full px-2.5 py-[3px] text-[10px] transition-opacity duration-400",
+            "auth-mono px-2.5 py-[3px] text-[10px] transition-opacity duration-400",
             step.chipClassName,
           )}
           style={{ opacity: reveal }}

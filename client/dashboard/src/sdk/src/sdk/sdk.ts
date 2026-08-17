@@ -6,6 +6,7 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminExternalCredentials } from "./adminexternalcredentials.js";
+import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
@@ -33,6 +34,7 @@ import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
 import { Litellm } from "./litellm.js";
+import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
@@ -44,6 +46,7 @@ import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
+import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -85,6 +88,13 @@ export class Gram extends ClientSDK {
   private _adminExternalCredentials?: AdminExternalCredentials;
   get adminExternalCredentials(): AdminExternalCredentials {
     return (this._adminExternalCredentials ??= new AdminExternalCredentials(
+      this._options,
+    ));
+  }
+
+  private _adminOpenRouterKeys?: AdminOpenRouterKeys;
+  get adminOpenRouterKeys(): AdminOpenRouterKeys {
+    return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
       this._options,
     ));
   }
@@ -223,6 +233,11 @@ export class Gram extends ClientSDK {
     return (this._litellm ??= new Litellm(this._options));
   }
 
+  private _mcpApproval?: McpApproval;
+  get mcpApproval(): McpApproval {
+    return (this._mcpApproval ??= new McpApproval(this._options));
+  }
+
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
@@ -280,6 +295,11 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformMcp?: PlatformMcp;
+  get platformMcp(): PlatformMcp {
+    return (this._platformMcp ??= new PlatformMcp(this._options));
   }
 
   private _plugins?: Plugins;

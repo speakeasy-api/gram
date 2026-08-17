@@ -52,6 +52,18 @@ export type TrendPoint = {
   findings: number;
 };
 
+// Resolves one category's chart color from the theme-resolved series ramp
+// (callers pass useSeriesColors()), so the Watchdog exposure bar shares the
+// trend chart's palette in both themes.
+export function getRiskCategoryChartColor(
+  category: string,
+  series: readonly string[],
+): string | undefined {
+  return riskCategoryChartColors(series).find(
+    (entry) => entry.category === category,
+  )?.color;
+}
+
 export function buildRiskTrendChartData(
   points: TrendPoint[],
   from: Date,

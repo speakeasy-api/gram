@@ -74,10 +74,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)

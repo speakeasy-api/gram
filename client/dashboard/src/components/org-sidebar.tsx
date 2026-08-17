@@ -1,6 +1,7 @@
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
-import { RequireScope } from "@/components/require-scope";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -9,22 +10,24 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/Sidebar";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useOrgRoutes } from "@/routes";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Icon } from "@/components/ui/Icon";
-import * as React from "react";
-import { Link } from "react-router";
-import { GramLogo } from "./gram-logo";
+
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
-import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { GramLogo } from "./gram-logo";
+import { Icon } from "@/components/ui/Icon";
+import { Link } from "react-router";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { RequireScope } from "@/components/require-scope";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 import { TrialStatusCard } from "./trial-status-card";
+import { WorkspaceSwitcher } from "./workspace-switcher";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -62,6 +65,8 @@ export function OrgSidebar({
     throwOnError: false,
   });
   const isPlatformAdmin = useIsPlatformAdmin();
+  const { enabled: isPlatformMcpDashboardEnabled } =
+    usePlatformMcpDashboardVisibility();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -73,6 +78,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -90,9 +96,14 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
-  const platformAdminActive = [orgRoutes.platformRemoteIdentityProviders].some(
-    (r) => r.active,
-  );
+  const platformAdminActive = [
+    orgRoutes.platformAdminOverview,
+    orgRoutes.platformAdminRbac,
+    orgRoutes.platformAdminFeatures,
+    orgRoutes.platformAdminOnboarding,
+    orgRoutes.platformAdminOpenRouterKeys,
+    orgRoutes.platformRemoteIdentityProviders,
+  ].some((r) => r.active);
 
   const activeGroup = settingsActive
     ? "Settings"
@@ -113,6 +124,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -122,6 +134,11 @@ export function OrgSidebar({
     orgRoutes.userSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
+    orgRoutes.platformAdminOverview,
+    orgRoutes.platformAdminRbac,
+    orgRoutes.platformAdminFeatures,
+    orgRoutes.platformAdminOnboarding,
+    orgRoutes.platformAdminOpenRouterKeys,
     orgRoutes.platformRemoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
@@ -178,8 +195,14 @@ export function OrgSidebar({
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  ...(productFeatures?.skillsEnabled === true
-                    ? [{ item: orgRoutes.skills, scope: "org:admin" as Scope }]
+                  { item: orgRoutes.skills, scope: "org:admin" },
+                  ...(isPlatformMcpDashboardEnabled
+                    ? [
+                        {
+                          item: orgRoutes.platformMcp,
+                          scope: "org:admin" as const,
+                        },
+                      ]
                     : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
@@ -237,19 +260,54 @@ export function OrgSidebar({
               <ScopeGatedNavGroup
                 label="Platform Admin"
                 Icon={(p) => <Icon {...p} name="crown" />}
-                items={
-                  isPlatformAdmin
+                items={[
+                  // The admin pages also show in local dev regardless of the
+                  // admin flag, like the old floating Developer Toolkit: the
+                  // Overview page holds the impersonation toggle non-admin
+                  // developers need to turn platform admin on in the first
+                  // place. Remote Identity Providers stays strictly
+                  // admin-gated — it is real catalog management, not a local
+                  // developer aid.
+                  ...(isPlatformAdmin || import.meta.env.DEV
                     ? [
                         {
+                          // The group header already says "Platform Admin"; the
+                          // route titles keep the prefix for Recents and the
+                          // command palette, which have no header to lean on.
+                          item: orgRoutes.platformAdminOverview,
+                          label: "Overview",
+                        },
+                        {
+                          item: orgRoutes.platformAdminRbac,
+                          label: "RBAC Override",
+                        },
+                        {
+                          item: orgRoutes.platformAdminFeatures,
+                          label: "Features",
+                        },
+                        {
+                          item: orgRoutes.platformAdminOnboarding,
+                          label: "Onboarding",
+                        },
+                      ]
+                    : []),
+                  ...(isPlatformAdmin
+                    ? [
+                        // OpenRouter Keys and Remote Identity Providers stay
+                        // strictly admin-gated even in local dev: both manage
+                        // real platform state (live upstream credentials, the
+                        // shared issuer catalog), not local developer aids.
+                        {
+                          item: orgRoutes.platformAdminOpenRouterKeys,
+                          label: "OpenRouter Keys",
+                        },
+                        {
                           item: orgRoutes.platformRemoteIdentityProviders,
-                          // The group header already says "Platform"; the route
-                          // title keeps it for Recents and the command palette,
-                          // which have no header to lean on.
                           label: "Remote Identity Providers",
                         },
                       ]
-                    : []
-                }
+                    : []),
+                ]}
               />
             </SidebarMenu>
           </NavGroupProvider>

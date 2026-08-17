@@ -77,7 +77,8 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 		ctx,
 		a.DeleteChatResolutions,
 		activities.DeleteChatResolutionsArgs{
-			ChatID: params.ChatID,
+			ChatID:    params.ChatID,
+			ProjectID: params.ProjectID,
 		},
 	).Get(ctx, nil)
 	if err != nil {

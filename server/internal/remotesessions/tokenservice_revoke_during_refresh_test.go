@@ -42,10 +42,10 @@ func TestResolveAccessToken_RevokedDuringRefresh_StaysRevoked(t *testing.T) {
 
 	// Push updated_at outside the refresh cadence so the next resolve must
 	// refresh rather than serve the stored token.
-	require.NoError(t, env.q.SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
-		ID:        env.session.ID,
-		ProjectID: conv.ToNullUUID(env.projectID),
-		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-2 * time.Hour)),
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		ID:              env.session.ID,
+		ProjectID:       conv.ToNullUUID(env.projectID),
+		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
 
 	type resolveResult struct {

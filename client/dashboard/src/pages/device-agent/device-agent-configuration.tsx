@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
-import { DevBadge } from "@/components/dev-badge";
+import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { ErrorAlert } from "@/components/ui/Alert";
 import {
   Field,
@@ -51,6 +51,12 @@ const PLATFORMS = [
     key: "cursor",
     label: "Cursor",
     description: "Configure Cursor plugins and MCP settings.",
+    defaultLayer: "off",
+  },
+  {
+    key: "opencode",
+    label: "OpenCode",
+    description: "Configure OpenCode plugins and MCP settings.",
     defaultLayer: "off",
   },
 ] as const satisfies ReadonlyArray<{
@@ -392,7 +398,7 @@ function DeviceAgentConfigurationForm({
             <Field>
               <FieldLabel htmlFor="device-agent-update-channel">
                 Update channel
-                <DevBadge />
+                <InternalAdminBadge />
               </FieldLabel>
               <Input
                 id="device-agent-update-channel"
@@ -496,7 +502,7 @@ function DeviceAgentConfigurationForm({
           <Field>
             <FieldLabel htmlFor="device-agent-blocked-versions">
               Blocked versions
-              <DevBadge />
+              <InternalAdminBadge />
             </FieldLabel>
             <Input
               id="device-agent-blocked-versions"

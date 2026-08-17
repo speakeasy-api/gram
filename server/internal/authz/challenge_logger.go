@@ -7,15 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,11 +44,13 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-// Log writes the challenge to ClickHouse via the supplied connection. The
-// write is gated behind the ChallengeLoggingEnabled feature check — if the
+const challengeOutboxTimeout = 10 * time.Second
+
+// Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
+// enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return
@@ -102,28 +106,35 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 		projectID = authCtx.ProjectID.String()
 	}
 
-	reqs := make([]authzrepo.RequestedCheck, 0, len(l.Checks))
+	reqs := make([]*authzv1.Challenge_RequestedCheck, 0, len(l.Checks))
 	for _, c := range l.Checks {
 		kind := c.ResourceKind
 		if kind == "" {
 			kind = ResourceKindForScope(c.Scope)
 		}
-		reqs = append(reqs, authzrepo.RequestedCheck{
-			Scope:        string(c.Scope),
-			ResourceKind: kind,
-			ResourceID:   c.ResourceID,
-			Selector:     marshalSelector(c.selector()),
-		})
+		scope := string(c.Scope)
+		resourceID := c.ResourceID
+		selector := marshalSelector(c.selector())
+		reqs = append(reqs, authzv1.Challenge_RequestedCheck_builder{
+			Scope:        &scope,
+			ResourceKind: &kind,
+			ResourceId:   &resourceID,
+			Selector:     &selector,
+		}.Build())
 	}
 
-	mgs := make([]authzrepo.MatchedGrant, 0, len(l.Matches))
+	mgs := make([]*authzv1.Challenge_MatchedGrant, 0, len(l.Matches))
 	for _, m := range l.Matches {
-		mgs = append(mgs, authzrepo.MatchedGrant{
-			PrincipalURN:         m.Grant.PrincipalUrn,
-			Scope:                string(m.Grant.Scope),
-			Selector:             marshalSelector(m.Grant.Selector),
-			MatchedViaCheckScope: string(m.ViaCheck.Scope),
-		})
+		principalURN := m.Grant.PrincipalUrn
+		scope := string(m.Grant.Scope)
+		selector := marshalSelector(m.Grant.Selector)
+		matchedViaCheckScope := string(m.ViaCheck.Scope)
+		mgs = append(mgs, authzv1.Challenge_MatchedGrant_builder{
+			PrincipalUrn:         &principalURN,
+			Scope:                &scope,
+			Selector:             &selector,
+			MatchedViaCheckScope: &matchedViaCheckScope,
+		}.Build())
 	}
 
 	expanded := []string{}
@@ -139,41 +150,63 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 		reqID = &v
 	}
 
-	row := authzrepo.ChallengeRow{
-		ID:                   uuid.NewString(),
-		Timestamp:            time.Now().UTC(),
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            projectID,
-		TraceID:              traceID,
-		SpanID:               spanID,
-		RequestID:            reqID,
-		PrincipalURN:         principalURN,
-		PrincipalType:        principalType,
-		UserID:               conv.PtrEmpty(authCtx.UserID),
-		UserExternalID:       conv.PtrEmpty(authCtx.ExternalUserID),
+	challengeID := uuid.New()
+	id := challengeID.String()
+	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
+	principalTypeString := string(principalType)
+	operation := string(l.Operation)
+	outcome := string(l.Outcome)
+	reason := string(l.Reason)
+	scope := string(focus.Scope)
+	resourceKind := focusSelector[SelectorKeyResourceKind]
+	resourceID := focus.ResourceID
+	selector := marshalSelector(focusSelector)
+	message := authzv1.Challenge_builder{
+		Id:                   &id,
+		Timestamp:            &timestamp,
+		OrganizationId:       &authCtx.ActiveOrganizationID,
+		ProjectId:            &projectID,
+		TraceId:              &traceID,
+		SpanId:               &spanID,
+		RequestId:            reqID,
+		PrincipalUrn:         &principalURN,
+		PrincipalType:        &principalTypeString,
+		UserId:               conv.PtrEmpty(authCtx.UserID),
+		UserExternalId:       conv.PtrEmpty(authCtx.ExternalUserID),
 		UserEmail:            authCtx.Email,
-		APIKeyID:             conv.PtrEmpty(authCtx.APIKeyID),
-		SessionID:            authCtx.SessionID,
+		ApiKeyId:             conv.PtrEmpty(authCtx.APIKeyID),
+		SessionId:            authCtx.SessionID,
 		RoleSlugs:            roleSlugsFromContext(ctx),
-		Operation:            l.Operation,
-		Outcome:              l.Outcome,
-		Reason:               l.Reason,
-		Scope:                string(focus.Scope),
-		ResourceKind:         focusSelector[SelectorKeyResourceKind],
-		ResourceID:           focus.ResourceID,
-		Selector:             marshalSelector(focusSelector),
+		Operation:            &operation,
+		Outcome:              &outcome,
+		Reason:               &reason,
+		Scope:                &scope,
+		ResourceKind:         &resourceKind,
+		ResourceId:           &resourceID,
+		Selector:             &selector,
 		ExpandedScopes:       expanded,
 		RequestedChecks:      reqs,
 		MatchedGrants:        mgs,
-		EvaluatedGrantCount:  l.EvaluatedGrantCount,
-		FilterCandidateCount: l.FilterCandidateCount,
-		FilterAllowedCount:   l.FilterAllowedCount,
-	}
+		EvaluatedGrantCount:  &l.EvaluatedGrantCount,
+		FilterCandidateCount: &l.FilterCandidateCount,
+		FilterAllowedCount:   &l.FilterAllowedCount,
+	}.Build()
 
-	if err := authzrepo.New(conn).InsertChallenge(ctx, row); err != nil {
-		logger.WarnContext(ctx, "failed to write authz challenge row",
+	// Request cancellation must not abort the durable enqueue after the
+	// authorization decision has completed. Keep it bounded so challenge
+	// logging cannot hold up the request indefinitely during a database outage.
+	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
+	defer cancel()
+
+	if _, err := outbox.Publish(enqueueCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
+		Proto:      message,
+		PublicID:   challengeID,
+		Attributes: nil,
+	}); err != nil {
+		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
 			attr.SlogError(err),
 		)
+		return
 	}
 }
 

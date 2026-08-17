@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -466,9 +467,9 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		gramOrgID = orgid.FromWorkOSID(m.OrganizationID)
 	}
 
-	slug := orgslug.Slugify(org.Name)
-	if slug == "" {
-		slug = m.OrganizationID
+	slug, err := orgslug.StableBase(org.Name, m.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("derive slug for WorkOS organization %q: %w", m.OrganizationID, err)
 	}
 
 	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
@@ -640,27 +641,19 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		return ProvisionedOrganization{}, fmt.Errorf("user %s has no workos_id", gramUserID)
 	}
 
-	// Create the WorkOS org first, then derive the Gram org ID from it.
-	workosOrgID, err := r.workosClient.CreateOrganization(ctx, orgName, "")
+	created, err := orgprovision.CreateInWorkOS(ctx, r.workosClient, orgName)
 	if err != nil {
-		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization: %w", err)
+		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	gramOrgID := orgid.FromWorkOSID(workosOrgID)
-
-	// Back-fill the external_id so WorkOS knows the Gram org ID.
-	if err := r.workosClient.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
-		return ProvisionedOrganization{}, fmt.Errorf("set external_id on WorkOS organization: %w", err)
-	}
-
-	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin")
+	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
 	if err != nil {
 		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 
 	return ProvisionedOrganization{
-		WorkOSOrganizationID: workosOrgID,
-		GramOrganizationID:   gramOrgID,
+		WorkOSOrganizationID: created.WorkOSOrganizationID,
+		GramOrganizationID:   created.GramOrganizationID,
 		WorkOSUserID:         user.WorkosID.String,
 		WorkOSMembershipID:   membershipID,
 	}, nil

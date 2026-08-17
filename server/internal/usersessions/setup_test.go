@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"slices"
 	"sync"
@@ -26,11 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,37 +88,15 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	enc := testenv.NewEncryptionClient(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	serverURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	// usersessions reaches the legacy gram registration migration through a
-	// remotesessions.Service; construct one over the same test database.
-	remoteSessionsService := remotesessions.NewService(
-		logger,
-		tracerProvider,
-		conn,
-		sessionManager,
-		authzEngine,
-		enc,
-		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)),
-		guardianPolicy,
-		audit.NewLogger(),
-		serverURL,
-		cache.NewRedisCacheAdapter(redisClient),
-	)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
 	if revoker != nil {
@@ -138,9 +113,10 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		authzEngine,
 		audit.NewLogger(),
 		guardianPolicy,
+		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
-		remoteSessionsService,
+		ratelimit.NewRedisStore(redisClient),
 	)
 
 	return ctx, &testInstance{
@@ -273,6 +249,28 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed user session client: %w", err)
+	}
+	return row, nil
+}
+
+// seedCimdUserSessionClient inserts a CIMD-resolved user_session_clients row.
+// It has to go through the CIMD upsert rather than seedUserSessionClient
+// because CreateUserSessionClient cannot write client_id_metadata_uri at all --
+// that column is only ever set by the authorize-time CIMD path. documentURL
+// becomes both client_id and client_id_metadata_uri, which the
+// user_session_clients_client_id_metadata_uri_match_check constraint requires.
+func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, documentURL string) (repo.UserSessionClient, error) {
+	t.Helper()
+
+	r := repo.New(conn)
+	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID: issuerID,
+		ClientID:            documentURL,
+		ClientName:          "test-cimd-" + documentURL,
+		RedirectUris:        []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
 	}
 	return row, nil
 }

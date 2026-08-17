@@ -24,6 +24,7 @@ type RemoteSession struct {
 	Resource               pgtype.Text
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -58,6 +59,7 @@ type RemoteSessionIssuer struct {
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
+	RevocationEndpoint                pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
 	ServiceDocumentation              pgtype.Text

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -31,6 +32,7 @@ type RegistryBackend interface {
 
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
+	policy       *guardian.Policy
 	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
 	backend      RegistryBackend
@@ -42,6 +44,7 @@ type RegistryClient struct {
 // NewRegistryClient creates a new registry client.
 func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
 	return &RegistryClient{
+		policy:     guardianPolicy,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		logger:     logger.With(attr.SlogComponent("mcp_registry_client")),
 		backend:    backend,
@@ -59,6 +62,26 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 	}
 }
 
+// WithAllowedCIDRBlocks returns a client whose registry requests may reach the
+// supplied trusted CIDR blocks. Callers must use this only for code-defined,
+// non-user-controlled registries such as the local fixture.
+func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient {
+	if c == nil || c.policy == nil || len(cidrs) == 0 {
+		return c
+	}
+	return &RegistryClient{
+		policy:     c.policy,
+		httpClient: c.policy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAllowedCIDRBlocks(cidrs...)),
+		logger:     c.logger,
+		backend:    c.backend,
+		// Cache keys include the registry URL; share cache entries while changing
+		// only the trusted fixture client's egress policy.
+		listCache:    c.listCache,
+		detailsCache: c.detailsCache,
+		listFlight:   singleflight.Group{},
+	}
+}
+
 // Registry represents an MCP registry endpoint.
 type Registry struct {
 	ID  uuid.UUID
@@ -68,6 +91,28 @@ type Registry struct {
 // ListServersParams contains optional parameters for listing servers.
 type ListServersParams struct {
 	Search *string
+}
+
+// maxRegistryResponseBytes bounds a registry response body. Registry payloads
+// embed full tool definitions with JSON Schemas, so the cap sits well above
+// what real catalogs produce — an oversized response fails loudly rather than
+// truncating into a baffling decode error.
+const maxRegistryResponseBytes = 32 << 20
+
+// readBoundedBody reads a response body up to maxRegistryResponseBytes,
+// reporting an oversized body as a size error rather than as a decode failure
+// on truncated JSON. Shared beyond registry fetches (OAuth metadata probes
+// reuse it), so the error names neither.
+func readBoundedBody(body io.Reader) ([]byte, error) {
+	// Read one byte past the cap so an oversized body is detected as such.
+	data, err := io.ReadAll(io.LimitReader(body, maxRegistryResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	if len(data) > maxRegistryResponseBytes {
+		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxRegistryResponseBytes)
+	}
+	return data, nil
 }
 
 const (
@@ -132,7 +177,35 @@ type serverJSON struct {
 	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
-	Remotes []serverRemoteJSON `json:"remotes"`
+	Remotes    []serverRemoteJSON    `json:"remotes"`
+	Repository *serverRepositoryJSON `json:"repository"`
+	Packages   []serverPackageJSON   `json:"packages"`
+}
+
+type serverRepositoryJSON struct {
+	URL       string `json:"url"`
+	Source    string `json:"source"`
+	Subfolder string `json:"subfolder"`
+}
+
+type serverPackageJSON struct {
+	RegistryType    string `json:"registryType"`
+	RegistryBaseURL string `json:"registryBaseUrl"`
+	Identifier      string `json:"identifier"`
+	Version         string `json:"version"`
+	RuntimeHint     string `json:"runtimeHint"`
+	FileSHA256      string `json:"fileSha256"`
+	Transport       struct {
+		Type string `json:"type"`
+	} `json:"transport"`
+	EnvironmentVariables []serverPackageEnvironmentVariableJSON `json:"environmentVariables"`
+}
+
+type serverPackageEnvironmentVariableJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsSecret    bool   `json:"isSecret"`
+	IsRequired  bool   `json:"isRequired"`
 }
 
 type serverRemoteJSON struct {
@@ -140,6 +213,56 @@ type serverRemoteJSON struct {
 	Type      string                    `json:"type"`
 	Headers   []RemoteHeader            `json:"headers"`
 	Variables map[string]RemoteVariable `json:"variables"`
+}
+
+// toExternalMCPRepository maps the registry's repository declaration, nil in
+// and nil out: a registry that links no repository is the common case, and it
+// must surface as absent rather than as an empty link.
+func toExternalMCPRepository(repository *serverRepositoryJSON) *types.ExternalMCPRepository {
+	if repository == nil || repository.URL == "" {
+		return nil
+	}
+
+	return &types.ExternalMCPRepository{
+		URL:       repository.URL,
+		Source:    conv.PtrEmpty(repository.Source),
+		Subfolder: conv.PtrEmpty(repository.Subfolder),
+	}
+}
+
+// toExternalMCPPackages maps the registry's published packages, dropping
+// entries too incomplete to identify an artifact.
+func toExternalMCPPackages(packages []serverPackageJSON) []*types.ExternalMCPPackage {
+	var out []*types.ExternalMCPPackage
+	for _, entry := range packages {
+		if entry.RegistryType == "" || entry.Identifier == "" || entry.Version == "" {
+			continue
+		}
+		var variables []*types.ExternalMCPPackageEnvironmentVariable
+		for _, variable := range entry.EnvironmentVariables {
+			if variable.Name == "" {
+				continue
+			}
+			variables = append(variables, &types.ExternalMCPPackageEnvironmentVariable{
+				Name:        variable.Name,
+				Description: conv.PtrEmpty(variable.Description),
+				IsSecret:    variable.IsSecret,
+				IsRequired:  variable.IsRequired,
+			})
+		}
+		out = append(out, &types.ExternalMCPPackage{
+			RegistryType:         entry.RegistryType,
+			RegistryBaseURL:      conv.PtrEmpty(entry.RegistryBaseURL),
+			Identifier:           entry.Identifier,
+			Version:              entry.Version,
+			RuntimeHint:          conv.PtrEmpty(entry.RuntimeHint),
+			TransportType:        conv.PtrEmpty(entry.Transport.Type),
+			EnvironmentVariables: variables,
+			FileSha256:           conv.PtrEmpty(entry.FileSHA256),
+		})
+	}
+
+	return out
 }
 
 // RemoteHeader represents a header requirement from the registry.
@@ -400,9 +523,9 @@ func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Req
 		return listResponse{}, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
-		return listResponse{}, fmt.Errorf("read response body: %w", err)
+		return listResponse{}, err
 	}
 
 	var listResp listResponse
@@ -503,6 +626,8 @@ func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types
 		}
 
 		servers = append(servers, &types.ExternalMCPServerEntry{
+			Repository:                          toExternalMCPRepository(s.Server.Repository),
+			Packages:                            toExternalMCPPackages(s.Server.Packages),
 			RegistrySpecifier:                   s.Server.Name,
 			Version:                             s.Server.Version,
 			Description:                         s.Server.Description,
@@ -574,6 +699,9 @@ func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) err
 }
 
 // ServerDetails contains detailed information about an MCP server including connection info.
+// Headers and variables are copied from the selected server-owned remote. Callers
+// must still validate configuration values against these declarations; they must
+// never treat the registry response as permission to accept arbitrary endpoints.
 type ServerDetails struct {
 	Name          string
 	Description   string
@@ -582,6 +710,7 @@ type ServerDetails struct {
 	TransportType externalmcptypes.TransportType
 	Tools         []serverTool
 	Headers       []RemoteHeader
+	Variables     map[string]RemoteVariable
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
@@ -642,7 +771,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, err
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read external mcp server details response: %w", err)
 	}
@@ -665,6 +794,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
 	var headers []RemoteHeader
+	var variables map[string]RemoteVariable
 	remoteIndex := -1 // Use -1 as sentinel to detect when no remote matched
 	for i, remote := range serverResp.Server.Remotes {
 		// Skip remotes not in allowed list (if filter is active)
@@ -678,12 +808,14 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
 			headers = remote.Headers
+			variables = remote.Variables
 			remoteIndex = i
 			break
 		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeSSE
 			headers = remote.Headers
+			variables = remote.Variables
 			remoteIndex = i
 		}
 	}
@@ -712,6 +844,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		TransportType: transportType,
 		Tools:         tools,
 		Headers:       headers,
+		Variables:     variables,
 	}
 
 	// Store in cache on success.

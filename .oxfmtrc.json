@@ -6,6 +6,7 @@
     "**/CHANGELOG.md",
     "**/*.mdx",
     "/.speakeasy/**",
+    "/client/admin/src/routeTree.gen.ts",
     "/client/dashboard/index.html",
     "/client/dashboard/public/external/**",
     "/client/dashboard/src/App.css",

@@ -13,7 +13,6 @@ import {
 } from "@/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { Loader2 } from "lucide-react";
@@ -123,11 +122,8 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const project = useProject();
   const draft = useAssistantDraft();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { data: productFeatures } = useProductFeatures();
   const { hasScope } = useRBAC();
-  const skillsEnabled =
-    productFeatures?.skillsEnabled === true &&
-    hasScope("skill:read", project.id);
+  const skillsEnabled = hasScope("skill:read", project.id);
   const skillMutationsEnabled =
     skillsEnabled && hasScope("project:write", project.id);
   const { theme: resolvedTheme } = useMoonshineConfig();

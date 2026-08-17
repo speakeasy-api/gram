@@ -2,7 +2,6 @@ package risk
 
 import (
 	"context"
-	"encoding/base64"
 	"log/slog"
 	"math"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -74,9 +74,14 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 
 	// Batch-resolve the denormalized attribution (chat id, user ids) for every
 	// finding that carries a well-formed anchor — one Postgres query per anchor
-	// kind, best-effort.
-	messageAttribution := w.chatMessageAttribution(ctx, messages)
-	contentPartAttribution := w.chatContentPartAttribution(ctx, messages)
+	// kind, best-effort. Both reads are bounded to the projects present in the
+	// batch; findings whose project id is unparseable contribute nothing, so
+	// an anchor they carry simply resolves no attribution.
+	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
+		return message.GetProjectId()
+	})
+	messageAttribution := w.chatMessageAttribution(ctx, messages, projectIDs)
+	contentPartAttribution := w.chatContentPartAttribution(ctx, messages, projectIDs)
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
 	for _, message := range messages {
@@ -127,7 +132,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if sum, pepperver, err := w.fingerprinter.HS256([]byte(match)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute global fingerprint", attr.SlogError(err))
 			} else {
-				globalHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				globalHS256 = EncodeFingerprint(sum)
 				pepperVersion = pepperver
 			}
 		}
@@ -137,7 +142,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
-				tenantHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				tenantHS256 = EncodeFingerprint(sum)
 				pepperVersion = pepperver
 			}
 		}
@@ -170,13 +175,22 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		// message_created_at falls back to the finding's own scan time so the
 		// listing sort key is never zero, mirroring the column's DEFAULT for
 		// pre-column rows.
-		var chatID, userID, externalUserID, assistantID string
+		var chatID, userID, externalUserID, assistantID, chatSource, team, userEmail string
 		messageCreatedAt := createdAt.UTC()
+		// Only attribute an anchor that belongs to the finding's own project,
+		// so a wrong or forged anchor id cannot pull another tenant's chat and
+		// user ids into this row. A NULL row project_id (project deleted) or
+		// unparseable finding project id is unverifiable and so gets no
+		// attribution.
+		findingProjectID, findingProjectErr := uuid.Parse(message.GetProjectId())
 		if msgID, err := uuid.Parse(chatMessageID); err == nil {
-			if a, ok := messageAttribution[msgID]; ok {
+			if a, ok := messageAttribution[msgID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
+				chatSource = chat.CanonicalSource(a.ChatSource)
+				team = a.Team
+				userEmail = a.UserEmail
 				if a.AssistantID != uuid.Nil {
 					assistantID = a.AssistantID.String()
 				}
@@ -185,16 +199,15 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 				}
 			}
 		} else if partID, err := uuid.Parse(contentPartID); err == nil {
-			// Only attribute a part that belongs to the finding's own project,
-			// so a wrong or forged anchor id cannot pull another tenant's chat
-			// and user ids into this row. A NULL project_id (project deleted)
-			// is unverifiable and so gets no attribution. The part attribution
-			// query carries no assistant link or message timestamp, so both keep
-			// the fallbacks above.
-			if a, ok := contentPartAttribution[partID]; ok && a.ProjectID.Valid && a.ProjectID.UUID.String() == message.GetProjectId() {
+			// The part attribution query carries no assistant link or message
+			// timestamp, so both keep the fallbacks above.
+			if a, ok := contentPartAttribution[partID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
+				chatSource = chat.CanonicalSource(a.ChatSource)
+				team = a.Team
+				userEmail = a.UserEmail
 			}
 		}
 
@@ -257,6 +270,9 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FalsePositiveAt:          falsePositiveAt,
 			MessageCreatedAt:         messageCreatedAt,
 			AssistantID:              assistantID,
+			ChatSource:               chatSource,
+			Team:                     team,
+			UserEmail:                userEmail,
 			Surface:                  message.GetSurface(),
 			Field:                    message.GetField(),
 			Path:                     message.GetPath(),
@@ -281,19 +297,22 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 }
 
 // chatMessageAttribution batch-fetches the denormalized attribution stamped
-// onto risk_findings rows, keyed by chat message id. Fail-open like the
-// exclusion lookup: message ids that are empty, malformed, or fail to resolve
-// simply get no attribution; a query error logs and enriches nothing rather
-// than dropping or redriving findings.
-func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding) map[uuid.UUID]repo.GetChatMessageAttributionRow {
+// onto risk_findings rows, keyed by chat message id and bounded to the given
+// batch project ids. Fail-open like the exclusion lookup: message ids that are
+// empty, malformed, or fail to resolve simply get no attribution; a query
+// error logs and enriches nothing rather than dropping or redriving findings.
+func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) map[uuid.UUID]repo.GetChatMessageAttributionRow {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetChatMessageId()
 	})
-	if len(ids) == 0 {
+	if len(ids) == 0 || len(projectIDs) == 0 {
 		return nil
 	}
 
-	rows, err := repo.New(w.db).GetChatMessageAttribution(ctx, ids)
+	rows, err := repo.New(w.db).GetChatMessageAttribution(ctx, repo.GetChatMessageAttributionParams{
+		Ids:        ids,
+		ProjectIds: projectIDs,
+	})
 	if err != nil {
 		w.logger.ErrorContext(ctx, "resolve chat message attribution", attr.SlogError(err))
 		return nil
@@ -307,23 +326,14 @@ func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages [
 }
 
 // chatContentPartAttribution batch-fetches denormalized attribution for
-// content-part findings, keyed by content part id. It resolves via the content
-// part's parent message when present and falls back to the chat.
-func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messages []*riskv1.Finding) map[uuid.UUID]repo.GetChatContentPartAttributionRow {
+// content-part findings, keyed by content part id and bounded to the given
+// batch project ids. It resolves via the content part's parent message when
+// present and falls back to the chat.
+func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) map[uuid.UUID]repo.GetChatContentPartAttributionRow {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetContentPartId()
 	})
-	if len(ids) == 0 {
-		return nil
-	}
-
-	// Bound the read to the projects present in this batch. Findings whose
-	// project id is unparseable contribute nothing, so a part they anchor to
-	// simply resolves no attribution.
-	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
-		return message.GetProjectId()
-	})
-	if len(projectIDs) == 0 {
+	if len(ids) == 0 || len(projectIDs) == 0 {
 		return nil
 	}
 

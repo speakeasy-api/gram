@@ -147,6 +147,14 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Best-effort upstream revocation, post-commit. Same rationale as the
+	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
+	s.revoker.RevokeDetached(ctx, RevokedCredentials{
+		RemoteSessionClientID: revoked.RemoteSessionClientID,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+	})
+
 	return nil
 }
 
@@ -191,15 +199,25 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 
-	// Recover the session's RFC 8707 audience binding from the client's
-	// attached MCP servers so the refreshed token keeps it.
-	mcpRows, err := repo.New(s.db).ListOrganizationMcpServersForClient(ctx, row.RemoteSession.RemoteSessionClientID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
+	// Sessions minted since the resource column exists carry their RFC 8707
+	// binding; RefreshNow replays it. Only legacy NULL rows need the
+	// derived-from-attached-MCP-servers fallback.
+	var fallbackResource string
+	if !row.RemoteSession.Resource.Valid || row.RemoteSession.Resource.String == "" {
+		fallbackResource, err = s.refresher.FallbackResourceForClient(ctx, row.RemoteSession.RemoteSessionClientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "derive fallback resource").LogError(ctx, logger)
+		}
 	}
 
-	// Refresh on the pool — the upstream token POST must not run inside a tx.
-	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, clientUpstreamResource(mcpRows))
+	// Refresh through the shared single-flighted primitive — the same lock the
+	// lazy MCP path and the scheduled sweep hold, so an admin click can never
+	// replay a refresh token a concurrent refresh already consumed. Two
+	// behavior notes versus the old direct call: a concurrent winner's tokens
+	// are adopted instead of double-POSTing, and a definitive upstream
+	// invalid_grant clears only the dead refresh grant so a still-working
+	// access token remains connected.
+	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, fallbackResource)
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
@@ -209,6 +227,10 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "refresh organization admin remote session").LogError(ctx, logger)
 	}
+	if result.Outcome == RefreshOutcomeSessionInactive {
+		return nil, oops.E(oops.CodeNotFound, nil, "remote session was revoked while refreshing").LogWarn(ctx, logger)
+	}
+	updated := result.Session
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -274,10 +296,11 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgsessi
 	}
 	client := clientRow.RemoteSessionClient
 
-	revokedCount, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, client.ID)
+	revoked, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, client.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke all remote sessions").LogError(ctx, logger)
 	}
+	revokedCount := int64(len(revoked))
 
 	if err := s.auditLogger.LogRemoteSessionClientRevokeSessions(ctx, dbtx, audit.LogRemoteSessionClientRevokeSessionsEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -295,6 +318,11 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgsessi
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Best-effort upstream revocation, post-commit and bounded. RevokedCount
+	// above reports the local tombstones, which are what the caller asked for
+	// and what has definitely happened; the upstream results land in metrics.
+	s.revoker.RevokeAllDetached(ctx, revokedCredentials(revoked))
 
 	return &orgsessionsgen.RevokeAllRemoteSessionsResult{RevokedCount: int(revokedCount)}, nil
 }

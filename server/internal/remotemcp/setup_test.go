@@ -76,7 +76,7 @@ type testInstance struct {
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	// servicePolicy blocks loopback / private ranges so validateURL exercises
+	// servicePolicy blocks loopback / private ranges so ValidateHTTPURL exercises
 	// the real production CIDR set, and uses a mock resolver so hostname-based
 	// test cases are deterministic.
 	servicePolicy := guardian.NewDefaultPolicy(
@@ -110,12 +110,9 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 
 	enc := testenv.NewEncryptionClient(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

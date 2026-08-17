@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -35,6 +36,13 @@ const (
 	mcpAuthFlowMaxBodyBytes = 16 * 1024
 	mcpAuthFlowTTL          = 15 * time.Minute
 	mcpAuthEventKind        = "assistant_mcp_auth"
+	mcpOAuthIssuerMaxLength = 500
+	mcpOAuthRegistrationTTL = 45 * time.Second
+	mcpOAuthRegistrationMax = 30 * time.Second
+	mcpOAuthPersistenceMax  = 5 * time.Second
+	mcpOAuthCoordinationMax = mcpOAuthRegistrationTTL + mcpOAuthRegistrationMax + mcpOAuthPersistenceMax
+	mcpOAuthPollMin         = 100 * time.Millisecond
+	mcpOAuthPollMax         = time.Second
 
 	mcpAuthStatusSuccess = "success"
 	mcpAuthStatusFailed  = "failed"
@@ -61,8 +69,23 @@ type mcpAuthClientRegistrationRequest struct {
 }
 
 type mcpAuthClientRegistrationResponse struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
+	ClientID              string `json:"client_id"`
+	ClientSecret          string `json:"client_secret"`
+	ClientSecretExpiresAt int64  `json:"client_secret_expires_at"`
+}
+
+type mcpAuthClientCredentials struct {
+	ClientID              string
+	ClientSecretEncrypted string
+}
+
+type mcpOAuthTokenError struct {
+	Code       string
+	StatusCode int
+}
+
+func (e *mcpOAuthTokenError) Error() string {
+	return fmt.Sprintf("token request failed: status=%d error=%s", e.StatusCode, e.Code)
 }
 
 type mcpAuthEventPayload struct {
@@ -128,11 +151,11 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeBadRequest, err, "mcp auth flow only supports hosted MCP URLs")
 	}
 
-	flowID := uuid.NewString()
+	attemptID := uuid.NewString()
 	if s.core.serverURL == nil {
 		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
 	}
-	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", flowID, "oauth", "callback").String()
+	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", principal.AssistantID.String(), "oauth", "callback").String()
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").LogError(ctx, s.logger)
@@ -146,40 +169,48 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "discover mcp authorization server metadata").LogError(ctx, s.logger)
 	}
-	if metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" || metadata.RegistrationEndpoint == "" {
+	if metadata.Issuer == "" || metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" || metadata.RegistrationEndpoint == "" {
 		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").LogError(ctx, s.logger)
 	}
-
-	registration, err := s.registerMCPAuthClient(ctx, metadata.RegistrationEndpoint, redirectURI)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "register assistant mcp oauth client").LogError(ctx, s.logger)
+	if len(metadata.Issuer) > mcpOAuthIssuerMaxLength {
+		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server issuer is too long").LogError(ctx, s.logger)
 	}
-	encryptedSecret, err := s.core.encryptionClient.Encrypt([]byte(registration.ClientSecret))
+
+	credentials, err := s.getOrRegisterMCPAuthClient(
+		ctx,
+		projectID,
+		principal.AssistantID,
+		metadata.Issuer,
+		metadata.RegistrationEndpoint,
+		redirectURI,
+	)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt mcp client secret").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "resolve assistant mcp oauth client").LogError(ctx, s.logger)
 	}
 
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
-		OrgID:         claims.OrgID,
-		ProjectID:     projectID,
-		UserID:        claims.UserID,
-		AssistantID:   principal.AssistantID,
-		ThreadID:      threadID,
-		FlowID:        flowID,
-		ServerID:      req.ServerID,
-		McpURL:        mcpURL.String(),
-		ClientID:      registration.ClientID,
-		ClientSecret:  encryptedSecret,
-		RedirectURI:   redirectURI,
-		CodeVerifier:  encryptedVerifier,
-		TokenEndpoint: metadata.TokenEndpoint,
-		TTL:           mcpAuthFlowTTL,
+		OrgID:             claims.OrgID,
+		ProjectID:         projectID,
+		UserID:            claims.UserID,
+		AssistantID:       principal.AssistantID,
+		ThreadID:          threadID,
+		AttemptID:         attemptID,
+		FlowID:            principal.AssistantID.String(),
+		ServerID:          req.ServerID,
+		McpURL:            mcpURL.String(),
+		ClientID:          credentials.ClientID,
+		ClientSecret:      credentials.ClientSecretEncrypted,
+		RedirectURI:       redirectURI,
+		CodeVerifier:      encryptedVerifier,
+		TokenEndpoint:     metadata.TokenEndpoint,
+		OAuthServerIssuer: metadata.Issuer,
+		TTL:               mcpAuthFlowTTL,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").LogError(ctx, s.logger)
 	}
 
-	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, registration.ClientID, redirectURI, state, codeChallenge)
+	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, credentials.ClientID, redirectURI, state, codeChallenge)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build mcp auth url").LogError(ctx, s.logger)
 	}
@@ -200,13 +231,13 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 
 func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	flowID := chi.URLParam(r, "id")
+	callbackID := chi.URLParam(r, "id")
 	state := r.URL.Query().Get("state")
 	claims, err := s.core.assistantTokens.ValidateMCPAuthFlow(state)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp auth callback state").LogError(ctx, s.logger)
 	}
-	if claims.FlowID != flowID {
+	if claims.FlowID != callbackID {
 		return oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogError(ctx, s.logger)
 	}
 
@@ -252,6 +283,10 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		payload.ErrorDescription = "authorization code missing from callback"
 	default:
 		if err := s.consumeMCPAuthGrant(ctx, claims, code); err != nil {
+			var tokenErr *mcpOAuthTokenError
+			if errors.As(err, &tokenErr) && tokenErr.Code == "invalid_client" {
+				s.invalidateMCPAuthClient(ctx, projectID, assistantID, claims.OAuthServerIssuer, claims.ClientID)
+			}
 			payload.Status = mcpAuthStatusFailed
 			payload.Error = "invalid_grant"
 			payload.ErrorDescription = "failed to consume authorization grant"
@@ -264,7 +299,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	eventCreated, err := s.enqueueMCPAuthEvent(ctx, projectID, assistantID, threadID, flowID, payload)
+	eventCreated, err := s.enqueueMCPAuthEvent(ctx, projectID, assistantID, threadID, mcpAuthAttemptID(claims), payload)
 	if err != nil {
 		return err
 	}
@@ -278,6 +313,13 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "<!doctype html><title>Authentication complete</title><p>Authentication complete. You can close this window.</p>")
 	return nil
+}
+
+func mcpAuthAttemptID(claims *assistanttokens.MCPAuthFlowClaims) string {
+	if claims.ID != "" {
+		return claims.ID
+	}
+	return claims.FlowID
 }
 
 func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
@@ -356,9 +398,220 @@ func decodeMCPAuthTurn(ctx context.Context, logger *slog.Logger, event assistant
 	return b.String(), true
 }
 
-func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectURI string) (mcpAuthClientRegistrationResponse, error) {
+func (s *Service) getOrRegisterMCPAuthClient(
+	ctx context.Context,
+	projectID uuid.UUID,
+	assistantID uuid.UUID,
+	oauthServerIssuer string,
+	registrationEndpoint string,
+	redirectURI string,
+) (mcpAuthClientCredentials, error) {
+	queries := assistantrepo.New(s.core.db)
+	coordinationCtx, cancel := context.WithTimeout(ctx, mcpOAuthCoordinationMax)
+	defer cancel()
+	pollDelay := mcpOAuthPollMin
+	claimLease := pgtype.Interval{
+		Microseconds: mcpOAuthRegistrationTTL.Microseconds(),
+		Days:         0,
+		Months:       0,
+		Valid:        true,
+	}
+
+	for {
+		now := time.Now()
+		usableAfter := pgtype.Timestamptz{
+			Time:             now.Add(mcpAuthFlowTTL),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
+		}
+		existing, err := queries.GetAssistantMCPOAuthClient(coordinationCtx, assistantrepo.GetAssistantMCPOAuthClientParams{
+			ProjectID:         projectID,
+			AssistantID:       assistantID,
+			OauthServerIssuer: oauthServerIssuer,
+			RedirectUri:       redirectURI,
+			UsableAfter:       usableAfter,
+			ClaimLease:        claimLease,
+		})
+		if err == nil && existing.Usable.Bool {
+			return mcpAuthClientCredentials{
+				ClientID:              existing.ClientID.String,
+				ClientSecretEncrypted: existing.ClientSecretEncrypted.String,
+			}, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			if err != nil {
+				return mcpAuthClientCredentials{}, fmt.Errorf("get assistant mcp oauth client: %w", err)
+			}
+		}
+
+		if errors.Is(err, pgx.ErrNoRows) || existing.Claimable.Bool {
+			registrationOwner := uuid.New()
+			claimed, err := queries.ClaimAssistantMCPOAuthClientRegistration(coordinationCtx, assistantrepo.ClaimAssistantMCPOAuthClientRegistrationParams{
+				ProjectID:         projectID,
+				AssistantID:       assistantID,
+				OauthServerIssuer: oauthServerIssuer,
+				RedirectUri:       redirectURI,
+				RegistrationOwner: uuid.NullUUID{UUID: registrationOwner, Valid: true},
+				ClaimLease:        claimLease,
+				UsableAfter:       usableAfter,
+			})
+			if err != nil {
+				return mcpAuthClientCredentials{}, fmt.Errorf("claim assistant mcp oauth client registration: %w", err)
+			}
+			if claimed == 1 {
+				return s.completeMCPAuthClientRegistration(
+					coordinationCtx,
+					queries,
+					projectID,
+					assistantID,
+					oauthServerIssuer,
+					registrationOwner,
+					registrationEndpoint,
+					redirectURI,
+				)
+			}
+		}
+
+		poll := time.NewTimer(mcpOAuthPollDelay(pollDelay))
+		select {
+		case <-coordinationCtx.Done():
+			if !poll.Stop() {
+				select {
+				case <-poll.C:
+				default:
+				}
+			}
+			return mcpAuthClientCredentials{}, fmt.Errorf("wait for assistant mcp oauth client registration: %w", coordinationCtx.Err())
+		case <-poll.C:
+		}
+		pollDelay = min(pollDelay*2, mcpOAuthPollMax)
+	}
+}
+
+func mcpOAuthPollDelay(base time.Duration) time.Duration {
+	var randomByte [1]byte
+	if _, err := rand.Read(randomByte[:]); err != nil {
+		return base
+	}
+	return base/2 + time.Duration(randomByte[0])*base/(2*255)
+}
+
+func (s *Service) completeMCPAuthClientRegistration(
+	ctx context.Context,
+	queries *assistantrepo.Queries,
+	projectID uuid.UUID,
+	assistantID uuid.UUID,
+	oauthServerIssuer string,
+	registrationOwner uuid.UUID,
+	registrationEndpoint string,
+	redirectURI string,
+) (mcpAuthClientCredentials, error) {
+	registrationCtx, cancel := context.WithTimeout(ctx, mcpOAuthRegistrationMax)
+	registration, err := s.registerMCPAuthClient(
+		registrationCtx,
+		registrationEndpoint,
+		redirectURI,
+		"Gram Assistant "+assistantID.String(),
+	)
+	cancel()
+	if err != nil {
+		s.abandonMCPAuthClientRegistration(ctx, queries, projectID, assistantID, oauthServerIssuer, registrationOwner)
+		return mcpAuthClientCredentials{}, err
+	}
+	if registration.ClientSecretExpiresAt < 0 {
+		s.abandonMCPAuthClientRegistration(ctx, queries, projectID, assistantID, oauthServerIssuer, registrationOwner)
+		return mcpAuthClientCredentials{}, fmt.Errorf("registration response has invalid client_secret_expires_at")
+	}
+	if registration.ClientSecretExpiresAt > 0 && !time.Unix(registration.ClientSecretExpiresAt, 0).After(time.Now().Add(mcpAuthFlowTTL)) {
+		s.abandonMCPAuthClientRegistration(ctx, queries, projectID, assistantID, oauthServerIssuer, registrationOwner)
+		return mcpAuthClientCredentials{}, fmt.Errorf("registration response client secret expires before the authorization flow")
+	}
+
+	clientSecretEncrypted, err := s.core.encryptionClient.Encrypt([]byte(registration.ClientSecret))
+	if err != nil {
+		s.abandonMCPAuthClientRegistration(ctx, queries, projectID, assistantID, oauthServerIssuer, registrationOwner)
+		return mcpAuthClientCredentials{}, fmt.Errorf("encrypt mcp client secret: %w", err)
+	}
+	clientSecretExpiresAt := pgtype.Timestamptz{
+		Time:             time.Time{},
+		InfinityModifier: pgtype.Finite,
+		Valid:            false,
+	}
+	if registration.ClientSecretExpiresAt > 0 {
+		clientSecretExpiresAt = pgtype.Timestamptz{
+			Time:             time.Unix(registration.ClientSecretExpiresAt, 0),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
+		}
+	}
+	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
+	defer persistenceCancel()
+	completed, err := queries.CompleteAssistantMCPOAuthClientRegistration(persistenceCtx, assistantrepo.CompleteAssistantMCPOAuthClientRegistrationParams{
+		ClientID:              pgtype.Text{String: registration.ClientID, Valid: true},
+		ClientSecretEncrypted: pgtype.Text{String: clientSecretEncrypted, Valid: true},
+		ClientSecretExpiresAt: clientSecretExpiresAt,
+		ProjectID:             projectID,
+		AssistantID:           assistantID,
+		OauthServerIssuer:     oauthServerIssuer,
+		RegistrationOwner:     uuid.NullUUID{UUID: registrationOwner, Valid: true},
+	})
+	if err != nil {
+		s.abandonMCPAuthClientRegistration(ctx, queries, projectID, assistantID, oauthServerIssuer, registrationOwner)
+		return mcpAuthClientCredentials{}, fmt.Errorf("complete assistant mcp oauth client registration: %w", err)
+	}
+	if completed != 1 {
+		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp oauth client registration lease was lost")
+	}
+
+	return mcpAuthClientCredentials{
+		ClientID:              registration.ClientID,
+		ClientSecretEncrypted: clientSecretEncrypted,
+	}, nil
+}
+
+func (s *Service) abandonMCPAuthClientRegistration(
+	ctx context.Context,
+	queries *assistantrepo.Queries,
+	projectID uuid.UUID,
+	assistantID uuid.UUID,
+	oauthServerIssuer string,
+	registrationOwner uuid.UUID,
+) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+
+	err := queries.AbandonAssistantMCPOAuthClientRegistration(cleanupCtx, assistantrepo.AbandonAssistantMCPOAuthClientRegistrationParams{
+		ProjectID:         projectID,
+		AssistantID:       assistantID,
+		OauthServerIssuer: oauthServerIssuer,
+		RegistrationOwner: uuid.NullUUID{UUID: registrationOwner, Valid: true},
+	})
+	if err != nil {
+		s.logger.WarnContext(cleanupCtx, "failed to release assistant mcp oauth client registration claim", attr.SlogError(err))
+	}
+}
+
+func (s *Service) invalidateMCPAuthClient(ctx context.Context, projectID, assistantID uuid.UUID, oauthServerIssuer, clientID string) {
+	if oauthServerIssuer == "" || clientID == "" {
+		return
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
+	defer cancel()
+
+	err := assistantrepo.New(s.core.db).InvalidateAssistantMCPOAuthClient(cleanupCtx, assistantrepo.InvalidateAssistantMCPOAuthClientParams{
+		ProjectID:         projectID,
+		AssistantID:       assistantID,
+		OauthServerIssuer: oauthServerIssuer,
+		ClientID:          pgtype.Text{String: clientID, Valid: true},
+	})
+	if err != nil {
+		s.logger.WarnContext(cleanupCtx, "failed to invalidate assistant mcp oauth client", attr.SlogError(err))
+	}
+}
+
+func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectURI, clientName string) (mcpAuthClientRegistrationResponse, error) {
 	payload := mcpAuthClientRegistrationRequest{
-		ClientName:              "Gram Assistant MCP Auth",
+		ClientName:              clientName,
 		RedirectURIs:            []string{redirectURI},
 		GrantTypes:              []string{"authorization_code"},
 		ResponseTypes:           []string{"code"},
@@ -373,7 +626,7 @@ func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectU
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("build registration request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.core.guardianPolicy.Client(guardian.WithDefaultRetryConfig()).Do(req)
+	resp, err := s.core.guardianPolicy.Client().Do(req)
 	if err != nil {
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("send registration request: %w", err)
 	}
@@ -438,6 +691,12 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 		return fmt.Errorf("read token response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var tokenError struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &tokenError) == nil && tokenError.Error != "" {
+			return &mcpOAuthTokenError{Code: tokenError.Error, StatusCode: resp.StatusCode}
+		}
 		return fmt.Errorf("token request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil

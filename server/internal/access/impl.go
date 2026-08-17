@@ -267,6 +267,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -539,7 +540,6 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -618,6 +618,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
+		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
 	}
 }
 
@@ -760,15 +761,17 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
@@ -961,7 +964,18 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		attr.UserID(authCtx.UserID),
 	)
 
-	skipPagination := payload.Resolved != nil
+	pgQueries := repo.New(s.db)
+	var resolvedChallengeIDs []string
+	if payload.Resolved != nil {
+		ids, err := pgQueries.ListRetainedResolvedChallengeIDs(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resolved challenge ids").LogError(ctx, s.logger)
+		}
+		if *payload.Resolved && len(ids) == 0 {
+			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
+		}
+		resolvedChallengeIDs = ids
+	}
 
 	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
 	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
@@ -969,39 +983,33 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		return nil, err
 	}
 
-	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
-		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
-		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
-		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
+	filters := chrepo.ChallengeBucketFilters{
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
+		Resolved:             payload.Resolved,
+		ResolvedChallengeIDs: resolvedChallengeIDs,
+		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
+		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
 	chQueries := chrepo.New(s.chConn)
 
-	var total uint64
-	if !skipPagination {
-		count, err := chQueries.CountChallengeBuckets(ctx, filters)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").LogError(ctx, s.logger)
-		}
-		if count == 0 {
-			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
-		}
-		total = count
-	}
-
-	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
+	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(buckets) == 0 {
-		return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: int(total)}, nil
+		return &gen.ListChallengeBucketsResult{
+			Buckets: []*gen.ChallengeBucket{},
+			Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
+		}, nil
 	}
 
 	// Batch-lookup resolutions from PG using all challenge IDs across buckets.
@@ -1010,7 +1018,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		allChallengeIDs = append(allChallengeIDs, b.ChallengeIDs...)
 	}
 
-	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+	resolutions, err := pgQueries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeIds:   allChallengeIDs,
 	})
@@ -1020,28 +1028,6 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
 		resolutionMap[r.ChallengeID] = r
-	}
-
-	// Apply resolved filter post-join if requested, then paginate in Go.
-	if payload.Resolved != nil {
-		wantResolved := *payload.Resolved
-		filtered := buckets[:0]
-		for _, b := range buckets {
-			_, hasResolution := resolutionMap[b.ID]
-			if hasResolution == wantResolved {
-				filtered = append(filtered, b)
-			}
-		}
-		buckets = filtered
-		total = uint64(len(buckets))
-		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
-		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
-		if offset >= total {
-			buckets = nil
-		} else {
-			end := min(offset+limit, total)
-			buckets = buckets[offset:end]
-		}
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1141,7 +1127,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	return &gen.ListChallengeBucketsResult{
 		Buckets: result,
-		Total:   int(total),
+		Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
 	}, nil
 }
 
@@ -1268,13 +1254,13 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
-	// Get list of org admin emails
-	adminEmails, err := repo.New(s.db).ListOrgAdminEmails(ctx, ac.ActiveOrganizationID)
+	// Get active organization administrators.
+	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list org admin emails").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
 	}
 
-	if len(adminEmails) == 0 {
+	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
 		return &gen.RequestAccessResult{SentToCount: 0}, nil
 	}
@@ -1302,15 +1288,15 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	// Send emails to all admins
 	sentCount := 0
-	for _, adminEmail := range adminEmails {
-		if adminEmail == "" {
+	for _, admin := range admins {
+		if admin.Email == "" {
 			continue
 		}
-		if err := s.email.Send(ctx, adminEmail, tmpl); err != nil {
+		if err := s.email.Send(ctx, admin.Email, tmpl); err != nil {
 			// Log but don't fail the entire request if one email fails
 			logger.WarnContext(ctx, "failed to send access request email",
 				attr.SlogError(err),
-				attr.SlogAccessRequestRecipient(adminEmail),
+				attr.SlogAccessRequestRecipient(admin.Email),
 			)
 			continue
 		}
@@ -1323,7 +1309,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	logger.InfoContext(ctx, "access request emails sent",
 		attr.SlogAccessRequestSentCount(sentCount),
-		attr.SlogAccessRequestAdminCount(len(adminEmails)),
+		attr.SlogAccessRequestAdminCount(len(admins)),
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 

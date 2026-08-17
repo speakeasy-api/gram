@@ -20,12 +20,12 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   logs: "Observe",
   employees: "Observe",
   // Secure
+  watchdog: "Secure",
   "risk-overview": "Secure",
   "risk-policies": "Secure",
   "risk-events": "Secure",
   "shadow-mcp": "Secure",
   "request-access": "Secure",
-  "approval-requests": "Secure",
   "detection-rules": "Secure",
   // Connect
   sources: "Connect",

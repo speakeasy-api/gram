@@ -1,5 +1,311 @@
 # dashboard
 
+## 0.108.0
+
+### Minor Changes
+
+- ed97a31: The MCP evidence dossier gains three deterministic sources. The assembler now
+  consults the code host about a package's declared source repository (stars,
+  forks, contributors, commit recency, archived status), asks OSV.dev which
+  published vulnerability advisories name the package, and reads the domain
+  registry's registration record for a remote server's registrable domain.
+  Package registries also surface their declared repository and homepage URLs.
+  Each source follows the dossier's existing contract — found, not-found, and
+  could-not-look stay distinct, with failures recorded as gaps — and the
+  approval page renders the new facts in the evidence panel, including a
+  dedicated advisories group where checked-and-clean is shown as a finding
+  rather than an absence.
+- 798360b: A shadow-MCP block link now redeems into the MCP approval workflow: the blocked employee's ask attaches as a requester on the server's single review — deduplicated by canonical URL, evidence gathered — instead of minting a per-user bypass request. The redemption endpoint reports what the token turned into, keeps the legacy bypass request only for identity-only servers and organizations without the approval feature, and the standalone Approval Requests review page retires — the Shadow MCP servers table is the one review surface. The command palette surfaces pending access requests in its place.
+- 798360b: Adds the MCP approval review surface, unified into the Shadow MCP servers table: every server row carries its review state, and each server's page renders the gathered evidence grouped by the question an admin is actually asking — who am I trusting, what is it asking me to hand over, what does it say it can do, is it real and maintained, are we already exposed, and what has been decided before. Every not-yet-gathered group renders as an explicitly unknown state rather than an empty one, and decisions are made in place with a required rationale.
+- 523d6b1: Allow risk policies to be disabled and re-enabled from Policy Center and the policy detail page, so operators can pause enforcement without deleting the policy.
+- 798360b: Unify Shadow MCP server pages with the MCP approval flow. The server detail page absorbs the approval review (evidence, requesters, decision history, decide form) and every allow/deny travels one write path: a recorded approval decision, opened on the spot for servers with no pending request. The standalone allow-rule/block/unblock/bypass action sheets are retired, approval queue rows and command-palette results land on the server page, and request links for URL targets redirect there.
+- 798360b: The Shadow MCP page becomes one servers table: the inventory list now unions in review-only targets (requested-but-unobserved URLs and stdio commands, marked by a new target_kind field) on the first page, and the separate Access Requests tab is gone. Every row carries its review state with pending decisions sorted first and filterable; URL rows open the server page, stdio rows open the review sheet.
+
+### Patch Changes
+
+- 2d5e6bb: Platform admins can now put a demoted enterprise trial back on. Until now the
+  expiry sweeper's demotion was one-way: it dropped the organization to the free
+  tier, put it back behind the book-a-demo gate and switched off its model
+  provider keys. Only the keys could be undone, one at a time, through the
+  existing admin action for enabling a key; the tier and the gate had no undo at
+  all. An operator who wanted to give a customer a second run had no way to do it,
+  and extending the trial was not the same thing, because an extension moves an
+  end date and leaves the free tier exactly where the demotion left it.
+
+  Re-arming restores all of it at once: the account type the trial grants, the
+  whitelist flag, every model provider key the demotion switched off, and a fresh
+  run of the length the operator asks for, capped at a year and counted from now. The end date is
+  counted from now rather than added to the old one on purpose, because a demoted
+  trial's end date is already in the past and adding to it could land in the past
+  again, which would leave the sweeper free to demote the organization a second
+  time within the hour.
+
+  One caveat on the keys: this is the deployed behaviour. A local development
+  stack has no OpenRouter account behind it, and its stand-in client accepts the
+  refresh without doing anything, so a re-arm there reports success and restores
+  the tier while both key rows stay switched off. Enabling a key locally has the
+  same gap.
+
+  The keys come back up before any of the database changes are committed. That
+  ordering is the opposite of the demotion's, and it is deliberate: if the model
+  provider refuses, the organization stays demoted and on the free tier, and the
+  operator can retry. Any key that came back up before the refusal stays up, which
+  is what makes the retry cheap. The alternative would advertise a running trial
+  to a customer whose keys were still switched off.
+
+  Only a demoted trial can be re-armed. A trial that is already running is
+  rejected, so re-arm cannot be used as an extend that ignores the extension
+  rules. An organization id that matches nothing is reported as not found, the
+  same answer the disable, enable and extend actions already give, so a mistyped
+  id does not send an operator off to inspect a trial that was never the problem.
+
+  The activity log reads the new entry as "restarted enterprise trial", credited
+  to the Speakeasy team rather than to the operator who ran it, which is the same
+  label the log already gives a Speakeasy action inside a customer's
+  organization. The admin dashboard row action follows.
+
+- 7da1436: The activity log can now record and render a restarted enterprise trial. The
+  entry reads "restarted enterprise trial" and is credited to the Speakeasy team
+  rather than to the individual operator, which is the label the log already gives
+  a Speakeasy action taken inside a customer's organization.
+
+  Nothing produces the entry yet. The admin action that restarts a trial follows
+  separately, and this change is the log's half of it: the action name, the writer
+  that records it, and the phrase the dashboard shows for it.
+
+  The collective "Speakeasy Team" label now has one definition instead of two.
+  The activity log applies it on read, by matching an actor against the members of
+  the Speakeasy organization. A writer that already knows it is acting as staff
+  has to apply the same label when it records the entry, because the read-time
+  mask can only recognise an actor that has a Gram user id, and an operator
+  authenticated through the admin app does not have one. Both paths now read the
+  label from the same constant, so one action cannot appear under two different
+  names depending on which path wrote it.
+
+- bbaf839: Registers the MCP approval resource type in the role editor's scope picker so the new mcp_approval:read and mcp_approval:decide permissions can be discovered and granted.
+- 5016dca: Org home now opens with a welcome banner offering three first moves: enter the
+  demo org, get started in a project, or start the enterprise rollout. The third
+  card needs an enterprise admin; the other two are open to any member. The
+  header's "Finish setup" banner stands down while the banner shows. It appears
+  for everyone for now; which orgs count as new is follow-up work.
+
+  Below it, the project search, view toggle, and Add New move into the column they
+  act on, and the two rails cap their height and scroll.
+
+## 0.107.1
+
+### Patch Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+- 5737ee7: Add three browser hardening headers to the dashboard HTML responses: `Cross-Origin-Resource-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin`, and `X-Permitted-Cross-Domain-Policies: none`. A penetration test reported all three as missing. Each one is set per location, because an `add_header` inside an nginx location discards every `add_header` inherited from the server block. Static assets under `/assets` and `/external` keep `Access-Control-Allow-Origin: *` and receive no cross-origin policy, so cross-origin image loads continue to work.
+- dda81c1: Land `/explore-demo` on the demo org's default project instead of org home, so new visitors see sample data without having to click into the project themselves.
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- 1fb8f18: Fix "Suggest with AI" exclusion suggestions being rejected as invalid regexes. The exclusion form now validates regex criteria with the same RE2 engine the platform matches with, so valid suggestions like `(?i)`-prefixed patterns save instead of failing with "Invalid regex pattern", server-side validation errors surface in the form, and a suggestion that fails validation is retried once with corrective feedback before falling back.
+
+## 0.107.0
+
+### Minor Changes
+
+- ae7f01b: The assistant detail panel is now fully configurable and observable. Overview settings (name, model, concurrency, warm TTL) are editable in place. The Sessions tab shows aggregate stats (sessions, messages, cost, tokens) over a selectable time range defaulting to the last 30 days, with per-session cost in the list. Triggers expand in place to show their recent traffic via the new `triggers.listEvents` endpoint, with each dispatched event linking to the conversation it was routed to.
+- ca0f1c1: Encrypt platform OpenRouter API keys at rest. New keys are written with an
+  AES-256-GCM encrypted copy alongside the plaintext column (dual-write during
+  the expand phase), every read path prefers the encrypted copy and lazily
+  records ciphertext for legacy plaintext rows, and the credits monitoring
+  activity decrypts inside the activity boundary. A new platform-admin
+  `adminOpenRouterKeys` service and dashboard page list every organization's
+  keys with their credit limit, live usage, and encryption state, with actions
+  to encrypt (verify the ciphertext, then clear the plaintext), enable, and
+  disable a key. Enable and disable actions are audit logged against the owning
+  organization; the encrypt action is internal storage hygiene and is not
+  surfaced in customer-visible audit logs.
+
+### Patch Changes
+
+- e3bb138: Render `@tool` and `/skill` references in the assistant composer as colored
+  chips, and make the composer a contenteditable so they can be real inline
+  elements rather than paint under a transparent textarea.
+
+  A textarea holds one flat string, so a reference inside a draft could only be
+  mirrored underneath the input — and anything painted there that occupied width
+  slid the caret off the glyphs after it. The input is now a `plaintext-only`
+  contenteditable whose chips are `contentEditable={false}` spans with real
+  padding, so the browser places the caret around them. The draft still lives on
+  the runtime as a string: the element reports edits as text and exposes
+  `value` / `selectionStart` / `selectionEnd` / `setSelectionRange`, so the
+  mention autocomplete, prompt recall, and dictation are unchanged.
+
+  Skills move into the draft with them. Picking a skill writes its `/name` token
+  into the text (and focuses the input, caret at the end) instead of only
+  toggling hidden state, and the composer derives the attached-skill set back out
+  of the draft — so deleting the token detaches the skill, and a message carrying
+  nothing but a reference can be sent. Tool names containing hyphens now match at
+  all; hyphenated source-slug names previously stopped at the first hyphen and
+  resolved to nothing. The badge rows above the input are gone, since the tokens
+  name themselves, and sent messages render the same chips in a bordered
+  white bubble.
+
+- c66958e: Agent sessions routed through LiteLLM keep their LiteLLM association even when the agent's own hook stream captures the transcript: they match the LiteLLM platform filter and display as "<Client> via LiteLLM" in the session list and detail views.
+- d893bcb: Fix natural-language input in the dashboard time range picker. The picker's
+  "type any date" parsing POSTs to `/chat/completions`, which requires both
+  `Gram-Session` and `Gram-Project` headers, but most pages rendered the picker
+  without a `projectSlug`, so the request 401ed and parsing silently did nothing.
+  The `DashboardTimeRangePicker` wrapper now injects the request project slug
+  via `useProjectSlugForRequests()` (callers can still override it), fixing the
+  project home, MCP overview, security overview, watchdog, and risk overview
+  pages in one place — and org-scoped pages like Billing through the same
+  default-project fallback every other SDK request uses.
+
+## 0.106.0
+
+### Minor Changes
+
+- 6f8d740: Configure which OAuth Client ID Metadata Document clients an MCP server accepts, directly from its authentication settings: choose between Gram's verified client catalog (viewable inline), any spec-valid client, or none at all, and allow additional document URLs beyond the catalog. Custom URLs can be verified before they are added, confirming the document is reachable and valid and naming the client it belongs to.
+- 8ae2c53: Revoke Remote Session credentials upstream via RFC 7009. Remote session issuers gain a `revocation_endpoint`, discovered from the issuer's RFC 8414 metadata document during issuer refresh. When a Remote Session is revoked, Gram now posts the stored token to the issuer's revocation endpoint so the upstream authorization server drops it, instead of leaving a live access/refresh pair that keeps working elsewhere until it expires on its own clock.
+
+  This covers every path that ends a session: revoking one session, revoking all of a client's sessions, deleting a client, which cascades a soft-delete to its sessions, and the consent screen's per-provider "Disconnect" — the one an end user drives rather than an admin. Batches run under bounded concurrency and a single budget for the whole batch, since every session on a client shares one upstream host.
+
+  The upstream call is best-effort by construction: it runs after the local revoke has committed, is bounded by a short timeout, and routes through the guardian egress policy. Failures are logged and metered, never surfaced to the caller — the local revoke is the security control the caller asked for and it has already succeeded. Issuers that advertise no revocation endpoint are recorded as a distinct `skipped` metric outcome rather than folded into success or failure, since that is the expected case for a large share of upstreams. A batch that exhausts its budget before reaching every session records the remainder as `dropped` rather than passing them off as done.
+
+- 7df6ad7: Add a new UI for the Watchdog page.
+- a2b272c: Warn when an identity provider duplicates an issuer URL that already exists, at all three tiers and on both create and edit. The warning is advisory and never blocks the write, since duplicating an issuer has legitimate use cases.
+
+### Patch Changes
+
+- 0e614ac: chat.list accepts a `user_id` filter so callers with project-wide chat visibility can narrow results to a specific Gram user. The Project Assistant dock uses it, together with the dashboard source-kind filter, so "Continue chat" only offers sessions the viewer started from the dashboard.
+- 3fb5ea2: Make skill and environment resources clickable on the access challenges page. Skill rows now link to the project's Skills page and environment rows link to the project's Environments page, instead of rendering a bare resource id.
+- 43107ac: Add compact tool-call rows with separately loaded, persisted two-sentence summaries and risk-first detail expansion.
+- 07e96cf: Hide the composer's cycling example prompts once a file is attached.
+- f552a11: The chat composer recalls past prompts terminal-style: Up walks back through prompts sent from this browser, Down walks forward, and the walk wraps around through the empty draft. History is kept in localStorage, scoped per project.
+- 0e7eb7f: Give the composer's "Add context" picker room to read: a wider pane, tool rows titled by their unqualified name so they stop truncating into identical ellipses, a single type scale across both halves, and a labelled header over the results so skills and tools are told apart while browsing, not only while searching.
+
+  The slash-command menu now drops below the composer when there is not enough room above it, so it stays on screen on the welcome surface instead of opening past the top edge.
+
+- 8589630: Read the employee page's usage stat tiles from the per-user metrics query
+  instead of the employees-list summary. The list query groups a
+  person's telemetry by identity, so those tiles were showing one identity's slice
+  of the usage — for someone on a personal AI account, often the slice with no
+  tokens or cost in it. The metrics query aggregates the same person's rows
+  without grouping them, so the tiles now show their whole total. A failed usage
+  query also surfaces as an error instead of rendering as a legitimate-looking
+  zero.
+- 5ffabf3: Freeze external key identity: `externalKeys.updateAwsKms` and `externalKeys.updateGcpKms` no longer accept `key_arn` / `resource_name` or `algorithm` and cover only `name`, `external_credential_id` and `customer_grant_reference`, so changing what a key is now means deleting it and creating a new one (a breaking change to those two methods). Deleting a key is refused with a conflict while a JSON Web Key Set or published key still references it, and `createGcpKms` now requires a fully-qualified crypto key version path.
+- 8540e53: Link durable block pages to the owning project's risk event log.
+- 8f3fb58: Show the supported client that originated an Agent Session routed through LiteLLM while preserving LiteLLM filtering.
+- abcde04: Logging out now returns `Clear-Site-Data: "cookies", "storage"`, so the browser drops the session cookie across the origin's registrable domain and empties localStorage, sessionStorage, IndexedDB and Cache Storage. Previously teardown relied entirely on an expiring `Set-Cookie` plus a best-effort localStorage sweep, both of which leave data behind when a cookie attribute drifts or a page navigates away mid-logout. The theme preference and project favorites still survive a logout: the dashboard reads them before the request goes out and writes them back once the response lands.
+- 164f45d: Merge the composer's two `@` buttons into a single "Add context" picker covering both skills and tool mentions.
+- 7c02667: Organization names accept punctuation and every script. The old rule allowed
+  only letters, digits, spaces, hyphens and underscores, which turned away
+  "Acme, Inc.", "Bob's Bakery", "Café Zoë", and — more importantly — every
+  company whose name is not written in the Latin alphabet, since a name in
+  Japanese, Chinese, Korean, Cyrillic, Arabic or Hebrew could not clear the rule
+  at all. Names are now capped at 100 characters (counted in characters, so a
+  non-Latin name gets the same room a Latin one does), must carry at least two
+  letters or numbers, and may use anything that renders: control characters, bidi
+  overrides and other invisible formatting are still rejected, and whitespace is
+  normalized. The URL slug is unaffected in shape — it is still derived
+  separately, with a generated fallback for names that contain fewer than two
+  URL-safe characters.
+- c2c59c8: Let organization admins set an organization-wide automatic remote session refresh policy (Disabled, User controlled, or Required) from the MCP Connections page, and surface the effective policy to end users on the OAuth consent screen. Required keeps every eligible connection refreshed and shows the consent control locked; Disabled stops background refresh and states it read-only so users know idle connections will lapse.
+- af354b1: Add a PAYG rate adjustment (%) input to the platform-admin TUM contract price estimator on the billing page. A positive percentage uplifts every pay-as-you-go band rate and a negative one discounts them, so an admin can price a negotiated swing off the list rates without retyping the bands. The adjustment is reflected in the PAYG card's tier table, blended rate, and the committed-vs-PAYG comparison, and a discount-driven "PAYG is cheaper" outcome is attributed to the adjustment instead of being flagged as a pricing-model error.
+- 530feba: Attach files to the Project Assistant. The composer accepts files from the paperclip or by dropping them anywhere on the chat, and the assistant can read them: images and text-like files (including OpenAPI specs) travel with the turn, and anything it cannot read inline comes with a short-lived download link.
+- c07751f: Split skill details into focused pages for content, usage, feedback, versions, and settings.
+- e8d3459: Score Watchdog signals from the matched risk policy's configured score, and simplify the signal drawer to a single Create-exclusion action.
+- 748871c: Watchdog trend percentages now measure change within the current window so
+  they move with the sparkline. Fix category badge labels rendering with
+  clipped glyphs.
+
+## 0.105.0
+
+### Minor Changes
+
+- 6228ad5: Introduce a paint-by-numbers page-template layer so dashboard pages share one structure. Adds `ResourceListPage`, `DetailPage`, `TabbedPage`, `FormPage`, `SettingsPage`, `OverviewPage`, `WorkbenchPage`, `WizardPage`, `CenteredPage`, and a `FullBleedPage` escape hatch (in `@/components/page-templates`), plus composite widgets `InlineEmptyState`, `StatRow`, `SummaryCard`, and `DetailBody`. Migrates ~34 pages onto the templates.
+
+  Consolidates the design-system primitives: removes the dead `Modal`/`IconButton` subsystem, folds `PrivateInput` into `Input` (new `reveal` prop), `DashboardCard` into `Card.Dashboard`, `ToggleButton` into the `SegmentedControl` module, and `Editable` into `editable-text`; renames the analytics tile `chart/MetricCard` to `StatTile` so `MetricCard` is the sole primitive; and promotes the shared detail-page primitives (`SettingsSection`, `DetailSidebarNav`) out of the mcp path into `@/components/detail`.
+
+- 91f8234: An organization whose enterprise trial has ended now lands on a page that says so and books an upgrade call, instead of the generic book-a-demo screen a company that had never heard of Gram sees. Anyone still inside a trial can reach the same page from the sidebar countdown to upgrade early.
+- 3705830: Scan captured skill manifests for prompt injection at capture time and show current-version findings on skill details. Admins can configure the existing Prompt Injection policy from the Skills page. A completed judgement records either a finding or clean coverage; unavailable judgements are retried on a later activation and never become durable clean results. Scanning never fails the upload. Coverage is usage-based rather than catalog-based, so a version no agent ever loads is never judged.
+
+## 0.104.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+
+### Patch Changes
+
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
+## 0.103.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 76592ef: Rework the toolset OAuth configuration UI now that the OAuth proxy provider system is removed. The "Configure OAuth" wizard keeps its structure, but its custom path now provisions a user session issuer (creating a remote_session_issuer + remote_session_client and linking the toolset) instead of an OAuth proxy server; the external-OAuth path is unchanged. The separate migrate-from-proxy modal and the Platform/Edit OAuth-proxy modals are removed.
+- f6df724: Add opencode to the managed tools list on the device agent fleet
+  configuration page, with the same off/user/managed enforcement layer
+  selection as the other supported tools.
+- d80c633: Restyle the dashboard to the new editorial design language: flat square
+  surfaces with hairline borders, serif display page titles with area
+  micro-labels, unified uppercase table headers, colorized metric tiles, a
+  restrained ink-and-brand chart palette with a dark-mode ramp, muted avatar
+  tints, and a styled not-found page for unmatched routes.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+
+### Patch Changes
+
+- 04679cd: Show Agent Plugins compatibility status and portable ZIP downloads on plugin list and detail pages.
+- 7b746d3: Fix AI Integrations poll-cadence labels to match actual sync intervals: Anthropic Compliance activity feed now reads "Every 5m" (was "Every 10m"), Claude Chat usage/cost metrics now read "Every 4h" (was "Hourly"), and Codex & ChatGPT cost metrics now read "Every 5m" (was "Hourly").
+- a9dd912: Clean up the floating "Bulk actions" toolbar on Risk Events and Risk
+  Overview category tables: removed the doubled border (the toolbar and its
+  "Bulk actions" trigger button each had their own), which read as a boxy
+  nested-border look, in favor of a single borderless pill with just a
+  shadow. Also insets the toolbar a few pixels from the table's header row
+  instead of sitting flush against its top edge.
+- b6e2941: Extend the brand-mesh surface treatment from the project home assistant
+  card to the full `/chat` landing page: the same neutral card-to-background
+  gradient with the brand rainbow breathing in from the top-right corner and
+  a film-grain wash. The decorative layers are now a shared `BrandMeshLayers`
+  component so the two surfaces can't drift apart, and the landing's scroll
+  container moved to an inner wrapper so the mesh and the back button stay
+  pinned while the content scrolls.
+- 0c1e8b6: Update the macOS setup walkthrough on the Device Agent page to install from
+  the signed `.pkg` instead of the retired curl-download-and-chmod script. The pkg installs the daemon, CLI, menu-bar UI, and privileged
+  helper together and registers its own LaunchAgents, so the walkthrough now
+  covers a manual `installer` run or a normal MDM Package push instead of a
+  separate download/chmod/service-register sequence. Windows and Linux are
+  unaffected — they still ship as raw binaries.
+
+  Also makes Device Agent the default choice (instead of Manual Setup) on the
+  "Instrument agent platforms" onboarding step, and drops its "Preview"
+  badge — it's out of preview.
+
+- 8a85b99: Relabel the amber badge that marks platform-admin-only UI from "Dev" to
+  "Internal Admin". The badge appears on the platform admin toolbar and on
+  admin-only fields of the device agent configuration page; "Dev" read as
+  "development build" rather than "visible to Speakeasy staff only", which
+  is what it actually means. Renamed the component to `InternalAdminBadge`
+  to match.
+- 0fad940: Stop the Policy Center table from printing the same thing twice per row. The "Categories / Prompt" column has been folded into the policy column as a second line that only appears when the policy name doesn't already convey it — so "Secrets Exposure Flagger" no longer sits next to "Secrets", and a prompt-based policy whose name is an excerpt of its guardrail shows the name alone. Policies whose name omits a category (or whose guardrail says more than its name) still show the detail, now with the freed-up width.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- bb83418: Make clickable table rows keyboard-focusable and activatable with Enter or Space.
+
 ## 0.102.0
 
 ### Minor Changes

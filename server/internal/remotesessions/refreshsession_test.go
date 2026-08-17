@@ -64,16 +64,20 @@ func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstan
 	refreshEnc, err := enc.Encrypt([]byte("upstream-refresh"))
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
+	authorizationExpiresAt := time.Now().Add(24 * time.Hour)
+	refreshExpiresAt := time.Now().Add(2 * time.Hour)
 
 	row, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
-		SubjectUrn:            urn.NewUserSubject("subject-" + slug),
-		UserSessionIssuerID:   userIssuerID,
-		RemoteSessionClientID: clientUUID,
-		AccessTokenEncrypted:  accessEnc,
-		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
-		RefreshTokenEncrypted: conv.PtrToPGText(&refreshEncStr),
-		RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		Scopes:                []string{},
+		SubjectUrn:             urn.NewUserSubject("subject-" + slug),
+		UserSessionIssuerID:    userIssuerID,
+		RemoteSessionClientID:  clientUUID,
+		AccessTokenEncrypted:   accessEnc,
+		AccessExpiresAt:        conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted:  conv.PtrToPGText(&refreshEncStr),
+		AuthorizationExpiresAt: conv.ToPGTimestamptz(authorizationExpiresAt),
+		RefreshExpiresAt:       conv.ToPGTimestamptz(refreshExpiresAt),
+		Scopes:                 []string{},
+		Resource:               pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	return row.ID
@@ -92,7 +96,7 @@ func TestRefreshSession(t *testing.T) {
 	// later expiry proves the refresh actually ran and persisted.
 	sessionID := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":7200,"refresh_token":"refreshed-refresh"}`))
+		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":7200,"refresh_token":"refreshed-refresh","scope":"read:only"}`))
 	})
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionRefresh)
@@ -119,6 +123,11 @@ func TestRefreshSession(t *testing.T) {
 	plain, err := enc.Decrypt(stored.AccessTokenEncrypted)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", plain)
+	require.Equal(t, []string{"read:only"}, stored.Scopes)
+	require.WithinDuration(t, time.Now().Add(24*time.Hour), stored.AuthorizationExpiresAt.Time, time.Minute,
+		"an omitted authorization_expires_in must preserve the known absolute deadline")
+	require.False(t, stored.RefreshExpiresAt.Valid,
+		"an omitted refresh_token_timeout must not carry a stale idle deadline onto the rotated token")
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionRefresh)
 	require.NoError(t, err)
@@ -186,6 +195,7 @@ func TestRefreshSession_UnreadableRefreshToken(t *testing.T) {
 		RefreshTokenEncrypted: conv.PtrToPGText(&bogus),
 		RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Scopes:                []string{},
+		Resource:              pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -846,4 +847,55 @@ func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *tes
 	tools := rows[1]
 	require.Empty(t, tools.Content, "stored Content is empty, not the whitespace")
 	require.NotEmpty(t, tools.ToolCalls)
+}
+
+// Gram-Chat-ID on /chat/completions is client-supplied, so it may name a chat
+// belonging to another project entirely. Without the project fence on
+// UpsertChat, the caller lands on the victim's row: their messages get appended
+// to it, the generation is bumped, and the owner's transcript renders empty
+// because chat.load asks for a generation none of their rows carry.
+func TestStartOrResumeChat_RejectsChatFromAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	ctx, conn, orgID := t.Context(), ti.conn, ti.orgID
+	s := newCaptureStrategy(t, conn)
+
+	// The victim's chat lives in a different project of the same org.
+	victimProject := createProjectInSameOrg(t, ti)
+	victimChat := uuid.New()
+	runTurn(t, ctx, s,
+		makeRequest(victimChat, victimProject, orgID, openrouter.CreateMessageUser("my private prompt")),
+		makeResponse("my private answer"),
+	)
+	before := listAllMessages(t, ctx, conn, victimChat, victimProject)
+	require.Len(t, before, 2)
+
+	beforeGen, err := repo.New(conn).GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    victimChat,
+		ProjectID: victimProject,
+	})
+	require.NoError(t, err)
+
+	// The attacker, in their own project, points a completion at that chat id.
+	_, err = s.StartOrResumeChat(ctx, makeRequest(
+		victimChat, ti.projectID, orgID,
+		openrouter.CreateMessageUser("injected"),
+	))
+	require.Error(t, err)
+	// Not-found, not unauthorized: the id exists elsewhere, so a distinct code
+	// would confirm that.
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// Nothing was written, and the generation is untouched — so the owner's
+	// transcript still resolves.
+	require.Empty(t, listAllMessages(t, ctx, conn, victimChat, ti.projectID))
+	require.Equal(t, before, listAllMessages(t, ctx, conn, victimChat, victimProject))
+
+	afterGen, err := repo.New(conn).GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    victimChat,
+		ProjectID: victimProject,
+	})
+	require.NoError(t, err)
+	require.Equal(t, beforeGen, afterGen, "a foreign write must not bump the victim's generation")
 }

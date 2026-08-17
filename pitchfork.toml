@@ -16,6 +16,11 @@ run = "mise run start:admin"
 ready_cmd = "mise run check:daemon --name {{name}}"
 depends = ["mock-oidc"]
 
+[daemons.admin-dashboard]
+run = "mise run start:admin-dashboard"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["admin"]
+
 [daemons.mock-oidc]
 run = "mise run start:mock-oidc"
 ready_cmd = "mise run check:daemon --name {{name}}"
@@ -36,10 +41,16 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run start:pystreams-multi"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Deliberately does NOT depend on `server`. Vite's dev proxy dials the server
+# per request, not at startup, so gating the dashboard on server readiness
+# bought nothing and cost the whole cold Go compile: on a fresh worktree vite
+# only launched ~80s into a ~137s boot, which is most of the wait before the
+# dashboard is reachable. Starting it immediately means the page is up while
+# the server is still building; requests made in that window fail until the
+# server is ready, which is the normal dev experience after any server restart.
 [daemons.dashboard]
 run = "mise run start:dashboard"
 ready_cmd = "mise run check:daemon --name {{name}}"
-depends = ["server"]
 
 [daemons.assistant-runtime]
 run = "mise run start:assistant-runtime"

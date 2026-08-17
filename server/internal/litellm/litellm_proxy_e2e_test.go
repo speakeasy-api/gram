@@ -339,7 +339,6 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   nil,
 	}))

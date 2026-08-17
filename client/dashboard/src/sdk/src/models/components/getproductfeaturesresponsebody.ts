@@ -42,9 +42,17 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
-   * Whether the organization is eligible for the Gram Platform MCP capability
+   * Whether the organization can use the Gram Platform MCP capability
    */
   platformMcpEnabled: boolean;
+  /**
+   * Whether consent screens expose automatic remote-session refresh for the organization
+   */
+  remoteSessionAutoRefreshEnabled: boolean;
+  /**
+   * Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference
+   */
+  remoteSessionAutoRefreshEnforcedEnabled: boolean;
   /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
@@ -86,6 +94,8 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
+    remote_session_auto_refresh_enabled: z.boolean(),
+    remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
@@ -106,6 +116,9 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "platform_mcp_enabled": "platformMcpEnabled",
+      "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
+      "remote_session_auto_refresh_enforced_enabled":
+        "remoteSessionAutoRefreshEnforcedEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",

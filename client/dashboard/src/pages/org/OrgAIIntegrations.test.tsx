@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrgAIIntegrationsInner } from "./OrgAIIntegrations";
 
 const state = vi.hoisted(() => ({
-  enabled: false,
   isAdmin: false,
 }));
 
@@ -29,12 +28,6 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { aiPlatformPushIntegrationsEnabled: state.enabled },
-  }),
-}));
-
 vi.mock("@/pages/org/ai-integration-connection-row", () => ({
   AIIntegrationConnectionRow: ({
     provider,
@@ -48,31 +41,19 @@ vi.mock("@/pages/org/litellm-integration-row", () => ({
 }));
 
 beforeEach(() => {
-  state.enabled = false;
   state.isAdmin = false;
 });
 
 afterEach(cleanup);
 
 describe("OrgAIIntegrationsInner", () => {
-  it("hides LiteLLM when the product feature is disabled", () => {
-    state.isAdmin = true;
-
-    render(<OrgAIIntegrationsInner />);
-
-    expect(screen.queryByText("LiteLLM push integration")).toBeNull();
-  });
-
   it("hides LiteLLM from non-admins without mounting its query surface", () => {
-    state.enabled = true;
-
     render(<OrgAIIntegrationsInner />);
 
     expect(screen.queryByText("LiteLLM push integration")).toBeNull();
   });
 
-  it("shows LiteLLM to admins when the product feature is enabled", () => {
-    state.enabled = true;
+  it("shows LiteLLM to admins", () => {
     state.isAdmin = true;
 
     render(<OrgAIIntegrationsInner />);

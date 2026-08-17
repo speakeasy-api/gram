@@ -751,11 +751,13 @@ func unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(v *UserSessi
 		ID:                    *v.ID,
 		UserSessionIssuerID:   *v.UserSessionIssuerID,
 		ClientID:              *v.ClientID,
+		ClientIDMetadataURI:   v.ClientIDMetadataURI,
 		ClientName:            *v.ClientName,
 		ClientIDIssuedAt:      *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt: v.ClientSecretExpiresAt,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
+		ActiveSessionCount:    *v.ActiveSessionCount,
 	}
 	res.RedirectUris = make([]string, len(v.RedirectUris))
 	for i, val := range v.RedirectUris {

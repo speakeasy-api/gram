@@ -37,6 +37,11 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 }
 
 func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	// Skills is generally available; the feature remains in the API for compatibility.
+	if feature == FeatureSkills {
+		return true, nil
+	}
+
 	if cached, err := c.featureCache.Get(ctx, FeatureCacheKey(organizationID, feature)); err == nil {
 		return cached.Enabled, nil
 	}
@@ -120,7 +125,6 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {
@@ -130,16 +134,72 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 		{
 			Scope:     string(authz.ScopeSkillWrite),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {
 		return fmt.Errorf("provision admin Skills grants: %w", err)
+	}
+
+	return nil
+}
+
+// SeedOrganizationDefaultsTx enables baseline entitlements for every newly
+// provisioned organization. It is intentionally separate from trial seeding so
+// an explicit org-admin disable remains durable and absent rows stay disabled.
+func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	if _, err := repo.New(tx).EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeaturePlatformMCP),
+	}); err != nil {
+		return fmt.Errorf("enable default %s entitlement: %w", FeaturePlatformMCP, err)
+	}
+	return nil
+}
+
+// EnterpriseTrialBundle is the entitlement set an enterprise trial organization
+// receives at signup. A trial gates only on the time window, so identity (SSO,
+// SCIM) is included rather than held back as a conversion lever.
+//
+// FeatureSkills is absent because Skills is generally available. The bundle
+// still calls EnableSkillsTx, which provisions the Skills role grants that the
+// entitlement cannot work without. FeatureHooksFailOpen and
+// FeatureSkillCaptureMetadataOnly are absent because they change how an
+// entitlement behaves rather than granting one.
+var EnterpriseTrialBundle = []Feature{
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+	FeatureAuthzChallengeLogging,
+	FeatureSSO,
+	FeatureSCIM,
+	FeatureHooksBrowserLogin,
+	FeatureCustomModelKeys,
+	FeatureAIPlatformPushIntegrations,
+	FeatureCustomerManagedEncryptionKeys,
+}
+
+// SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
+// caller's transaction. Idempotent, so a replayed signup is safe. The feature
+// cache is left untouched: the organization is created in the same transaction,
+// so no reader can have cached a state for it yet.
+func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	q := repo.New(tx)
+
+	for _, feature := range EnterpriseTrialBundle {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable %s for enterprise trial: %w", feature, err)
+		}
+	}
+
+	if err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
+		return fmt.Errorf("enable Skills for enterprise trial: %w", err)
 	}
 
 	return nil

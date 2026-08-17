@@ -87,7 +87,8 @@ func (c *Client) BaseURL() string {
 
 // Call invokes a Slack Web API method with a form-encoded payload, resolving
 // the token from env according to kind, and returns the raw response body once
-// the Slack envelope reports ok=true.
+// the Slack envelope reports ok=true. A refusal by Slack — a non-200 status or
+// an ok=false envelope — is returned as an *Error carrying the envelope code.
 func (c *Client) Call(ctx context.Context, method string, payload map[string]any, kind TokenKind, env toolconfig.ToolCallEnv) ([]byte, error) {
 	token, err := c.Token(kind, env)
 	if err != nil {
@@ -130,7 +131,7 @@ func (c *Client) CallWithToken(ctx context.Context, method string, payload map[s
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("slack %s returned %d: %s", method, resp.StatusCode, string(bodyBytes))
+		return nil, newStatusError(method, resp.StatusCode, bodyBytes)
 	}
 
 	var envelope ResponseEnvelope
@@ -138,7 +139,7 @@ func (c *Client) CallWithToken(ctx context.Context, method string, payload map[s
 		return nil, fmt.Errorf("decode slack response for %s: %w", method, err)
 	}
 	if !envelope.Ok {
-		return nil, fmt.Errorf("slack %s: %s", method, errorDetails(envelope))
+		return nil, newEnvelopeError(method, resp.StatusCode, envelope)
 	}
 
 	return bodyBytes, nil
@@ -148,6 +149,12 @@ func (c *Client) CallWithToken(ctx context.Context, method string, payload map[s
 // environment, following the platform-tool preference order: bot token first
 // for general methods, user token only for user-scoped methods.
 func (c *Client) Token(kind TokenKind, env toolconfig.ToolCallEnv) (string, error) {
+	return TokenFromEnv(kind, env.Merged())
+}
+
+// TokenFromEnv resolves a Slack token from a merged environment view using
+// the kind's candidate-variable precedence.
+func TokenFromEnv(kind TokenKind, env *toolconfig.CaseInsensitiveEnv) (string, error) {
 	var candidates []string
 	switch kind {
 	case TokenRequireUser:
@@ -155,9 +162,8 @@ func (c *Client) Token(kind TokenKind, env toolconfig.ToolCallEnv) (string, erro
 	default:
 		candidates = []string{BotTokenEnvVar, UserTokenEnvVar, TokenEnvVar}
 	}
-	merged := env.Merged()
 	for _, key := range candidates {
-		if value := strings.TrimSpace(merged.Get(key)); value != "" {
+		if value := strings.TrimSpace(env.Get(key)); value != "" {
 			return value, nil
 		}
 	}

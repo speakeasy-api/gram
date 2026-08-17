@@ -14,6 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	accessRepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -25,10 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -154,9 +157,10 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	}
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cache.SuffixNone)
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cacheSuffix)
 	sessionManager := sessions.NewManager(
-		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
+		logger, tracerProvider, conn, redisClient, cacheSuffix,
 		idpClient, billingClient, resolver,
 	)
 
@@ -167,14 +171,13 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		Environment:       "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	ti.trialNotifier = trialNotifier
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
@@ -250,6 +253,43 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
 	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
 
+}
+
+func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_NONLATIN"
+		workosOrgID  = "org_01WORKOS_NONLATIN"
+		orgName      = "アクメ株式会社"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01NONLATIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "nonlatin@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, orgid.FromWorkOSID(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, orgMeta.Name)
+	require.Equal(t, "org-01workos-nonlatin", orgMeta.Slug)
 }
 
 // TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
@@ -466,7 +506,8 @@ func TestSyncMembershipsFromWorkOS_EmptyResponseRevokesWorkOSRelationships(t *te
 }
 
 // TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition verifies that a
-// new user with zero orgs and the "assistants" disposition gets auto-provisioned.
+// new user with zero orgs and the "assistants" disposition gets auto-provisioned,
+// and that the organization it provisions arms no enterprise trial.
 func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 	t.Parallel()
 
@@ -493,6 +534,25 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 	require.NotContains(t, result.Location, "signin_error=")
 	assert.Contains(t, result.Location, "assistants")
 	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := authCtx.ActiveOrganizationID
+	require.NotEmpty(t, organizationID)
+
+	// An assistants organization is a live product for a user who never asked for
+	// a trial, so arming one here would strip entitlements two weeks later. The
+	// account type stays whatever the billing provider reports, the stub's "pro".
+	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.NotEqual(t, "enterprise", org.GramAccountType)
+	require.True(t, org.Whitelisted)
+
+	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 // TestE2E_Callback_ExistingUserWithDBOrgs verifies the happy path: user
@@ -1279,7 +1339,7 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 		role, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, roleSlug)
 		require.NoError(t, err)
 		roleURN := "role:global:" + role.ID.String()
-		grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedGramOrgID, roleSlug, roleURN)
+		grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedGramOrgID, roleURN)
 		require.NoError(t, err)
 		require.Len(t, grants, len(authz.SystemRoleGrants[roleSlug]))
 	}
@@ -1355,9 +1415,8 @@ func TestE2E_Register_RejectsInvalidOrgName(t *testing.T) {
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)
 
-	// Register with invalid characters
-	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Bad<>Org!"})
-	assert.Error(t, err, "register should reject invalid org name characters")
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Acme\u202eInc"})
+	require.ErrorContains(t, err, "organization name contains invalid characters")
 }
 
 // TestE2E_FullOnboardingFlow exercises the complete new-user journey end to end:

@@ -17,7 +17,7 @@ UPDATE chat_messages
 SET message_id = $1
 WHERE id = $2
   AND chat_id = $3
-  AND (project_id IS NULL OR project_id = $4)
+  AND project_id = $4
   AND role = 'user'
   AND (message_id IS NULL OR message_id = '')
 `
@@ -477,7 +477,8 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.key AS api_key
+    k.key AS api_key,
+    k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
@@ -493,7 +494,8 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
-	ApiKey           string
+	ApiKey           pgtype.Text
+	ApiKeyEncrypted  pgtype.Text
 }
 
 // Targets for periodic OpenRouter credit usage polling. Filters out disabled
@@ -501,9 +503,11 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 // account-type allowlist so coverage can expand (e.g. add 'pro') without a
 // code change. monthly_credits is the canonical limit last written by
 // RefreshAPIKeyLimit and reflects any per-org overrides applied via the
-// OpenrouterKeyRefreshWorkflow. The api_key is included so the caller can
-// issue the upstream usage HTTP call in a single round-trip — keep it inside
-// the activity boundary and never return it to the workflow.
+// OpenrouterKeyRefreshWorkflow. The key material is included so the caller
+// can issue the upstream usage HTTP call in a single round-trip — keep it
+// inside the activity boundary and never return it to the workflow. The
+// encrypted column is preferred and the plaintext column is the legacy
+// fallback for rows minted before encrypted storage.
 func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, accountTypes []string) ([]GetOpenRouterCreditsMonitoringTargetsRow, error) {
 	rows, err := q.db.Query(ctx, getOpenRouterCreditsMonitoringTargets, accountTypes)
 	if err != nil {
@@ -520,6 +524,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.ApiKey,
+			&i.ApiKeyEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -648,11 +653,115 @@ func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) 
 	return items, nil
 }
 
+const listIdentityMapEntries = `-- name: ListIdentityMapEntries :many
+WITH directory AS (
+    SELECT
+        our.organization_id,
+        lower(btrim(u.email)) AS email_lower,
+        min(u.id) AS user_id,
+        count(*) AS claimants
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.deleted_at IS NULL
+      AND our.deleted_at IS NULL
+      AND btrim(u.email) != ''
+    GROUP BY our.organization_id, lower(btrim(u.email))
+), account_owners AS (
+    SELECT ua.organization_id, lower(btrim(ua.email)) AS email_lower, ua.user_id
+    FROM user_accounts ua
+    WHERE ua.deleted_at IS NULL
+      AND ua.user_id IS NOT NULL
+      AND ua.email IS NOT NULL
+      AND btrim(ua.email) != ''
+    GROUP BY ua.organization_id, lower(btrim(ua.email)), ua.user_id
+), unique_account_owner AS (
+    SELECT organization_id, email_lower, min(user_id) AS user_id
+    FROM account_owners
+    GROUP BY organization_id, email_lower
+    HAVING count(*) = 1
+)
+SELECT
+    d.organization_id,
+    d.email_lower,
+    d.user_id::text AS canonical_user_id,
+    d.email_lower AS canonical_email
+FROM directory d
+WHERE d.claimants = 1
+UNION ALL
+SELECT
+    uao.organization_id,
+    uao.email_lower,
+    d.user_id::text AS canonical_user_id,
+    d.email_lower AS canonical_email
+FROM unique_account_owner uao
+JOIN users u ON u.id = uao.user_id AND u.deleted_at IS NULL
+JOIN directory d
+    ON d.organization_id = uao.organization_id
+    AND d.email_lower = lower(btrim(u.email))
+    AND d.user_id = u.id
+    AND d.claimants = 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM directory dd
+    WHERE dd.organization_id = uao.organization_id
+      AND dd.email_lower = uao.email_lower
+)
+ORDER BY organization_id, email_lower
+`
+
+type ListIdentityMapEntriesRow struct {
+	OrganizationID  string
+	EmailLower      string
+	CanonicalUserID string
+	CanonicalEmail  string
+}
+
+// Source of the ClickHouse identity_map fold table. Internal sync sweep that
+// deliberately spans all organizations: the org boundary is carried in the
+// output rows (organization_id keys the map), not the predicate; not reachable
+// from user-facing handlers.
+//
+// Encodes the employee identity fold rules (the SQL twin of telemetry's
+// resolveEmployeeIdentity, which DNO-857 retires): a directory email maps to
+// its user only when exactly one connected, non-deleted user claims it
+// case-insensitively; a linked-account email maps to its owner only when the
+// email has no directory row in the org and exactly one connected owner with
+// an unambiguous directory email claims it. Ambiguous emails are omitted so
+// readers fall back to literal matching rather than guessing.
+//
+// The owner-ambiguity count deliberately includes account links whose owner is
+// since deleted or disconnected (matching the Go resolver): a second historical
+// claimant has telemetry rows under the shared email, and folding it to the
+// surviving owner would move the departed claimant's usage onto them.
+func (q *Queries) ListIdentityMapEntries(ctx context.Context) ([]ListIdentityMapEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listIdentityMapEntries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentityMapEntriesRow
+	for rows.Next() {
+		var i ListIdentityMapEntriesRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.EmailLower,
+			&i.CanonicalUserID,
+			&i.CanonicalEmail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
 SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = $1
-  AND (project_id IS NULL OR project_id = $2)
+  AND project_id = $2
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
