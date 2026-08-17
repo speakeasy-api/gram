@@ -717,9 +717,11 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    // Cancelled first, then confirmed. Radix restores focus to a
-    // `DialogTrigger`, and this dialog has none, so both exits drop the
-    // keyboard on `document.body` unless the control is focused back.
+    // Radix restores focus to a `DialogTrigger`, and this dialog has none, so
+    // both exits drop the keyboard on `document.body` unless the control is
+    // focused back. The confirmed half of this test proves only that the
+    // control ends up focused; it cannot see the browser's blur-on-disable, so
+    // the real cover for that path is the two tests below.
     const select = await pickAccountType("enterprise");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -733,6 +735,61 @@ describe("Overview", () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(toggle);
     });
+  });
+
+  // The control is disabled while its write is in flight, and a browser drops
+  // focus to the body when the focused element becomes disabled. jsdom does not:
+  // it leaves focus where it was, so a restore that runs before the disable
+  // passes here and fails in front of an operator. Both tests below blur the
+  // control by hand to stand in for the browser, then require the write to put
+  // the keyboard back.
+  async function landsFocusBackAfter(settle: () => void): Promise<void> {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const toggle = await screen.findByRole("switch");
+    fireEvent.click(toggle);
+    await confirmDialog();
+    await waitFor(() => {
+      expect(isDisabled(screen.getByRole("switch"))).toBe(true);
+    });
+
+    // What the browser does when a focused control becomes disabled.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).not.toBe(toggle);
+
+    settle();
+    await waitFor(() => {
+      expect(isDisabled(screen.getByRole("switch"))).toBe(false);
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("switch"));
+    });
+  }
+
+  it("puts the keyboard back on the control after a write lands", async () => {
+    let landTheWrite = () => {};
+    mocks.updateOrganization.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          landTheWrite = () => resolve({ ...ORG, whitelisted: false });
+        }),
+    );
+
+    await landsFocusBackAfter(() => landTheWrite());
+  });
+
+  it("puts the keyboard back on the control after a write fails", async () => {
+    let failTheWrite = () => {};
+    mocks.updateOrganization.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          failTheWrite = () => reject(new Error("update failed"));
+        }),
+    );
+
+    await landsFocusBackAfter(() => failTheWrite());
   });
 
   it("disables both controls while a write is in flight", async () => {
