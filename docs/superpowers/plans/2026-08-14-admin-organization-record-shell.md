@@ -35,14 +35,10 @@ The managing session did this before any builder started. It is recorded here so
 a task's executor can see the branch it is standing on.
 
 - Branch `walker/admin-org-record-shell`, based on `origin/main` at `b5c1aa858`.
-- Worktree `/Users/walker/github.com/speakeasy-api/gram.walker-admin-org-record-shell`,
+- Worktree `<worktree>` for the branch above,
   created with `wt switch --create`, so `mise.local.toml` is copied and the ports
   are remapped. Never run `git worktree add`.
 - The spec and this plan are committed on that branch.
-
-Every `git commit` in this worktree needs the `PATH="/Users/walker/.local/bin:$PATH"`
-prefix. Without it the commit hook picks the Homebrew `mise` and fails with a
-bogus trust error.
 
 ---
 
@@ -122,7 +118,7 @@ Expected: no output, exit 0. Then canary it: temporarily change one `layout="but
 
 ```bash
 git add client/admin/src/pages/organizations/
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "refactor(admin): name the organization actions layout for its shape"
+git commit -m "refactor(admin): name the organization actions layout for its shape"
 ```
 
 ---
@@ -156,7 +152,7 @@ Expected: no output, exit 0.
 
 ```bash
 git add client/admin/src/components/ui/breadcrumb.tsx
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "chore(admin): add the breadcrumb primitive"
+git commit -m "chore(admin): add the breadcrumb primitive"
 ```
 
 ---
@@ -371,7 +367,7 @@ Expected: both pass. The organizations list tests must still pass: `useOpenOrgan
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "refactor(admin): split the organization record into routed views"
+git commit -m "refactor(admin): split the organization record into routed views"
 ```
 
 ---
@@ -561,7 +557,7 @@ Expected: both pass.
 
 ```bash
 git add client/admin/src/components/
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): swap the sidebar for the record's own nav"
+git commit -m "feat(admin): swap the sidebar for the record's own nav"
 ```
 
 ---
@@ -751,7 +747,7 @@ Expected: both pass.
 
 ```bash
 git add client/admin/src/pages/organization/
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): give the organization record a header and trial callout"
+git commit -m "feat(admin): give the organization record a header and trial callout"
 ```
 
 ---
@@ -916,7 +912,7 @@ Expected: both pass.
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): build the breadcrumb from the matched routes"
+git commit -m "feat(admin): build the breadcrumb from the matched routes"
 ```
 
 ---
@@ -999,7 +995,7 @@ Expected: all pass.
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the organization record one action bar"
+git commit -m "fix(admin): give the organization record one action bar"
 ```
 
 ---
@@ -1139,7 +1135,7 @@ The three `t6b-*` PNGs now show the wrong thing. Recapture as `t6c-header-runnin
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the trial callout the action that resolves it"
+git commit -m "fix(admin): give the trial callout the action that resolves it"
 ```
 
 ---
@@ -1230,7 +1226,7 @@ longer carries `bg-muted/30`, so reverting the class is a kill.
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): draw the trial callout in the warning tone"
+git commit -m "fix(admin): draw the trial callout in the warning tone"
 ```
 
 ---
@@ -1400,7 +1396,7 @@ test passes vacuously.
 
 ```bash
 git add client/admin/src
-PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): extend a trial to a chosen end date"
+git commit -m "feat(admin): extend a trial to a chosen end date"
 ```
 
 ---
@@ -1479,7 +1475,7 @@ Stop what you started and prune what leaked:
 ```bash
 pitchfork list | grep '^<worktree>/'
 pitchfork stop <name>
-DOCKER_HOST="unix:///Users/walker/.colima/default/docker.sock" mise exec -- docker container prune -f
+mise exec -- docker container prune -f
 ```
 
 Then use the `pull-request` skill. Open the pull request with `env -u GH_TOKEN -u GITHUB_TOKEN gh pr create`; mise mounts a bad token otherwise.
