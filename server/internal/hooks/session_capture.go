@@ -30,6 +30,12 @@ import (
 // ErrChatNotFound indicates the chat (conversation) does not exist.
 var ErrChatNotFound = errors.New("chat not found")
 
+// errChatProjectMismatch is returned when a hook write names a chat that
+// already exists under a different project. Session ids hash to chat ids with
+// no project in the derivation, so an org-scoped key can otherwise stamp
+// messages onto a sibling project's chat.
+var errChatProjectMismatch = errors.New("chat belongs to another project")
+
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
@@ -38,6 +44,47 @@ func isForeignKeyViolation(err error) bool {
 		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
+}
+
+func (s *Service) ensureHookChat(
+	ctx context.Context,
+	queries *repo.Queries,
+	metadata *SessionMetadata,
+	chatID uuid.UUID,
+	projectID uuid.UUID,
+	title string,
+) error {
+	if queries == nil {
+		queries = s.repo
+	}
+
+	existing, err := queries.GetChatProjectID(ctx, chatID)
+	switch {
+	case err == nil:
+		if existing != projectID {
+			return errChatProjectMismatch
+		}
+		return nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("get chat project: %w", err)
+	}
+
+	_, err = queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(title),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return errChatProjectMismatch
+	case err != nil:
+		return fmt.Errorf("upsert claude code session: %w", err)
+	}
+	return nil
 }
 
 // isConversationEvent returns true if the event is a conversation capture event (not a tool call).
@@ -390,7 +437,12 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return n, nil
 	}
 
-	// Try to insert the message (the writer handles notification on success).
+	// Pin the session to this project (or create the chat) before writing so a
+	// sibling-project header cannot stamp messages onto an existing chat.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, err
+	}
+
 	n, err := writeMessage()
 	if err == nil {
 		return n > 0, nil
@@ -401,18 +453,10 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
-	// Create the chat and retry.
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-	})
-	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+	// Create the chat and retry. A concurrent first-writer in another project
+	// loses here the same way UpsertChat does: no returned row.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, fmt.Errorf("upsert claude code session after FK violation: %w", err)
 	}
 
 	n, err = writeMessage()
@@ -520,17 +564,8 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	// lock, keep both rows rather than guessing from prompt text and losing or
 	// misattributing a legitimate repeated native turn.
 
-	_, err = repo.New(tx).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             msgParams.ChatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-	})
-	if err != nil {
-		return false, fmt.Errorf("upsert claude code session: %w", err)
+	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
+		return false, err
 	}
 	params := []chatRepo.CreateChatMessageParams{msgParams}
 	n, err := s.writer.WriteInTx(ctx, tx, params)

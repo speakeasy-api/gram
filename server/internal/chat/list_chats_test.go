@@ -1107,3 +1107,44 @@ func TestListChats_Filter_Source_ExpandsAliases(t *testing.T) {
 	require.True(t, got[newStyle.String()], "expected claude-code chat in results")
 	require.True(t, got[legacy.String()], "expected legacy ClaudeCode chat in results")
 }
+
+func TestListChats_NumMessagesIgnoresOtherProjectRows(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-drift", "drifted stamp chat")
+	early := time.Date(2026, 7, 16, 16, 20, 0, 0, time.UTC)
+	late := time.Date(2026, 7, 16, 21, 41, 0, 0, time.UTC)
+	_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early.Add(time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: late, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, 2, result.Chats[0].NumMessages,
+		"list count must match the transcript, which filters project_id")
+	require.Equal(t, early.Add(time.Minute).Format(time.RFC3339), result.Chats[0].LastMessageTimestamp,
+		"a later sibling-project stamp must not move last_message_timestamp")
+}

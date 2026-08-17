@@ -127,6 +127,15 @@ FROM skill_observations
 WHERE project_id = @project_id
 ORDER BY seen_at ASC, id ASC;
 
+-- name: GetChatProjectID :one
+-- Looks up a chat by id alone so hook ingest can refuse a write whose session
+-- already lives in another project. Session ids hash to chat ids with no
+-- project in the derivation, and an org-scoped key can present any project
+-- header in the org.
+SELECT project_id
+FROM chats
+WHERE id = @id;
+
 -- name: UpsertClaudeCodeSession :one
 INSERT INTO chats (
     id
@@ -150,9 +159,15 @@ VALUES (
     NOW(),
     NOW()
 )
+-- The conflict target is the bare primary key, so a later hook request for
+-- the same session with a different project header would otherwise land on
+-- that row, bump updated_at, and RETURNING would hand the caller an id that
+-- then accepts messages stamped with the new project. Rejecting the conflict
+-- yields no row.
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec

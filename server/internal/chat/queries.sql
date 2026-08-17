@@ -562,6 +562,7 @@ candidate_chats AS (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = @project_id::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
@@ -570,8 +571,10 @@ candidate_chats AS (
     )
 ),
 chat_activity AS (
-  -- Per-chat backward probe on chat_messages_chat_id_created_at_idx instead of
-  -- aggregating every candidate chat's full message history.
+  -- Per-chat backward probe on chat_messages_chat_id_project_id_created_at_idx
+  -- instead of aggregating every candidate chat's full message history.
+  -- project_id keeps a sibling-project stamp on the same chat_id from moving
+  -- the chat in the date-range filter.
   SELECT
     cc.id,
     cc.created_at,
@@ -581,6 +584,7 @@ chat_activity AS (
     SELECT MAX(cm.created_at) AS ts
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
+      AND cm.project_id = @project_id::uuid
   ) last_msg
 )
 SELECT COUNT(*) AS total
@@ -698,6 +702,7 @@ candidate_chats AS (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = @project_id::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
@@ -706,8 +711,10 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
-  -- Per-chat probe on chat_messages_chat_id_created_at_idx (index-only count +
-  -- max) instead of aggregating every candidate chat's full message history.
+  -- Per-chat probe on chat_messages_chat_id_project_id_created_at_idx
+  -- (index-only count + max) instead of aggregating every candidate chat's
+  -- full message history. project_id keeps a sibling-project stamp on the
+  -- same chat_id from inflating num_messages or last_message_timestamp.
   SELECT
     cc.id,
     stats.num_messages,
@@ -720,6 +727,7 @@ chat_stats AS (
       MAX(cm.created_at) AS max_created_at
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
+      AND cm.project_id = @project_id::uuid
   ) stats
 ),
 filtered_chats AS (
@@ -758,7 +766,7 @@ limited_chats AS (
     fc.pinned_at,
     fc.litellm_proxied,
     fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND project_id = @project_id::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
@@ -796,6 +804,7 @@ chat_attribution AS (
       END
       FROM chat_messages
       WHERE chat_id = lc.id
+        AND project_id = @project_id::uuid
         AND source = 'litellm'
       ORDER BY created_at DESC
       LIMIT 1
@@ -917,16 +926,18 @@ LIMIT @page_limit;
 -- agent-type filter options on the Agent Sessions page so the list reflects the
 -- sources actually present in the data rather than a hardcoded catalog.
 -- Driven from chats with a per-chat probe on
--- chat_messages_chat_id_created_at_source_idx for the latest non-empty source,
--- instead of sorting the project's entire message history. The lateral join
--- drops chats with no sourced messages, matching the previous inner-join
--- semantics.
+-- chat_messages_chat_id_project_id_created_at_source_idx for the latest
+-- non-empty source, instead of sorting the project's entire message history.
+-- The lateral join drops chats with no sourced messages, matching the previous
+-- inner-join semantics. project_id keeps a sibling-project stamp from
+-- advertising a source this project cannot load.
 SELECT DISTINCT latest.source
 FROM chats c
 CROSS JOIN LATERAL (
   SELECT cm.source
   FROM chat_messages cm
   WHERE cm.chat_id = c.id
+    AND cm.project_id = @project_id::uuid
     AND cm.source IS NOT NULL
     AND cm.source <> ''
   ORDER BY cm.created_at DESC
@@ -1076,6 +1087,29 @@ LIMIT @lim::integer;
 -- message_capture_strategy.go.
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
+
+-- name: RestampMismatchedChatMessageProjects :execrows
+-- One-shot repair: copy chats.project_id onto chat_messages rows whose stamp
+-- drifted (or is NULL). Hook ingest used to accept any project header for a
+-- session-derived chat id, so a later request could file messages under a
+-- sibling project. Not project-scoped: every drifted row has to move, and the
+-- chat's project is the destination.
+UPDATE chat_messages cm
+SET project_id = c.project_id
+FROM chats c
+WHERE c.id = cm.chat_id
+  AND cm.project_id IS DISTINCT FROM c.project_id;
+
+-- name: CountChatMessagesWithMismatchedProject :one
+SELECT count(*)::bigint
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+WHERE cm.project_id IS DISTINCT FROM c.project_id;
+
+-- name: CountChatMessagesWithNullProject :one
+SELECT count(*)::bigint
+FROM chat_messages
+WHERE project_id IS NULL;
 
 -- name: GetChatMessageStats :one
 -- Chat-wide aggregates (total message count + most recent message timestamp).
@@ -1533,7 +1567,7 @@ WHERE id IN (
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
       AND cr.project_id = @project_id
-      AND cm.project_id = @project_id
+      AND cm.project_id = @project_id::uuid
       AND (cm.created_at, cm.seq) > (
         SELECT created_at, seq FROM chat_messages
         WHERE chat_messages.id = @after_message_id

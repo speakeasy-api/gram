@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -996,8 +997,14 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
-			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
+		event := "hooks_ingest_chat_persist_failed"
+		msg := "failed to persist canonical hook conversation event"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist hook conversation event for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1008,8 +1015,14 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
 	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
-			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
+		event := "hooks_ingest_prompt_attachment_persist_failed"
+		msg := "failed to persist prompt attachments"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist prompt attachments for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1713,6 +1726,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		return nil
 	}
 
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "")); err != nil {
+		return err
+	}
+
 	contents := make([][]byte, len(pending))
 	for i := range pending {
 		contents[i] = pending[i].content
@@ -1743,17 +1760,8 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	} else if !isForeignKeyViolation(err) {
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
-	})
-	if upsertErr != nil {
-		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "")); err != nil {
+		return fmt.Errorf("upsert claude code session for prompt attachments: %w", err)
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
 		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
