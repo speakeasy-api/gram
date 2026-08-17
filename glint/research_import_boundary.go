@@ -26,6 +26,7 @@ var researchImportBoundaryForbidden = []string{
 	"github.com/jackc/pgx",
 	"database/sql",
 	"github.com/ClickHouse/clickhouse-go",
+	"github.com/ClickHouse/ch-go",
 	"github.com/redis/go-redis",
 }
 
@@ -84,6 +85,10 @@ func researchImportBoundaryViolated(path string) bool {
 		}
 	}
 
-	return strings.HasPrefix(path, "github.com/speakeasy-api/gram/") &&
-		(strings.HasSuffix(path, "/repo") || strings.Contains(path, "/repo/"))
+	if !strings.HasPrefix(path, "github.com/speakeasy-api/gram/") {
+		return false
+	}
+
+	return strings.HasSuffix(path, "/repo") || strings.Contains(path, "/repo/") ||
+		strings.HasSuffix(path, "/chrepo") || strings.Contains(path, "/chrepo/")
 }

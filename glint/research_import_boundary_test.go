@@ -27,7 +27,9 @@ func TestResearchImportBoundaryDefaultsProtectProductionPackages(t *testing.T) {
 	require.Contains(t, researchImportBoundaryPackages, "github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent")
 	require.Contains(t, researchImportBoundaryPackages, "github.com/speakeasy-api/gram/server/internal/platformtools/research")
 	require.True(t, researchImportBoundaryViolated("github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"))
+	require.True(t, researchImportBoundaryViolated("github.com/speakeasy-api/gram/server/internal/risk/chrepo"))
 	require.True(t, researchImportBoundaryViolated("github.com/jackc/pgx/v5/pgxpool"))
+	require.True(t, researchImportBoundaryViolated("github.com/ClickHouse/ch-go/proto"))
 	require.False(t, researchImportBoundaryViolated("github.com/speakeasy-api/gram/server/internal/oops"))
 }
 
