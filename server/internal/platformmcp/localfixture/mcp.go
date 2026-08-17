@@ -62,6 +62,7 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id"`
 		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.JSONRPC != "2.0" {
 		writeFixtureMCPError(w, request.ID, -32600, "invalid request")
@@ -111,6 +112,24 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 			"annotations": map[string]any{"readOnlyHint": true},
 		}}})
+	case "tools/call":
+		if !s.hasSession(sessionID) {
+			writeFixtureMCPError(w, request.ID, -32600, "unknown session")
+			return
+		}
+		var params struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil || params.Name != fixtureToolName {
+			writeFixtureMCPError(w, request.ID, -32602, "unknown tool")
+			return
+		}
+		writeFixtureMCPResult(w, request.ID, map[string]any{
+			"content": []map[string]string{{
+				"type": "text",
+				"text": "local fixture status: ready",
+			}},
+		})
 	default:
 		writeFixtureMCPError(w, request.ID, -32601, "method not found")
 	}

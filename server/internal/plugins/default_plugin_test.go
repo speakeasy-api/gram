@@ -8,12 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
@@ -238,6 +241,156 @@ func TestAttachToDefaultPlugin_SuffixedNameAlsoTaken_ProbesLadder(t *testing.T) 
 	servers, err := queries.ListPluginServers(ctx, result.PluginID)
 	require.NoError(t, err)
 	require.Len(t, servers, 3, "the attach must succeed alongside both occupied names")
+}
+
+func TestAttachToExistingDefaultPluginAudited_RejectsMissingDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Missing Default", mcpservers.VisibilityPublic)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+
+	attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Missing Default")
+	require.ErrorIs(t, err, plugins.ErrDefaultPluginNotFound)
+	require.Nil(t, attached)
+}
+
+func TestAttachToExistingDefaultPluginAudited_AttachesAndAudits(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Platform Distribution", mcpservers.VisibilityPublic)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	defaultPlugin, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+	attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Platform Distribution")
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.False(t, attached.PluginCreated)
+	require.Equal(t, defaultPlugin.Plugin.ID, attached.PluginID)
+	require.Equal(t, mcpServer.id, attached.Server.McpServerID.UUID)
+	require.NoError(t, tx.Commit(ctx))
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	expectedMcpServerURN := urn.NewMcpServer(mcpServer.id)
+	require.Equal(t, expectedMcpServerURN.String(), metadata["mcp_server_urn"])
+}
+
+func TestAttachToExistingDefaultPluginAudited_NoOpsWithoutDuplicateAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Idempotent Distribution", mcpservers.VisibilityPublic)
+	tx1 := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := plugins.EnsureDefaultPlugin(ctx, tx1, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+	first, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx1, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Idempotent Distribution")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.NoError(t, tx1.Commit(ctx))
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	second, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx2, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Idempotent Distribution")
+	require.NoError(t, err)
+	require.Nil(t, second)
+	require.NoError(t, tx2.Commit(ctx))
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestAttachToExistingDefaultPluginAudited_RejectsUnpublishableMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServer := createTestMcpServerWithEndpoint(t, ctx, ti.conn, "Disabled Distribution", mcpservers.VisibilityDisabled, true)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	defaultPlugin, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+
+	attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Disabled Distribution")
+	require.ErrorIs(t, err, plugins.ErrMcpServerNotPublishable)
+	require.Nil(t, attached)
+
+	servers, err := pluginsrepo.New(tx).ListPluginServers(ctx, defaultPlugin.Plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, servers)
+}
+
+func TestAttachToExistingDefaultPluginAudited_RejectsEndpointlessMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServer := createTestMcpServerWithEndpoint(t, ctx, ti.conn, "Endpointless Distribution", mcpservers.VisibilityPublic, false)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	defaultPlugin, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+
+	attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.id, "Endpointless Distribution")
+	require.ErrorIs(t, err, plugins.ErrMcpServerNotPublishable)
+	require.Nil(t, attached)
+
+	servers, err := pluginsrepo.New(tx).ListPluginServers(ctx, defaultPlugin.Plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, servers)
+}
+
+func TestAttachToExistingDefaultPluginAudited_RejectsCrossProjectMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	originalProjectID := *authCtx.ProjectID
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "other-project",
+		Slug:           "other-project",
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	authCtx.ProjectID = &otherProject.ID
+	otherCtx := contextvalues.SetAuthContext(ctx, authCtx)
+	otherServer := createTestMcpServer(t, otherCtx, ti.conn, "Other Project Server", mcpservers.VisibilityPublic)
+	authCtx.ProjectID = &originalProjectID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	defaultPlugin, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, originalProjectID)
+	require.NoError(t, err)
+	attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, audit.NewLogger(), authCtx, authCtx.ActiveOrganizationID, originalProjectID, otherServer.id, "Cross Project")
+	require.ErrorIs(t, err, plugins.ErrMcpServerNotFoundForProject)
+	require.Nil(t, attached)
+	servers, err := pluginsrepo.New(tx).ListPluginServers(ctx, defaultPlugin.Plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, servers)
 }
 
 func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *testing.T) {

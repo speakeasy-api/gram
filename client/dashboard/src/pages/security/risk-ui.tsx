@@ -51,7 +51,14 @@ export function CategoryLabel({
       title={`${meta.label}: ${meta.description}`}
     >
       <Badge variant="neutral" className="max-w-full">
-        <Badge.Text className="min-w-0 truncate">{meta.label}</Badge.Text>
+        {/* The ellipsis needs overflow:hidden, but Badge.Text's default box
+            hugs the glyph ink (leading-none plus cap/alphabetic
+            text-box-trim), so clipping there shaves the letters themselves.
+            Disable the trim and open up the line box on this truncating
+            instance so the ink never crosses the clip edge. */}
+        <Badge.Text className="min-w-0 truncate leading-normal [text-box-trim:none]">
+          {meta.label}
+        </Badge.Text>
       </Badge>
     </span>
   );

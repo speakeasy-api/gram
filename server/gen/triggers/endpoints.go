@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	ListTriggerDefinitions goa.Endpoint
 	ListTriggerInstances   goa.Endpoint
+	ListTriggerEvents      goa.Endpoint
 	GetTriggerInstance     goa.Endpoint
 	CreateTriggerInstance  goa.Endpoint
 	UpdateTriggerInstance  goa.Endpoint
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListTriggerDefinitions: NewListTriggerDefinitionsEndpoint(s, a.APIKeyAuth),
 		ListTriggerInstances:   NewListTriggerInstancesEndpoint(s, a.APIKeyAuth),
+		ListTriggerEvents:      NewListTriggerEventsEndpoint(s, a.APIKeyAuth),
 		GetTriggerInstance:     NewGetTriggerInstanceEndpoint(s, a.APIKeyAuth),
 		CreateTriggerInstance:  NewCreateTriggerInstanceEndpoint(s, a.APIKeyAuth),
 		UpdateTriggerInstance:  NewUpdateTriggerInstanceEndpoint(s, a.APIKeyAuth),
@@ -46,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTriggerDefinitions = m(e.ListTriggerDefinitions)
 	e.ListTriggerInstances = m(e.ListTriggerInstances)
+	e.ListTriggerEvents = m(e.ListTriggerEvents)
 	e.GetTriggerInstance = m(e.GetTriggerInstance)
 	e.CreateTriggerInstance = m(e.CreateTriggerInstance)
 	e.UpdateTriggerInstance = m(e.UpdateTriggerInstance)
@@ -121,6 +124,41 @@ func NewListTriggerInstancesEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.ListTriggerInstances(ctx, p)
+	}
+}
+
+// NewListTriggerEventsEndpoint returns an endpoint function that calls the
+// method "listTriggerEvents" of service "triggers".
+func NewListTriggerEventsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTriggerEventsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTriggerEvents(ctx, p)
 	}
 }
 

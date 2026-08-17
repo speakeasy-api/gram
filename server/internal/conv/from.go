@@ -455,6 +455,26 @@ func ClampedIntToUint8(v int) (out uint8, clamped bool) {
 	return uint8(v), false
 }
 
+// ClampedUint64ToInt64 converts a uint64 to an int64, clamping the value to
+// math.MaxInt64 if it exceeds the maximum value for int64. The second return
+// value indicates whether clamping occurred.
+func ClampedUint64ToInt64(v uint64) (out int64, clamped bool) {
+	if v > math.MaxInt64 {
+		return math.MaxInt64, true
+	}
+	return int64(v), false
+}
+
+// ClampedUint64ToInt converts a uint64 to an int, clamping the value to
+// math.MaxInt if it exceeds the platform's maximum int value. The second
+// return value indicates whether clamping occurred.
+func ClampedUint64ToInt(v uint64) (out int, clamped bool) {
+	if v > uint64(math.MaxInt) {
+		return math.MaxInt, true
+	}
+	return int(v), false
+}
+
 // SafeInt converts int64 to int, clamping at the platform's int boundaries.
 func SafeInt(v int64) int {
 	const maxInt = int64(^uint(0) >> 1)

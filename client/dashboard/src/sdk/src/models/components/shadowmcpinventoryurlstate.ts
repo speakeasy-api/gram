@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ShadowMCPInventoryApprovalRequest,
+  ShadowMCPInventoryApprovalRequest$inboundSchema,
+} from "./shadowmcpinventoryapprovalrequest.js";
+import {
   ShadowMCPInventoryRequestSummary,
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
@@ -15,6 +19,10 @@ import {
 export type ShadowMCPInventoryURLState = {
   access: string;
   allowedPolicyIds: Array<string>;
+  /**
+   * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
+   */
+  approvalRequest?: ShadowMCPInventoryApprovalRequest | undefined;
   /**
    * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
    */
@@ -31,6 +39,9 @@ export const ShadowMCPInventoryURLState$inboundSchema: z.ZodMiniType<
   z.object({
     access: z.string(),
     allowed_policy_ids: z.array(z.string()),
+    approval_request: z.optional(
+      ShadowMCPInventoryApprovalRequest$inboundSchema,
+    ),
     blocked_policy_ids: z.array(z.string()),
     latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     request_count: z.int(),
@@ -38,6 +49,7 @@ export const ShadowMCPInventoryURLState$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "allowed_policy_ids": "allowedPolicyIds",
+      "approval_request": "approvalRequest",
       "blocked_policy_ids": "blockedPolicyIds",
       "latest_request": "latestRequest",
       "request_count": "requestCount",

@@ -108,6 +108,10 @@ type Service struct {
 	// back. Must be the same backing store the link generator uses.
 	cache     cache.Cache
 	jwtSecret string
+	// approvalIntake routes a redeemed shadow-MCP block link into the MCP
+	// approval workflow instead of a bypass request. Optional: nil keeps the
+	// legacy bypass flow.
+	approvalIntake ShadowMCPApprovalIntake
 	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
 	// when nil the feature is treated as disabled.
 	flags feature.Provider
@@ -173,6 +177,7 @@ func NewObserver(
 		audit:                        auditLogger,
 		cache:                        nil,
 		jwtSecret:                    "",
+		approvalIntake:               nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -200,6 +205,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	cacheImpl cache.Cache,
 	jwtSecret string,
+	approvalIntake ShadowMCPApprovalIntake,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
@@ -231,6 +237,7 @@ func NewService(
 		audit:                        auditLogger,
 		cache:                        cacheImpl,
 		jwtSecret:                    jwtSecret,
+		approvalIntake:               approvalIntake,
 		piiScanner:                   piiScanner,
 		piScanner:                    piScanner,
 		gitleaksScanner:              gitleaks.NewScanner(),
@@ -2848,6 +2855,16 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
+// errExclusionSuggestionInvalid marks a completion that parsed but failed
+// semantic validation (bad match_type, regex that does not compile as RE2,
+// empty value) — the one failure class where feeding the error back gives
+// the model something it can act on, so it is worth one corrective retry.
+// Transport failures, empty completions, and unparseable JSON stay outside
+// it: the retry prompt carries only the error text, not the model's raw
+// output, so a parse-level failure cannot self-correct and the second call
+// would be wasted.
+var errExclusionSuggestionInvalid = errors.New("invalid exclusion suggestion")
+
 func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
@@ -2913,6 +2930,30 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Strict:      optionalnullable.From(&strict),
 	}
 
+	result, err := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, userMessage, &jsonSchema)
+	if err == nil {
+		return result, nil
+	}
+	if !errors.Is(err, errExclusionSuggestionInvalid) {
+		return nil, err
+	}
+
+	// One corrective retry with the validation error fed back. Without it, a
+	// model slip (a lookahead in an otherwise fine regex, say) drops the
+	// caller onto the heuristic fallback — an exact match on the operator's
+	// entire prompt text — which reads as the AI failing outright.
+	retryMessage := fmt.Sprintf("%s\n\nYour previous suggestion was rejected: %v\nReturn a corrected JSON object that fixes this.", userMessage, err)
+	result, retryErr := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, retryMessage, &jsonSchema)
+	if retryErr != nil {
+		return nil, fmt.Errorf("retry exclusion suggestion: %w (first attempt: %w)", retryErr, err)
+	}
+	return result, nil
+}
+
+// requestExclusionSuggestion performs a single completion round trip and
+// validates the response with the same gate the create/update exclusion
+// handlers use. Validation failures wrap errExclusionSuggestionInvalid.
+func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, projectID, userID, userEmail, systemPrompt, userMessage string, jsonSchema *or.ChatJSONSchemaConfig) (*gen.SuggestExclusionResult, error) {
 	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -2933,7 +2974,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		ExternalUserID: "",
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
+		JSONSchema:     jsonSchema,
 		Reasoning:      nil,
 	})
 	if err != nil {
@@ -2964,12 +3005,12 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	parsed.SourceFilter = strings.TrimSpace(parsed.SourceFilter)
 
 	if !exclusionMatchTypeAllow[parsed.MatchType] {
-		return nil, fmt.Errorf("model returned invalid match_type %q", parsed.MatchType)
+		return nil, fmt.Errorf("%w: model returned invalid match_type %q", errExclusionSuggestionInvalid, parsed.MatchType)
 	}
 	// Same gate the create/update exclusion handlers apply: non-empty value,
 	// and a regex must compile (RE2) and fit the length cap.
 	if err := validateExclusionMatchValue(parsed.MatchType, parsed.MatchValue); err != nil {
-		return nil, fmt.Errorf("model returned invalid match_value: %w", err)
+		return nil, fmt.Errorf("%w: model returned invalid match_value: %w", errExclusionSuggestionInvalid, err)
 	}
 
 	return exclusionSuggestionResult(parsed.MatchType, parsed.MatchValue, parsed.RuleIDFilter, parsed.SourceFilter), nil

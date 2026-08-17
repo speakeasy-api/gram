@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_ListRoles_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -62,7 +61,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"))
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: roleID})
 	require.NoError(t, err)
@@ -213,7 +212,7 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)

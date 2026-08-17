@@ -570,13 +570,13 @@ func (c *Client) GetRiskPolicyStatus(ctx context.Context, p *GetRiskPolicyStatus
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateRiskPolicyBypassRequest(ctx context.Context, p *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error) {
+func (c *Client) CreateRiskPolicyBypassRequest(ctx context.Context, p *CreateRiskPolicyBypassRequestPayload) (res *PolicyBypassRedemption, err error) {
 	var ires any
 	ires, err = c.CreateRiskPolicyBypassRequestEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*RiskPolicyBypassRequest), nil
+	return ires.(*PolicyBypassRedemption), nil
 }
 
 // AcknowledgeRiskPolicyChallenge calls the "acknowledgeRiskPolicyChallenge"

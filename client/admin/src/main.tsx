@@ -2,8 +2,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthGate } from "@/components/auth-gate";
 import { routeTree } from "./routeTree.gen";
 import "./index.css";
+
+// Hover an element and press Cmd/Ctrl+C to copy its file, component and HTML
+// for pasting into a coding agent. `import.meta.env.DEV` is replaced with
+// `false` in production, so this import is tree-shaken out of the bundle.
+if (import.meta.env.DEV) {
+  void import("react-grab");
+}
 
 const root = document.getElementById("root");
 if (!root) {
@@ -29,7 +37,9 @@ declare module "@tanstack/react-router" {
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthGate>
+        <RouterProvider router={router} />
+      </AuthGate>
     </QueryClientProvider>
   </React.StrictMode>,
 );

@@ -43,6 +43,17 @@ type SummarizeRequestBody struct {
 	Regenerate *bool `form:"regenerate,omitempty" json:"regenerate,omitempty" xml:"regenerate,omitempty"`
 }
 
+// SummarizeToolCallRequestBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP request body.
+type SummarizeToolCallRequestBody struct {
+	// The ID of the chat containing the tool call
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the assistant message containing the tool call
+	MessageID *string `form:"message_id,omitempty" json:"message_id,omitempty" xml:"message_id,omitempty"`
+	// The provider-assigned ID of the tool call
+	ToolCallID *string `form:"tool_call_id,omitempty" json:"tool_call_id,omitempty" xml:"tool_call_id,omitempty"`
+}
+
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
 // endpoint HTTP request body.
 type SubmitFeedbackRequestBody struct {
@@ -59,6 +70,19 @@ type ListChatsResponseBody struct {
 	Chats []*ChatOverviewResponseBody `form:"chats" json:"chats" xml:"chats"`
 	// Total number of chats (before pagination)
 	Total int `form:"total" json:"total" xml:"total"`
+}
+
+// GetAssistantSessionSummaryResponseBody is the type of the "chat" service
+// "getAssistantSessionSummary" endpoint HTTP response body.
+type GetAssistantSessionSummaryResponseBody struct {
+	// Number of sessions with activity in the range
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+	// Number of messages created in the range
+	Messages int64 `form:"messages" json:"messages" xml:"messages"`
+	// Tokens consumed in the range
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Cost in USD incurred in the range
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 }
 
 // GetWorkUnitsTrendResponseBody is the type of the "chat" service
@@ -131,6 +155,9 @@ type LoadChatResponseBody struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool `form:"litellm_proxied,omitempty" json:"litellm_proxied,omitempty" xml:"litellm_proxied,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -191,6 +218,17 @@ type SummarizeResponseBody struct {
 	// When the summary was last generated.
 	SummaryGeneratedAt string `form:"summary_generated_at" json:"summary_generated_at" xml:"summary_generated_at"`
 	// True when an existing summary was returned without regenerating
+	Cached bool `form:"cached" json:"cached" xml:"cached"`
+}
+
+// SummarizeToolCallResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body.
+type SummarizeToolCallResponseBody struct {
+	// A concise two-sentence description of the tool call and its effect
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// Whether the tool call only read data or could change state
+	Impact string `form:"impact" json:"impact" xml:"impact"`
+	// True when a stored summary was returned without calling the model
 	Cached bool `form:"cached" json:"cached" xml:"cached"`
 }
 
@@ -374,6 +412,196 @@ type ListChatsUnexpectedResponseBody struct {
 // ListChatsGatewayErrorResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "gateway_error" error.
 type ListChatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryUnauthorizedResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetAssistantSessionSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryForbiddenResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetAssistantSessionSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryBadRequestResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "bad_request" error.
+type GetAssistantSessionSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryNotFoundResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "not_found" error.
+type GetAssistantSessionSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryConflictResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "conflict" error.
+type GetAssistantSessionSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryUnsupportedMediaResponseBody is the type of the
+// "chat" service "getAssistantSessionSummary" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetAssistantSessionSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryInvalidResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "invalid" error.
+type GetAssistantSessionSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryInvariantViolationResponseBody is the type of the
+// "chat" service "getAssistantSessionSummary" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetAssistantSessionSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryUnexpectedResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "unexpected" error.
+type GetAssistantSessionSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAssistantSessionSummaryGatewayErrorResponseBody is the type of the "chat"
+// service "getAssistantSessionSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetAssistantSessionSummaryGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1655,6 +1883,189 @@ type SummarizeGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SummarizeToolCallUnauthorizedResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeToolCallUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallForbiddenResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "forbidden" error.
+type SummarizeToolCallForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallBadRequestResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "bad_request" error.
+type SummarizeToolCallBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallNotFoundResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "not_found" error.
+type SummarizeToolCallNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallConflictResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "conflict" error.
+type SummarizeToolCallConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallUnsupportedMediaResponseBody is the type of the "chat"
+// service "summarizeToolCall" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SummarizeToolCallUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallInvalidResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "invalid" error.
+type SummarizeToolCallInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallInvariantViolationResponseBody is the type of the "chat"
+// service "summarizeToolCall" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SummarizeToolCallInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallUnexpectedResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "unexpected" error.
+type SummarizeToolCallUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeToolCallGatewayErrorResponseBody is the type of the "chat" service
+// "summarizeToolCall" endpoint HTTP response body for the "gateway_error"
+// error.
+type SummarizeToolCallGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SubmitFeedbackUnauthorizedResponseBody is the type of the "chat" service
 // "submitFeedback" endpoint HTTP response body for the "unauthorized" error.
 type SubmitFeedbackUnauthorizedResponseBody struct {
@@ -2040,6 +2451,9 @@ type ChatOverviewResponseBody struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool `form:"litellm_proxied,omitempty" json:"litellm_proxied,omitempty" xml:"litellm_proxied,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -2266,6 +2680,19 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 	return body
 }
 
+// NewGetAssistantSessionSummaryResponseBody builds the HTTP response body from
+// the result of the "getAssistantSessionSummary" endpoint of the "chat"
+// service.
+func NewGetAssistantSessionSummaryResponseBody(res *chat.AssistantSessionSummary) *GetAssistantSessionSummaryResponseBody {
+	body := &GetAssistantSessionSummaryResponseBody{
+		Sessions:    res.Sessions,
+		Messages:    res.Messages,
+		TotalTokens: res.TotalTokens,
+		TotalCost:   res.TotalCost,
+	}
+	return body
+}
+
 // NewGetWorkUnitsTrendResponseBody builds the HTTP response body from the
 // result of the "getWorkUnitsTrend" endpoint of the "chat" service.
 func NewGetWorkUnitsTrendResponseBody(res *chat.WorkUnitsTrendResult) *GetWorkUnitsTrendResponseBody {
@@ -2305,6 +2732,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		OriginatingClient:    res.OriginatingClient,
+		LitellmProxied:       res.LitellmProxied,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 		TotalInputTokens:     res.TotalInputTokens,
@@ -2399,6 +2827,17 @@ func NewSummarizeResponseBody(res *chat.SummarizeChatResult) *SummarizeResponseB
 		Summary:            res.Summary,
 		SummaryGeneratedAt: res.SummaryGeneratedAt,
 		Cached:             res.Cached,
+	}
+	return body
+}
+
+// NewSummarizeToolCallResponseBody builds the HTTP response body from the
+// result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallResponseBody(res *chat.SummarizeToolCallResult) *SummarizeToolCallResponseBody {
+	body := &SummarizeToolCallResponseBody{
+		Summary: res.Summary,
+		Impact:  res.Impact,
+		Cached:  res.Cached,
 	}
 	return body
 }
@@ -2557,6 +2996,156 @@ func NewListChatsUnexpectedResponseBody(res *goa.ServiceError) *ListChatsUnexpec
 // result of the "listChats" endpoint of the "chat" service.
 func NewListChatsGatewayErrorResponseBody(res *goa.ServiceError) *ListChatsGatewayErrorResponseBody {
 	body := &ListChatsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getAssistantSessionSummary" endpoint
+// of the "chat" service.
+func NewGetAssistantSessionSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryUnauthorizedResponseBody {
+	body := &GetAssistantSessionSummaryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryForbiddenResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryForbiddenResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryForbiddenResponseBody {
+	body := &GetAssistantSessionSummaryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryBadRequestResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryBadRequestResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryBadRequestResponseBody {
+	body := &GetAssistantSessionSummaryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryNotFoundResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryNotFoundResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryNotFoundResponseBody {
+	body := &GetAssistantSessionSummaryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryConflictResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryConflictResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryConflictResponseBody {
+	body := &GetAssistantSessionSummaryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getAssistantSessionSummary" endpoint
+// of the "chat" service.
+func NewGetAssistantSessionSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryUnsupportedMediaResponseBody {
+	body := &GetAssistantSessionSummaryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryInvalidResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryInvalidResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryInvalidResponseBody {
+	body := &GetAssistantSessionSummaryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getAssistantSessionSummary" endpoint
+// of the "chat" service.
+func NewGetAssistantSessionSummaryInvariantViolationResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryInvariantViolationResponseBody {
+	body := &GetAssistantSessionSummaryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getAssistantSessionSummary" endpoint of the
+// "chat" service.
+func NewGetAssistantSessionSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryUnexpectedResponseBody {
+	body := &GetAssistantSessionSummaryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAssistantSessionSummaryGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getAssistantSessionSummary" endpoint
+// of the "chat" service.
+func NewGetAssistantSessionSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetAssistantSessionSummaryGatewayErrorResponseBody {
+	body := &GetAssistantSessionSummaryGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3549,6 +4138,148 @@ func NewSummarizeGatewayErrorResponseBody(res *goa.ServiceError) *SummarizeGatew
 	return body
 }
 
+// NewSummarizeToolCallUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeToolCallUnauthorizedResponseBody {
+	body := &SummarizeToolCallUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallForbiddenResponseBody builds the HTTP response body from
+// the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallForbiddenResponseBody(res *goa.ServiceError) *SummarizeToolCallForbiddenResponseBody {
+	body := &SummarizeToolCallForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallBadRequestResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallBadRequestResponseBody(res *goa.ServiceError) *SummarizeToolCallBadRequestResponseBody {
+	body := &SummarizeToolCallBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallNotFoundResponseBody builds the HTTP response body from
+// the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallNotFoundResponseBody(res *goa.ServiceError) *SummarizeToolCallNotFoundResponseBody {
+	body := &SummarizeToolCallNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallConflictResponseBody builds the HTTP response body from
+// the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallConflictResponseBody(res *goa.ServiceError) *SummarizeToolCallConflictResponseBody {
+	body := &SummarizeToolCallConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "summarizeToolCall" endpoint of the "chat"
+// service.
+func NewSummarizeToolCallUnsupportedMediaResponseBody(res *goa.ServiceError) *SummarizeToolCallUnsupportedMediaResponseBody {
+	body := &SummarizeToolCallUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallInvalidResponseBody builds the HTTP response body from
+// the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallInvalidResponseBody(res *goa.ServiceError) *SummarizeToolCallInvalidResponseBody {
+	body := &SummarizeToolCallInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "summarizeToolCall" endpoint of the "chat"
+// service.
+func NewSummarizeToolCallInvariantViolationResponseBody(res *goa.ServiceError) *SummarizeToolCallInvariantViolationResponseBody {
+	body := &SummarizeToolCallInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallUnexpectedResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallUnexpectedResponseBody(res *goa.ServiceError) *SummarizeToolCallUnexpectedResponseBody {
+	body := &SummarizeToolCallUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeToolCallGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "summarizeToolCall" endpoint of the "chat" service.
+func NewSummarizeToolCallGatewayErrorResponseBody(res *goa.ServiceError) *SummarizeToolCallGatewayErrorResponseBody {
+	body := &SummarizeToolCallGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSubmitFeedbackUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "submitFeedback" endpoint of the "chat" service.
 func NewSubmitFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *SubmitFeedbackUnauthorizedResponseBody {
@@ -3856,6 +4587,19 @@ func NewListChatsPayload(search *string, externalUserID *string, userID *string,
 	return v
 }
 
+// NewGetAssistantSessionSummaryPayload builds a chat service
+// getAssistantSessionSummary endpoint payload.
+func NewGetAssistantSessionSummaryPayload(assistantID string, from string, to string, sessionToken *string, projectSlugInput *string) *chat.GetAssistantSessionSummaryPayload {
+	v := &chat.GetAssistantSessionSummaryPayload{}
+	v.AssistantID = assistantID
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetWorkUnitsTrendPayload builds a chat service getWorkUnitsTrend endpoint
 // payload.
 func NewGetWorkUnitsTrendPayload(from *string, to *string, sessionToken *string, projectSlugInput *string) *chat.GetWorkUnitsTrendPayload {
@@ -3947,6 +4691,20 @@ func NewSummarizePayload(body *SummarizeRequestBody, sessionToken *string, proje
 	return v
 }
 
+// NewSummarizeToolCallPayload builds a chat service summarizeToolCall endpoint
+// payload.
+func NewSummarizeToolCallPayload(body *SummarizeToolCallRequestBody, sessionToken *string, projectSlugInput *string) *chat.SummarizeToolCallPayload {
+	v := &chat.SummarizeToolCallPayload{
+		ID:         *body.ID,
+		MessageID:  *body.MessageID,
+		ToolCallID: *body.ToolCallID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewSubmitFeedbackPayload builds a chat service submitFeedback endpoint
 // payload.
 func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.SubmitFeedbackPayload {
@@ -4005,6 +4763,27 @@ func ValidateSummarizeRequestBody(body *SummarizeRequestBody) (err error) {
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSummarizeToolCallRequestBody runs the validations defined on
+// SummarizeToolCallRequestBody
+func ValidateSummarizeToolCallRequestBody(body *SummarizeToolCallRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.MessageID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message_id", "body"))
+	}
+	if body.ToolCallID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.MessageID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.message_id", *body.MessageID, goa.FormatUUID))
 	}
 	return
 }

@@ -66,6 +66,10 @@ type Service struct {
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
 	efficacySignaler efficacy.Signaler
+	// identityMapRefresh is optional: when nil, newly attributed account
+	// links converge into the ClickHouse identity map at the sync schedule's
+	// next tick instead of immediately.
+	identityMapRefresh IdentityMapRefreshSignaler
 	// suggestionSignaler is optional: when nil, recorded feedback skips the
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
@@ -174,6 +178,34 @@ type ChatTitleGenerator interface {
 // slow coordinator.
 const skillEfficacySignalTimeout = time.Second
 
+// IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
+// sync after an account link gains attribution. Implemented by the background
+// package's throttled schedule trigger.
+type IdentityMapRefreshSignaler interface {
+	SignalIdentityMapRefresh(ctx context.Context) error
+}
+
+// identityMapRefreshSignalTimeout bounds one refresh request. A request is
+// best-effort and always follows a durable link write, so it must never hold
+// a hook response open on a slow Temporal call.
+const identityMapRefreshSignalTimeout = time.Second
+
+// signalIdentityMapRefresh delivers one best-effort refresh request after an
+// attributed account link write. Detached from the request context — the link
+// is already durable — and bounded so a slow Temporal call can never hold a
+// hook response open. Failures are logged and swallowed: the sync schedule
+// delivers the same refresh at its next tick.
+func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
+	if s.identityMapRefresh == nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityMapRefreshSignalTimeout)
+	defer cancel()
+	if err := s.identityMapRefresh.SignalIdentityMapRefresh(signalCtx); err != nil {
+		s.logger.ErrorContext(ctx, "signal identity map refresh from hook", attr.SlogError(err))
+	}
+}
+
 // signalSkillEfficacy delivers one best-effort wake for a project. Detached
 // from the request context: the write the wake reports is already durable, so a
 // client disconnect must not drop it. Failures are logged and swallowed —
@@ -216,6 +248,7 @@ func NewService(
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
+	identityMapRefresh IdentityMapRefreshSignaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
@@ -241,6 +274,7 @@ func NewService(
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
+		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,

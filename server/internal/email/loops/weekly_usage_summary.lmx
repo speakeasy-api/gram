@@ -1,0 +1,38 @@
+<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="#121212" buttonBodyXPadding="22" buttonBodyYPadding="14" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FFFFFF" buttonTextFormat="0" buttonTextFontSize="13" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="#121212" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="#FFFFFF" heading2FontSize="48" heading2LineHeight="100" heading2LetterSpacing="-1.5" heading3Color="#EBEBEB" heading3FontSize="12" heading3LineHeight="150" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
+<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem verticalAlignment="middle">
+    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
+  </ColumnItem>
+</Columns>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">WEEKLY USAGE · </Strong>{data.organization_name}</Paragraph>
+<H1 paddingRight="40" paddingBottom="36" paddingLeft="40">Your usage,<Br />at a glance.</H1>
+<Section blockColor="#121212" paddingTop="34" paddingRight="40" paddingBottom="36" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#BABABA">TOKENS MANAGED · CYCLE TO DATE</Strong></Paragraph>
+  <H2 paddingTop="13">{data.total_tokens}</H2>
+  <H3 paddingTop="14">{data.total_change_percent} vs. the same point last cycle</H3>
+</Section>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingBottom="32">
+  <Columns gap="12" widths="50,50">
+    <ColumnItem>
+      <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">PREVIOUS CYCLE</Strong><Br />{data.previous_total_tokens}</Paragraph>
+    </ColumnItem>
+    <ColumnItem>
+      <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">REMAINING</Strong><Br />{data.days_remaining}</Paragraph>
+    </ColumnItem>
+  </Columns>
+</Section>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="32" paddingRight="40" paddingBottom="10" paddingLeft="40"><Strong textColor="#757575">BILLING CYCLE</Strong></Paragraph>
+<Paragraph fontSize="14" lineHeight="160" paddingRight="40" paddingBottom="36" paddingLeft="40">Your current cycle ends on {data.cycle_end_date}.</Paragraph>
+<Button href="{data.view_usage_url}" paddingRight="40" paddingBottom="48" paddingLeft="40">View detailed usage →</Button>
+<Divider />
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">You’re receiving this operational report because this address is configured for billing alerts in Speakeasy.</Paragraph>
+</Section>

@@ -43,20 +43,22 @@ const (
 	// server-side per organization with distinctID = the issuer's org ID and
 	// no groups.
 	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
-	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
-	// It is evaluated in addition to the durable Platform MCP product capability.
-	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
-	// FlagPlatformMCPCatalogRegistration independently gates Platform MCP catalog
-	// registration and provider-setup handoffs. It is evaluated after the main
-	// Platform MCP gate and is default-off during the mutation rollout.
-	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
-	// FlagAssistantPlatformMCP selects which platform toolset a project's
-	// managed (dashboard) assistant is served. It is MULTIVARIATE, not
-	// boolean: the matched variant names the toolset, and the two variants are
-	// mutually exclusive — an org on one never sees the other's tools. See
-	// VariantAssistantToolsLegacy / VariantAssistantToolsPlatformMCP. Targeted
-	// by PostHog organization group (org slug), like FlagBudgets. Evaluated
-	// server-side only; removed once one variant wins.
+
+	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
+	// durable platform_mcp product feature remains the organization-admin opt-in
+	// once this release flag permits access.
+	FlagPlatformMCP Flag = "platform-mcp"
+	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
+	// Platform MCP. It is presentation-only; runtime authorization requires
+	// FlagPlatformMCP and the durable organization product feature.
+	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+
+	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
+	// assistant the Platform MCP read toolset — the "platform" platform
+	// toolset re-serving the Platform MCP read tools over the assistant
+	// runtime channel. Targeted by PostHog organization group (org slug),
+	// like FlagBudgets. Evaluated server-side only; removed once the toolset
+	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
@@ -72,6 +74,29 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+
+	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
+	// telemetry.listSessions) email filters and group-bys through the
+	// ClickHouse identity_map fold, so one employee's directory, personal,
+	// and case-variant emails read as one identity. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. Removed once the fold
+	// is GA (DNO-856).
+	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
+	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
+	// telemetry.query table read alongside the literal one — serving the
+	// literal result — and logs divergence, validating the fold on real
+	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
+	// when the fold flag is on. Same targeting; removed with the fold flag.
+	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
+
+	// FlagMCPApproval gates the MCP approval workflow end to end: the
+	// approval queue, evidence gathering, deciding, and the promotion of
+	// blocked-server redemptions into approval requests (orgs off the flag
+	// fall back to legacy bypass requests). Targeted by PostHog organization
+	// group (org slug), like FlagBudgets. A rollout gate while the workflow
+	// is dogfooded; if approval becomes a sold capability the durable
+	// entitlement returns through productfeatures alongside this flag.
+	FlagMCPApproval Flag = "gram-mcp-approval"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

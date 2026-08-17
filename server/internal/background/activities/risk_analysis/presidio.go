@@ -667,7 +667,7 @@ func convertPresidioFindings(text string, results []presidioResult) []scanners.F
 			continue
 		}
 
-		if isPresidioFalsePositive(r.EntityType, match) {
+		if isPresidioFalsePositive(r.EntityType, match, text) {
 			continue
 		}
 
@@ -699,9 +699,15 @@ func convertPresidioFindings(text string, results []presidioResult) []scanners.F
 // type is noise the policy author would not want surfaced. The catalogs and
 // dispatch live in the leaf package internal/risk/presidiofp so they can be
 // reused outside the scanner (e.g. the offline sweep that re-evaluates stored
-// findings); see presidiofp.Reason for the per-entity coverage.
-func isPresidioFalsePositive(entityType, match string) bool {
-	return presidiofp.Reason(entityType, match) != ""
+// findings); see presidiofp.ReasonInContext for the per-entity coverage.
+//
+// text is the payload the match came from. Most catalogs judge the match alone,
+// but some need it: a ten-digit run only reads as a UK NHS number when the
+// surrounding text talks about health care, because Presidio's recognizer pins
+// any checksum-valid run at maximum confidence without ever consulting its own
+// context words.
+func isPresidioFalsePositive(entityType, match, text string) bool {
+	return presidiofp.ReasonInContext(entityType, match, text) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the
