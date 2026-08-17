@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordNav } from "@/components/record-nav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { organizationProjectsQuery } from "@/lib/adminQueries";
-import type { AdminOrganization, AdminProject } from "@/lib/gramAdminApi";
+import type {
+  AdminOrganization,
+  AdminProject,
+  TrialState,
+} from "@/lib/gramAdminApi";
 import { anOrganization, aProject } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
@@ -22,6 +26,9 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 });
 
 const ORG = anOrganization();
+
+// The two states that mean the record is not trialling.
+const NOT_TRIALLING: (TrialState | undefined)[] = ["none", undefined];
 
 beforeEach(() => {
   mocks.listOrganizationProjects.mockReset();
@@ -165,6 +172,21 @@ describe("RecordNav", () => {
     expect(screen.getByText("free · Running")).toBeTruthy();
   });
 
+  // `undefined` beside `"none"`, because `subtitle` defaults an absent state to
+  // `none` and that is the state most records are in.
+  it.each(NOT_TRIALLING)(
+    "names the account type alone for a trial state of %s",
+    async (trial_state) => {
+      await mount([], anOrganization({ trial_state }));
+
+      // `TRIAL_LABELS.none` is the words "No trial", so the guard for a state
+      // this build has never heard of never catches this one. The header draws
+      // no mark for it and the list cell draws a dash.
+      expect(screen.getByText("free")).toBeTruthy();
+      expect(screen.queryByText(/No trial/)).toBeNull();
+    },
+  );
+
   it("says nothing about a trial state this build has no words for", async () => {
     await mount([], anOrganization({ trial_state: "resurrected" as never }));
 
@@ -172,6 +194,16 @@ describe("RecordNav", () => {
     // to stop, put back in the sidebar.
     expect(screen.getByText("free")).toBeTruthy();
     expect(screen.queryByText(/No trial/)).toBeNull();
+  });
+
+  it("says nothing for a trial state named after a property of Object", async () => {
+    await mount([], anOrganization({ trial_state: "toString" as never }));
+
+    // The words are looked up in a plain record, so an inherited property
+    // answers for a state nobody wrote down. This is the case `Object.hasOwn`
+    // is there for, and the only one it is needed for: without it the subtitle
+    // reads out the source of `Object.prototype.toString`.
+    expect(screen.getByText("free")).toBeTruthy();
   });
 
   it("leads back to the list of organizations", async () => {

@@ -33,9 +33,13 @@ const WORDS_BY_STATE: Record<string, string | undefined> = TRIAL_LABELS;
 // would launder an unknown state into a known one.
 function subtitle(org: AdminOrganization): string {
   const state = org.trial_state ?? "none";
-  const words = Object.hasOwn(TRIAL_LABELS, state)
-    ? WORDS_BY_STATE[state]
-    : undefined;
+  // `none` excluded on its own, because it has words and the guard beside it
+  // only drops a state that has none. The header draws no mark for `none` and
+  // the list cell draws a dash.
+  const words =
+    state !== "none" && Object.hasOwn(TRIAL_LABELS, state)
+      ? WORDS_BY_STATE[state]
+      : undefined;
   return words ? `${org.account_type} · ${words}` : org.account_type;
 }
 
