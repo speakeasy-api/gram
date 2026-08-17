@@ -12,7 +12,153 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const adminGetOrganizationByIDOrSlug = `-- name: AdminGetOrganizationByIDOrSlug :one
+const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
+UPDATE organization_metadata
+SET
+    gram_account_type = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY($2::text[])
+RETURNING id
+`
+
+type AdminBulkUpdateAccountTypeParams struct {
+	AccountType string
+	Ids         []string
+}
+
+// One statement rather than a loop, so every id is matched against one snapshot.
+// RETURNING is how the caller learns which of its ids matched nothing.
+func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkUpdateAccountTypeParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, adminBulkUpdateAccountType, arg.AccountType, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminCountOrganizations = `-- name: AdminCountOrganizations :one
+WITH search AS (
+    -- Identical to AdminListOrganizations, escaping included: a pasted id that
+    -- reaches the rows through an escaped pattern and the total through an
+    -- unescaped one gives the pager a count that disagrees with what it shows.
+    SELECT
+        $2::text AS term,
+        '%' || replace(replace(replace($2::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
+    SELECT
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
+    WHERE
+        (
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
+        AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
+)
+SELECT count(*)::bigint FROM filtered
+WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
+`
+
+type AdminCountOrganizationsParams struct {
+	TrialStates    []string
+	Q              pgtype.Text
+	AccountTypes   []string
+	DisabledStates []string
+}
+
+// The count cannot ride on the page query. That query carries the cursor
+// predicate, so a window count inside it reports the rows after the cursor
+// rather than the rows the filters matched, and a page past the end returns no
+// row to carry a count at all. Keeping it out also leaves the page query free to
+// terminate early on its index scan.
+//
+// The filter arms must stay identical to AdminListOrganizations, trial_states
+// included. That arm reads a column only the trials join can produce, so this
+// query carries the join and the same CASE ladder. The join stays count-safe
+// because organization_id is that table's primary key and cannot fan one
+// organization out into several counted rows.
+func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrganizationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountOrganizations,
+		arg.TrialStates,
+		arg.Q,
+		arg.AccountTypes,
+		arg.DisabledStates,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Operator-initiated disable. Keyed on the Gram organization id rather than
+// workos_id so an organization that was never linked to WorkOS can still be
+// disabled. Deliberately leaves workos_last_event_id alone: that column is the
+// WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
+// misrecord which event was last applied. Idempotent — the COALESCE keeps the
+// original timestamp when the organization is already disabled.
+func (q *Queries) AdminDisableOrganization(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDisableOrganization, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminEnableOrganization = `-- name: AdminEnableOrganization :execrows
+UPDATE organization_metadata
+SET disabled_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Undo of AdminDisableOrganization, and likewise blind to workos_last_event_id.
+// Idempotent — enabling an already-active organization is a no-op beyond
+// updated_at.
+func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, adminEnableOrganization, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
     om.name,
@@ -44,11 +190,17 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = $1::text
-   OR om.slug = $1::text
+   OR ($2::boolean AND om.slug = $1::text)
+ORDER BY (om.id = $1::text) DESC
 LIMIT 1
 `
 
-type AdminGetOrganizationByIDOrSlugRow struct {
+type AdminGetOrganizationParams struct {
+	ID        string
+	AllowSlug bool
+}
+
+type AdminGetOrganizationRow struct {
 	ID                 string
 	Name               string
 	Slug               string
@@ -65,9 +217,18 @@ type AdminGetOrganizationByIDOrSlugRow struct {
 	MemberCount        int64
 }
 
-func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug string) (AdminGetOrganizationByIDOrSlugRow, error) {
-	row := q.db.QueryRow(ctx, adminGetOrganizationByIDOrSlug, idOrSlug)
-	var i AdminGetOrganizationByIDOrSlugRow
+// Resolving a slug is opt-in because every admin write is keyed on id alone.
+// Both columns are bare TEXT, so one organization's slug can equal another's
+// id; a read-after-write that allowed slugs could then describe a different
+// organization than the one just written, and the operator would see a 200
+// reporting the write never happened. Reads that are not following a write pass
+// allow_slug true, which the dashboard relies on. The ORDER BY settles the same
+// collision for those reads: when the argument is one organization's id and
+// another's slug both rows match, and LIMIT 1 on its own would pick either, so
+// the exact id match is sorted first.
+func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganizationParams) (AdminGetOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganization, arg.ID, arg.AllowSlug)
+	var i AdminGetOrganizationRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -83,6 +244,61 @@ func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug s
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
+	)
+	return i, err
+}
+
+const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
+WITH orgs AS (
+    SELECT
+        om.created_at,
+        om.disabled_at,
+        -- Must stay identical to AdminListOrganizations: a figure counted from a
+        -- shortened predicate would disagree with the rows clicking it lands on.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+)
+SELECT
+    count(*)::bigint AS total,
+    count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
+    count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
+    count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
+FROM orgs
+`
+
+type AdminGetOrganizationStatsRow struct {
+	Total             int64
+	CreatedLast7Days  int64
+	TrialsEndingSoon  int64
+	Disabled          int64
+	DisabledLast7Days int64
+}
+
+// Blind to the list's filters by design: these figures must not move when an
+// operator filters. total and both 7-day windows count disabled organizations
+// too, so the strip reports the real platform size rather than the list's
+// default active-only view.
+//
+// The join stays count-safe because organization_id is the trials primary key.
+// Both 7-day windows exclude their boundary: exactly seven days old is outside.
+func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrganizationStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationStats)
+	var i AdminGetOrganizationStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.CreatedLast7Days,
+		&i.TrialsEndingSoon,
+		&i.Disabled,
+		&i.DisabledLast7Days,
 	)
 	return i, err
 }
@@ -260,51 +476,106 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 }
 
 const adminListOrganizations = `-- name: AdminListOrganizations :many
-SELECT
-    om.id,
-    om.name,
-    om.slug,
-    om.gram_account_type AS account_type,
-    om.workos_id,
-    om.whitelisted,
-    om.disabled_at,
-    om.free_trial_started_at,
-    om.free_trial_ends_at,
-    -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
-    CASE
-        WHEN t.organization_id IS NULL THEN 'none'
-        WHEN t.converted_at IS NOT NULL THEN 'converted'
-        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
-        WHEN t.ends_at <= now() THEN 'expired'
-        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
-        ELSE 'running'
-    END::text AS trial_state,
-    t.ends_at AS trial_ends_at,
-    om.created_at,
-    om.updated_at,
-    (
-        SELECT count(*)
-        FROM organization_user_relationships our
-        WHERE our.organization_id = om.id
-          AND our.deleted IS FALSE
-    )::bigint AS member_count
-FROM organization_metadata om
-LEFT JOIN trials t ON t.organization_id = om.id
-WHERE
-    ($1::text IS NULL OR om.name ILIKE '%' || $1::text || '%' OR om.slug ILIKE '%' || $1::text || '%')
-    AND ($2::text IS NULL OR om.gram_account_type = $2::text)
-    AND ($3::boolean OR om.disabled_at IS NULL)
-    AND ($4::text IS NULL OR om.id > $4::text)
-ORDER BY om.id ASC
+WITH search AS (
+    -- Escaped once here rather than per arm so the name and the slug arm cannot
+    -- drift apart. Backslash goes first or it escapes the escapes that follow.
+    -- Every id in both id spaces contains underscores and _ is a
+    -- single-character wildcard, so an unescaped pasted id draws incidental
+    -- matches out of the name and slug arms.
+    SELECT
+        $6::text AS term,
+        '%' || replace(replace(replace($6::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
+    SELECT
+        om.id,
+        om.name,
+        om.slug,
+        om.gram_account_type AS account_type,
+        om.workos_id,
+        om.whitelisted,
+        om.disabled_at,
+        om.free_trial_started_at,
+        om.free_trial_ends_at,
+        -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state,
+        t.ends_at AS trial_ends_at,
+        om.created_at,
+        om.updated_at,
+        (
+            SELECT count(*)
+            FROM organization_user_relationships our
+            WHERE our.organization_id = om.id
+              AND our.deleted IS FALSE
+        )::bigint AS member_count
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
+    WHERE
+        -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+        -- They compare case-insensitively because a real WorkOS id embeds an uppercase ULID and a log pipeline hands the operator a lowercased copy of it.
+        -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
+        (
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
+        -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
+        -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
+        -- would drop every row instead of keeping every row.
+        AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
+        -- No empty arm: the handler resolves an absent filter to {active}.
+        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
+        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
+        AND ($9::text IS NULL OR om.id > $9::text)
+)
+SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
+ORDER BY
+    CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $2::text = 'name' AND $3::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $2::text = 'slug' AND $3::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $2::text = 'slug' AND $3::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $2::text = 'account_type' AND $3::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $2::text = 'account_type' AND $3::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $2::text = 'member_count' AND $3::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $2::text = 'member_count' AND $3::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $2::text = 'created_at' AND $3::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'created_at' AND $3::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
+    id ASC
 LIMIT $5::int
+OFFSET $4::bigint
 `
 
 type AdminListOrganizationsParams struct {
-	Q               pgtype.Text
-	AccountType     pgtype.Text
-	IncludeDisabled bool
-	AfterID         pgtype.Text
-	PageLimit       int32
+	TrialStates    []string
+	SortBy         string
+	SortDir        string
+	PageOffset     int64
+	PageLimit      int32
+	Q              pgtype.Text
+	AccountTypes   []string
+	DisabledStates []string
+	AfterID        pgtype.Text
 }
 
 type AdminListOrganizationsRow struct {
@@ -324,13 +595,27 @@ type AdminListOrganizationsRow struct {
 	MemberCount        int64
 }
 
+// Two paging modes share this query. A caller that supplies no sort key gets the
+// cursor walk it always had: the sort ladder collapses to all-NULL and the
+// tiebreaker alone orders the rows. A caller that supplies one gets offset paging.
+// trial_state is computed in the CTE's select list, so it cannot be named in the
+// CTE's own WHERE. Filtering out here keeps the ladder to one copy per query.
+// The sort key stays a bound parameter, never an interpolated column name, so no
+// caller input reaches the parser. NULLS LAST is what keeps empty dates at the
+// bottom under DESC, where Postgres would otherwise put them first; on the ASC
+// arms it only spells out the default. Both are written out so the two arms of a
+// column read alike.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
-		arg.Q,
-		arg.AccountType,
-		arg.IncludeDisabled,
-		arg.AfterID,
+		arg.TrialStates,
+		arg.SortBy,
+		arg.SortDir,
+		arg.PageOffset,
 		arg.PageLimit,
+		arg.Q,
+		arg.AccountTypes,
+		arg.DisabledStates,
+		arg.AfterID,
 	)
 	if err != nil {
 		return nil, err

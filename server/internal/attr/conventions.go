@@ -154,6 +154,7 @@ const (
 	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -475,22 +476,26 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
-	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
-	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
-	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
-	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
-	LiteLLMUserEmailKey      = attribute.Key("gram.litellm.user_email")
-	LiteLLMTeamIDKey         = attribute.Key("gram.litellm.team_id")
-	LiteLLMTeamAliasKey      = attribute.Key("gram.litellm.team_alias")
-	LiteLLMEndUserIDKey      = attribute.Key("gram.litellm.end_user_id")
-	LiteLLMOrganizationIDKey = attribute.Key("gram.litellm.org_id")
-	LiteLLMAPIKeyHashKey     = attribute.Key("gram.litellm.api_key_hash")
-	LiteLLMAPIKeyAliasKey    = attribute.Key("gram.litellm.api_key_alias")
-	LiteLLMInputCostKey      = attribute.Key("litellm.cost.input")
-	LiteLLMOutputCostKey     = attribute.Key("litellm.cost.output")
-	LiteLLMCacheReadCostKey  = attribute.Key("litellm.cost.cache_read")
-	LiteLLMCacheWriteCostKey = attribute.Key("litellm.cost.cache_creation")
+	HookBlockReasonKey             = attribute.Key("gram.hook.block_reason")
+	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
+	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
+	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
+	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey              = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey               = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey            = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey               = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey            = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey            = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey       = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey           = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey          = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey            = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey           = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey        = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey       = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -807,6 +812,27 @@ func SlogHookSource(v string) slog.Attr      { return slog.String(string(HookSou
 
 func HookBlockReason(v string) attribute.KeyValue { return HookBlockReasonKey.String(v) }
 func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(HookBlockReasonKey), v) }
+
+func IdentityFoldCanonicalGroups(v int) attribute.KeyValue {
+	return IdentityFoldCanonicalGroupsKey.Int(v)
+}
+
+func SlogIdentityFoldCanonicalGroups(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldCanonicalGroupsKey), v)
+}
+
+func IdentityFoldCostDelta(v float64) attribute.KeyValue { return IdentityFoldCostDeltaKey.Float64(v) }
+func SlogIdentityFoldCostDelta(v float64) slog.Attr {
+	return slog.Float64(string(IdentityFoldCostDeltaKey), v)
+}
+
+func IdentityFoldLiteralGroups(v int) attribute.KeyValue { return IdentityFoldLiteralGroupsKey.Int(v) }
+func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldLiteralGroupsKey), v)
+}
+
+func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
+func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
 
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }
@@ -1938,6 +1964,11 @@ func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 
 func MCPRegistryID(v string) attribute.KeyValue { return MCPRegistryIDKey.String(v) }
 func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPRegistryIDKey), v) }
+
+func MCPApprovalRequestID(v string) attribute.KeyValue { return MCPApprovalRequestIDKey.String(v) }
+func SlogMCPApprovalRequestID(v string) slog.Attr {
+	return slog.String(string(MCPApprovalRequestIDKey), v)
+}
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }

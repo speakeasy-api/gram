@@ -1,3 +1,4 @@
+import { StatusBadge } from "@/components/mcp-approvals/EvidencePanel";
 import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Badge } from "@/components/ui/Badge";
@@ -11,7 +12,7 @@ function countLabel(count: number, singular: string, plural: string): string {
 function shadowMCPInventoryServerLabel(
   server: ShadowMCPInventoryServer,
 ): string {
-  return server.serverName || server.urlHost;
+  return server.serverName || server.urlHost || server.canonicalServerUrl;
 }
 
 export function ShadowMCPInventoryServerCell({
@@ -19,6 +20,23 @@ export function ShadowMCPInventoryServerCell({
 }: {
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
+  if (server.targetKind === "stdio_command") {
+    return (
+      <div className="min-w-0 space-y-1">
+        <Text
+          variant="small"
+          className="truncate font-mono font-medium"
+          title={server.canonicalServerUrl}
+        >
+          {server.canonicalServerUrl}
+        </Text>
+        <Text muted small className="text-xs">
+          Local command — known only from its access request
+        </Text>
+      </div>
+    );
+  }
+
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex items-center gap-2">
@@ -45,6 +63,39 @@ export function ShadowMCPInventoryServerCell({
       >
         {server.canonicalServerUrl}
       </Text>
+    </div>
+  );
+}
+
+/**
+ * The review state a row carries: its status badge plus how many people are
+ * waiting when a decision is pending. A dash for rows the review system has
+ * not touched — observed traffic with no dossier yet.
+ */
+export function ShadowMCPInventoryReviewCell({
+  server,
+}: {
+  server: ShadowMCPInventoryServer;
+}): JSX.Element {
+  const request = server.approvalRequest;
+  // An unreviewed dossier holds evidence but is not a review state: nobody
+  // asked and nothing was decided, so it reads the same as no review.
+  if (!request || request.status === "unreviewed") {
+    return (
+      <Text muted small>
+        —
+      </Text>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <StatusBadge status={request.status} />
+      {request.status === "requested" && request.requesterCount > 0 && (
+        <Text muted small className="text-xs">
+          {countLabel(request.requesterCount, "person", "people")} waiting
+        </Text>
+      )}
     </div>
   );
 }

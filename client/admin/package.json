@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "@tanstack/react-table": "9.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "lucide-react": "catalog:",
     "radix-ui": "^1.6.0",
     "react": "^19.2.8",

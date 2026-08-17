@@ -698,6 +698,47 @@ func TestListChats_Filter_DateRange(t *testing.T) {
 	require.Equal(t, oldChat.String(), result.Chats[0].ID)
 }
 
+// TestListChats_Filter_DateRange_ActiveChatNewerThanTo verifies the range test
+// is interval overlap: a chat created inside the window stays listed even when
+// its newest message is more recent than the requested `to` bound. The
+// dashboard freezes `to` when a range is picked, so a still-running session
+// would otherwise vanish from the list as soon as another message lands.
+func TestListChats_Filter_DateRange_ActiveChatNewerThanTo(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-active")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	activeChat := seedChatAtTime(t, ctx, ti, "ext-active", now.Add(-2*time.Hour))
+	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    activeChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// `to` is older than the chat's newest message but newer than its creation.
+	from := now.Add(-24 * time.Hour).Format(time.RFC3339)
+	to := now.Add(-10 * time.Minute).Format(time.RFC3339)
+	payload := defaultPayload()
+	payload.From = &from
+	payload.To = &to
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, activeChat.String(), result.Chats[0].ID)
+
+	// A page past the end takes the CountChats fallback; it must apply the
+	// same overlap semantics and still count the active chat.
+	payload.Offset = 50
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Empty(t, result.Chats)
+}
+
 func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)

@@ -1109,6 +1109,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 
 	// Normalize and validate every principal URN through urn.ParsePrincipal so
 	// the typed wrapper is the single source of truth on what a principal is.
+	// Role assignments additionally require an active canonical role principal.
 	// The wildcard is a literal token (not a typed URN), so it takes a
 	// fast-path. Email IDs are lowercased here so the device-agent endpoint
 	// can match a lowercased lookup deterministically.
@@ -1126,6 +1127,14 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			parsed, err := urn.ParsePrincipal(normalized)
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
+			}
+			if parsed.Type == urn.PrincipalTypeRole {
+				if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, parsed); err != nil {
+					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+						return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
+					}
+					return nil, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
+				}
 			}
 			principalURN = parsed.String()
 		}

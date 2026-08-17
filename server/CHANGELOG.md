@@ -1,5 +1,231 @@
 # server
 
+## 1.12.0
+
+### Minor Changes
+
+- ed97a31: The MCP evidence dossier gains three deterministic sources. The assembler now
+  consults the code host about a package's declared source repository (stars,
+  forks, contributors, commit recency, archived status), asks OSV.dev which
+  published vulnerability advisories name the package, and reads the domain
+  registry's registration record for a remote server's registrable domain.
+  Package registries also surface their declared repository and homepage URLs.
+  Each source follows the dossier's existing contract — found, not-found, and
+  could-not-look stay distinct, with failures recorded as gaps — and the
+  approval page renders the new facts in the evidence panel, including a
+  dedicated advisories group where checked-and-clean is shown as a finding
+  rather than an absence.
+- bbaf839: Adds the MCP approval management API. Admins can list servers awaiting a decision, open one to see the evidence gathered for it alongside any previous decisions, and record an approval or denial with a rationale and an explicit set of principals it covers. Gated by two new permissions so reviewing the queue and committing the organisation to a server can be granted separately. Also generates the TypeScript SDK bindings and React Query hooks for the new endpoints.
+- 798360b: A shadow-MCP block link now redeems into the MCP approval workflow: the blocked employee's ask attaches as a requester on the server's single review — deduplicated by canonical URL, evidence gathered — instead of minting a per-user bypass request. The redemption endpoint reports what the token turned into, keeps the legacy bypass request only for identity-only servers and organizations without the approval feature, and the standalone Approval Requests review page retires — the Shadow MCP servers table is the one review surface. The command palette surfaces pending access requests in its place.
+- 798360b: MCP approval decisions now enforce: an approval replaces the server's risk-policy bypass audience with the decision's blast radius (defaulting to everyone, stored explicitly), and a denial revokes it — in the same transaction that records the decision, through the same grant machinery the shadow-MCP allow/block controls use, so the policy evaluator is unchanged. Under allow-by-default policies the directions invert (deny writes the block rule, approve clears it), and an approval narrower than everyone is rejected when no block-by-default policy can express it rather than silently widening. Granted principal URNs are validated at intake now that they become enforcement state.
+- e6a470f: Assembles the evidence document at approval-request intake. Every admission now gathers the deterministic signals — resolved identity, package-registry metadata, and the org's own traffic exposure — into the versioned document the approval surface renders and decisions freeze. Found, not-published, and could-not-look are distinct outcomes, per-source failures are recorded as gaps inside the document rather than read as clean, and a flaky registry can delay evidence but never lose an admission. The optional research agent stays deliberately outside this document: web-sourced findings keep their own trust tier and lifecycle, and the deterministic document doubles as the agent's briefing when an admin later asks for a run.
+- bbaf839: Adds org-exposure signals to the MCP approval evidence set: whether the requesting project is already talking to a server, since when, how often, and how many distinct people have called it. This is the only observed signal in the approval workflow — everything else a server or registry declares about itself — and it is what tells a reviewer what denying a request would actually cost.
+- e6a470f: Adds approval-request intake to the MCP approval API. Members can ask for a server to be reviewed by URL or launch command — no permission grant needed, matching the block and bypass surfaces — and admins can promote a risk-policy bypass request into the review queue, carrying the blocked employee's identity and justification with it. Repeat asks for the same server attach to the existing review rather than opening a second one, identity resolution runs at intake so evidence has something to hang off by the time an admin looks, and a re-request reopens a denied review with its decision history intact.
+- 0c7f9fc: Evidence gathering for MCP approval requests now probes remote servers directly: their published OAuth metadata through the standard well-known endpoints (auth mode, scopes, dynamic client registration), and their tool declarations through an unauthenticated tools/list assessed for declared and schema-implied capability. Both are the server's own words about itself, gathered without credentials — a server that refuses to answer records a gap, never a clean empty section.
+
+  When the server refuses an unauthenticated tools/list, the gather now falls back to its MCP registry catalog entry, which carries the registry's copy of the tool declarations — labeled as registry-sourced, one step further from the server. A catalog match also fills a new provenance section (official flag, lifecycle status, publish/update recency, visitor estimates), and a new `mcpApproval.refreshEvidence` endpoint re-runs every source on demand, replacing the request's current evidence while leaving frozen decision snapshots untouched.
+
+- e6a470f: Server evidence decouples from asking: mcpApproval.ensureServerReview resolves the evidence dossier for any server URL, opening one in a new unreviewed status when none exists. Dossiers stay out of the decision queue and upgrade in place when someone actually requests the server, so evidence can be inspected before — or without — any review being decided.
+- 798360b: Retire the legacy Shadow MCP inventory enforcement endpoints — upsert/delete policy bypass and block/unblock server — now that every allow and deny travels through a recorded MCP approval decision. resolveShadowMCPInventoryRequest stays while pre-approval bypass requests drain.
+- bbaf839: Shadow MCP inventory servers now carry their MCP approval request state. Approval request summaries expose the inventory server slug for server_url targets, and inventory list/detail responses include the approval request (id, status, requester count) tracking each server, joining the two surfaces on the same canonical URL identity.
+- 798360b: The Shadow MCP page becomes one servers table: the inventory list now unions in review-only targets (requested-but-unobserved URLs and stdio commands, marked by a new target_kind field) on the first page, and the separate Access Requests tab is gone. Every row carries its review state with pending decisions sorted first and filterable; URL rows open the server page, stdio rows open the review sheet.
+
+### Patch Changes
+
+- 4304347: Platform admins can now set the account type on many organizations in one call.
+  The new admin endpoint takes a list of organization ids and one account type,
+  writes them in a single statement, and reports back the ids it wrote and the ids
+  from the request that matched no organization. A stale id therefore costs that
+  one row rather than the whole batch. One call carries at most 1000 ids.
+
+  Both admin write paths now accept only `free`, `pro` and `enterprise`, matched
+  exactly. The single-organization update endpoint used to take any string, so a
+  typo or a difference of capitalisation was written straight to the record. A
+  value outside the list is now refused before anything is written, and the refusal
+  names it. Existing records holding some other account type are left alone.
+
+  The admin dashboard's bulk selection and confirmation step follow.
+
+- c8b377a: Platform admins can now create an organization without leaving the admin app.
+  Until now the only way to open one was the WorkOS dashboard, followed by a wait
+  for the event sync to notice it, so setting up a customer meant working in two
+  tools and having no way to tell which step had actually landed. A new admin
+  endpoint creates the organization in WorkOS and in Gram in one call and reports
+  it back, ready for the existing list, detail and update endpoints.
+
+  The organization it creates is deliberately plain: no members, not whitelisted,
+  no trial, and on the free tier. Each of those is a separate decision with its
+  own endpoint, and creating an organization is not a way to make any of them.
+
+  The new organization is safe to create even while WorkOS is delivering the event
+  for it. Both writers derive the Gram organization id from the WorkOS one, so the
+  admin write and the event sync land on the same row whichever gets there first,
+  and an organization the sync already created keeps the slug it was given rather
+  than being renamed.
+
+  A deployment with no WorkOS configuration refuses the request and says so, rather
+  than minting an organization nobody could log into. If WorkOS refuses the create,
+  Gram stores nothing and the request fails as an upstream error, with the detail in
+  the server logs rather than in the response. If a later step fails, everything
+  Gram wrote is rolled back, but the WorkOS organization is already real and the
+  event sync creates a Gram row for it shortly afterwards.
+
+  Names are validated exactly as self-serve signup validates them, because both
+  paths now run the same validator: an organization created by an operator cannot
+  be named something a customer could not have named it.
+
+  The local development identity provider gained the two organization routes this
+  flow needs, so the whole thing can be exercised without a WorkOS account.
+
+  The admin dashboard button follows.
+
+- 1c02a8a: Platform admins can now disable an organization and undo it. Until now the only
+  thing that could disable an organization was the WorkOS `organization.deleted`
+  webhook, and nothing anywhere could re-enable one, so an operator had no way to
+  cut off access or to reverse a disable that turned out to be wrong. Two admin
+  endpoints cover both directions and report the organization back in its new
+  state, which the existing list and detail endpoints already surface.
+
+  Disabling is keyed on the Gram organization id rather than the WorkOS one, so an
+  organization that was never linked to WorkOS can be disabled like any other.
+  Disabling an organization that is already disabled keeps the original timestamp
+  instead of moving it, so the record of when access was cut stays true. Neither
+  direction touches the whitelist flag, which is the separate not-yet-approved
+  gate, nor the WorkOS webhook cursor, which only the webhook path may write.
+
+  All three organization writes now read the organization back by id alone, which
+  also corrects the existing update endpoint. An organization id and another
+  organization's slug can be the same string, and the read that produced the
+  response resolved either, so a write could return a different organization than
+  the one it changed. Addressing one of these writes by slug now returns a
+  not-found instead of a success describing an organization that was never
+  touched. Reading an organization by slug still works, and when the same string
+  is one organization's id and another's slug the exact id match now wins instead
+  of the database picking either row.
+
+  The admin dashboard row action and confirmation dialog follow.
+
+- dee31a5: Platform admins can now give a customer more time on a running enterprise trial.
+  Until now the trial end date was written once, when the trial was granted, and
+  nothing anywhere could move it, so an operator who wanted to buy a customer
+  another two weeks had no way to do it.
+
+  The extension is added to the trial's current end date rather than to today, so
+  "another two weeks" means two weeks on top of whatever the customer has left,
+  and extending a trial that still has three weeks to run cannot accidentally
+  shorten it. Extensions accumulate, and a single one is capped at a year.
+
+  Only a running trial can be extended. A trial that has already converted to a
+  contract, one that has been demoted, and one whose date has passed but that the
+  expiry sweeper has not reached yet are all rejected with an error that leaves the
+  date where it was, rather than quietly re-arming a trial that has already ended.
+  An organization id that matches nothing is reported as not found, the same answer
+  the disable and enable actions already give, so one mistyped id does not send an
+  operator off to inspect a trial that was never the problem.
+  Extending a trial changes the end date and nothing else: the organization's
+  account type, its whitelist flag and the record of when the trial began all stay
+  as they were.
+
+  The admin dashboard row action follows.
+
+- 8b6278d: The admin API can now report how big the platform is in one call. `GET /admin/organizations.stats` returns the number of organizations in total, the number created in the last 7 days, the number whose enterprise trial is ending soon, the number disabled, and the number disabled in the last 7 days. The total and both 7-day figures include disabled organizations, so the total reports the real platform size rather than the organizations list's default active-only view. None of the five figures narrows to the caller's list filters, so they stay put while an operator filters the list. The ending-soon figure is counted from the same trial state definition the organizations list filters on, so the figure agrees with the rows an operator lands on after clicking it.
+- 2d5e6bb: Platform admins can now put a demoted enterprise trial back on. Until now the
+  expiry sweeper's demotion was one-way: it dropped the organization to the free
+  tier, put it back behind the book-a-demo gate and switched off its model
+  provider keys. Only the keys could be undone, one at a time, through the
+  existing admin action for enabling a key; the tier and the gate had no undo at
+  all. An operator who wanted to give a customer a second run had no way to do it,
+  and extending the trial was not the same thing, because an extension moves an
+  end date and leaves the free tier exactly where the demotion left it.
+
+  Re-arming restores all of it at once: the account type the trial grants, the
+  whitelist flag, every model provider key the demotion switched off, and a fresh
+  run of the length the operator asks for, capped at a year and counted from now. The end date is
+  counted from now rather than added to the old one on purpose, because a demoted
+  trial's end date is already in the past and adding to it could land in the past
+  again, which would leave the sweeper free to demote the organization a second
+  time within the hour.
+
+  One caveat on the keys: this is the deployed behaviour. A local development
+  stack has no OpenRouter account behind it, and its stand-in client accepts the
+  refresh without doing anything, so a re-arm there reports success and restores
+  the tier while both key rows stay switched off. Enabling a key locally has the
+  same gap.
+
+  The keys come back up before any of the database changes are committed. That
+  ordering is the opposite of the demotion's, and it is deliberate: if the model
+  provider refuses, the organization stays demoted and on the free tier, and the
+  operator can retry. Any key that came back up before the refusal stays up, which
+  is what makes the retry cheap. The alternative would advertise a running trial
+  to a customer whose keys were still switched off.
+
+  Only a demoted trial can be re-armed. A trial that is already running is
+  rejected, so re-arm cannot be used as an extend that ignores the extension
+  rules. An organization id that matches nothing is reported as not found, the
+  same answer the disable, enable and extend actions already give, so a mistyped
+  id does not send an operator off to inspect a trial that was never the problem.
+
+  The activity log reads the new entry as "restarted enterprise trial", credited
+  to the Speakeasy team rather than to the operator who ran it, which is the same
+  label the log already gives a Speakeasy action inside a customer's
+  organization. The admin dashboard row action follows.
+
+- 112a408: Keep actively-running agent sessions listed under a date-range filter. The
+  chat list previously required a session's newest message to fall inside the
+  requested range, so a session that logged a message after the client's frozen
+  `to` bound vanished from the Agent Sessions page until the range was
+  re-selected. The range test is now interval overlap: last activity after the
+  range opens and created before it closes.
+- 0f21e6a: Stop a chronically failing AI integration sync from ringing failure monitors forever, and make its failure diagnostics actionable without exposing provider payloads to organization members. Poll failures now back off exponentially — each consecutive final failure doubles the delay before the next run, bounded by a 6h ceiling and anchored on recording time so long runs don't erase the early rounds — and a success, a config save, or re-enabling the schedule resets the streak and makes it due again immediately. Pollers retain normal diagnostic error chains for Temporal and worker logs, while the activity boundary separately derives the safe error persisted to `last_poll_error`. Codex JSON decode failures include the offending log record internally, but customer-visible status includes only the log id and decoder error.
+- 7da1436: The activity log can now record and render a restarted enterprise trial. The
+  entry reads "restarted enterprise trial" and is credited to the Speakeasy team
+  rather than to the individual operator, which is the label the log already gives
+  a Speakeasy action taken inside a customer's organization.
+
+  Nothing produces the entry yet. The admin action that restarts a trial follows
+  separately, and this change is the log's half of it: the action name, the writer
+  that records it, and the phrase the dashboard shows for it.
+
+  The collective "Speakeasy Team" label now has one definition instead of two.
+  The activity log applies it on read, by matching an actor against the members of
+  the Speakeasy organization. A writer that already knows it is acting as staff
+  has to apply the same label when it records the entry, because the read-time
+  mask can only recognise an actor that has a Gram user id, and an operator
+  authenticated through the admin app does not have one. Both paths now read the
+  label from the same constant, so one action cannot appear under two different
+  names depending on which path wrote it.
+
+- 2fc4c57: Cost analytics email filters and group-bys can fold one employee's directory,
+  personal, and case-variant emails into one canonical identity via the
+  ClickHouse identity map, gated by a PostHog rollout flag with a shadow-compare
+  mode that validates the fold on live traffic before serving it. Off by
+  default; literal matching is unchanged.
+- c62e192: Extend canonical identity folding to the employee detail pages, the
+  enrollment list, and the billing email breakdown: behind the same rollout
+  flag, per-user metrics scope through the identity map (email identifiers
+  resolve entirely in-query), the enrollment list shows one row per employee,
+  and billing email slices fold to canonical identities. Literal behavior is
+  unchanged with the flag off.
+- 6324cdb: Add the ClickHouse identity_map fold tables (live + staging twin). Inert in
+  this release: the sync worker and analytics readers land separately. The map
+  folds each unambiguous directory or linked-account email to its owning user so
+  analytics queries can resolve one employee to one identity via joinGet.
+- a3a5186: Trigger an immediate identity map sync when an account link gains attribution
+  during ingest or a WorkOS directory membership changes, instead of waiting out
+  the sync schedule. Triggers are throttled per process and go through the
+  schedule's overlap-skip policy, so chatty ingest coalesces and concurrent
+  requests are safe; a lost trigger degrades to the next scheduled tick.
+- 38da532: Add the identity map sync worker: a scheduled Temporal workflow rebuilds the
+  ClickHouse identity_map fold table from the Postgres directory every 15
+  minutes, mapping each unambiguous directory or linked-account email to its
+  owning user. Full refresh into a staging table with an atomic swap, so
+  deletions propagate and readers never observe a partial map. Nothing reads the
+  map yet; analytics folding lands separately.
+- aad88f0: Stop leftover trial reminder emails after a customer converts or a trial
+  expires. `trialActive` is now cleared in Loops on Polar conversion, an admin
+  account-type change, and demotion, so the 7-day and 1-day sequences no longer
+  keep sending to paying or expired orgs.
+
 ## 1.11.0
 
 ### Minor Changes
