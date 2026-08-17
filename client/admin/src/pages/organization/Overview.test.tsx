@@ -81,6 +81,47 @@ function labelsIn(group: string): string[] {
   );
 }
 
+// Opens the account type select and picks an option, and hands back the
+// trigger so a test can read what the control says afterwards.
+async function pickAccountType(option: string): Promise<HTMLElement> {
+  const select = await screen.findByRole("combobox");
+  fireEvent.keyDown(select, { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+  return select;
+}
+
+async function confirmDialog(): Promise<void> {
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+}
+
+// The body of the one write under test. Read off the mock rather than asserted
+// through `toHaveBeenCalledWith`, so a test can name the keys it must not have.
+function payloadOf(mock: { mock: { calls: unknown[][] } }): object {
+  const [first] = mock.mock.calls;
+  if (!first) throw new Error("no write was made");
+  return first[0] as object;
+}
+
+// Both controls are buttons under the hood, so the attribute is the answer.
+// This suite has no jest-dom matchers.
+function isDisabled(control: HTMLElement): boolean {
+  return control.hasAttribute("disabled");
+}
+
+// `RecordLayout`'s live region, the one place a write reported from inside a
+// dialog reaches a screen reader.
+function liveRegion(): HTMLElement {
+  const region = document.querySelector('[aria-live="polite"]');
+  if (!(region instanceof HTMLElement)) {
+    throw new Error("the record has no live region");
+  }
+  return region;
+}
+
 const writeText = vi.fn<(text: string) => Promise<void>>(() =>
   Promise.resolve(),
 );
@@ -188,21 +229,124 @@ describe("Overview", () => {
     expect(valueBeside("Disabled at").textContent).toBe(shortDate(disabled));
   });
 
-  it("shows the account type the operator picked, not the saved one", async () => {
+  it("leaves the control reading the record while the dialog asks", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    const select = await screen.findByRole("combobox");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+    const select = await pickAccountType("enterprise");
+    await screen.findByRole("dialog");
 
-    // A control that keeps reading the record shows the old value while Save
-    // offers to write the new one, so the operator saves a change the page
-    // never showed them.
-    expect(select.textContent).toBe("enterprise");
+    // Honest: the record has not changed yet, and the dialog carries the words
+    // for what is about to change. A control that ran ahead of the write would
+    // read as saved to an operator who then cancels.
+    expect(select.textContent).toBe(ORG.account_type);
     expect(ORG.account_type).not.toBe("enterprise");
-    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+  });
+
+  it("names the change from the old value to the new one", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await pickAccountType("enterprise");
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByRole("heading").textContent).toBe(
+      `Update ${ORG.name}?`,
+    );
+    // Written out with both values in order. A description built backwards
+    // still names the right two words and asks the operator to approve the
+    // opposite of what will be written.
+    expect(dialog.textContent).toContain(
+      `Account type: ${ORG.account_type} → enterprise`,
+    );
+    expect(dialog.textContent).not.toContain(
+      `Account type: enterprise → ${ORG.account_type}`,
+    );
+  });
+
+  it("writes the account type on its own, with no whitelisted field", async () => {
+    mocks.updateOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "enterprise",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await pickAccountType("enterprise");
+    await confirmDialog();
+
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledTimes(1);
+    });
+    // The keys, not just the values. `toHaveBeenCalledWith` treats an absent
+    // key and a key set to `undefined` as the same object, so a write that
+    // sends `whitelisted: undefined` alongside passes a loose assertion while
+    // the endpoint reads it as a field the operator never touched.
+    expect(payloadOf(mocks.updateOrganization)).toStrictEqual({
+      id: ORG.id,
+      account_type: "enterprise",
+    });
+    expect(Object.keys(payloadOf(mocks.updateOrganization)).sort()).toEqual([
+      "account_type",
+      "id",
+    ]);
+  });
+
+  it("writes whitelisted on its own, with no account type field", async () => {
+    mocks.updateOrganization.mockResolvedValue({ ...ORG, whitelisted: false });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    await confirmDialog();
+
+    // The field by name, not merely that a write happened: the two editors
+    // write one record between them, and a switch that lands on the account
+    // type changes the plan of an organization nobody meant to touch.
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledTimes(1);
+    });
+    expect(payloadOf(mocks.updateOrganization)).toStrictEqual({
+      id: ORG.id,
+      whitelisted: false,
+    });
+    expect(Object.keys(payloadOf(mocks.updateOrganization)).sort()).toEqual([
+      "id",
+      "whitelisted",
+    ]);
+  });
+
+  it("writes nothing when the operator cancels, and the control snaps back", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const select = await pickAccountType("enterprise");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.updateOrganization).not.toHaveBeenCalled();
+    // No revert code wrote this back. The control reads `org`, so a change
+    // nobody confirmed was never anywhere but the dialog's words.
+    expect(select.textContent).toBe(ORG.account_type);
+
+    fireEvent.click(screen.getByRole("switch"));
+    const second = await screen.findByRole("dialog");
+    fireEvent.click(within(second).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.updateOrganization).not.toHaveBeenCalled();
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      String(ORG.whitelisted),
+    );
   });
 
   it("shows a saved change on a record the operator reached by id", async () => {
@@ -216,24 +360,36 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.id}`,
     });
 
-    const select = await screen.findByRole("combobox");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await pickAccountType("enterprise");
+    await confirmDialog();
 
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-
-    // Waited out rather than asserted straight away: while the write is in
-    // flight the draft is still what the control reads, so it says "enterprise"
-    // either way. Save leaving is the record answering for itself again.
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    });
     // An operator who watched the save land and then reads the old value back
     // has no way to tell a stale page from a write that did not happen.
-    expect(screen.getByRole("combobox").textContent).toBe("enterprise");
+    await waitFor(() => {
+      expect(screen.getByRole("combobox").textContent).toBe("enterprise");
+    });
     expect(ORG.account_type).not.toBe("enterprise");
+  });
+
+  it("announces a write that lands", async () => {
+    mocks.updateOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "enterprise",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await pickAccountType("enterprise");
+    await confirmDialog();
+
+    // Spoken, because the record repaints in place and a screen reader is told
+    // nothing by a select whose text changed.
+    await waitFor(() => {
+      expect(liveRegion().textContent).toContain(
+        `${ORG.name} updated. Account type: ${ORG.account_type} → enterprise.`,
+      );
+    });
   });
 
   it("keeps a saved change through a list read that was already in flight", async () => {
@@ -274,16 +430,10 @@ describe("Overview", () => {
       expect(mocks.listOrganizations).toHaveBeenCalled();
     });
 
-    const select = await screen.findByRole("combobox");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-
+    await pickAccountType("enterprise");
+    await confirmDialog();
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      expect(mocks.updateOrganization).toHaveBeenCalled();
     });
 
     // Now, after the write. React Query commits whatever a request answers
@@ -343,15 +493,17 @@ describe("Overview", () => {
       expect(mocks.getOrganizationStats).toHaveBeenCalled();
     });
 
-    const select = await screen.findByRole("combobox");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await pickAccountType("enterprise");
+    await confirmDialog();
 
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-
-    await screen.findByText(/update failed/);
+    // Shown as well as spoken. The save bar carried this line and went with the
+    // draft, so without the reporter a failed write is silent on the page.
+    await waitFor(() => {
+      expect(document.querySelector(".text-destructive")?.textContent).toMatch(
+        /Could not update .*update failed/,
+      );
+    });
+    expect(liveRegion().textContent).toContain("update failed");
     answerStatsRead();
 
     // Cancelled and replaced by nothing: a failed write repaints no record, so
@@ -364,7 +516,7 @@ describe("Overview", () => {
     });
   });
 
-  it("does not carry an unsaved draft to the next record", async () => {
+  it("does not carry an open dialog to the next record", async () => {
     const other = anOrganization({
       id: "org_2",
       name: "Second Org",
@@ -373,7 +525,7 @@ describe("Overview", () => {
     // Both records are already in the cache, which is the state the list
     // navigates from: `useOpenOrganization` writes the record before it moves.
     // Without the seed the second record arrives pending, the layout paints its
-    // loading state, and the unmount that follows clears the draft for reasons
+    // loading state, and the unmount that follows closes the dialog for reasons
     // that have nothing to do with the record it belonged to.
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -387,7 +539,7 @@ describe("Overview", () => {
     });
 
     fireEvent.click(await screen.findByRole("switch"));
-    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+    expect((await screen.findByRole("dialog")).textContent).toContain(ORG.name);
 
     await router.navigate({
       to: "/organizations/$idOrSlug",
@@ -397,9 +549,12 @@ describe("Overview", () => {
     expect(
       await screen.findByRole("heading", { name: other.name }),
     ).toBeTruthy();
-    // The edit belonged to the record that was open when it was made. Carrying
-    // it over offers to save one organization's change against another.
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    // The question belonged to the record it was asked about. Carried over, it
+    // offers to write one organization's change against another.
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.updateOrganization).not.toHaveBeenCalled();
   });
 
   it("draws the facts in three named groups", async () => {
@@ -453,40 +608,84 @@ describe("Overview", () => {
     expect(labels).not.toContain("Members");
   });
 
-  it("keeps the save bar under the whole record, not inside a group", async () => {
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${ORG.slug}`,
-    });
-
-    fireEvent.click(await screen.findByRole("switch"));
-    // A save bar drawn inside Access would read as saving Access alone, while
-    // it writes the account type in Plan too.
-    expect(
-      screen.getByRole("button", { name: "Save" }).closest("section"),
-    ).toBeNull();
-  });
-
-  it("saves the whitelisted switch as whitelisted", async () => {
+  it("raises no save bar over the record when a fact changes", async () => {
     mocks.updateOrganization.mockResolvedValue({ ...ORG, whitelisted: false });
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
     fireEvent.click(await screen.findByRole("switch"));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-
-    // The field by name, not merely that a write happened: the two editors
-    // write one record between them, and a switch that lands on the account
-    // type changes the plan of an organization nobody meant to touch.
+    await confirmDialog();
     await waitFor(() => {
-      expect(mocks.updateOrganization).toHaveBeenCalledWith({
-        id: ORG.id,
-        account_type: undefined,
-        whitelisted: false,
-      });
+      expect(mocks.updateOrganization).toHaveBeenCalled();
     });
+
+    // The record commits one fact at a time now. A bar left over the whole
+    // record offers to write facts the operator never touched, and the dialog
+    // it would raise could not name what it was about to save.
+    const overview = screen
+      .getByText("Whitelisted")
+      .closest("section")?.parentElement;
+    expect(overview).toBeTruthy();
+    expect(
+      within(overview!).queryByRole("button", { name: "Save" }),
+    ).toBeNull();
+    expect(
+      within(overview!).queryByRole("button", { name: "Cancel" }),
+    ).toBeNull();
+  });
+
+  it("returns focus to the control the dialog was opened from", async () => {
+    mocks.updateOrganization.mockResolvedValue({ ...ORG, whitelisted: false });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    // Cancelled first, then confirmed. Radix restores focus to a
+    // `DialogTrigger`, and this dialog has none, so both exits drop the
+    // keyboard on `document.body` unless the control is focused back.
+    const select = await pickAccountType("enterprise");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(select);
+    });
+
+    const toggle = screen.getByRole("switch");
+    fireEvent.click(toggle);
+    await confirmDialog();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(toggle);
+    });
+  });
+
+  it("disables both controls while a write is in flight", async () => {
+    let landTheWrite = () => {};
+    mocks.updateOrganization.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          landTheWrite = () => resolve({ ...ORG, whitelisted: false });
+        }),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    await confirmDialog();
+
+    // Two writes in flight against one record race each other into the cache,
+    // and the loser's answer is the one that stays.
+    await waitFor(() => {
+      expect(isDisabled(screen.getByRole("switch"))).toBe(true);
+    });
+    expect(isDisabled(screen.getByRole("combobox"))).toBe(true);
+
+    landTheWrite();
+    await waitFor(() => {
+      expect(isDisabled(screen.getByRole("switch"))).toBe(false);
+    });
+    expect(isDisabled(screen.getByRole("combobox"))).toBe(false);
   });
 
   it("copies each identifier off its own row", async () => {

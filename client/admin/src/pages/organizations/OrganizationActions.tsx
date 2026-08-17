@@ -1,6 +1,5 @@
 import { CalendarIcon, MoreHorizontalIcon } from "lucide-react";
 import {
-  createContext,
   useContext,
   useId,
   useRef,
@@ -47,6 +46,9 @@ import {
   useEnableOrganization,
   useExtendTrial,
 } from "./rowActions";
+import { WriteReportContext, type WriteReporter } from "./writeReport";
+
+export type { WriteReporter } from "./writeReport";
 
 // The trial length the rest of the system assumes, so the operator extending a
 // trial by the usual amount picks nothing.
@@ -67,32 +69,6 @@ function extensionRange(
     latest: anchor + MAX_TRIAL_EXTENSION_DAYS,
   };
 }
-
-/**
- * How these controls report a write.
- *
- * The list owns both surfaces a write can report on, the live region and the
- * failure banner, and these controls are drawn inside table cells the list
- * cannot pass props to, so they reach them through context the way the peek
- * controls do.
- *
- * The default is a no-op rather than a throw: the peek panel renders these
- * actions too and it is mounted on its own in tests.
- */
-export type WriteReporter = {
-  // Speaks. Every write ends in one of these, whether it succeeded or not.
-  announce: (text: string) => void;
-  // Shows, and only for a failure with no dialog of its own to report in.
-  // `null` clears whatever is showing.
-  showFailure: (text: string | null) => void;
-};
-
-const NO_REPORTER: WriteReporter = {
-  announce: () => {},
-  showFailure: () => {},
-};
-
-const WriteReportContext = createContext<WriteReporter>(NO_REPORTER);
 
 export function WriteReportProvider({
   value,
