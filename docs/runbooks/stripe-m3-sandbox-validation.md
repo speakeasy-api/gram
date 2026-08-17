@@ -235,7 +235,8 @@ SQL
 
 The sum of confirmed TUM deltas must equal the frozen billed baseline for the
 closed period. Initial OpenRouter allocation cents plus signed carry cents must
-equal the exact final cumulative Other inference-spend cents. Every confirmed external ID
+equal the exact final cumulative Other inference spend cents. Every confirmed
+external ID
 must resolve to the same customer, subscription, invoice period, currency, and
 amount in Stripe.
 
