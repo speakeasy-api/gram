@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -96,6 +98,48 @@ func (s *SnapshotBillingCycleUsage) maybeSendUsageAlert(
 	orgName, err := queries.GetOrganizationName(ctx, orgID)
 	if err != nil {
 		release("failed to get organization name for tum usage alert", err)
+		return
+	}
+
+	// Serialize the final eligibility read and the send with PAYG activation.
+	// If conversion commits first, this read suppresses the legacy contract
+	// email. If delivery holds the lock first, the organization is still an
+	// enterprise contract customer at send time and conversion follows it.
+	lockConn, err := s.db.Acquire(ctx)
+	if err != nil {
+		release("failed to acquire billing eligibility lock for tum usage alert", err)
+		return
+	}
+	defer lockConn.Release()
+	lockQueries := activitiesrepo.New(lockConn)
+	lockParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	}
+	if err := lockQueries.AcquireOpenRouterKeyBillingLock(ctx, lockParams); err != nil {
+		release("failed to lock billing eligibility for tum usage alert", err)
+		return
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		unlocked, unlockErr := lockQueries.ReleaseOpenRouterKeyBillingLock(unlockCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
+		if unlockErr != nil || !unlocked {
+			logger.ErrorContext(unlockCtx, "failed to unlock billing eligibility after tum usage alert", attr.SlogError(unlockErr))
+		}
+	}()
+
+	accountType, err = usagerepo.New(lockConn).GetBillingOrganizationAccountType(ctx, orgID)
+	if err != nil {
+		release("failed to re-read organization tier for tum usage alert", err)
+		return
+	}
+	if accountType == string(billing.TierPayg) {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := s.cache.Delete(releaseCtx, key); err != nil {
+			logger.ErrorContext(releaseCtx, "failed to release ineligible tum usage alert reservation", attr.SlogError(err))
+		}
 		return
 	}
 

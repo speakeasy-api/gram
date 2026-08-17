@@ -37,6 +37,15 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
+-- name: AcquireOpenRouterKeyBillingLock :exec
+-- Billing transitions take the matching transaction lock before changing an
+-- organization's projection. Holding this session lock through the final
+-- eligibility read and delivery makes either the old or new tier win cleanly.
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
+
+-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
+
 -- name: GetAllOrganizationsWithToolsets :many
 SELECT
     organization_metadata.id,

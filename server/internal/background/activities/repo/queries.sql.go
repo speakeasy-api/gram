@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))
+`
+
+type AcquireOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Billing transitions take the matching transaction lock before changing an
+// organization's projection. Holding this session lock through the final
+// eligibility read and delivery makes either the old or new tier win cleanly.
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquirePaygOpenRouterChatKeyLock = `-- name: AcquirePaygOpenRouterChatKeyLock :exec
 SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
 `
@@ -2132,6 +2149,22 @@ func (q *Queries) ReconcileAndRotateStripeInvoiceAllocation(ctx context.Context,
 	var idempotency_key string
 	err := row.Scan(&idempotency_key)
 	return idempotency_key, err
+}
+
+const releaseOpenRouterKeyBillingLock = `-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const releasePaygOpenRouterChatKeyLock = `-- name: ReleasePaygOpenRouterChatKeyLock :one
