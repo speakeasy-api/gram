@@ -153,6 +153,7 @@ func handleToolsList(
 		Result: toolsListResultTools{
 			Tools: tools,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	}
 
 	bs, err := json.Marshal(result)

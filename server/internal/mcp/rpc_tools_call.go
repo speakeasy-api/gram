@@ -437,8 +437,9 @@ func handleToolsCall(
 	// External MCP tools and MCP passthrough tools already return properly formatted responses
 	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
 		bs, err := json.Marshal(result[json.RawMessage]{
-			ID:     req.ID,
-			Result: json.RawMessage(rw.body.Bytes()),
+			ID:             req.ID,
+			Result:         json.RawMessage(rw.body.Bytes()),
+			serverIdentity: serverInfoHostedToolset,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
@@ -459,6 +460,7 @@ func handleToolsCall(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
