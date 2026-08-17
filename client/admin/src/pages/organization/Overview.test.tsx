@@ -792,6 +792,36 @@ describe("Overview", () => {
     await landsFocusBackAfter(() => failTheWrite());
   });
 
+  it("puts the keyboard back on the control on a second write", async () => {
+    // Fast enough that neither write commits a pending render, which is the
+    // case where one settled write looks exactly like the last one.
+    mocks.updateOrganization.mockImplementation((body: { id: string }) =>
+      Promise.resolve({ ...ORG, ...body }),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const toggle = await screen.findByRole("switch");
+    fireEvent.click(toggle);
+    await confirmDialog();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("switch"));
+    });
+
+    // The second write is the one at issue: the first moves the write off
+    // `idle`, and after that a repeat has nothing new to say about itself.
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(screen.getByRole("switch"));
+    await confirmDialog();
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("switch"));
+    });
+  });
+
   it("disables both controls while a write is in flight", async () => {
     let landTheWrite = () => {};
     mocks.updateOrganization.mockImplementation(

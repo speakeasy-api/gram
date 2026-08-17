@@ -116,14 +116,16 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   // Re-enabling does not bring it back, so the restore waits for the write to
   // settle and runs from here, after React has taken `disabled` off again.
   // Asked for at `mutate` rather than read off a pending render, because a write
-  // that settles fast never commits one.
+  // that settles fast never commits one. `variables` is a dep for the same
+  // reason: without it a fast write after another goes `success` to `success`
+  // and nothing here changes.
   const restoreWanted = useRef(false);
   useEffect(() => {
     if (mut.isPending || !restoreWanted.current) return;
     restoreWanted.current = false;
     // A control that has left the page is not somewhere to put the keyboard.
     if (openedFrom.current?.isConnected) openedFrom.current.focus();
-  }, [mut.status, mut.isPending]);
+  }, [mut.status, mut.isPending, mut.variables]);
 
   const commit = async (
     change: FactChange,
