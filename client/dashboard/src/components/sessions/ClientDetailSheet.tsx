@@ -147,21 +147,9 @@ function CimdMetadataPanel({
 
   return (
     <div className="border-border flex flex-col gap-4 border-t pt-4">
-      <div className="flex items-center justify-between gap-2">
-        <Text variant="subheading" className="text-sm">
-          Metadata document
-        </Text>
-        {canRefresh && (
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={refresh.isPending}
-            onClick={() => refresh.mutate({ request: { id: client.id } })}
-          >
-            {refresh.isPending ? "Refreshing…" : "Refresh metadata"}
-          </Button>
-        )}
-      </div>
+      <Text variant="subheading" className="text-sm">
+        Metadata document
+      </Text>
       <Text small muted>
         This client is identified by a metadata document it hosts. Gram caches
         the document and enforces the values extracted from it; refreshing
@@ -187,6 +175,17 @@ function CimdMetadataPanel({
           <ETagValue etag={client.clientIdMetadataEtag} />
         </DetailField>
       </div>
+      {canRefresh && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="self-start"
+          disabled={refresh.isPending}
+          onClick={() => refresh.mutate({ request: { id: client.id } })}
+        >
+          {refresh.isPending ? "Refreshing…" : "Refresh metadata"}
+        </Button>
+      )}
     </div>
   );
 }
