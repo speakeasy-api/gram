@@ -22,7 +22,6 @@ import {
   clientDocumentOrigin,
   userSessionClientSource,
 } from "@/lib/user-session-client-source";
-import { ClientDetailSheet } from "./ClientDetailSheet";
 import { ClientSourceBadge } from "./ClientSourceBadge";
 import { ListStateBoundary } from "./ListStateBoundary";
 import { RevokeClientDialog } from "./RevokeClientDialog";
@@ -52,13 +51,14 @@ export function UserSessionClientsList({
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
-  /**
-   * When set, the table shows only this client. The tab drills into a single
-   * client's sessions rather than scrolling to them, so collapsing this table
-   * to the matching row is what brings the sessions above it into view.
-   */
+  /** When set, the table shows only this client. */
   filteredClientId?: string;
-  onViewSessions: (client: UserSessionClient) => void;
+  /**
+   * Drill-down target for a client's sessions. Optional: the MCP server detail
+   * tab groups connections by client directly, so it has nothing to drill to
+   * and omits the affordance rather than offering a dead one.
+   */
+  onViewSessions?: (client: UserSessionClient) => void;
   /**
    * Called after a revoke lands, so the owner can refresh the sessions the
    * revoke cascaded to. Revoking a client soft-deletes every session it
@@ -74,12 +74,6 @@ export function UserSessionClientsList({
     null,
   );
   const [revokeOpen, setRevokeOpen] = useState(false);
-  // Same lifetime split as the revoke dialog: the target outlives the open
-  // flag so the sheet stays mounted through its close animation.
-  const [detailTarget, setDetailTarget] = useState<UserSessionClient | null>(
-    null,
-  );
-  const [detailOpen, setDetailOpen] = useState(false);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(CLIENT_FILTERS);
   const { hasScope } = useRBAC();
@@ -95,11 +89,6 @@ export function UserSessionClientsList({
   const openRevoke = (client: UserSessionClient) => {
     setRevokeTarget(client);
     setRevokeOpen(true);
-  };
-
-  const openDetail = (client: UserSessionClient) => {
-    setDetailTarget(client);
-    setDetailOpen(true);
   };
 
   const deferredSearch = useDeferredValue(search);
@@ -203,14 +192,14 @@ export function UserSessionClientsList({
         >
           <MoreActions
             actions={[
-              {
-                label: "View details",
-                onClick: () => openDetail(client),
-              },
-              {
-                label: "View sessions",
-                onClick: () => onViewSessions(client),
-              },
+              ...(onViewSessions
+                ? [
+                    {
+                      label: "View sessions",
+                      onClick: () => onViewSessions(client),
+                    },
+                  ]
+                : []),
               ...(canRevoke
                 ? [
                     {
@@ -291,7 +280,6 @@ export function UserSessionClientsList({
             columns={columns}
             data={pageClients}
             rowKey={(client) => client.id}
-            onRowClick={openDetail}
             sort={sort}
             onSortChange={(next) => {
               setSort(next);
@@ -306,12 +294,11 @@ export function UserSessionClientsList({
               <ContextMenu>
                 <ContextMenuTrigger asChild>{rowElement}</ContextMenuTrigger>
                 <ContextMenuContent>
-                  <ContextMenuItem onSelect={() => openDetail(client)}>
-                    View details
-                  </ContextMenuItem>
-                  <ContextMenuItem onSelect={() => onViewSessions(client)}>
-                    View sessions
-                  </ContextMenuItem>
+                  {onViewSessions && (
+                    <ContextMenuItem onSelect={() => onViewSessions(client)}>
+                      View sessions
+                    </ContextMenuItem>
+                  )}
                   {canRevoke && (
                     <ContextMenuItem
                       variant="destructive"
@@ -332,15 +319,6 @@ export function UserSessionClientsList({
           />
         </section>
       </ListStateBoundary>
-
-      {/* One sheet for the table rather than a closed one mounted per row. */}
-      {detailTarget && (
-        <ClientDetailSheet
-          client={detailTarget}
-          open={detailOpen}
-          onOpenChange={setDetailOpen}
-        />
-      )}
 
       {/* One dialog for the table rather than a closed one mounted per row. */}
       {revokeTarget && (
@@ -368,9 +346,10 @@ function ActiveSessionCountCell({
   onViewSessions,
 }: {
   client: UserSessionClient;
-  onViewSessions: (client: UserSessionClient) => void;
+  onViewSessions?: (client: UserSessionClient) => void;
 }): JSX.Element {
-  if (client.activeSessionCount === 0) {
+  // Without a drill-down target the count is still worth reading, just inert.
+  if (client.activeSessionCount === 0 || !onViewSessions) {
     return (
       <Text small muted>
         0

@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import {
   invalidateAllUserSessionClients,
@@ -12,14 +11,12 @@ import {
 } from "@gram/client/react-query/userSessions.js";
 
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { clientDocumentOrigin } from "@/lib/user-session-client-source";
 import { UserSessionClientsList } from "./UserSessionClientsList";
-import { UserSessionsList } from "./UserSessionsList";
 import { useDrainedPages, PAGE_FETCH_LIMIT } from "./useDrainedPages";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
+import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
 
 /**
  * Body of the Clients and Sessions tab, shared verbatim by the toolset-backed
@@ -36,26 +33,6 @@ export function ClientsAndSessionsTab({
   issuerId: string | undefined;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  // The filter remembers which issuer it was set against. Navigating between
-  // two MCP servers reuses this component instance rather than remounting it
-  // (and when the target server is already in the query cache there is no
-  // loading gap to unmount through), so a filter keyed only by client id would
-  // survive onto the next server and silently scope its sessions to a client
-  // that belongs to a different issuer. Derived during render rather than
-  // reset in an effect, so there is no stale first paint.
-  const [filter, setFilter] = useState<{
-    issuerId: string;
-    client: UserSessionClient;
-  } | null>(null);
-  // Compare on `filter &&` rather than `filter?.issuerId === issuerId`: with
-  // no filter set and no issuer attached, the optional-chained form compares
-  // undefined to undefined, takes the truthy branch, and dereferences null.
-  const activeFilter =
-    filter && filter.issuerId === issuerId ? filter.client : null;
-  // client_name is client-chosen; pair it with the unspoofable document origin
-  // so the chip cannot be made to read like a client it isn't.
-  const filterOrigin = activeFilter ? clientDocumentOrigin(activeFilter) : null;
-
   // Both queries treat a missing user_session_issuer_id as "don't filter by
   // issuer", so leaving them enabled on a server with no issuer would list the
   // whole project's sessions and clients under one server's tab. The hooks
@@ -102,31 +79,12 @@ export function ClientsAndSessionsTab({
     [clientsQuery.data],
   );
 
-  // Offered by the sessions table's Client filter. Keyed by id rather than
-  // name because client_name is client-chosen and two registrations can pick
-  // the same one.
-  const clientOptions = useMemo(
-    () =>
-      clients
-        .map((client) => ({ value: client.id, label: client.clientName }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [clients],
-  );
-
-  const selectClient = (client: UserSessionClient) => {
-    if (!issuerId) return;
-    setFilter({ issuerId, client });
-  };
-
   // Revoking a client cascades to every session it issued, so the sessions
   // list has to be refetched too or it keeps offering Revoke actions for
   // sessions the backend already deleted. Only the filter pointing at the
   // revoked client is cleared; revoking some other client leaves the current
   // drill-down where the operator put it.
-  const onClientRevoked = (revoked: UserSessionClient) => {
-    setFilter((current) =>
-      current?.client.id === revoked.id ? null : current,
-    );
+  const onClientRevoked = () => {
     void clientsQuery.refetch();
     void invalidateAllUserSessions(queryClient, { refetchType: "all" });
   };
@@ -180,20 +138,6 @@ export function ClientsAndSessionsTab({
         </Text>
       )}
 
-      {/* Both listings below are narrowed to the selected client, which is what
-          keeps them short enough to read together without scrolling. */}
-      {activeFilter && (
-        <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border px-3 py-2">
-          <Text small>
-            Filtered to {activeFilter.clientName}
-            {filterOrigin ? ` (${filterOrigin})` : ""}
-          </Text>
-          <Button variant="tertiary" size="sm" onClick={() => setFilter(null)}>
-            Clear filter
-          </Button>
-        </div>
-      )}
-
       <Stack gap={3}>
         <Stack
           direction="horizontal"
@@ -202,30 +146,31 @@ export function ClientsAndSessionsTab({
           gap={4}
         >
           <Stack gap={1}>
-            <Text variant="subheading">Sessions</Text>
+            <Text variant="subheading">Connections</Text>
             <Text small muted>
-              Active sessions for this MCP Server.
+              Who is connected to this server, what they connect through, and
+              the upstream providers Gram reaches on their behalf.
             </Text>
           </Stack>
           <ViewOrgSessionsButton />
         </Stack>
-        <UserSessionsList
+
+        <ConnectionsListSection
           sessions={sessions}
           isPending={sessionsQuery.isPending}
           isError={sessionsQuery.isError && sessions.length === 0}
           onRetry={() => void sessionsQuery.refetch()}
           onRevoked={onSessionRevoked}
-          clientFilterId={activeFilter?.id}
-          clientOptions={clientOptions}
         />
       </Stack>
 
       <Stack gap={3}>
         <Stack gap={1}>
-          <Text variant="subheading">Clients</Text>
+          <Text variant="subheading">Registered clients</Text>
           <Text small muted>
             MCP Clients, agents, and other applications that are registered for
-            creating sessions.
+            creating sessions. Revoking a registration cuts off every connection
+            it established.
           </Text>
         </Stack>
         <UserSessionClientsList
@@ -233,8 +178,6 @@ export function ClientsAndSessionsTab({
           isPending={clientsQuery.isPending}
           isError={clientsQuery.isError && clients.length === 0}
           onRetry={() => void clientsQuery.refetch()}
-          filteredClientId={activeFilter?.id}
-          onViewSessions={selectClient}
           onClientRevoked={onClientRevoked}
         />
       </Stack>
