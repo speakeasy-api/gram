@@ -158,6 +158,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chatWriter,
 		nil,
 		nil,
+		nil,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",

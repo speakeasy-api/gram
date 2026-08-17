@@ -31,8 +31,6 @@ export type OrganizationsSearch = {
   disabled?: DisabledState[];
   sort?: string;
   dir?: "asc" | "desc";
-  /** 1-based. Declared, not yet wired: the list API is still cursor-paged. */
-  page?: number;
 };
 
 // The router parses a param that reads as a JSON literal before this runs, so
@@ -78,12 +76,6 @@ function direction(value: unknown): "asc" | "desc" | undefined {
   return undefined;
 }
 
-// Page 1 is the default, so it never reaches the URL.
-function pageNumber(value: unknown): number | undefined {
-  const page = typeof value === "number" ? value : Number(value);
-  return Number.isInteger(page) && page > 1 ? page : undefined;
-}
-
 export function organizationsSearchSchema(
   search: Record<string, unknown>,
 ): OrganizationsSearch {
@@ -94,7 +86,6 @@ export function organizationsSearchSchema(
     disabled: statuses(search["disabled"]),
     sort: text(search["sort"]),
     dir: direction(search["dir"]),
-    page: pageNumber(search["page"]),
   };
 }
 

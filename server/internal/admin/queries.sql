@@ -201,6 +201,39 @@ filtered AS (
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality(sqlc.arg('trial_states')::text[]), 0) = 0 OR trial_state = ANY(sqlc.arg('trial_states')::text[]);
 
+-- name: AdminGetOrganizationStats :one
+-- Blind to the list's filters by design: these figures must not move when an
+-- operator filters. total and both 7-day windows count disabled organizations
+-- too, so the strip reports the real platform size rather than the list's
+-- default active-only view.
+--
+-- The join stays count-safe because organization_id is the trials primary key.
+-- Both 7-day windows exclude their boundary: exactly seven days old is outside.
+WITH orgs AS (
+    SELECT
+        om.created_at,
+        om.disabled_at,
+        -- Must stay identical to AdminListOrganizations: a figure counted from a
+        -- shortened predicate would disagree with the rows clicking it lands on.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+)
+SELECT
+    count(*)::bigint AS total,
+    count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
+    count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
+    count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
+FROM orgs;
+
 -- name: AdminUpdateOrganization :exec
 -- Admin-only mutation. Both fields are optional — caller passes NULL to skip
 -- the field. NULL on both is a no-op (still touches updated_at).
@@ -210,6 +243,16 @@ SET
     whitelisted = COALESCE(sqlc.narg('whitelisted')::boolean, whitelisted),
     updated_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: AdminBulkUpdateAccountType :many
+-- One statement rather than a loop, so every id is matched against one snapshot.
+-- RETURNING is how the caller learns which of its ids matched nothing.
+UPDATE organization_metadata
+SET
+    gram_account_type = @account_type::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY(@ids::text[])
+RETURNING id;
 
 -- name: AdminDisableOrganization :execrows
 -- Operator-initiated disable. Keyed on the Gram organization id rather than

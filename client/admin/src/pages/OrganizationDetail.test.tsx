@@ -206,6 +206,23 @@ describe("organization detail", () => {
     ]);
   });
 
+  it("draws no checkbox on a table that did not ask for one", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    await screen.findByRole("link", { name: PROJECT.name });
+
+    // Row selection is opt-in, and it is opted into by putting the select
+    // column in a page's own column list. The shared table registers the
+    // feature for every page that uses it, and a feature that drew a column of
+    // its own would put one here, where nothing reads a selection.
+    expect(screen.queryAllByRole("checkbox")).toEqual([]);
+
+    await selectTab("Members");
+    await screen.findByRole("cell", { name: MEMBER.email });
+    expect(screen.queryAllByRole("checkbox")).toEqual([]);
+  });
+
   it("renders every members cell out of the record that produced it", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

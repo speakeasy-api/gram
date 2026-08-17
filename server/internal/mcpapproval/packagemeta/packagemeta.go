@@ -19,8 +19,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,6 +91,17 @@ type Metadata struct {
 
 	// DeprecationReason is the publisher's stated reason, if any.
 	DeprecationReason string
+
+	// RepositoryURL is the source repository the publisher declared, verbatim
+	// in whichever shorthand the registry stores (`git+https://…`,
+	// `github:owner/repo`). Empty when none is published. Like every other
+	// field it is a claim: nothing verifies the repository actually builds
+	// this package.
+	RepositoryURL string
+
+	// HomepageURL is the project homepage the publisher declared, empty when
+	// none is published.
+	HomepageURL string
 }
 
 // Client looks packages up over the public registry APIs.
@@ -198,7 +211,9 @@ type npmDocument struct {
 	Maintainers []struct {
 		Name string `json:"name"`
 	} `json:"maintainers"`
-	License any `json:"license"`
+	License    any    `json:"license"`
+	Repository any    `json:"repository"`
+	Homepage   string `json:"homepage"`
 }
 
 // npmTimes is npm's time map with non-string values dropped. A package that
@@ -227,8 +242,23 @@ func (t *npmTimes) UnmarshalJSON(data []byte) error {
 }
 
 func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) {
-	// A scoped name contains a slash that must survive as one path segment.
-	endpoint := c.npmURL + "/" + strings.ReplaceAll(url.PathEscape(name), "%2F", "/")
+	// A scoped name contains exactly one slash, separating scope from
+	// package. Each segment is validated and escaped individually so a
+	// crafted name cannot smuggle extra path segments — or `.`/`..`
+	// traversal — into the registry request once the intended separator is
+	// in place.
+	segments := strings.Split(name, "/")
+	if len(segments) > 2 {
+		return nil, fmt.Errorf("invalid npm package name %q", name)
+	}
+	escaped := make([]string, len(segments))
+	for i, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return nil, fmt.Errorf("invalid npm package name %q", name)
+		}
+		escaped[i] = url.PathEscape(segment)
+	}
+	endpoint := c.npmURL + "/" + strings.Join(escaped, "/")
 
 	var doc npmDocument
 	found, err := c.get(ctx, endpoint, &doc)
@@ -259,6 +289,8 @@ func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) 
 		// release says nothing about what installs today.
 		Deprecated:        false,
 		DeprecationReason: "",
+		RepositoryURL:     npmRepository(doc.Repository),
+		HomepageURL:       strings.TrimSpace(doc.Homepage),
 	}
 
 	if version, ok := doc.Versions[latest].(map[string]any); ok {
@@ -269,6 +301,21 @@ func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) 
 	}
 
 	return meta, nil
+}
+
+// npmRepository reads npm's repository field, which is a string shorthand on
+// some packages and a {type, url} object on most.
+func npmRepository(raw any) string {
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case map[string]any:
+		if repoURL, ok := value["url"].(string); ok {
+			return strings.TrimSpace(repoURL)
+		}
+	}
+
+	return ""
 }
 
 // npmLicense reads npm's license field, which is a string on modern packages
@@ -316,12 +363,14 @@ func npmTime(raw string) time.Time {
 
 type pypiDocument struct {
 	Info struct {
-		Name         string   `json:"name"`
-		Version      string   `json:"version"`
-		License      string   `json:"license"`
-		Yanked       bool     `json:"yanked"`
-		YankedReason string   `json:"yanked_reason"`
-		Classifiers  []string `json:"classifiers"`
+		Name         string            `json:"name"`
+		Version      string            `json:"version"`
+		License      string            `json:"license"`
+		Yanked       bool              `json:"yanked"`
+		YankedReason string            `json:"yanked_reason"`
+		Classifiers  []string          `json:"classifiers"`
+		HomePage     string            `json:"home_page"`
+		ProjectURLs  map[string]string `json:"project_urls"`
 	} `json:"info"`
 	Releases map[string][]struct {
 		UploadTime string `json:"upload_time_iso_8601"`
@@ -370,7 +419,62 @@ func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error)
 		MaintainerCount:   0,
 		Deprecated:        doc.Info.Yanked,
 		DeprecationReason: doc.Info.YankedReason,
+		RepositoryURL:     pypiRepository(doc),
+		HomepageURL:       pypiHomepage(doc),
 	}, nil
+}
+
+// pypiRepository finds the declared source repository among the project URLs,
+// whose labels are free-form. The conventional labels are tried first; failing
+// those, any URL hosted on a known code host is taken — even one under a
+// label like "Tracker", since a code-host subpath still names the repository
+// it lives in and the parse folds it to the repository root. Keys are walked
+// in sorted order so repeated gathers of the same document extract the same
+// URL, and empty values never shadow a URL under another label.
+func pypiRepository(doc pypiDocument) string {
+	keys := slices.Sorted(maps.Keys(doc.Info.ProjectURLs))
+
+	for _, label := range []string{"repository", "source", "source code", "code"} {
+		for _, key := range keys {
+			if !strings.EqualFold(strings.TrimSpace(key), label) {
+				continue
+			}
+			if value := strings.TrimSpace(doc.Info.ProjectURLs[key]); value != "" {
+				return value
+			}
+		}
+	}
+
+	for _, key := range keys {
+		trimmed := strings.TrimSpace(doc.Info.ProjectURLs[key])
+		if trimmed == "" {
+			continue
+		}
+		if u, err := url.Parse(trimmed); err == nil {
+			host := strings.ToLower(u.Hostname())
+			if host == "github.com" || host == "gitlab.com" || host == "bitbucket.org" {
+				return trimmed
+			}
+		}
+	}
+
+	return ""
+}
+
+// pypiHomepage prefers the classic home_page field and falls back to the
+// conventional project-URL label.
+func pypiHomepage(doc pypiDocument) string {
+	if home := strings.TrimSpace(doc.Info.HomePage); home != "" {
+		return home
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(doc.Info.ProjectURLs)) {
+		if strings.EqualFold(strings.TrimSpace(key), "homepage") {
+			return strings.TrimSpace(doc.Info.ProjectURLs[key])
+		}
+	}
+
+	return ""
 }
 
 // pypiLicense prefers the explicit license field and falls back to the

@@ -13,13 +13,18 @@ import (
 )
 
 type LogRecord struct {
-	Action    string
-	ProjectID uuid.NullUUID
+	Action         string
+	OrganizationID string
+	ProjectID      uuid.NullUUID
 
-	// The display name is denormalized and masked for staff; assert on these instead.
+	// The display name is denormalized and masked for staff; assert on these
+	// instead. ActorDisplayName keeps the presence-vs-empty distinction the
+	// masking tests assert on; ActorDisplay is its collapsed convenience form.
 	ActorID          string
 	ActorType        string
 	ActorDisplayName *string
+	ActorDisplay     string
+	SubjectID        string
 	SubjectType      string
 	SubjectDisplay   string
 	SubjectSlug      string
@@ -36,10 +41,13 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 
 	return LogRecord{
 		Action:           row.Action,
+		OrganizationID:   row.OrganizationID,
 		ProjectID:        row.ProjectID,
 		ActorID:          row.ActorID,
 		ActorType:        row.ActorType,
 		ActorDisplayName: conv.FromPGText[string](row.ActorDisplayName),
+		ActorDisplay:     conv.PtrValOr(conv.FromPGText[string](row.ActorDisplayName), ""),
+		SubjectID:        row.SubjectID,
 		SubjectType:      row.SubjectType,
 		SubjectDisplay:   conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
 		SubjectSlug:      conv.PtrValOr(conv.FromPGText[string](row.SubjectSlug), ""),

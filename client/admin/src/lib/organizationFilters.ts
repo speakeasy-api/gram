@@ -40,6 +40,10 @@ export type FilterGroup = {
   // "everything", and an operator cannot be expected to know which is which,
   // so each group says its own.
   emptyLabel: string;
+  // What every value at once amounts to, where that is worth naming. Absent on
+  // Type: an organization can carry a type the picker does not offer, so
+  // choosing all three still leaves rows out.
+  allLabel?: string;
   options: FilterOption[];
 };
 
@@ -63,6 +67,8 @@ export const FILTER_GROUPS: FilterGroup[] = [
     key: "trial",
     label: "Trial",
     emptyLabel: "All trial states",
+    // Every organization has exactly one of these, `none` included.
+    allLabel: "All trial states",
     // TRIAL_LABELS is the map the Trial cell renders its badge from, so the
     // filter and the rows it returns cannot say different words for one state.
     options: TRIAL_STATES.map((value) => ({
@@ -74,6 +80,8 @@ export const FILTER_GROUPS: FilterGroup[] = [
     key: "disabled",
     label: "Status",
     emptyLabel: "Active only",
+    // Not the empty label: this group's default is a filter, not everything.
+    allLabel: "Active and disabled",
     options: DISABLED_STATES.map((value) => ({
       value,
       label: DISABLED_LABELS[value],
@@ -95,6 +103,12 @@ export function filterSummary(
   const only = chosen[0];
   if (chosen.length === 1 && only !== undefined) {
     return options.find((option) => option.value === only)?.label ?? only;
+  }
+  if (
+    group.allLabel !== undefined &&
+    group.options.every((option) => chosen.includes(option.value))
+  ) {
+    return group.allLabel;
   }
   return `${chosen.length} selected`;
 }

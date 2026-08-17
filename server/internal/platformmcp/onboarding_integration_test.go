@@ -25,8 +25,8 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 		CatalogProvider:      "fixture",
 		CatalogReference:     "onboarding-test",
 		Status:               registrationStatusPending,
-		ConnectionID:         connectionIDFromPrincipal(t, principal),
-		ConnectionGeneration: connectionIDFromPrincipalGeneration(t, principal),
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
 	})
 	require.NoError(t, err)
 	service := NewOnboardingService(conn)

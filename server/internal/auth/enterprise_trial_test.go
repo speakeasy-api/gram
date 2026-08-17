@@ -86,8 +86,8 @@ func TestRegister_ArmsEnterpriseTrial(t *testing.T) {
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
-	require.NotNil(t, entry.ActorDisplayName, "org-less session must still resolve the actor email")
-	require.Equal(t, email, *entry.ActorDisplayName)
+	require.NotEmpty(t, entry.ActorDisplay, "org-less session must still resolve the actor email")
+	require.Equal(t, email, entry.ActorDisplay)
 }
 
 // TestRegister_EnterpriseTrialResolvesThroughInfo checks the tier survives the
