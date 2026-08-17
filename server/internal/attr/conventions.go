@@ -75,6 +75,8 @@ const (
 	ReasonKey   = attribute.Key("reason")
 	ValueKey    = attribute.Key("value")
 
+	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
+
 	SpanIDKey                    = attribute.Key("span.id")
 	SpanParentIDKey              = attribute.Key("span.parent_id")
 	TraceIDKey                   = attribute.Key("trace.id")
@@ -902,6 +904,11 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
+func SlogStripeWebhookEventID(v string) slog.Attr {
+	return slog.String(string(StripeWebhookEventIDKey), v)
+}
 
 func Expected(v any) attribute.KeyValue { return ExpectedKey.String(fmt.Sprintf("%v", v)) }
 func SlogExpected(v any) slog.Attr      { return slog.Any(string(ExpectedKey), v) }

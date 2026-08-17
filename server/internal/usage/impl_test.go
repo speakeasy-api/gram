@@ -164,6 +164,8 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
 		posthogClient: posthog.New(t.Context(), logger, "", "", ""),
+		stripeClient:  nil,
+		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
 	}
 }
