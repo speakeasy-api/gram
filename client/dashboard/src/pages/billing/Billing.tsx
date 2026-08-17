@@ -24,6 +24,7 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { TumUsageSection } from "@/components/billing/tum-section";
@@ -54,8 +55,9 @@ function BillingInner() {
   if (productTier === "enterprise") {
     return (
       <>
-        <StartPaygCheckoutCTA />
+        <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
+        <PaygPriceList />
         {isAdmin && <TumAdminSection />}
       </>
     );
@@ -63,7 +65,7 @@ function BillingInner() {
 
   return (
     <>
-      <StartPaygCheckoutCTA />
+      <StartPaygCheckoutCTA label="Add payment method" />
       <UsageSection />
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (

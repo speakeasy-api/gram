@@ -176,6 +176,15 @@ describe("StartPaygCheckoutCTA", () => {
     expect(mocks.hasScope).toHaveBeenCalledWith("org:admin");
   });
 
+  it("uses the action label supplied by its surface", () => {
+    render(<StartPaygCheckoutCTA label="Add payment method" />);
+
+    expect(
+      screen.getByRole("button", { name: /add payment method/i }),
+    ).toBeTruthy();
+    expect(cta()).toBeNull();
+  });
+
   // Opt-in only: every unresolved flag state has to read as "off", so a
   // misconfigured or unreachable PostHog can never surface a payment flow.
   it.each([

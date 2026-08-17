@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   hasScope: vi.fn(),
   session: vi.fn(),
+  usageTiers: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -49,7 +50,7 @@ vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => ({ data: undefined }),
 }));
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
-  useGetUsageTiers: () => ({ data: undefined, isLoading: false }),
+  useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
 }));
 vi.mock("@/components/billing/tum-section", () => ({
   TumUsageSection: () => <div>tum usage</div>,
@@ -87,8 +88,7 @@ import Billing from "./Billing";
 
 const DAY = 24 * 60 * 60 * 1000;
 
-const cta = () =>
-  screen.queryByRole("button", { name: /start pay as you go/i });
+const cta = () => screen.queryByRole("button", { name: /add payment method/i });
 
 describe("Billing", () => {
   beforeEach(() => {
@@ -101,6 +101,26 @@ describe("Billing", () => {
         startedAt: new Date(Date.now() - 2 * DAY),
         endsAt: new Date(Date.now() + 12 * DAY),
       },
+    });
+    mocks.usageTiers.mockReturnValue({
+      data: {
+        payg: {
+          basePrice: 0,
+          includedToolCalls: 0,
+          includedServers: 0,
+          includedCredits: 0,
+          pricePerAdditionalToolCall: 0,
+          pricePerAdditionalServer: 0,
+          featureBullets: ["Enterprise feature set"],
+          includedBullets: [
+            "Other inference billed at provider cost",
+            "Security inference funded by Speakeasy",
+          ],
+          tumPricePerMillionUsd: "0.35",
+        },
+      },
+      isLoading: false,
+      isError: false,
     });
   });
 
@@ -121,6 +141,9 @@ describe("Billing", () => {
 
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).not.toBeNull();
+    expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
+    expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
+    expect(mocks.usageTiers).toHaveBeenCalledWith({ throwOnError: false });
   });
 
   it("shows no checkout CTA to a member", () => {
@@ -144,5 +167,6 @@ describe("Billing", () => {
     render(<Billing />);
 
     expect(cta()).toBeNull();
+    expect(screen.queryByText("Pay as you go pricing")).toBeNull();
   });
 });

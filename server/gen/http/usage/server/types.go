@@ -1628,6 +1628,8 @@ type TierLimitsResponseBody struct {
 	IncludedBullets []string `form:"included_bullets" json:"included_bullets" xml:"included_bullets"`
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string `form:"tum_price_per_million_usd,omitempty" json:"tum_price_per_million_usd,omitempty" xml:"tum_price_per_million_usd,omitempty"`
 }
 
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result

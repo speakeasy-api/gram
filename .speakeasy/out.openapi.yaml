@@ -73519,6 +73519,9 @@ components:
           type: number
           description: The price per additional tool call
           format: double
+        tum_price_per_million_usd:
+          type: string
+          description: Exact USD list price per million tokens under management (optional)
       required:
         - base_price
         - included_tool_calls

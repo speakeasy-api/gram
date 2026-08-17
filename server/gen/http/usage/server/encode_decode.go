@@ -1603,6 +1603,7 @@ func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLi
 		IncludedCredits:            v.IncludedCredits,
 		PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   v.PricePerAdditionalServer,
+		TumPricePerMillionUsd:      v.TumPricePerMillionUsd,
 	}
 	if v.FeatureBullets != nil {
 		res.FeatureBullets = make([]string, len(v.FeatureBullets))

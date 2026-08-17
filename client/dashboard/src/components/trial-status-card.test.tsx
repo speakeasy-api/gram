@@ -249,7 +249,7 @@ describe("TrialStatusCard", () => {
     render(<TrialStatusCard />);
 
     expect(
-      screen.getByRole("button", { name: /start pay as you go/i }),
+      screen.getByRole("button", { name: /add payment method/i }),
     ).toBeTruthy();
     // Sales stays available; checkout is an addition, not a replacement.
     expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
@@ -262,7 +262,7 @@ describe("TrialStatusCard", () => {
     render(<TrialStatusCard />);
 
     expect(
-      screen.queryByRole("button", { name: /start pay as you go/i }),
+      screen.queryByRole("button", { name: /add payment method/i }),
     ).toBeNull();
     expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
   });
@@ -274,7 +274,7 @@ describe("TrialStatusCard", () => {
     render(<TrialStatusCard />);
 
     expect(
-      screen.queryByRole("button", { name: /start pay as you go/i }),
+      screen.queryByRole("button", { name: /add payment method/i }),
     ).toBeNull();
     expect(
       screen.getByRole("link", { name: "Talk to sales about upgrading" }),

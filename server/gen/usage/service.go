@@ -166,6 +166,8 @@ type TierLimits struct {
 	IncludedBullets []string
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service

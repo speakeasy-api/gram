@@ -106,7 +106,7 @@ export function TrialStatusCard(): React.ReactNode {
         </div>
         {/* Self-serve upgrade for admins still in the trial; sales stays the
             fallback for everyone else and for expired trials. */}
-        <StartPaygCheckoutCTA size="sm" />
+        <StartPaygCheckoutCTA size="sm" label="Add payment method" />
         <Link
           to={SALES_PATH}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

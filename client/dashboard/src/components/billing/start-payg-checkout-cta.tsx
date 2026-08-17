@@ -40,9 +40,12 @@ const ERROR_MESSAGE = "Couldn't start checkout. Try again.";
 export function StartPaygCheckoutCTA({
   size = "md",
   className,
+  label = CTA_LABEL,
 }: {
   size?: ButtonSize;
   className?: string;
+  /** Customer-facing action for the surface that owns this shared behavior. */
+  label?: string;
 }): JSX.Element | null {
   const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
@@ -121,7 +124,7 @@ export function StartPaygCheckoutCTA({
         onClick={startCheckout}
         disabled={locked || checkout.isPending}
       >
-        {CTA_LABEL}
+        {label}
       </Button>
       {failed ? (
         <Text small destructive role="alert">
