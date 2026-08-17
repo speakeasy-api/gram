@@ -68,6 +68,19 @@ function valueBeside(label: string): HTMLElement {
   return value;
 }
 
+// The labels of one group's rows, in the order they are drawn. Read off the
+// group's heading, so a row that moves out of a group fails the group it left
+// as well as the one it joined.
+function labelsIn(group: string): string[] {
+  const section = screen
+    .getByRole("heading", { name: group })
+    .closest("section");
+  if (!section) throw new Error(`the ${group} heading is not in a group`);
+  return [...section.querySelectorAll('[data-slot="field-label"]')].map(
+    (n) => n.textContent ?? "",
+  );
+}
+
 beforeEach(() => {
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
@@ -377,6 +390,77 @@ describe("Overview", () => {
     // The edit belonged to the record that was open when it was made. Carrying
     // it over offers to save one organization's change against another.
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("draws the facts in three named groups", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Identity" });
+    // Written out rather than counted: the label an operator reads is the
+    // whole contract of a fact row, and "Whitelisted" in particular must not
+    // drift to a name that reads like a preference. See S2-FACTS-AUDIT.md.
+    expect(labelsIn("Identity")).toEqual([
+      "Name",
+      "Slug",
+      "Organization id",
+      "WorkOS id",
+      "Created",
+      "Updated",
+    ]);
+    expect(labelsIn("Plan")).toEqual(["Account type", "Trial"]);
+    expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at"]);
+  });
+
+  it("no longer counts the members the record nav already counts", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Identity" });
+    // By label, not by text: the record nav says "Members" too, and that one
+    // is the count this row was dropped in favour of.
+    const labels = [
+      ...document.querySelectorAll('[data-slot="field-label"]'),
+    ].map((n) => n.textContent);
+    expect(labels).not.toContain("Members");
+  });
+
+  it("keeps the save bar under the whole record, not inside a group", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    // A save bar drawn inside Access would read as saving Access alone, while
+    // it writes the account type in Plan too.
+    expect(
+      screen.getByRole("button", { name: "Save" }).closest("section"),
+    ).toBeNull();
+  });
+
+  it("saves the whitelisted switch as whitelisted", async () => {
+    mocks.updateOrganization.mockResolvedValue({ ...ORG, whitelisted: false });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    // The field by name, not merely that a write happened: the two editors
+    // write one record between them, and a switch that lands on the account
+    // type changes the plan of an organization nobody meant to touch.
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledWith({
+        id: ORG.id,
+        account_type: undefined,
+        whitelisted: false,
+      });
+    });
   });
 
   it("renders a dash for a record that was never disabled", async () => {
