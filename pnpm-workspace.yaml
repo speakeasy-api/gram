@@ -7,7 +7,6 @@ packages:
   - server
   - cli
   - tunnel
-  - hooks
   - functions
   - docs
   - evaluation
