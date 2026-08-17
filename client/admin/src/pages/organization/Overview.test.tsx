@@ -266,6 +266,52 @@ describe("Overview", () => {
     );
   });
 
+  it("names the whitelisted change as yes and no, in that order", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    const dialog = await screen.findByRole("dialog");
+
+    // The record under test is whitelisted, so the change reads yes → no. Both
+    // halves are asserted: a description that renders the boolean backwards, or
+    // one that names the two states the wrong way round, still reads like a
+    // sentence and asks the operator to approve the opposite of the write.
+    expect(ORG.whitelisted).toBe(true);
+    expect(dialog.textContent).toContain("Whitelisted: yes → no");
+    expect(dialog.textContent).not.toContain("Whitelisted: no → yes");
+  });
+
+  it("does not run a new write under the last one's failure", async () => {
+    mocks.updateOrganization.mockRejectedValueOnce(new Error("update failed"));
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    await confirmDialog();
+    await waitFor(() => {
+      expect(document.querySelector(".text-destructive")?.textContent).toMatch(
+        /update failed/,
+      );
+    });
+
+    mocks.updateOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "enterprise",
+    });
+    await pickAccountType("enterprise");
+    await confirmDialog();
+
+    // A failure left standing over a write that landed tells the operator the
+    // change they just watched succeed did not happen.
+    await waitFor(() => {
+      expect(screen.getByRole("combobox").textContent).toBe("enterprise");
+    });
+    expect(document.querySelector(".text-destructive")).toBeNull();
+  });
+
   it("writes the account type on its own, with no whitelisted field", async () => {
     mocks.updateOrganization.mockResolvedValue({
       ...ORG,

@@ -76,7 +76,9 @@ export function OverviewRoute(): JSX.Element | null {
   const { data } = useQuery(organizationQuery(idOrSlug));
   if (!data) return null;
   // Keyed, so a write in flight and the dialog asking about it belong to the
-  // record they were started on.
+  // record they were started on. `RecordLayout` keys this whole subtree the
+  // same way, which is what actually enforces it today; this one holds if the
+  // view is ever mounted somewhere that does not.
   return <Overview key={data.id} org={data} />;
 }
 
