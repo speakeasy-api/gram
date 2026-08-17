@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -1411,7 +1412,7 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
-			if err := configurePlatformMCP(ctx, platformMCPConfig{
+			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                 logger,
 				MeterProvider:          meterProvider,
 				TracerProvider:         tracerProvider,
@@ -1434,7 +1435,8 @@ func newStartCommand() *cli.Command {
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
 				LocalFixture:           platformFixture,
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
 			mcp.Attach(mux, mcpService, mcpMetadataService)
@@ -1548,7 +1550,7 @@ func newStartCommand() *cli.Command {
 				AssistantSkillTools:           skillTools,
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
-				PlatformMCPReadTools:          platformtoolsruntime.PlatformMCPReadTools(platformmcp.NewPostgresReader(db)),
+				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 			}))
 
 			srv := &http.Server{

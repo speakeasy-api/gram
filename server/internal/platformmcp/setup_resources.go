@@ -22,7 +22,8 @@ type SetupResource struct {
 	Text        string
 }
 
-func registerSetupResources(server *mcp.Server, resources []SetupResource) {
+func registerSetupResources(reg *Registrar, resources []SetupResource) {
+	server := reg.server
 	for _, resource := range resources {
 		if !validSetupResource(resource) {
 			continue
