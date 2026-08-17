@@ -211,7 +211,7 @@ func TestFeedbackServiceMetersConnectionAndSubjectCallersSeparately(t *testing.T
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_feedback_caller_buckets")
 	require.NoError(t, err)
 	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
-	assistant := Principal{UserID: connected.UserID, OrganizationID: connected.OrganizationID, Surface: SurfaceProjectAssistant}
+	assistant := Principal{UserID: connected.UserID, OrganizationID: connected.OrganizationID, ClientID: AssistantClientID, Surface: SurfaceProjectAssistant}
 
 	service := NewFeedbackService(conn)
 	for i := range feedbackConnectionHourlyLimit {

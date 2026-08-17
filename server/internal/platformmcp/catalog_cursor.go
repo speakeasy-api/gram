@@ -30,8 +30,12 @@ type catalogCursor struct {
 // connection-less caller has no generation, so its cursors bind to the acting
 // user and surface instead — otherwise pagination would fail outright rather
 // than merely being unbound.
+// principalCursorBinding ties a cursor to the caller that issued it. It uses
+// the same HasConnection predicate as the budget, so a connected caller is
+// bound to its generation and a connection-less one to its surface and
+// subject — never one classification here and the other there.
 func principalCursorBinding(principal Principal) string {
-	if principal.Generation != "" {
+	if principal.HasConnection() {
 		return principal.Generation
 	}
 	if principal.UserID == "" {

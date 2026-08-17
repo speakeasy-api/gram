@@ -50,8 +50,13 @@ func (b OperationBudget) valid() bool {
 // allowance. A connection-less surface — the project assistant acts under
 // assistant identity — has no connection to meter, so it is metered per acting
 // user instead. Keying on the subject URN keeps the two namespaces disjoint.
+// callerBudgetKey identifies the bucket a call is metered against. It asks
+// HasConnection rather than reading a half of the pair directly, so a caller
+// is classified the same way here as everywhere else — a half-populated
+// identity is a connection claim, and fails closed in parseConnection instead
+// of being metered as two different callers by two different helpers.
 func callerBudgetKey(principal Principal) string {
-	if principal.ConnectionID != "" {
+	if principal.HasConnection() {
 		return principal.ConnectionID
 	}
 	if principal.UserID == "" {

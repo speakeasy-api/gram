@@ -146,3 +146,45 @@ func TestPrincipalConnectionRejectsAHalfPopulatedPair(t *testing.T) {
 		require.Error(t, err, "an incomplete connection identity must not be treated as connection-less")
 	}
 }
+
+// Budget metering and cursor binding must classify a caller the same way. When
+// they disagreed, a half-populated identity was metered as a connected caller
+// but paginated as a connection-less one — the same principal counted as two
+// different callers depending on which helper looked at it.
+func TestCallerClassificationIsConsistentAcrossHelpers(t *testing.T) {
+	t.Parallel()
+
+	connectionID, generation := uuid.NewString(), uuid.NewString()
+
+	t.Run("a full pair is metered and bound by its connection", func(t *testing.T) {
+		t.Parallel()
+
+		principal := Principal{UserID: "user", OrganizationID: "org", ConnectionID: connectionID, Generation: generation}
+		require.True(t, principal.HasConnection())
+		require.Equal(t, connectionID, callerBudgetKey(principal))
+		require.Equal(t, generation, principalCursorBinding(principal))
+	})
+
+	t.Run("no connection is metered and bound by its subject", func(t *testing.T) {
+		t.Parallel()
+
+		principal := Principal{UserID: "user", OrganizationID: "org", Surface: SurfaceProjectAssistant}
+		require.False(t, principal.HasConnection())
+		require.Equal(t, userSubjectURN("user"), callerBudgetKey(principal))
+		require.Equal(t, string(SurfaceProjectAssistant)+":"+userSubjectURN("user"), principalCursorBinding(principal))
+	})
+
+	// A half-populated pair is a connection claim the caller cannot prove. Both
+	// helpers take the connected branch and find nothing there, so the budget
+	// reports unavailable and the cursor cannot be bound — failing closed in
+	// the same direction rather than metering one way and paginating another.
+	for _, principal := range []Principal{
+		{UserID: "user", OrganizationID: "org", ConnectionID: connectionID},
+		{UserID: "user", OrganizationID: "org", Generation: generation},
+	} {
+		require.True(t, principal.HasConnection(), "either half is a claim to a connection")
+		budgetKey, cursorBinding := callerBudgetKey(principal), principalCursorBinding(principal)
+		require.True(t, budgetKey == "" || cursorBinding == "",
+			"a half pair must fail closed rather than be metered or bound as a proven caller")
+	}
+}
