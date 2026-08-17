@@ -741,6 +741,40 @@ func TestURLMenu_CanonicalizesFragments(t *testing.T) {
 	require.False(t, ok)
 }
 
+// A search whose annotations all fail the citation shape has learned nothing
+// from the web, and must say so rather than reading as absence of coverage.
+func TestWebSearch_AllInvalidAnnotationsIsAFailedSearch(t *testing.T) {
+	t.Parallel()
+
+	completions := &fakeCompletions{
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "file_citation", URLCitation: nil},
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{URL: "", Title: "broken", Content: ""}},
+		},
+	}
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
+
+	_, err := runSearch(t, authedContext(t), tool, `{"query": "q"}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no citations")
+}
+
+// A same-host redirect onto a different port is a different service, not a
+// same-site move: it must clear the menu like any cross-site hop.
+func TestFetchPage_RefusesASameHostPortChangeRedirect(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://"+r.Host[:strings.LastIndex(r.Host, ":")]+":1/", http.StatusFound)
+	}))
+	t.Cleanup(server.Close)
+
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not among this run's observed sources")
+}
+
 // One run's fetch budget is bounded; a fresh run has its own.
 func TestFetchPage_EnforcesPerRunBudget(t *testing.T) {
 	t.Parallel()
