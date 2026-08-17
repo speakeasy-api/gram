@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
+  "chat_session:handoff_export",
   "chat_session:move",
   "custom_domains:create",
   "custom_domains:delete",
@@ -269,6 +270,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated chat analysis settings";
     case "chat_session:access":
       return "opened chat session";
+    case "chat_session:handoff_export":
+      return "exported chat session handoff";
     case "chat_session:move":
       return "moved chat session";
 
