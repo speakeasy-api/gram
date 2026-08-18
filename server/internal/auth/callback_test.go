@@ -633,6 +633,15 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set after callback")
 	require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID)
+
+	storedSession, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", storedSession.ImpersonatorEmail)
+
+	info, err := instance.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, info.ImpersonatorEmail)
+	require.Equal(t, "support@example.com", *info.ImpersonatorEmail)
 }
 
 func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {

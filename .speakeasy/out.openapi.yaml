@@ -65484,6 +65484,9 @@ components:
         has_active_subscription:
           type: boolean
           description: Whether the organization has an active billing subscription
+        impersonator_email:
+          type: string
+          description: The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.
         is_admin:
           type: boolean
         organizations:
