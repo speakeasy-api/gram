@@ -142,8 +142,7 @@ const ImpersonationBanner = () => {
         "flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,
       )}
-      role="status"
-      aria-live="polite"
+      role="alert"
     >
       <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
       {/* Plain concatenation: tailwind-merge would treat text-eyebrow and the
