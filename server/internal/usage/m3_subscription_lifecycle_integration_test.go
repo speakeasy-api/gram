@@ -169,7 +169,6 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 		_, err := keys.CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 			OrganizationID: m3OrganizationID,
 			KeyType:        string(keyType),
-			Key:            pgtype.Text{String: "key_placeholder_" + string(keyType), Valid: true},
 			KeyEncrypted:   pgtype.Text{},
 			KeyHash:        "hash_placeholder_" + string(keyType),
 			MonthlyCredits: 70,
