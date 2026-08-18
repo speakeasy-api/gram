@@ -294,7 +294,7 @@ func NewActivities(
 	// without either (test workers) get a nil activity and the wrapper fails
 	// loudly if a research run is ever scheduled there.
 	var mcpResearch *activities.McpResearch
-	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil {
+	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil && features != nil {
 		// One menu instance shared by search (writer), fetch (enforcer), and
 		// the runner (briefing seeder): the run's fetchable URLs are exactly
 		// what these three observed.
@@ -310,7 +310,7 @@ func NewActivities(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
 				platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
 			)...,
-		))
+		), features)
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer

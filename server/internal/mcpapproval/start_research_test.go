@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -135,6 +138,52 @@ func TestStartResearch_RequiresOrgAdmin(t *testing.T) {
 	nonAdmin := withProject(t, ctx, ti, ti.projectID)
 	_, err := ti.service.StartResearch(nonAdmin, startResearchPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// Research has its own rollout on top of the approval flag, and a kill
+// switch above both: the switch stops research without touching the rollout
+// flag's org targeting, so un-killing restores exactly the release state
+// from before.
+func TestStartResearch_GatedByResearchFlagAndKillSwitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "https://mcp.example.com/research-gates", status: "requested", evidence: "", version: 0,
+	})
+
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, false)
+	_, err := ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, true)
+	ti.flags.SetFlag(feature.FlagMCPResearchKill, ti.organizationID, true)
+	_, err = ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	ti.flags.SetFlag(feature.FlagMCPResearchKill, ti.organizationID, false)
+	_, err = ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+	require.NoError(t, err)
+}
+
+// Buying a run leaves a feed entry: research spends the org's money against
+// the open web, so the audit trail names who started it and on which server.
+func TestStartResearch_AuditsTheStart(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "https://mcp.example.com/research-audit", status: "requested", evidence: "", version: 0,
+	})
+
+	_, err := ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+	require.NoError(t, err)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestResearchStart)
+	require.NoError(t, err)
+	require.Equal(t, ti.authContext.UserID, entry.ActorID)
+	require.Equal(t, requestID.String(), entry.SubjectID)
+	require.Equal(t, "https://mcp.example.com/research-audit", entry.SubjectDisplay)
 }
 
 // Two clicks that land together must still buy one run. The check and the

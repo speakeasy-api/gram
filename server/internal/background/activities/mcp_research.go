@@ -13,8 +13,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 // McpResearchInput identifies one research run. Everything else is loaded
@@ -33,14 +35,16 @@ type McpResearch struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	runner *researchagent.Runner
+	flags  feature.Provider
 }
 
 // NewMcpResearch builds the research activity over the supplied runner.
-func NewMcpResearch(logger *slog.Logger, db *pgxpool.Pool, runner *researchagent.Runner) *McpResearch {
+func NewMcpResearch(logger *slog.Logger, db *pgxpool.Pool, runner *researchagent.Runner, flags feature.Provider) *McpResearch {
 	return &McpResearch{
 		logger: logger.With(attr.SlogComponent("mcp-research")),
 		db:     db,
 		runner: runner,
+		flags:  flags,
 	}
 }
 
@@ -53,6 +57,16 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 	defer stopHeartbeat()
 
 	queries := approvalrepo.New(m.db)
+
+	// Re-checked here, not only at start: the flags can flip between the
+	// admin's click and this activity being picked up, and the kill switch
+	// only means anything if a queued run also honors it. A killed or
+	// de-rolled run resolves its report as failed — silently skipping would
+	// strand it in running.
+	if reason, gated := m.researchGate(ctx, input.OrgID); gated {
+		m.failReport(ctx, queries, input, reason)
+		return nil
+	}
 
 	request, err := queries.GetApprovalRequest(ctx, approvalrepo.GetApprovalRequestParams{
 		ID:        input.RequestID,
@@ -150,4 +164,36 @@ func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Quer
 	}); err != nil {
 		m.logger.ErrorContext(ctx, "record research failure", attr.SlogError(err))
 	}
+}
+
+// researchGate mirrors the service's start-time gate for the execution side:
+// the kill switch first (affirmatively on stops everything, failing open on
+// evaluation errors), then the rollout flag (failing closed). Returns the
+// reason to record when the run must not execute.
+func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (string, bool) {
+	var groups map[string]string
+	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		m.logger.WarnContext(ctx, "resolve organization slug for mcp research flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	killed, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
+	if err != nil {
+		m.logger.WarnContext(ctx, "mcp research kill-switch check failed; continuing to rollout check", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else if killed {
+		return "research was disabled before this run executed", true
+	}
+
+	enabled, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPResearch, organizationID, groups)
+	if err != nil {
+		m.logger.WarnContext(ctx, "mcp research flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return "research is not enabled for this organization", true
+	}
+	if !enabled {
+		return "research is not enabled for this organization", true
+	}
+
+	return "", false
 }
