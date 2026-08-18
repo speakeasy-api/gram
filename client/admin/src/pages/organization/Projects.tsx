@@ -13,7 +13,7 @@ import {
   organizationQuery,
 } from "@/lib/adminQueries";
 import type { AdminOrganization, AdminProject } from "@/lib/gramAdminApi";
-import { fmtDateShort } from "@/lib/utils";
+import { byOldestFirst, fmtDateShort } from "@/lib/utils";
 
 // `isPending`, not `isLoading`: React Query makes the second of those
 // `isPending && isFetching`, so a paused read is neither loading nor errored and
@@ -55,10 +55,16 @@ function projectColumns(idOrSlug: string) {
       header: "Slug",
       cell: ({ row }) => <span className="text-sm">{row.original.slug}</span>,
     }),
-    projectColumn.accessor("id", {
-      header: "ID",
+    projectColumn.accessor("mcp_server_count", {
+      // "MCP Servers", not "Toolsets": the count is both server models, the
+      // toolset-backed legacy one and the `mcp_servers` row. AGE-3276.
+      header: "MCP Servers",
+      // Printed even when it is zero. A blank cell reads as a project nobody
+      // has measured, and none is a real answer about a project that has been.
       cell: ({ row }) => (
-        <span className="text-muted-foreground text-sm">{row.original.id}</span>
+        <span className="text-sm tabular-nums">
+          {row.original.mcp_server_count}
+        </span>
       ),
     }),
     projectColumn.accessor("created_at", {
@@ -69,9 +75,6 @@ function projectColumns(idOrSlug: string) {
     }),
   ]);
 }
-
-// A fresh fallback array each render would rebuild the row model every time.
-const NO_PROJECTS: AdminProject[] = [];
 
 export function ProjectsRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -95,6 +98,13 @@ export function Projects({
     enabled: !!org.id,
   });
 
+  // Sorted here rather than trusted from the endpoint, which promises no order,
+  // and a fresh array each render would rebuild the row model every time.
+  const projects = useMemo(
+    () => [...(data?.projects ?? [])].sort(byOldestFirst),
+    [data],
+  );
+
   // Rebuilt only when the record changes. A fresh column set each render
   // rebuilds the row model with it.
   const columns = useMemo(() => projectColumns(idOrSlug), [idOrSlug]);
@@ -102,42 +112,52 @@ export function Projects({
   const table = useTable({
     features: dataTableFeatures,
     columns,
-    data: data?.projects ?? NO_PROJECTS,
+    data: projects,
     getRowId: (project) => project.id,
   });
 
   const rows = table.getRowModel().rows;
 
   return (
-    <div className="max-h-96 overflow-auto rounded-lg border">
-      <Table cellPadding="condensed">
-        <Table.Header table={table} />
-        <Table.Body>
-          {isPending || rows.length === 0 ? (
-            <Table.NoResultsMessage>
-              <span className="text-muted-foreground text-sm">
-                {projectsMessage(isPending, isError)}
-              </span>
-            </Table.NoResultsMessage>
-          ) : (
-            rows.map((row) => (
-              <Table.Row
-                key={row.id}
-                row={row}
-                onClick={(project) => {
-                  void navigate({
-                    to: "/organizations/$idOrSlug/projects/$projectIdOrSlug",
-                    params: {
-                      idOrSlug,
-                      projectIdOrSlug: project.id,
-                    },
-                  });
-                }}
-              />
-            ))
-          )}
-        </Table.Body>
-      </Table>
+    <div className="flex flex-col gap-3">
+      {/* Only once the read has answered with rows. A count over a pending read
+          is a number nobody has established, and "0 projects" beside the
+          sentence that says there are none says it twice. */}
+      {rows.length > 0 && (
+        <p className="text-sm font-medium">
+          {rows.length === 1 ? "1 project" : `${rows.length} projects`}
+        </p>
+      )}
+      <div className="overflow-hidden rounded-lg border">
+        <Table cellPadding="condensed">
+          <Table.Header table={table} />
+          <Table.Body>
+            {isPending || rows.length === 0 ? (
+              <Table.NoResultsMessage>
+                <span className="text-muted-foreground text-sm">
+                  {projectsMessage(isPending, isError)}
+                </span>
+              </Table.NoResultsMessage>
+            ) : (
+              rows.map((row) => (
+                <Table.Row
+                  key={row.id}
+                  row={row}
+                  onClick={(project) => {
+                    void navigate({
+                      to: "/organizations/$idOrSlug/projects/$projectIdOrSlug",
+                      params: {
+                        idOrSlug,
+                        projectIdOrSlug: project.id,
+                      },
+                    });
+                  }}
+                />
+              ))
+            )}
+          </Table.Body>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -83,17 +83,129 @@ describe("Members", () => {
     const emailCell = await screen.findByRole("cell", { name: MEMBER.email });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Email", "Name", "ID", "Last login", "Joined"]);
+    ).toEqual(["Member", "Email", "Last active", "Joined"]);
 
     const row = emailCell.closest("tr");
     if (!row) throw new Error("the email cell is not inside a row");
+    // The member cell carries the monogram and then the name it was taken
+    // from. The monogram is `aria-hidden`, so the cell's accessible name is the
+    // name alone, but its text is both.
     expect(cellsOf(row)).toEqual([
+      `PM${MEMBER.display_name}`,
       MEMBER.email,
-      MEMBER.display_name,
-      MEMBER.id,
       shortDate(lastLogin),
       shortDate(MEMBER.created_at),
     ]);
+    expect(
+      screen.getByRole("cell", { name: MEMBER.display_name }),
+    ).toBeTruthy();
+  });
+
+  it("falls back to the email when a member record carries no name", async () => {
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({
+        members: [aMember({ display_name: "   " })],
+      }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    // A member with no name is still a member, and an empty first cell reads
+    // as a broken row rather than as a record with a field unset.
+    await screen.findByText("1 member");
+    const row = screen.getAllByRole("row")[1];
+    if (!row) throw new Error("the table drew no member row");
+    expect(cellsOf(row)[0]).toBe(`ME${MEMBER.email}`);
+  });
+
+  it("takes a one-word name's monogram from that word", async () => {
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({ members: [aMember({ display_name: "Ada" })] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    await screen.findByRole("cell", { name: "Ada" });
+    const row = screen.getAllByRole("row")[1];
+    if (!row) throw new Error("the table drew no member row");
+    // Two letters from the one word, not one letter and not the whole name.
+    expect(cellsOf(row)[0]).toBe("ADAda");
+  });
+
+  it("draws the members oldest first, whatever order the endpoint sent", async () => {
+    // Shuffled on the wire. `organization.members` promises no order, so a view
+    // that renders what it was handed shows one organization two ways on two
+    // reads.
+    const middle = aMember({
+      id: "user_2",
+      email: "middle@example.test",
+      display_name: "Middle Member",
+      created_at: "2026-01-08T00:00:00Z",
+    });
+    const newest = aMember({
+      id: "user_3",
+      email: "newest@example.test",
+      display_name: "Newest Member",
+      created_at: "2026-02-01T00:00:00Z",
+    });
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({ members: [newest, MEMBER, middle] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+    await screen.findByRole("cell", { name: MEMBER.email });
+
+    expect(
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => cellsOf(row)[1]),
+    ).toEqual([MEMBER.email, middle.email, newest.email]);
+  });
+
+  it("counts the members above the table", async () => {
+    const second = aMember({ id: "user_2", email: "second@example.test" });
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({ members: [MEMBER, second] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    expect(await screen.findByText("2 members")).toBeTruthy();
+  });
+
+  it("says one member in the singular", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    expect(await screen.findByText("1 member")).toBeTruthy();
+    expect(screen.queryByText("1 members")).toBeNull();
+  });
+
+  it("says the organization has no members rather than showing an empty table", async () => {
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({ members: [] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    expect(
+      await screen.findByText("No members in this organization"),
+    ).toBeTruthy();
+    // No "0 members" line above it. The sentence in the table already says
+    // that, and a count of nothing beside it says it twice.
+    expect(screen.queryByText("0 members")).toBeNull();
   });
 
   it("draws no checkbox on a table that did not ask for one", async () => {
@@ -109,7 +221,7 @@ describe("Members", () => {
     expect(screen.queryAllByRole("checkbox")).toEqual([]);
   });
 
-  it("reads a dash for a member who has never logged in", async () => {
+  it("reads Never for a member who has never logged in", async () => {
     mocks.listOrganizationMembers.mockImplementation(() =>
       Promise.resolve({ members: [aMember({ last_login: undefined })] }),
     );
@@ -121,7 +233,11 @@ describe("Members", () => {
     const emailCell = await screen.findByRole("cell", { name: MEMBER.email });
     const row = emailCell.closest("tr");
     if (!row) throw new Error("the email cell is not inside a row");
-    expect(cellsOf(row)[3]).toBe("-");
+    // Not the dash every other absent date draws. A member who has never
+    // signed in is a fact about the account, and the dash that means "nothing
+    // recorded" hides it among the fields that merely have no value.
+    expect(cellsOf(row)[2]).toBe("Never");
+    expect(cellsOf(row)[2]).not.toBe("-");
   });
 
   it("says it is loading rather than that there are none while the read is paused", async () => {
