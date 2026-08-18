@@ -161,7 +161,8 @@ type PageHeaderBreadcrumbsProps = {
 // Breadcrumbs are hidden: the header now carries the project switcher instead.
 // The renderer below is kept intact (and every caller keeps mounting
 // <PageHeader.Breadcrumbs>) so flipping this back on is a one-line change.
-const SHOW_BREADCRUMBS: boolean = false;
+// Widened to boolean so the renderer below doesn't type as unreachable.
+const SHOW_BREADCRUMBS = false as boolean;
 
 function PageHeaderBreadcrumbs(props: PageHeaderBreadcrumbsProps) {
   if (!SHOW_BREADCRUMBS) return null;

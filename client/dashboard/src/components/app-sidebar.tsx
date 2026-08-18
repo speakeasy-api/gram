@@ -142,14 +142,20 @@ export function AppSidebar({
         <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
           {/* Home — the org-scoped app (was the "Organization settings"
               footer action); the project's own landing page sits below it as
-              "Project Overview". */}
-          <SidebarMenuItem>
-            <NavButton
-              title="Home"
-              href={`/${orgSlug}`}
-              Icon={(p) => <Icon {...p} name="building" />}
-            />
-          </SidebarMenuItem>
+              "Project Overview". Scoped to match OrgSidebar's own Home item,
+              so it only shows to users who can open the page it links to. */}
+          <RequireScope
+            scope={["org:read", "project:read", "org:admin"]}
+            level="section"
+          >
+            <SidebarMenuItem>
+              <NavButton
+                title="Home"
+                href={`/${orgSlug}`}
+                Icon={(p) => <Icon {...p} name="building" />}
+              />
+            </SidebarMenuItem>
+          </RequireScope>
 
           {/* Project overview — top-level, no group */}
           <ScopeGatedTopLevelItem
