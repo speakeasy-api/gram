@@ -18,7 +18,6 @@
     },
     { "domain": "snyk.io", "category": "security research" },
     { "domain": "trailofbits.com", "category": "security research" },
-    { "domain": "blog.trailofbits.com", "category": "security research" },
     { "domain": "portswigger.net", "category": "security research" },
     { "domain": "rapid7.com", "category": "security research" },
     { "domain": "crowdstrike.com", "category": "security research" },
