@@ -218,7 +218,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.created_at, p.slug AS project_slug
+SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
 WHERE a.organization_id = $1
@@ -277,6 +277,8 @@ type ListAuditLogsRow struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	ProjectSlug        pgtype.Text
 }
@@ -318,6 +320,8 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.BeforeSnapshot,
 			&i.AfterSnapshot,
 			&i.Metadata,
+			&i.ActingSurface,
+			&i.ActingClientID,
 			&i.CreatedAt,
 			&i.ProjectSlug,
 		); err != nil {
