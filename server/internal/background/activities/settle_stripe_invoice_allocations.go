@@ -29,10 +29,7 @@ const (
 	stripeAllocationSourceOpenRouter = "openrouter_daily_spend"
 	stripeAllocationSourceTUM        = "tum_cycle"
 
-	// The unique indexes on stripe_invoice_allocations that a concurrent settle
-	// can trip while storing an allocation this run also wanted.
 	stripeAllocationIdempotencyKeyIndex = "stripe_invoice_allocations_idempotency_key_key"
-	stripeAllocationOrgSourceSeqIndex   = "stripe_invoice_allocations_org_source_seq_key"
 )
 
 // SettleStripeInvoiceAllocationsArgs fixes the observation time for one daily
@@ -304,29 +301,22 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 // allocationAlreadyClaimed reports whether a failed allocation insert lost a
 // race to a concurrent settle rather than hitting a real fault.
 //
-// stripe_invoice_allocations carries two unique indexes that both derive from
-// the same (organization, source day, seq) tuple: the idempotency key and
-// (organization_id, source_kind, source_key, seq). ON CONFLICT DO NOTHING only
-// swallows conflicts on the index it names as the arbiter, so a racing insert
-// that reaches the idempotency-key index first still raises a unique violation.
-// Either conflict means the row this run wanted is already stored, and these
-// rows are immutable once written, so the loser has nothing left to do.
+// The insert arbitrates ON CONFLICT on (organization_id, source_kind,
+// source_key, seq), and Postgres resolves a concurrent conflict on the arbiter
+// through the speculative-insert wait without raising. It does not extend that
+// to the table's other unique index, idempotency_key, so a racing insert that
+// reaches that one still raises. Both keys derive from the same (organization,
+// source day, seq) tuple, so the violation means the row this run wanted is
+// already stored, and no UPDATE in this package rewrites a stored allocation's
+// amount_usd or source_snapshot_usd. The loser has nothing left to do.
 //
-// Only those two indexes qualify. A violation from any other constraint —
-// including one added later — is a fault this activity has never reasoned
-// about, so it still has to surface.
+// Any other violation, the arbiter's included, is a fault this activity has
+// never reasoned about and still has to surface.
 func allocationAlreadyClaimed(err error) bool {
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
-		return false
-	}
-
-	switch pgErr.ConstraintName {
-	case stripeAllocationIdempotencyKeyIndex, stripeAllocationOrgSourceSeqIndex:
-		return true
-	default:
-		return false
-	}
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
+		pgErr.ConstraintName == stripeAllocationIdempotencyKeyIndex
 }
 
 func openRouterAllocationParams(

@@ -3,6 +3,8 @@ package activities
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgerrcode"
@@ -10,80 +12,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A settle run that loses the insert race has to carry on: the allocation it
-// wanted is already stored and immutable. Only a unique violation means that,
-// so every other failure still has to surface.
 func TestAllocationAlreadyClaimed(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
+	cases := []struct {
 		err  error
 		want bool
 	}{
-		{
-			name: "idempotency key index, the non-arbiter one ON CONFLICT cannot swallow",
-			err: &pgconn.PgError{
-				Code:           pgerrcode.UniqueViolation,
-				ConstraintName: "stripe_invoice_allocations_idempotency_key_key",
-			},
-			want: true,
-		},
-		{
-			name: "arbiter index, when the conflict surfaces as an error rather than DO NOTHING",
-			err: &pgconn.PgError{
-				Code:           pgerrcode.UniqueViolation,
-				ConstraintName: "stripe_invoice_allocations_org_source_seq_key",
-			},
-			want: true,
-		},
-		{
-			name: "wrapped by the caller's context",
-			err:  fmt.Errorf("freeze baseline for 2026-07-01: %w", &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "stripe_invoice_allocations_idempotency_key_key"}),
-			want: true,
-		},
-		{
-			name: "a unique violation from the primary key is a real fault",
-			err: &pgconn.PgError{
-				Code:           pgerrcode.UniqueViolation,
-				ConstraintName: "stripe_invoice_allocations_pkey",
-			},
-			want: false,
-		},
-		{
-			name: "a unique violation from an index this activity has never reasoned about is a real fault",
-			err: &pgconn.PgError{
-				Code:           pgerrcode.UniqueViolation,
-				ConstraintName: "stripe_invoice_allocations_some_future_key",
-			},
-			want: false,
-		},
-		{
-			name: "a foreign key violation is a real fault",
-			err:  &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation},
-			want: false,
-		},
-		{
-			name: "a check constraint violation is a real fault",
-			err:  &pgconn.PgError{Code: pgerrcode.CheckViolation},
-			want: false,
-		},
-		{
-			name: "a non-database failure is a real fault",
-			err:  errors.New("connection reset"),
-			want: false,
-		},
-		{
-			name: "no error",
-			err:  nil,
-			want: false,
-		},
+		{err: &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: stripeAllocationIdempotencyKeyIndex}, want: true},
+		{err: fmt.Errorf("freeze baseline for 2026-07-01: %w", &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: stripeAllocationIdempotencyKeyIndex}), want: true},
+		// The arbiter resolves without raising, so a violation naming it is a
+		// state this insert cannot reach and must not be swallowed.
+		{err: &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "stripe_invoice_allocations_org_source_seq_key"}, want: false},
+		{err: &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "stripe_invoice_allocations_pkey"}, want: false},
+		{err: &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation}, want: false},
+		{err: errors.New("connection reset"), want: false},
+		{err: nil, want: false},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, allocationAlreadyClaimed(tt.err))
-		})
+	for _, tc := range cases {
+		require.Equal(t, tc.want, allocationAlreadyClaimed(tc.err), "err=%v", tc.err)
 	}
+}
+
+// The predicate keys off an index name, so a migration that renames the index
+// turns a swallowed race back into a hard failure. Catch that here rather than
+// in a settle run.
+func TestAllocationIndexNameMatchesSchema(t *testing.T) {
+	t.Parallel()
+
+	schema, err := os.ReadFile("../../../database/schema.sql")
+	require.NoError(t, err)
+	require.Contains(t, string(schema), stripeAllocationIdempotencyKeyIndex,
+		"index renamed in schema.sql without updating stripeAllocationIdempotencyKeyIndex")
+	require.True(t, strings.Contains(string(schema), "CREATE UNIQUE INDEX IF NOT EXISTS "+stripeAllocationIdempotencyKeyIndex),
+		"index is no longer unique, so it can no longer signal a lost race")
 }
