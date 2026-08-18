@@ -16,16 +16,32 @@ These metrics are operational evidence only.
 
 ## Metric contracts
 
-| Metric                                        | Type                | Tags                                      | Meaning                                                                  |
-| --------------------------------------------- | ------------------- | ----------------------------------------- | ------------------------------------------------------------------------ |
-| `platform_mcp.oauth.events`                   | counter             | `operation`, `outcome`, optional `reason` | One bounded OAuth endpoint result for refresh and code exchange.         |
-| `platform_mcp.oauth.refresh_duration`         | histogram (seconds) | `operation:refresh`, `outcome:succeeded`  | Successful refresh latency only.                                         |
-| `platform_mcp.oauth.connection_age`           | histogram (seconds) | `operation:refresh`, `outcome:succeeded`  | Current authorization-generation age at a successful refresh.            |
-| `platform_mcp.oauth.reauthorization_required` | counter             | `reason`                                  | A committed terminal transition, after the durable transaction succeeds. |
+| Metric                                        | Type                | Tags                                      | Meaning                                                                                                                         |
+| --------------------------------------------- | ------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `platform_mcp.oauth.events`                   | counter             | `operation`, `outcome`, optional `reason` | One bounded OAuth endpoint result for refresh, code exchange, interactive authorization, revocation, or runtime authentication. |
+| `platform_mcp.oauth.refresh_duration`         | histogram (seconds) | `operation:refresh`, `outcome:succeeded`  | Successful refresh latency only.                                                                                                |
+| `platform_mcp.oauth.connection_age`           | histogram (seconds) | `operation:refresh`, `outcome:succeeded`  | Current authorization-generation age at a successful refresh.                                                                   |
+| `platform_mcp.oauth.reauthorization_required` | counter             | `reason`                                  | A committed terminal transition, after the durable transaction succeeds.                                                        |
 
 Terminal `reason` values are fixed: `refresh_idle_expired`,
 `authorization_expired`, `refresh_reuse`, `connection_revoked`,
 `client_revoked`, `authorization_lost`, and `security_reset`.
+
+Interactive-authorization events also use the fixed bounded reasons
+`authorization_denied`, `authorization_unavailable`, and `platform_disabled`
+when applicable.
+
+## Rollout prerequisites
+
+Before enabling the dogfood cohort, the Platform MCP on-call must create the
+Dashboard and monitors described below in the Datadog UI and link every monitor
+to this runbook. These operational assets are intentionally not repository IaC.
+
+Revocation-to-denial latency is measured by the external synthetic probe in this
+runbook, not by an application metric: each probe records its action timestamp
+and the next denied runtime request without sending an identifier into
+application telemetry. The probe's published contract bound and alert are a
+required rollout artifact.
 
 ## Dashboard
 
@@ -42,12 +58,14 @@ Create a **Platform MCP durable auth** dashboard scoped to
 7. Reauthorization-required transitions by reason.
 
 The active dogfood cohort belongs in the dashboard's saved scope/configuration;
-do not add organization or client identity as a metric tag.
+do not add organization or client identity as a metric tag. Creating this
+dashboard is a rollout prerequisite, not an application deployment side effect.
 
 ## Datadog monitors
 
 Thresholds are initial values. Tune after the dogfood baseline is established.
-All metric queries below are scoped to `service:gram-server`.
+All metric queries below are scoped to `service:gram-server`. Creating these
+monitors and linking their notifications to this runbook is a rollout prerequisite.
 
 ### Refresh availability
 
