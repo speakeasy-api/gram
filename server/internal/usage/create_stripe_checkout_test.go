@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -42,10 +41,13 @@ type checkoutStripeClient struct {
 	checkoutInputs  []stripeclient.CreateCheckoutSessionInput
 	customerError   error
 	checkoutError   error
+	checkoutState   *stripeclient.CheckoutSessionState
+	checkoutGetErr  error
 }
 
 type checkoutStripeResult struct {
 	input stripeclient.CreateCheckoutSessionInput
+	id    string
 	url   string
 }
 
@@ -86,15 +88,26 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 		if !reflect.DeepEqual(result.input, input) {
 			return nil, fmt.Errorf("idempotency key %q reused with different checkout input", input.IdempotencyKey)
 		}
-		return &stripeclient.CheckoutSession{URL: result.url}, nil
+		return &stripeclient.CheckoutSession{ID: result.id, URL: result.url}, nil
 	}
+	checkoutID := fmt.Sprintf("cs_%d", len(c.checkoutResults)+1)
 	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutResults)+1)
-	c.checkoutResults[input.IdempotencyKey] = checkoutStripeResult{input: input, url: checkoutURL}
-	return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
+	c.checkoutResults[input.IdempotencyKey] = checkoutStripeResult{input: input, id: checkoutID, url: checkoutURL}
+	return &stripeclient.CheckoutSession{ID: checkoutID, URL: checkoutURL}, nil
 }
 
-func (c *checkoutStripeClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
-	return nil, errors.New("not implemented")
+func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) (*stripeclient.CheckoutSessionState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.checkoutGetErr != nil {
+		return nil, c.checkoutGetErr
+	}
+	if c.checkoutState == nil || c.checkoutState.ID != id {
+		return nil, errors.New("checkout session not found")
+	}
+	state := *c.checkoutState
+	return &state, nil
 }
 
 func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
@@ -125,13 +138,14 @@ func TestCheckoutStripeClientRejectsIdempotencyKeyReuseWithDifferentInput(t *tes
 
 	client := newCheckoutStripeClient()
 	input := stripeclient.CreateCheckoutSessionInput{
-		CustomerID:       "cus_first",
-		OrganizationID:   "<ORG_ID>",
-		OrganizationSlug: "billing-test",
-		SuccessURL:       "https://app.example.test/billing-test/billing",
-		CancelURL:        "https://app.example.test/billing-test/billing",
-		TrialEnd:         nil,
-		IdempotencyKey:   "checkout-session:<ORG_ID>",
+		CustomerID:         "cus_first",
+		OrganizationID:     "<ORG_ID>",
+		OrganizationSlug:   "billing-test",
+		SuccessURL:         "https://app.example.test/billing-test/billing",
+		CancelURL:          "https://app.example.test/billing-test/billing",
+		TrialEnd:           nil,
+		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout-session:<ORG_ID>",
 	}
 
 	_, err := client.CreateCheckoutSession(t.Context(), input)
@@ -139,6 +153,89 @@ func TestCheckoutStripeClientRejectsIdempotencyKeyReuseWithDifferentInput(t *tes
 	input.CustomerID = "cus_second"
 	_, err = client.CreateCheckoutSession(t.Context(), input)
 	require.ErrorContains(t, err, "reused with different checkout input")
+}
+
+func TestNextStripeBillingCycleAnchor(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 14, 13, 45, 0, 0, time.FixedZone("test", 2*60*60))
+	trialAtMidnight := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
+	trialDuringDay := time.Date(2026, time.August, 21, 9, 30, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		now      time.Time
+		trialEnd *time.Time
+		want     time.Time
+	}{
+		{
+			name:     "immediate checkout uses next UTC midnight",
+			now:      now,
+			trialEnd: nil,
+			want:     time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "immediate checkout at midnight still gets a free day stub",
+			now:      time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC),
+			trialEnd: nil,
+			want:     time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "midnight trial end is already aligned",
+			now:      now,
+			trialEnd: &trialAtMidnight,
+			want:     trialAtMidnight,
+		},
+		{
+			name:     "daytime trial end gets a free stub to midnight",
+			now:      now,
+			trialEnd: &trialDuringDay,
+			want:     time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, nextStripeBillingCycleAnchor(tt.now, tt.trialEnd))
+		})
+	}
+}
+
+func TestNewStripeCheckoutIntent(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 14, 13, 45, 0, 0, time.UTC)
+	productTrialEnd := time.Date(2026, time.August, 21, 9, 30, 0, 0, time.UTC)
+
+	t.Run("active product trial uses aligned Stripe trial end", func(t *testing.T) {
+		t.Parallel()
+		intent := newStripeCheckoutIntent("<ORG_ID>", now, &productTrialEnd)
+		wantAnchor := time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC)
+		require.Equal(t, wantAnchor, intent.billingCycleAnchor)
+		require.NotNil(t, intent.trialEnd)
+		require.Equal(t, wantAnchor, *intent.trialEnd)
+		require.Equal(t, now.Add(23*time.Hour+59*time.Minute), intent.expiresAt)
+	})
+
+	t.Run("immediate checkout expires at the next midnight anchor", func(t *testing.T) {
+		t.Parallel()
+		intent := newStripeCheckoutIntent("<ORG_ID>", now, nil)
+		wantAnchor := time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC)
+		require.Equal(t, wantAnchor, intent.billingCycleAnchor)
+		require.Nil(t, intent.trialEnd)
+		require.Equal(t, wantAnchor.Add(-stripeCheckoutExpirySafetyMargin), intent.expiresAt)
+	})
+
+	t.Run("checkout near midnight moves to the following anchor", func(t *testing.T) {
+		t.Parallel()
+		nearMidnight := time.Date(2026, time.August, 14, 23, 45, 0, 0, time.UTC)
+		intent := newStripeCheckoutIntent("<ORG_ID>", nearMidnight, nil)
+		require.Equal(t, time.Date(2026, time.August, 16, 0, 0, 0, 0, time.UTC), intent.billingCycleAnchor)
+		require.Equal(t, nearMidnight.Add(23*time.Hour+59*time.Minute), intent.expiresAt)
+		require.GreaterOrEqual(t, intent.expiresAt.Sub(nearMidnight), minimumStripeCheckoutSessionLifetime)
+		require.Less(t, intent.expiresAt, intent.billingCycleAnchor)
+	})
 }
 
 type stripeCheckoutTestInstance struct {
@@ -231,6 +328,33 @@ func (ti *stripeCheckoutTestInstance) adminContext(t *testing.T) context.Context
 	return ti.context(t, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 }
 
+func seedExpiredCheckoutSession(t *testing.T, ti *stripeCheckoutTestInstance, sessionID string) stripeCheckoutIntent {
+	t.Helper()
+	preparedAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	proposal := newStripeCheckoutIntent(ti.orgID, preparedAt, nil)
+	prepared, err := ti.service.prepareStripeCheckoutIntent(
+		t.Context(),
+		ti.orgID,
+		"cus_test",
+		preparedAt,
+		proposal,
+		pgtype.Text{String: "", Valid: false},
+	)
+	require.NoError(t, err)
+	_, err = repo.New(ti.db).FinalizeStripeCheckoutIntent(t.Context(), repo.FinalizeStripeCheckoutIntentParams{
+		StripeCheckoutSessionID:          sessionID,
+		OrganizationID:                   ti.orgID,
+		StripeCustomerID:                 "cus_test",
+		StripeCheckoutIdempotencyKey:     prepared.idempotencyKey,
+		StripeCheckoutBillingCycleAnchor: finiteTimestamptz(prepared.billingCycleAnchor),
+		StripeCheckoutTrialEnd:           optionalTimestamptz(prepared.trialEnd),
+		StripeCheckoutExpiresAt:          finiteTimestamptz(prepared.expiresAt),
+	})
+	require.NoError(t, err)
+	require.LessOrEqual(t, prepared.expiresAt, time.Now().UTC())
+	return prepared.stripeCheckoutIntent
+}
+
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var shareable *oops.ShareableError
@@ -296,7 +420,8 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
 	require.Equal(t, checkouts[0].SuccessURL, checkouts[0].CancelURL)
 	require.Nil(t, checkouts[0].TrialEnd)
-	require.Equal(t, "checkout-session:"+ti.orgID, checkouts[0].IdempotencyKey)
+	require.Equal(t, stripeCheckoutExpirySafetyMargin, checkouts[0].BillingCycleAnchor.Sub(checkouts[0].ExpiresAt))
+	require.Contains(t, checkouts[0].IdempotencyKey, "checkout-session:"+ti.orgID+":")
 }
 
 func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
@@ -313,7 +438,7 @@ func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
 	require.Empty(t, checkouts)
 }
 
-func TestCreateStripeCheckoutPreservesActiveTrialEnd(t *testing.T) {
+func TestCreateStripeCheckoutAlignsStripeTrialEndWithoutChangingProductTrial(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -329,7 +454,14 @@ func TestCreateStripeCheckoutPreservesActiveTrialEnd(t *testing.T) {
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
 	require.NotNil(t, checkouts[0].TrialEnd)
-	require.Equal(t, trialEnd, *checkouts[0].TrialEnd)
+	wantAnchor := nextStripeBillingCycleAnchor(time.Now(), &trialEnd)
+	require.Equal(t, wantAnchor, *checkouts[0].TrialEnd)
+	require.Equal(t, wantAnchor, checkouts[0].BillingCycleAnchor)
+	require.Less(t, checkouts[0].ExpiresAt, wantAnchor)
+
+	storedTrial, err := trialsrepo.New(ti.db).GetActiveTrial(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.True(t, trialEnd.Equal(storedTrial.EndsAt.Time))
 }
 
 func TestCreateStripeCheckoutStartsImmediatelyWhenTrialExpired(t *testing.T) {
@@ -462,6 +594,82 @@ func TestCreateStripeCheckoutSequentialRequestsCreateCustomerOnce(t *testing.T) 
 	require.Len(t, checkouts, 2)
 	require.Equal(t, checkouts[0].CustomerID, checkouts[1].CustomerID)
 	require.Equal(t, checkouts[0].IdempotencyKey, checkouts[1].IdempotencyKey)
+	require.Equal(t, checkouts[0], checkouts[1])
+	auditCount, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionBillingMetadataCreateStripeCheckout)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, auditCount)
+}
+
+func TestPrepareStripeCheckoutIntentReusesAcrossMidnightAndRotatesAfterExpiry(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	beforeMidnight := time.Date(2026, time.August, 14, 23, 50, 0, 0, time.UTC)
+	firstProposal := newStripeCheckoutIntent(ti.orgID, beforeMidnight, nil)
+	first, err := ti.service.prepareStripeCheckoutIntent(t.Context(), ti.orgID, "cus_test", beforeMidnight, firstProposal, pgtype.Text{String: "", Valid: false})
+	require.NoError(t, err)
+
+	afterMidnight := time.Date(2026, time.August, 15, 0, 10, 0, 0, time.UTC)
+	secondProposal := newStripeCheckoutIntent(ti.orgID, afterMidnight, nil)
+	require.NotEqual(t, firstProposal.idempotencyKey, secondProposal.idempotencyKey)
+	second, err := ti.service.prepareStripeCheckoutIntent(t.Context(), ti.orgID, "cus_test", afterMidnight, secondProposal, pgtype.Text{String: "", Valid: false})
+	require.NoError(t, err)
+	require.Equal(t, first.stripeCheckoutIntent, second.stripeCheckoutIntent)
+
+	afterExpiry := first.expiresAt.Add(time.Second)
+	replacementProposal := newStripeCheckoutIntent(ti.orgID, afterExpiry, nil)
+	replacement, err := ti.service.prepareStripeCheckoutIntent(t.Context(), ti.orgID, "cus_test", afterExpiry, replacementProposal, pgtype.Text{String: "", Valid: false})
+	require.NoError(t, err)
+	require.Equal(t, replacementProposal, replacement.stripeCheckoutIntent)
+	require.NotEqual(t, first.idempotencyKey, replacement.idempotencyKey)
+}
+
+func TestCreateStripeCheckoutDoesNotRotateCompletedExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_completed")
+	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		ID:             "cs_completed",
+		Status:         "complete",
+		CustomerID:     "cus_test",
+		SubscriptionID: "sub_delayed_webhook",
+	}
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Empty(t, checkouts)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, oldIntent.idempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.Equal(t, "cs_completed", stored.StripeCheckoutSessionID.String)
+}
+
+func TestCreateStripeCheckoutRotatesStripeConfirmedExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_expired")
+	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		ID:         "cs_expired",
+		Status:     "expired",
+		CustomerID: "cus_test",
+	}
+
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/1", checkoutURL)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.NotEqual(t, oldIntent.idempotencyKey, checkouts[0].IdempotencyKey)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, checkouts[0].IdempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.Equal(t, "cs_1", stored.StripeCheckoutSessionID.String)
 }
 
 func TestCreateStripeCheckoutAuditsActingUserWithoutStripeMetadata(t *testing.T) {
@@ -521,8 +729,8 @@ func TestCreateStripeCheckoutConcurrentDoubleClickCreatesOneCustomer(t *testing.
 		require.Equal(t, "customer:"+ti.orgID, customer.IdempotencyKey)
 	}
 	require.Len(t, checkouts, 2)
-	require.Equal(t, "checkout-session:"+ti.orgID, checkouts[0].IdempotencyKey)
 	require.Equal(t, checkouts[0].IdempotencyKey, checkouts[1].IdempotencyKey)
+	require.Equal(t, checkouts[0], checkouts[1])
 
 	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
 	require.NoError(t, err)
@@ -530,7 +738,7 @@ func TestCreateStripeCheckoutConcurrentDoubleClickCreatesOneCustomer(t *testing.
 	require.Equal(t, "cus_1", stored.StripeCustomerID.String)
 }
 
-func TestCreateStripeCheckoutDoesNotPersistCustomerWhenCheckoutFails(t *testing.T) {
+func TestCreateStripeCheckoutPersistsIntentWhenCheckoutFails(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -539,8 +747,13 @@ func TestCreateStripeCheckoutDoesNotPersistCustomerWhenCheckoutFails(t *testing.
 	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeUnexpected)
-	_, err = repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.True(t, stored.StripeCustomerID.Valid)
+	require.True(t, stored.StripeCheckoutIdempotencyKey.Valid)
+	require.True(t, stored.StripeCheckoutBillingCycleAnchor.Valid)
+	require.True(t, stored.StripeCheckoutExpiresAt.Valid)
+	require.False(t, stored.StripeCheckoutSessionID.Valid)
 
 	count, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionBillingMetadataCreateStripeCheckout)
 	require.NoError(t, err)

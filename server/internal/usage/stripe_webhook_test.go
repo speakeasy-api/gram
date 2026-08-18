@@ -486,6 +486,16 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	featureCache := configurePaygCheckout(t, service, "event_activation", "subscription_activation", "active")
 	baseline, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
+	preparedAt := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	_, err = service.prepareStripeCheckoutIntent(
+		t.Context(),
+		stripeWebhookOrganizationID,
+		"customer_placeholder",
+		preparedAt,
+		newStripeCheckoutIntent(stripeWebhookOrganizationID, preparedAt, nil),
+		pgtype.Text{String: "", Valid: false},
+	)
+	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "activation").Code)
 
@@ -493,7 +503,16 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "customer_placeholder", metadata.StripeCustomerID.String)
 	require.Equal(t, "subscription_activation", metadata.StripeSubscriptionID.String)
+	require.True(t, metadata.StripeBillingCycleAnchor.Valid)
+	stripeClient, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	require.True(t, stripeClient.checkout.BillingCycleAnchor.Equal(metadata.StripeBillingCycleAnchor.Time))
 	require.EqualValues(t, 23, metadata.BillingCycleAnchorDay)
+	require.False(t, metadata.StripeCheckoutIdempotencyKey.Valid)
+	require.False(t, metadata.StripeCheckoutBillingCycleAnchor.Valid)
+	require.False(t, metadata.StripeCheckoutTrialEnd.Valid)
+	require.False(t, metadata.StripeCheckoutExpiresAt.Valid)
+	require.False(t, metadata.StripeCheckoutSessionID.Valid)
 	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.Equal(t, "payg", organization.GramAccountType)

@@ -30,6 +30,10 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
+var errMissingBillingCycleAnchor = errors.New("billing cycle anchor is required")
+
+var errMissingCheckoutExpiration = errors.New("checkout expiration is required")
+
 // Catalog contains the Stripe object identifiers used by PAYG billing.
 type Catalog struct {
 	PriceIDTUM     string
@@ -91,8 +95,15 @@ type CreateCheckoutSessionInput struct {
 	// CancelURL is the browser destination when Checkout is canceled.
 	CancelURL string
 
-	// TrialEnd preserves an active in-product trial on the Stripe subscription.
+	// TrialEnd is the UTC-aligned financial trial end. Gram retains the exact
+	// product trial end separately and the interval between them is a free stub.
 	TrialEnd *time.Time
+
+	// BillingCycleAnchor starts the first full paid period at an exact UTC boundary.
+	BillingCycleAnchor time.Time
+
+	// ExpiresAt prevents the session from completing after its intended paid anchor.
+	ExpiresAt time.Time
 
 	// IdempotencyKey identifies one Checkout creation request.
 	IdempotencyKey string
@@ -100,6 +111,9 @@ type CreateCheckoutSessionInput struct {
 
 // CheckoutSession is the Stripe Checkout data needed by billing callers.
 type CheckoutSession struct {
+	// ID is Stripe's stable Checkout Session identifier.
+	ID string
+
 	// URL is Stripe's hosted Checkout page.
 	URL string
 }
@@ -238,11 +252,18 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	if input.IdempotencyKey == "" {
 		return nil, errMissingIdempotencyKey
 	}
+	if input.BillingCycleAnchor.IsZero() {
+		return nil, errMissingBillingCycleAnchor
+	}
+	if input.ExpiresAt.IsZero() {
+		return nil, errMissingCheckoutExpiration
+	}
 
 	params := new(stripesdk.CheckoutSessionCreateParams)
 	params.CancelURL = stripesdk.String(input.CancelURL)
 	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
 	params.Customer = stripesdk.String(input.CustomerID)
+	params.ExpiresAt = new(input.ExpiresAt.Unix())
 	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
 		{
 			Price:    stripesdk.String(c.catalog.PriceIDTUM),
@@ -263,6 +284,9 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.SuccessURL = stripesdk.String(input.SuccessURL)
 	if input.TrialEnd != nil {
 		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
+	} else {
+		params.SubscriptionData.BillingCycleAnchor = new(input.BillingCycleAnchor.Unix())
+		params.SubscriptionData.ProrationBehavior = stripesdk.String("none")
 	}
 	params.SetIdempotencyKey(input.IdempotencyKey)
 
@@ -270,7 +294,7 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	if err != nil {
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
-	return &CheckoutSession{URL: session.URL}, nil
+	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil
 }
 
 func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSessionState, error) {
@@ -418,7 +442,7 @@ func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) 
 
 func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
 	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
-	return &CheckoutSession{URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
+	return &CheckoutSession{ID: "cs_local_stub", URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
 }
 
 func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error) {
