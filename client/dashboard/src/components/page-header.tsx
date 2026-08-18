@@ -1,6 +1,5 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { Separator } from "@/components/ui/Separator";
-import { SidebarTrigger } from "@/components/ui/Sidebar";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -8,11 +7,12 @@ import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
-import { BrandGradientLine } from "./brand-gradient-line.tsx";
+import { HatchRule } from "./hatch-rule.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
+import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
 
 function PageHeaderComponent({
   className,
@@ -35,18 +35,23 @@ function PageHeaderComponent({
           className,
         )}
       >
-        <div className="flex w-full items-center gap-3 px-3">
-          <SidebarTrigger className="mx-0 -ml-1 px-0" />
-          <Separator
-            orientation="vertical"
-            className="data-[orientation=vertical]:h-4"
-          />
+        {/* px-8 matches Page.Body's padding; the switcher pulls back by its own
+            inner padding so its tile lines up with the content edge. */}
+        <div className="flex w-full items-center gap-3 px-8">
+          {/* Project context lives here, in the slot the breadcrumbs used to
+              occupy, rather than in the sidebar. The collapse control moved to
+              the sidebar header alongside the logo. */}
+          <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
           {children}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <InsightsDockShortcutHint />
+            <CommandPaletteTrigger />
+          </div>
         </div>
       </header>
-      {/* Brand gradient signature, relocated here from the old top bar — it now
-          divides the main panel's header from its content on the right side. */}
-      <BrandGradientLine />
+      {/* Crosshatch rule (marketing-site idiom) divides header from content and
+          continues the sidebar header's own rule across the pane boundary. */}
+      <HatchRule />
       <OnboardingBanner />
       {/* Inference stopping is felt on whichever page the user was working on,
           so the reason for it rides the header rather than waiting on the
@@ -145,19 +150,32 @@ function BreadcrumbCrumb({
   );
 }
 
-function PageHeaderBreadcrumbs({
-  fullWidth,
-  className,
-  substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
-  skipSegments = [], // Segments to skip/hide from breadcrumbs
-  stage,
-}: {
+type PageHeaderBreadcrumbsProps = {
   fullWidth?: boolean;
   className?: string;
   substitutions?: Record<string, string | undefined>;
   skipSegments?: string[];
   stage?: ReleaseStage;
-}) {
+};
+
+// Breadcrumbs are hidden: the header now carries the project switcher instead.
+// The renderer below is kept intact (and every caller keeps mounting
+// <PageHeader.Breadcrumbs>) so flipping this back on is a one-line change.
+// Widened to boolean so the renderer below doesn't type as unreachable.
+const SHOW_BREADCRUMBS = false as boolean;
+
+function PageHeaderBreadcrumbs(props: PageHeaderBreadcrumbsProps) {
+  if (!SHOW_BREADCRUMBS) return null;
+  return <PageHeaderBreadcrumbsTrail {...props} />;
+}
+
+function PageHeaderBreadcrumbsTrail({
+  fullWidth,
+  className,
+  substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
+  skipSegments = [], // Segments to skip/hide from breadcrumbs
+  stage,
+}: PageHeaderBreadcrumbsProps) {
   const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
   const organization = useOrganization();
@@ -271,10 +289,6 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    // Breadcrumbs + hint share their own justify-between row so the hint
-    // always pins to the true right edge of the nav bar, independent of the
-    // SidebarTrigger/Separator siblings in the outer header row (their width
-    // otherwise threw off the old ml-auto-on-both-siblings layout).
     <div className="flex w-full items-center justify-between gap-2">
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
@@ -291,7 +305,6 @@ function PageHeaderBreadcrumbs({
           {stage && <ReleaseStageBadge stage={stage} />}
         </div>
       </PageHeader.Title>
-      <InsightsDockShortcutHint className="shrink-0" />
     </div>
   );
 }

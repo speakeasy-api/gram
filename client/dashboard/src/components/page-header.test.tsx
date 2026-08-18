@@ -3,12 +3,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/ui/Sidebar", () => ({
-  SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
-}));
-vi.mock("@/components/ui/Separator", () => ({
-  Separator: () => <hr data-testid="separator" />,
-}));
 vi.mock("./onboarding-banner.tsx", () => ({
   OnboardingBanner: () => null,
 }));
@@ -17,6 +11,12 @@ vi.mock("./onboarding-banner.tsx", () => ({
 // the thing that mounts them, so they reach every page that has a header.
 vi.mock("./billing/billing-banners.tsx", () => ({
   PaygCapReachedBanners: () => <div data-testid="cap-paused-banner" />,
+}));
+vi.mock("./workspace-switcher.tsx", () => ({
+  WorkspaceSwitcher: () => <div data-testid="workspace-switcher" />,
+}));
+vi.mock("./command-palette/CommandPaletteTrigger", () => ({
+  CommandPaletteTrigger: () => <button data-testid="command-palette" />,
 }));
 // Stub context/hook modules imported at the top of page-header.tsx (used only
 // in PageHeaderBreadcrumbs, not PageHeaderComponent, but they execute on import)
