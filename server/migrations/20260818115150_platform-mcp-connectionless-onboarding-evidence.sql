@@ -1,0 +1,7 @@
+-- atlas:txmode none
+
+-- Modify "platform_mcp_onboarding_milestones" table
+ALTER TABLE "platform_mcp_onboarding_milestones" DROP CONSTRAINT "platform_mcp_onboarding_milestones_connection_generation_check", ADD CONSTRAINT "platform_mcp_onboarding_milestones_connection_generation_check" CHECK ((milestone <> ALL (ARRAY['authorization_succeeded'::text, 'authorization_failed'::text, 'connection_ready'::text, 'catalog_explored'::text, 'first_read_succeeded'::text, 'first_write_succeeded'::text, 'read_only_cohort'::text])) OR ((connection_id IS NOT NULL) AND (connection_generation IS NOT NULL)) OR (user_id IS NOT NULL)) NOT VALID, ADD COLUMN "user_id" text NULL, ADD COLUMN "acting_surface" text NULL;
+ALTER TABLE "platform_mcp_onboarding_milestones" VALIDATE CONSTRAINT "platform_mcp_onboarding_milestones_connection_generation_check";
+-- Create index "platform_mcp_onboarding_milestones_user_key" to table: "platform_mcp_onboarding_milestones"
+CREATE UNIQUE INDEX CONCURRENTLY "platform_mcp_onboarding_milestones_user_key" ON "platform_mcp_onboarding_milestones" ("organization_id", "milestone", "user_id") WHERE ((connection_id IS NULL) AND (user_id IS NOT NULL) AND (milestone = ANY (ARRAY['authorization_succeeded'::text, 'authorization_failed'::text, 'connection_ready'::text, 'catalog_explored'::text, 'first_read_succeeded'::text, 'first_write_succeeded'::text, 'read_only_cohort'::text])));

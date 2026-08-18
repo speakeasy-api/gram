@@ -25,6 +25,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
+import {
+  PaygCapReachedBanners,
+  PaygPaymentFailedBanner,
+} from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygUsageSection } from "@/components/billing/payg-usage-section";
@@ -40,6 +44,13 @@ export default function Billing(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
+      {/* A failed payment is what stops the whole account, so it precedes the
+          cap notices when both states apply. The global header suppresses its
+          cap banners on this route to avoid a duplicate query and notice. */}
+      <Page.Banner>
+        <PaygPaymentFailedBanner />
+        <PaygCapReachedBanners />
+      </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <BillingInner />

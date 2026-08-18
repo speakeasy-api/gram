@@ -224,9 +224,10 @@ describe("PaygPlanSection", () => {
       expect(resumeButton()).toBeNull();
     });
 
-    // Stripe keeps retrying a failed payment, so service continues — but the
-    // admin has to be told, because the card is what stops it.
-    it("flags a failed payment on a past due subscription", () => {
+    // Stripe keeps retrying a failed payment, so service continues and the plan
+    // is still the plan. Saying so a second time here, below the fold, would
+    // only compete with the banner heading the page.
+    it("leaves a failed payment to the banner", () => {
       queryState({
         data: subscription({ status: "past_due", paymentFailed: true }),
       });
@@ -234,16 +235,8 @@ describe("PaygPlanSection", () => {
       render(<PaygPlanSection />);
 
       expect(screen.getByText("Pay as you go")).toBeTruthy();
-      expect(screen.getByRole("alert").textContent).toMatch(
-        /last payment failed/i,
-      );
+      expect(screen.queryByText(/last payment failed/i)).toBeNull();
       expect(cancelTrigger()).not.toBeNull();
-    });
-
-    it("shows no payment warning while payments are landing", () => {
-      render(<PaygPlanSection />);
-
-      expect(screen.queryByRole("alert")).toBeNull();
     });
   });
 

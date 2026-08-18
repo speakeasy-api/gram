@@ -149,12 +149,8 @@ function PaygPlanDetails({
           {copy.detail}
         </Text>
       </Stack>
-      {state.paymentFailed && (
-        <Text small destructive role="alert">
-          Your last payment failed. Update your payment method to keep this
-          organization's service running.
-        </Text>
-      )}
+      {/* A failed payment is reported by the banner heading this page, where it
+          can't be scrolled past — not by a line of body text down here. */}
       {/* A member reads the state above but gets no controls: every action
           here is admin-only at the API, so a visible one would only invite a
           request that is going to be refused. */}

@@ -9,7 +9,7 @@ import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { useCreateStripePortalSessionMutation } from "@gram/client/react-query/createStripePortalSession.js";
 import { useCallback, useState } from "react";
 
-const BUTTON_LABEL = "Manage billing";
+const DEFAULT_LABEL = "Manage billing";
 const ERROR_MESSAGE = "Couldn't open the billing portal. Try again.";
 
 /**
@@ -19,8 +19,17 @@ const ERROR_MESSAGE = "Couldn't open the billing portal. Try again.";
  * The portal session is minted per click rather than at render: the link is
  * single-use and short-lived, so one created on page load would already have
  * expired by the time anyone pressed it.
+ *
+ * `label` narrows the offer to the one thing a caller is asking for — the
+ * payment-failure banner sends an admin to update a card, not to browse
+ * invoices — while the portal handoff, its URL check, and the audited mutation
+ * behind it stay in one place.
  */
-export function PaygPortalButton(): JSX.Element {
+export function PaygPortalButton({
+  label = DEFAULT_LABEL,
+}: {
+  label?: string;
+} = {}): JSX.Element {
   const telemetry = useTelemetry();
   const portal = useCreateStripePortalSessionMutation();
   const [failed, setFailed] = useState(false);
@@ -64,7 +73,7 @@ export function PaygPortalButton(): JSX.Element {
         onClick={openPortal}
         disabled={portal.isPending}
       >
-        {portal.isPending ? "OPENING..." : BUTTON_LABEL}
+        {portal.isPending ? "OPENING..." : label}
       </Button>
       {failed && (
         <Text small destructive role="alert">

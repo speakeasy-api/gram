@@ -1,4 +1,5 @@
 import { InferenceCapControl } from "@/components/billing/inference-cap-control";
+import { useInferenceCapsMode } from "@/components/billing/inference-caps-mode";
 import {
   INFERENCE_CAPS_ANCHOR,
   isInferenceCapAnchor,
@@ -15,14 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
-import { type ProductTier, useProductTier } from "@/hooks/useProductTier";
-import { useTrialNow } from "@/hooks/useTrialNow";
 import { isNotFoundError } from "@/lib/route-errors";
-import {
-  getTrialLifecycleFromDates,
-  type TrialLifecycle,
-} from "@/lib/trial-status";
 import { useGetInferenceSpendCaps } from "@gram/client/react-query/getInferenceSpendCaps.js";
 import { type RefObject, useEffect, useRef } from "react";
 import { useLocation } from "react-router";
@@ -39,18 +33,6 @@ import { useLocation } from "react-router";
  * Stripe can still be trialing the subscription for days, so from there the
  * live Stripe status decides what is editable.
  */
-type InferenceCapsMode = "payg" | "product-trial" | "hidden";
-
-function inferenceCapsMode(
-  productTier: ProductTier,
-  trialLifecycle: TrialLifecycle,
-): InferenceCapsMode {
-  if (productTier !== "payg" && productTier !== "enterprise") return "hidden";
-  if (trialLifecycle === "active") return "product-trial";
-  // Enterprise off a trial is on a contract, which bills through its own terms.
-  return productTier === "payg" ? "payg" : "hidden";
-}
-
 /**
  * Why the caps can be read but not changed, when that is the case.
  *
@@ -190,15 +172,7 @@ function useScrollToInferenceCapHash(
  * the caps apply.
  */
 export function InferenceCapsSection(): JSX.Element | null {
-  const productTier = useProductTier();
-  const { trial } = useSession();
-  // A trial that ends while the page is open has to unlock the caps with it, so
-  // this reads a clock that re-renders on the trial's own boundaries.
-  const now = useTrialNow(trial);
-  const mode = inferenceCapsMode(
-    productTier,
-    getTrialLifecycleFromDates(trial, now),
-  );
+  const mode = useInferenceCapsMode();
   const section = useScrollToInferenceCapHash(mode !== "hidden");
 
   if (mode === "hidden") return null;
