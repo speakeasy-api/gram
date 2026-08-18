@@ -44,6 +44,11 @@ func TestStripeFlagsAreAvailableInEveryServerProcess(t *testing.T) {
 			_, tomlSourceable = meterEventName.(altsrc.FlagInputSourceExtension)
 			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
 			require.Contains(t, meterEventName.Names(), "stripe.meter_event_name")
+
+			portalConfigurationID := requireFlag(t, command.Flags, "stripe-portal-configuration-id")
+			_, tomlSourceable = portalConfigurationID.(altsrc.FlagInputSourceExtension)
+			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
+			require.Contains(t, portalConfigurationID.Names(), "stripe.portal_configuration_id")
 		})
 	}
 }

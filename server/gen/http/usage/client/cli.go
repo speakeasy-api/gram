@@ -235,6 +235,66 @@ func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken stri
 	return v, nil
 }
 
+// BuildGetStripeSubscriptionPayload builds the payload for the usage
+// getStripeSubscription endpoint from CLI flags.
+func BuildGetStripeSubscriptionPayload(usageGetStripeSubscriptionSessionToken string) (*usage.GetStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageGetStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.GetStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateStripePortalSessionPayload builds the payload for the usage
+// createStripePortalSession endpoint from CLI flags.
+func BuildCreateStripePortalSessionPayload(usageCreateStripePortalSessionSessionToken string) (*usage.CreateStripePortalSessionPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateStripePortalSessionSessionToken != "" {
+			sessionToken = &usageCreateStripePortalSessionSessionToken
+		}
+	}
+	v := &usage.CreateStripePortalSessionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCancelStripeSubscriptionPayload builds the payload for the usage
+// cancelStripeSubscription endpoint from CLI flags.
+func BuildCancelStripeSubscriptionPayload(usageCancelStripeSubscriptionSessionToken string) (*usage.CancelStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageCancelStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageCancelStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.CancelStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResumeStripeSubscriptionPayload builds the payload for the usage
+// resumeStripeSubscription endpoint from CLI flags.
+func BuildResumeStripeSubscriptionPayload(usageResumeStripeSubscriptionSessionToken string) (*usage.ResumeStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageResumeStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageResumeStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.ResumeStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateTopUpCheckoutPayload builds the payload for the usage
 // createTopUpCheckout endpoint from CLI flags.
 func BuildCreateTopUpCheckoutPayload(usageCreateTopUpCheckoutSessionToken string) (*usage.CreateTopUpCheckoutPayload, error) {

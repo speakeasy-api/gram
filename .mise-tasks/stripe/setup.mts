@@ -10,12 +10,11 @@
 import { intro, isCancel, log, outro, password } from "@clack/prompts";
 import { $ } from "zx";
 
-const STRIPE_API_VERSION = "2026-03-25.dahlia";
-
 const METER_EVENT_NAME = "tum";
 const METER_DISPLAY_NAME = "Tokens under management";
 const PRICE_LOOKUP_KEY = "payg-tum";
 const PRODUCT_NAME = "AI Control Plane PAYG";
+const PORTAL_CONFIGURATION_PURPOSE = "gram-payg";
 // $0.35 per 1M TUMs, linear per-unit, expressed in cents per TUM.
 const UNIT_AMOUNT_DECIMAL_CENTS = "0.000035";
 
@@ -51,6 +50,25 @@ interface StripePrice {
     interval_count?: number;
     usage_type?: string;
     meter?: string;
+  };
+}
+
+interface StripePortalConfiguration {
+  id: string;
+  active: boolean;
+  livemode: boolean;
+  metadata?: Record<string, string>;
+  features?: {
+    customer_update?: { enabled?: boolean };
+    invoice_history?: { enabled?: boolean };
+    payment_method_update?: { enabled?: boolean };
+    subscription_cancel?: {
+      enabled?: boolean;
+      mode?: string;
+      proration_behavior?: string;
+      cancellation_reason?: { enabled?: boolean };
+    };
+    subscription_update?: { enabled?: boolean };
   };
 }
 
@@ -91,7 +109,6 @@ async function stripe<T>(
     method,
     headers: {
       Authorization: `Bearer ${key}`,
-      "Stripe-Version": STRIPE_API_VERSION,
     },
   };
   if (params && method === "GET") {
@@ -112,6 +129,96 @@ async function stripe<T>(
     );
   }
   return body;
+}
+
+async function findPortalConfigurations(
+  key: string,
+): Promise<StripePortalConfiguration[]> {
+  const matches: StripePortalConfiguration[] = [];
+  let startingAfter: string | undefined;
+
+  do {
+    const params: Record<string, string> = { active: "true", limit: "100" };
+    if (startingAfter) params.starting_after = startingAfter;
+
+    const configurations = await stripe<StripeList<StripePortalConfiguration>>(
+      key,
+      "GET",
+      "/billing_portal/configurations",
+      params,
+    );
+    matches.push(
+      ...configurations.data.filter(
+        (candidate) =>
+          candidate.metadata?.purpose === PORTAL_CONFIGURATION_PURPOSE,
+      ),
+    );
+    if (!configurations.has_more) return matches;
+
+    startingAfter = configurations.data.at(-1)?.id;
+    if (!startingAfter) {
+      throw new Error(
+        "Stripe returned an invalid paginated portal configuration list.",
+      );
+    }
+  } while (true);
+}
+
+function assertPortalConfiguration(configuration: StripePortalConfiguration) {
+  assertConfiguration(
+    `Billing Portal configuration ${configuration.id}`,
+    [
+      ["active", configuration.active, true],
+      ["livemode", configuration.livemode, false],
+      [
+        "metadata.purpose",
+        configuration.metadata?.purpose,
+        PORTAL_CONFIGURATION_PURPOSE,
+      ],
+      [
+        "features.customer_update.enabled",
+        configuration.features?.customer_update?.enabled,
+        false,
+      ],
+      [
+        "features.invoice_history.enabled",
+        configuration.features?.invoice_history?.enabled,
+        true,
+      ],
+      [
+        "features.payment_method_update.enabled",
+        configuration.features?.payment_method_update?.enabled,
+        true,
+      ],
+      [
+        "features.subscription_cancel.enabled",
+        configuration.features?.subscription_cancel?.enabled,
+        true,
+      ],
+      [
+        "features.subscription_cancel.mode",
+        configuration.features?.subscription_cancel?.mode,
+        "at_period_end",
+      ],
+      [
+        "features.subscription_cancel.proration_behavior",
+        configuration.features?.subscription_cancel?.proration_behavior,
+        "none",
+      ],
+      [
+        "features.subscription_cancel.cancellation_reason.enabled",
+        configuration.features?.subscription_cancel?.cancellation_reason
+          ?.enabled,
+        false,
+      ],
+      [
+        "features.subscription_update.enabled",
+        configuration.features?.subscription_update?.enabled,
+        false,
+      ],
+    ],
+    "Deactivate the tagged configuration in the Stripe sandbox and re-run this task.",
+  );
 }
 
 async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
@@ -338,6 +445,48 @@ async function main() {
     ["recurring.meter", price.recurring?.meter, meter.id],
   ]);
 
+  // Billing Portal — use a dedicated, tagged configuration so production
+  // behavior cannot drift when someone edits Stripe's mutable default.
+  const portalConfigurations = await findPortalConfigurations(key);
+  if (portalConfigurations.length > 1) {
+    throw new Error(
+      `Found multiple active Billing Portal configurations tagged metadata.purpose=${PORTAL_CONFIGURATION_PURPOSE}: ` +
+        `${portalConfigurations.map((candidate) => candidate.id).join(", ")}. ` +
+        "Deactivate all but one in the Stripe sandbox and re-run this task.",
+    );
+  }
+  let portalConfiguration = portalConfigurations[0];
+  if (portalConfiguration) {
+    log.info(
+      `Billing Portal configuration "${PORTAL_CONFIGURATION_PURPOSE}" already exists: ${portalConfiguration.id}`,
+    );
+  } else {
+    portalConfiguration = await stripe<StripePortalConfiguration>(
+      key,
+      "POST",
+      "/billing_portal/configurations",
+      {
+        "metadata[purpose]": PORTAL_CONFIGURATION_PURPOSE,
+        "features[customer_update][enabled]": "false",
+        "features[invoice_history][enabled]": "true",
+        "features[payment_method_update][enabled]": "true",
+        "features[subscription_cancel][enabled]": "true",
+        "features[subscription_cancel][mode]": "at_period_end",
+        "features[subscription_cancel][proration_behavior]": "none",
+        "features[subscription_cancel][cancellation_reason][enabled]": "false",
+        "features[subscription_cancel][cancellation_reason][options][0]":
+          "missing_features",
+        "features[subscription_cancel][cancellation_reason][options][1]":
+          "other",
+        "features[subscription_update][enabled]": "false",
+      },
+    );
+    log.success(
+      `Created Billing Portal configuration "${PORTAL_CONFIGURATION_PURPOSE}": ${portalConfiguration.id}`,
+    );
+  }
+  assertPortalConfiguration(portalConfiguration);
+
   const webhookSecret = await resolveWebhookSecret(key);
   log.success("Initialized the Stripe CLI webhook signing secret.");
 
@@ -345,6 +494,7 @@ async function main() {
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_METER_ID_TUM: meter.id,
     STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
+    STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
   };
   if (prompted) {

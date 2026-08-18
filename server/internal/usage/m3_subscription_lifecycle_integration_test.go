@@ -50,6 +50,18 @@ func (c *m3StripeWebhookClient) GetCheckoutSession(context.Context, string) (*st
 	return &state, nil
 }
 
+func (*m3StripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*m3StripeWebhookClient) SetSubscriptionCancelAtPeriodEnd(context.Context, stripeclient.SetSubscriptionCancelAtPeriodEndInput) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (*m3StripeWebhookClient) CreatePortalSession(context.Context, stripeclient.CreatePortalSessionInput) (*stripeclient.PortalSession, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (*m3StripeWebhookClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
 	return errors.New("not implemented")
 }
@@ -84,7 +96,7 @@ func (c *m3StripeWebhookClient) VerifyWebhook([]byte, string) (*stripeclient.Web
 }
 
 func (*m3StripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: ""}
+	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
 }
 
 type m3OpenRouterProvisioner struct {

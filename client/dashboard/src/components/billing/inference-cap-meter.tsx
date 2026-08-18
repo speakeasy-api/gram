@@ -22,27 +22,37 @@ const usdMeter = new Intl.NumberFormat("en-US", {
 /**
  * This calendar month's spend against one Gram-managed inference cap.
  *
- * The cap's own control names it in the label of the field that sets it, so the
- * meter carries no heading of its own — repeating the name directly below reads
- * as two separate things. The accessible name on the bar still carries it: a
- * screen reader meets the bar on its own.
+ * Shared by every surface that reports a cap, so none of them can disagree
+ * about what has been spent, or about which band the spend is in.
+ *
+ * `title` is what a caller that names the cap itself doesn't want: the cap's
+ * own control already names it in the label of the field that sets it, and
+ * repeating it directly below reads as two separate things.
  */
 export function InferenceCapMeter({
   cap,
+  title = true,
 }: {
   cap: InferenceSpendCap;
+  title?: boolean;
 }): JSX.Element {
   const label = inferenceCapLabel(cap.keyType);
   const spent = usdMeter.format(cap.creditsUsed);
+  const heading = title ? <Text className="font-medium">{label}</Text> : null;
 
   // Without a cap the spend has nothing to be a proportion of, and a full-width
   // bar would read as a limit that was reached. The figure still shows: it is
-  // the only place this month's spend on this key appears.
+  // the only place this month's spend on this key appears. Nothing is added
+  // under it — every note this meter draws is about a cap's own month, which
+  // would contradict the "No cap is set." printed directly above.
   if (!(cap.monthlyCredits > 0)) {
     return (
-      <Text muted small className="tabular-nums">
-        {spent} spent this month. No cap is set.
-      </Text>
+      <Stack gap={1}>
+        {heading}
+        <Text muted small className="tabular-nums">
+          {spent} spent this month. No cap is set.
+        </Text>
+      </Stack>
     );
   }
 
@@ -52,13 +62,15 @@ export function InferenceCapMeter({
   );
   const percent = spendCapFillPercent(cap.creditsUsed, cap.monthlyCredits);
   const limit = usdMeter.format(cap.monthlyCredits);
-  const thresholdNote = capNote(threshold, cap.disabled);
 
   return (
     <Stack gap={2}>
-      <Text muted small className="tabular-nums">
-        {spent} of {limit}
-      </Text>
+      <Stack direction="horizontal" justify="space-between" gap={3}>
+        {heading}
+        <Text muted small className="tabular-nums">
+          {spent} of {limit}
+        </Text>
+      </Stack>
       <div
         role="progressbar"
         aria-label={`${label}: ${spent} of the ${limit} monthly cap`}
@@ -75,14 +87,23 @@ export function InferenceCapMeter({
           style={{ width: `${percent}%` }}
         />
       </div>
-      {/* Below the first band there is nothing to say, and an empty line would
-          open a gap between the bar and the field under it. */}
-      {thresholdNote !== "" && (
-        <Text muted small>
-          {thresholdNote}
-        </Text>
-      )}
+      <Footnote text={capNote(threshold, cap.disabled)} />
     </Stack>
+  );
+}
+
+/**
+ * The line under a meter, dropped entirely when there is nothing to say.
+ *
+ * Below the first threshold there is no note, and an empty line there would
+ * open a gap under the bar.
+ */
+function Footnote({ text }: { text: string }): JSX.Element | null {
+  if (text === "") return null;
+  return (
+    <Text muted small>
+      {text}
+    </Text>
   );
 }
 

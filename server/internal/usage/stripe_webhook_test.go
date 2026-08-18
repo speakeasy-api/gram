@@ -62,6 +62,18 @@ func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*
 	return f.checkout, f.checkoutError
 }
 
+func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) SetSubscriptionCancelAtPeriodEnd(context.Context, stripeclient.SetSubscriptionCancelAtPeriodEndInput) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) CreatePortalSession(context.Context, stripeclient.CreatePortalSessionInput) (*stripeclient.PortalSession, error) {
+	return nil, errors.New("not implemented")
+}
+
 type captureFeatureCache struct {
 	mu      sync.Mutex
 	enabled []productfeatures.Feature
@@ -130,7 +142,7 @@ func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: ""}
+	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
 }
 
 func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {

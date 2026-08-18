@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3286,6 +3286,18 @@ func ParseEndpoint(
 		usageCreateStripeCheckoutFlags            = flag.NewFlagSet("create-stripe-checkout", flag.ExitOnError)
 		usageCreateStripeCheckoutSessionTokenFlag = usageCreateStripeCheckoutFlags.String("session-token", "", "")
 
+		usageGetStripeSubscriptionFlags            = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
+		usageGetStripeSubscriptionSessionTokenFlag = usageGetStripeSubscriptionFlags.String("session-token", "", "")
+
+		usageCreateStripePortalSessionFlags            = flag.NewFlagSet("create-stripe-portal-session", flag.ExitOnError)
+		usageCreateStripePortalSessionSessionTokenFlag = usageCreateStripePortalSessionFlags.String("session-token", "", "")
+
+		usageCancelStripeSubscriptionFlags            = flag.NewFlagSet("cancel-stripe-subscription", flag.ExitOnError)
+		usageCancelStripeSubscriptionSessionTokenFlag = usageCancelStripeSubscriptionFlags.String("session-token", "", "")
+
+		usageResumeStripeSubscriptionFlags            = flag.NewFlagSet("resume-stripe-subscription", flag.ExitOnError)
+		usageResumeStripeSubscriptionSessionTokenFlag = usageResumeStripeSubscriptionFlags.String("session-token", "", "")
+
 		usageCreateTopUpCheckoutFlags            = flag.NewFlagSet("create-top-up-checkout", flag.ExitOnError)
 		usageCreateTopUpCheckoutSessionTokenFlag = usageCreateTopUpCheckoutFlags.String("session-token", "", "")
 
@@ -4153,6 +4165,10 @@ func ParseEndpoint(
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
 	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
+	usageGetStripeSubscriptionFlags.Usage = usageGetStripeSubscriptionUsage
+	usageCreateStripePortalSessionFlags.Usage = usageCreateStripePortalSessionUsage
+	usageCancelStripeSubscriptionFlags.Usage = usageCancelStripeSubscriptionUsage
+	usageResumeStripeSubscriptionFlags.Usage = usageResumeStripeSubscriptionUsage
 	usageCreateTopUpCheckoutFlags.Usage = usageCreateTopUpCheckoutUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
@@ -6297,6 +6313,18 @@ func ParseEndpoint(
 			case "create-stripe-checkout":
 				epf = usageCreateStripeCheckoutFlags
 
+			case "get-stripe-subscription":
+				epf = usageGetStripeSubscriptionFlags
+
+			case "create-stripe-portal-session":
+				epf = usageCreateStripePortalSessionFlags
+
+			case "cancel-stripe-subscription":
+				epf = usageCancelStripeSubscriptionFlags
+
+			case "resume-stripe-subscription":
+				epf = usageResumeStripeSubscriptionFlags
+
 			case "create-top-up-checkout":
 				epf = usageCreateTopUpCheckoutFlags
 
@@ -8368,6 +8396,18 @@ func ParseEndpoint(
 			case "create-stripe-checkout":
 				endpoint = c.CreateStripeCheckout()
 				data, err = usagec.BuildCreateStripeCheckoutPayload(*usageCreateStripeCheckoutSessionTokenFlag)
+			case "get-stripe-subscription":
+				endpoint = c.GetStripeSubscription()
+				data, err = usagec.BuildGetStripeSubscriptionPayload(*usageGetStripeSubscriptionSessionTokenFlag)
+			case "create-stripe-portal-session":
+				endpoint = c.CreateStripePortalSession()
+				data, err = usagec.BuildCreateStripePortalSessionPayload(*usageCreateStripePortalSessionSessionTokenFlag)
+			case "cancel-stripe-subscription":
+				endpoint = c.CancelStripeSubscription()
+				data, err = usagec.BuildCancelStripeSubscriptionPayload(*usageCancelStripeSubscriptionSessionTokenFlag)
+			case "resume-stripe-subscription":
+				endpoint = c.ResumeStripeSubscription()
+				data, err = usagec.BuildResumeStripeSubscriptionPayload(*usageResumeStripeSubscriptionSessionTokenFlag)
 			case "create-top-up-checkout":
 				endpoint = c.CreateTopUpCheckout()
 				data, err = usagec.BuildCreateTopUpCheckoutPayload(*usageCreateTopUpCheckoutSessionTokenFlag)
@@ -22032,6 +22072,10 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create a Stripe Checkout link for starting PAYG billing`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
+	fmt.Fprintln(os.Stderr, `    create-stripe-portal-session: Create a Stripe customer portal session for the organization's PAYG subscription`)
+	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period`)
+	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription`)
 	fmt.Fprintln(os.Stderr, `    create-top-up-checkout: Create a checkout link for a one-time credit top-up purchase`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -22237,6 +22281,78 @@ func usageCreateStripeCheckoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-stripe-checkout --session-token \"abc123\"")
+}
+
+func usageGetStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the live lifecycle state of the organization's Stripe PAYG subscription`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-stripe-subscription --session-token \"abc123\"")
+}
+
+func usageCreateStripePortalSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage create-stripe-portal-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a Stripe customer portal session for the organization's PAYG subscription`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-stripe-portal-session --session-token \"abc123\"")
+}
+
+func usageCancelStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage cancel-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage cancel-stripe-subscription --session-token \"abc123\"")
+}
+
+func usageResumeStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage resume-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage resume-stripe-subscription --session-token \"abc123\"")
 }
 
 func usageCreateTopUpCheckoutUsage() {

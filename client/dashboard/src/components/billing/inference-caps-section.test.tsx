@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render as rtlRender,
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   reset: vi.fn(),
   hasAnyScope: vi.fn(),
   invalidate: vi.fn(),
+  subscription: vi.fn(),
+  subscriptionRefetch: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -42,6 +45,13 @@ vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
 vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
   useSetSpendCapMutation: (options?: { onSuccess?: () => void }) =>
     mocks.mutation(options),
+}));
+
+// The shared subscription read is mocked at the wrapper: what the caps do with
+// the live Stripe state is this file's subject, and the wrapper's own query
+// options are covered by `use-stripe-subscription.test.ts`.
+vi.mock("@/components/billing/use-stripe-subscription", () => ({
+  useStripeSubscription: () => mocks.subscription(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -67,7 +77,11 @@ vi.mock("@/components/page-layout", () => {
   return { Page: { Section } };
 });
 
-import { InferenceCapsSection } from "./inference-caps-section";
+import { INFERENCE_CAPS_ANCHOR, inferenceCapAnchor } from "./inference-caps";
+import {
+  CAP_ANCHOR_WAIT_MS,
+  InferenceCapsSection,
+} from "./inference-caps-section";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -84,7 +98,7 @@ function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
   };
 }
 
-/** The chat key as the API reports it, under the label a customer reads. */
+/** The Other inference key as the API reports it. */
 function otherCap(overrides: Partial<InferenceSpendCap> = {}) {
   return cap({ keyType: "chat", monthlyCredits: 250, ...overrides });
 }
@@ -126,6 +140,54 @@ function loadedCaps(caps: InferenceSpendCap[] = [otherCap(), securityCap()]) {
   queryState({ data: caps });
 }
 
+// Midday UTC so the formatted day can't slide either side of the date line in
+// whichever time zone the tests happen to run in.
+const TRIAL_END = new Date("2026-08-20T12:00:00.000Z");
+
+type Subscription = {
+  status: string;
+  trialEnd?: Date;
+  cancelAtPeriodEnd?: boolean;
+};
+
+type SubscriptionState = {
+  data?: Subscription | undefined;
+  error?: unknown;
+  isError?: boolean;
+  isFetching?: boolean;
+};
+
+/**
+ * The live Stripe subscription the caps gate on. No `data` is a read that never
+ * resolved — the loading state, or a load that failed outright.
+ */
+function subscriptionState({
+  data,
+  error,
+  isError = false,
+  isFetching = false,
+}: SubscriptionState = {}) {
+  mocks.subscription.mockReturnValue({
+    data,
+    error,
+    isError,
+    isFetching,
+    refetch: mocks.subscriptionRefetch,
+  });
+}
+
+/** Shaped like the SDK's 404 rejection, which is what the branch keys on. */
+function notFound(): Error {
+  return Object.assign(new Error("subscription not found"), {
+    statusCode: 404,
+  });
+}
+
+/** Stripe has converted the trial and is billing the organization. */
+function billingSubscription() {
+  subscriptionState({ data: { status: "active" } });
+}
+
 type MutationState = {
   isPending?: boolean;
   isSuccess?: boolean;
@@ -150,13 +212,13 @@ function mutationState({
  * The section reaches for the query client to invalidate after a save, and the
  * controls link to the in-app sales gate through the router.
  */
-function render(ui: ReactNode) {
+function render(ui: ReactNode, { at = "/acme/billing" }: { at?: string } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const wrap = (node: ReactNode) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{node}</MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>{node}</MemoryRouter>
     </QueryClientProvider>
   );
   const result = rtlRender(wrap(ui));
@@ -186,6 +248,84 @@ const heading = () =>
 
 const meters = () => screen.queryAllByRole("progressbar");
 
+// jsdom has no layout, so `scrollIntoView` isn't implemented on the prototype.
+// The stub records both the options and which element was scrolled, since
+// landing on the right element is the whole point.
+const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+const scrolledElements: HTMLElement[] = [];
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
+
+function scrolledElementIds(): string[] {
+  return scrolledElements.map((element) => element.id);
+}
+
+/**
+ * Stands in for a banner's link: a real router navigation, so repeats of the
+ * same URL get the fresh location the effect has to notice.
+ */
+function AnchorNavigator({ to }: { to: string }): JSX.Element {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      onClick={() => {
+        void navigate(to);
+      }}
+    >
+      Go to the cap
+    </button>
+  );
+}
+
+/**
+ * Waits out the animation frame the scroll is deferred by, so "nothing was
+ * scrolled" is a settled answer rather than a race the assertion won.
+ */
+function settleFrames(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
+/**
+ * Puts the two clocks the anchor scroll runs on — a frame, then the bounded
+ * wait for the control it named — under the test's control. Only those two are
+ * faked, so nothing else in the tree changes behavior underneath them.
+ */
+function fakeAnchorClock(): void {
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+    ],
+  });
+}
+
+/** Comfortably past the frame the first scroll is deferred by. */
+const A_FRAME = 100;
+
+function advanceClock(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+/** Mutation records are delivered on a microtask, so a render isn't enough. */
+async function settleMutations(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 /** What the save handler sent, unwrapped from the request envelope. */
 function sentCaps(): Array<{ keyType: string; monthlyCredits: number }> {
   return mocks.mutate.mock.calls.map(
@@ -214,10 +354,33 @@ describe("InferenceCapsSection", () => {
     mocks.session.mockReturnValue({ trial: null });
     mocks.hasAnyScope.mockReturnValue(true);
     loadedCaps();
+    billingSubscription();
     mutationState();
+
+    scrollIntoView.mockReset();
+    scrolledElements.length = 0;
+    HTMLElement.prototype.scrollIntoView = function (
+      this: HTMLElement,
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      scrolledElements.push(this);
+      scrollIntoView(options as ScrollIntoViewOptions | undefined);
+    };
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    if (originalScrollIntoView) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "scrollIntoView",
+        originalScrollIntoView,
+      );
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
 
   // The endpoint answers with the materialized Gram-managed keys — two, one, or
   // none — so the section renders what it was given rather than a shape it
@@ -328,6 +491,20 @@ describe("InferenceCapsSection", () => {
     expect(otherField()).not.toBeNull();
   });
 
+  // A banner links straight at the control for the cap it is about, so the
+  // anchors have to survive edits to the section that carries them.
+  it("carries the section anchor and one anchor per control", () => {
+    const { container } = render(<InferenceCapsSection />);
+
+    expect(container.querySelector(`#${INFERENCE_CAPS_ANCHOR}`)).not.toBeNull();
+    expect(
+      container.querySelector(`#${inferenceCapAnchor("chat")}`),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`#${inferenceCapAnchor("internal")}`),
+    ).not.toBeNull();
+  });
+
   // 0 is how the API reports a key that has no cap on it, not an amount an
   // admin chose — and it is one of the amounts the endpoint refuses. Seeding it
   // would open the page on a field already flagged as wrong.
@@ -396,6 +573,262 @@ describe("InferenceCapsSection", () => {
 
     expect(otherField()!.id).not.toBe(securityField()!.id);
     expect(document.querySelectorAll(`#${otherField()!.id}`)).toHaveLength(1);
+  });
+
+  // The dashboard's router doesn't scroll to fragments, so arriving on an
+  // anchor without this leaves the caps below the fold — which is the whole
+  // point of the link that sent them.
+  describe("arriving on an anchor", () => {
+    const anchored = `/acme/billing#${INFERENCE_CAPS_ANCHOR}`;
+    const securityAnchored = `/acme/billing#${inferenceCapAnchor("internal")}`;
+
+    it("scrolls the section into view", async () => {
+      render(<InferenceCapsSection />, { at: anchored });
+
+      await vi.waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          behavior: "smooth",
+          block: "start",
+        }),
+      );
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+    });
+
+    // A banner names one cap, so its link lands on that cap's own control
+    // rather than the top of a section the other cap also lives in.
+    it("scrolls to the control the link names", async () => {
+      render(<InferenceCapsSection />, { at: securityAnchored });
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([inferenceCapAnchor("internal")]);
+    });
+
+    // A link can outlive the key it named — the list is what decides what is on
+    // screen — and the request still has to be answered somewhere.
+    it("falls back to the section when that control isn't on screen", async () => {
+      loadedCaps([otherCap()]);
+
+      render(<InferenceCapsSection />, { at: securityAnchored });
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+    });
+
+    // The cap list is fetched, so a banner's link routinely arrives while the
+    // section is still a skeleton and the control it names doesn't exist yet.
+    // The section is the first answer; the reader still has to end up on the
+    // cap they were sent to.
+    it("lands on the control once the cap list resolves", async () => {
+      queryState();
+
+      const { rerender } = render(<InferenceCapsSection />, {
+        at: securityAnchored,
+      });
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+
+      loadedCaps();
+      rerender(<InferenceCapsSection />);
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+      expect(scrolledElementIds()).toEqual([
+        INFERENCE_CAPS_ANCHOR,
+        inferenceCapAnchor("internal"),
+      ]);
+    });
+
+    // The link has been answered. A later refresh of the list — this section's
+    // own post-save invalidation, or another admin's change — is not a second
+    // request to jump, and yanking the page around mid-edit would be one.
+    it("stops watching once it has landed on the control", async () => {
+      queryState();
+
+      const { rerender } = render(<InferenceCapsSection />, {
+        at: securityAnchored,
+      });
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      loadedCaps();
+      rerender(<InferenceCapsSection />);
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+
+      loadedCaps([otherCap(), securityCap({ monthlyCredits: 900 })]);
+      rerender(<InferenceCapsSection />);
+
+      await settleFrames();
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    });
+
+    // A slow list is still the list this link was waiting for, so the wait has
+    // to outlast a fetch rather than the frame that starts it.
+    it("still lands on a control that arrives late in the wait", async () => {
+      fakeAnchorClock();
+      queryState();
+
+      const { rerender } = render(<InferenceCapsSection />, {
+        at: securityAnchored,
+      });
+
+      advanceClock(A_FRAME);
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+
+      advanceClock(CAP_ANCHOR_WAIT_MS - A_FRAME - 1);
+      loadedCaps();
+      rerender(<InferenceCapsSection />);
+      await settleMutations();
+
+      expect(scrolledElementIds()).toEqual([
+        INFERENCE_CAPS_ANCHOR,
+        inferenceCapAnchor("internal"),
+      ]);
+    });
+
+    // A link can name a key this organization has never materialized, which no
+    // amount of waiting will produce. The wait ends anyway, so the section
+    // isn't watched for the rest of the page's life — and a key that shows up
+    // much later, from another admin or a background refresh, doesn't yank the
+    // page away from whoever has been reading it since.
+    it("gives up on a control that never materializes", async () => {
+      fakeAnchorClock();
+      queryState();
+
+      const { rerender } = render(<InferenceCapsSection />, {
+        at: securityAnchored,
+      });
+
+      advanceClock(A_FRAME);
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+
+      // The list resolves without the key the link named, and stays that way
+      // until well past the wait.
+      loadedCaps([otherCap()]);
+      rerender(<InferenceCapsSection />);
+      await settleMutations();
+      advanceClock(CAP_ANCHOR_WAIT_MS);
+
+      loadedCaps();
+      rerender(<InferenceCapsSection />);
+      await settleMutations();
+
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+    });
+
+    // The controls can only ever appear inside this section, so watching the
+    // document would wake this hook for every unrelated insertion the billing
+    // page makes while the list is in flight.
+    it("watches the caps section rather than the document", async () => {
+      const observe = vi.spyOn(MutationObserver.prototype, "observe");
+
+      try {
+        queryState();
+        const { container } = render(<InferenceCapsSection />, {
+          at: securityAnchored,
+        });
+
+        await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+        const section = container.querySelector(`#${INFERENCE_CAPS_ANCHOR}`);
+        expect(section).not.toBeNull();
+        expect(observe.mock.calls.map(([root]) => root)).toEqual([section]);
+
+        // An unrelated part of the page changing is not this hook's business.
+        const unrelated = document.createElement("div");
+        document.body.appendChild(unrelated);
+        await settleMutations();
+        unrelated.remove();
+
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      } finally {
+        observe.mockRestore();
+      }
+    });
+
+    // A link at the section itself is answered the moment the section is there.
+    // The controls arriving later are not the thing it asked for.
+    it("answers a section link once, whatever the list does after", async () => {
+      queryState();
+
+      const { rerender } = render(<InferenceCapsSection />, { at: anchored });
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      loadedCaps();
+      rerender(<InferenceCapsSection />);
+
+      await settleFrames();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+    });
+
+    // A trial locks the controls but still renders them, so a banner's link
+    // lands on the cap it named rather than the top of the section.
+    it("scrolls to a locked control during a trial", async () => {
+      mocks.session.mockReturnValue({
+        trial: {
+          startedAt: new Date(Date.now() - 2 * DAY),
+          endsAt: new Date(Date.now() + 12 * DAY),
+        },
+      });
+
+      render(<InferenceCapsSection />, { at: securityAnchored });
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([inferenceCapAnchor("internal")]);
+    });
+
+    it("leaves the page alone with no hash", async () => {
+      render(<InferenceCapsSection />);
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("leaves the page alone for another section's hash", async () => {
+      render(<InferenceCapsSection />, { at: "/acme/billing#billing-email" });
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    // Following the link, scrolling away, then following it again is a fresh
+    // navigation to a URL that hasn't changed. Reading the hash alone would
+    // report nothing happened and leave the second request unanswered.
+    it("scrolls again when the same anchor is followed twice", async () => {
+      render(
+        <>
+          <AnchorNavigator to={securityAnchored} />
+          <InferenceCapsSection />
+        </>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /go to the cap/i }));
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole("button", { name: /go to the cap/i }));
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+
+      expect(scrolledElementIds()).toEqual([
+        inferenceCapAnchor("internal"),
+        inferenceCapAnchor("internal"),
+      ]);
+    });
+
+    // The anchor arrives with the navigation but the section behind it appears
+    // only once the tier resolves, so a scroll fired on arrival would have
+    // nothing to land on.
+    it("waits for a section that mounts after the navigation", async () => {
+      mocks.productTier.mockReturnValue("base");
+      const { rerender } = render(<InferenceCapsSection />, { at: anchored });
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      mocks.productTier.mockReturnValue("payg");
+      rerender(<InferenceCapsSection />);
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([INFERENCE_CAPS_ANCHOR]);
+    });
   });
 
   describe("saving one cap", () => {
@@ -972,6 +1405,14 @@ describe("InferenceCapsSection", () => {
         }
       });
 
+      it("reads the caps without asking about the subscription", () => {
+        render(<InferenceCapsSection />);
+
+        expect(mocks.query).toHaveBeenCalled();
+        // The trial outranks the tier, so there is no Stripe state to consult.
+        expect(mocks.subscription).not.toHaveBeenCalled();
+      });
+
       it("never mounts the write path", () => {
         render(<InferenceCapsSection />);
 
@@ -982,6 +1423,406 @@ describe("InferenceCapsSection", () => {
       });
     },
   );
+
+  // Checkout marks the product trial converted and drops it from the session
+  // while Stripe can keep trialing the subscription for days. So a PAYG
+  // organization with no product trial left is not necessarily being billed:
+  // from here on the live Stripe status is what decides, and it fails closed.
+  describe("once the product trial has been converted", () => {
+    it("shows the enforced caps, locked, while Stripe is still trialing", () => {
+      subscriptionState({ data: { status: "trialing", trialEnd: TRIAL_END } });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.value).toBe("250");
+      expect(otherField()!.disabled).toBe(true);
+      expect(securityField()!.disabled).toBe(true);
+      expect(meters()).toHaveLength(2);
+      expect(
+        screen.getByText(
+          /you can change them when pay as you go begins on August 20, 2026/i,
+        ),
+      ).toBeTruthy();
+    });
+
+    it.each<[string, InferenceSpendCap[], number]>([
+      ["no", [], 0],
+      ["one", [otherCap()], 1],
+      ["two", [otherCap(), securityCap()], 2],
+    ])(
+      "renders %s locked controls for that many keys while trialing",
+      (_n, caps, count) => {
+        subscriptionState({ data: { status: "trialing" } });
+        loadedCaps(caps);
+
+        render(<InferenceCapsSection />);
+
+        const fields = screen.queryAllByRole("spinbutton");
+        expect(fields).toHaveLength(count);
+        for (const input of fields) {
+          expect(input.hasAttribute("disabled")).toBe(true);
+        }
+        if (count === 0) {
+          expect(
+            screen.getByText(
+              "No Gram-managed inference keys are available to configure yet.",
+            ),
+          ).toBeTruthy();
+        }
+      },
+    );
+
+    it("never mounts the write path while Stripe is trialing", () => {
+      subscriptionState({ data: { status: "trialing" } });
+
+      render(<InferenceCapsSection />);
+
+      fireEvent.click(saveButton(OTHER_LABEL)!);
+
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+      // The caps themselves are still read: they are being enforced.
+      expect(mocks.query).toHaveBeenCalled();
+    });
+
+    // A trial on its way out is still a trial: the amounts can't be changed
+    // until it converts.
+    it("keeps a trial that is set to cancel locked", () => {
+      subscriptionState({
+        data: {
+          status: "trialing",
+          trialEnd: TRIAL_END,
+          cancelAtPeriodEnd: true,
+        },
+      });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(true);
+      expect(mocks.mutation).not.toHaveBeenCalled();
+    });
+
+    // Only a subscription Stripe is actually billing has a bill for a cap to
+    // apply to. `past_due` counts: the bill exists and Stripe is retrying it.
+    it.each(["active", "past_due"])(
+      "opens the controls for a %s subscription",
+      (status) => {
+        subscriptionState({ data: { status } });
+
+        render(<InferenceCapsSection />);
+
+        expect(otherField()!.disabled).toBe(false);
+        expect(securityField()!.disabled).toBe(false);
+      },
+    );
+
+    // Service and billing both run to the end of the period, so a scheduled
+    // cancellation leaves the caps editable for as long as they apply.
+    it("keeps the controls through a scheduled cancellation", () => {
+      subscriptionState({
+        data: { status: "active", cancelAtPeriodEnd: true },
+      });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(false);
+      expect(saveButton(OTHER_LABEL)).not.toBeNull();
+    });
+
+    // A subscription with no live bill behind it can't take a changed cap, but
+    // the caps it was running under are still there and still enforced.
+    it.each([
+      "canceled",
+      "unpaid",
+      "incomplete",
+      "incomplete_expired",
+      "paused",
+    ])("shows the caps read-only for a %s subscription", (status) => {
+      subscriptionState({ data: { status } });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.value).toBe("250");
+      expect(otherField()!.disabled).toBe(true);
+      expect(securityField()!.disabled).toBe(true);
+      expect(meters()).toHaveLength(2);
+      expect(screen.getByText(/subscription isn't billing/i)).toBeTruthy();
+      // Read, but never written.
+      expect(mocks.query).toHaveBeenCalled();
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    });
+
+    // Nothing has resolved yet, so there is nothing to show or lock — just the
+    // placeholder, and no reads behind it.
+    it("waits on the placeholder while the subscription read is in flight", () => {
+      subscriptionState();
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()).toBeNull();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // A refetch is in flight precisely when the state might be about to change
+    // — after a conversion or a cancellation — but also for reasons that have
+    // nothing to do with this admin, like a window refocus. Taking the
+    // controls away would discard amounts they typed and haven't saved, so the
+    // lock stops the writing without touching what is on screen.
+    it("locks the controls rather than closing them during a background refetch", () => {
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(true);
+      expect(securityField()!.disabled).toBe(true);
+      expect(saveButton(OTHER_LABEL)!.hasAttribute("disabled")).toBe(true);
+      expect(saveButton(SECURITY_LABEL)!.hasAttribute("disabled")).toBe(true);
+    });
+
+    // The lock is one state shared by every control, so it is announced once —
+    // two live regions carrying identical text get announced in whichever
+    // order the screen reader pleases, or talk over each other.
+    it("announces the lock once for the whole section", () => {
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<InferenceCapsSection />);
+
+      const statuses = screen.getAllByRole("status");
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0]!.textContent).toMatch(/checking your subscription/i);
+    });
+
+    it("keeps unsaved drafts through a refetch and blocks saving them", () => {
+      const { rerender } = render(<InferenceCapsSection />);
+
+      fireEvent.change(otherField()!, { target: { value: "900" } });
+      fireEvent.change(securityField()!, { target: { value: "700" } });
+
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+      rerender(<InferenceCapsSection />);
+
+      // The drafts are still there, still showing the admin's amounts...
+      expect(otherField()!.value).toBe("900");
+      expect(securityField()!.value).toBe("700");
+
+      // ...and nothing can reach the endpoint until the state is confirmed.
+      const save = saveButton(OTHER_LABEL)!;
+      fireEvent.click(save);
+      fireEvent.submit(save.closest("form")!);
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    });
+
+    // Saving invalidates the caps and the subscription both, so a confirmation
+    // and the lock can land in the same render. The control that would have
+    // spoken for the lock says the more important thing instead.
+    it("announces one status per control when a save and a refetch overlap", () => {
+      mutationState({ isSuccess: true });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<InferenceCapsSection />);
+
+      const statuses = screen.getAllByRole("status");
+      expect(statuses).toHaveLength(2);
+      expect(statuses[0]!.textContent).toMatch(
+        /saved the other inference cap/i,
+      );
+      expect(screen.queryByText(/checking your subscription/i)).toBeNull();
+      // The lock still holds even though it no longer speaks for itself.
+      expect(otherField()!.disabled).toBe(true);
+    });
+
+    // A failed save outranks both: the amount didn't land, which is the thing
+    // the admin has to hear.
+    it("announces the failure when a failed save and a refetch overlap", () => {
+      mutationState({ isError: true });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<InferenceCapsSection />);
+
+      expect(screen.queryAllByRole("status")).toHaveLength(0);
+      expect(screen.getAllByRole("alert")[0]!.textContent).toMatch(
+        /couldn't save the other inference cap/i,
+      );
+      expect(screen.queryByText(/checking your subscription/i)).toBeNull();
+    });
+
+    it("saves the same draft once the refetch settles", () => {
+      const { rerender } = render(<InferenceCapsSection />);
+
+      fireEvent.change(otherField()!, { target: { value: "900" } });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+      rerender(<InferenceCapsSection />);
+
+      billingSubscription();
+      rerender(<InferenceCapsSection />);
+
+      expect(otherField()!.value).toBe("900");
+      expect(otherField()!.disabled).toBe(false);
+      expect(screen.queryByRole("status")).toBeNull();
+
+      fireEvent.click(saveButton(OTHER_LABEL)!);
+
+      expect(mocks.mutate).toHaveBeenCalledTimes(1);
+      expect(lastSentCap()?.monthlyCredits).toBe(900);
+    });
+
+    // A refetch that settles somewhere the caps can no longer be changed drops
+    // the draft with the form: there is nothing left to save it against. The
+    // enforced amount takes its place rather than an empty field.
+    it.each(["trialing", "canceled"])(
+      "locks the controls when the refetch settles to %s",
+      (status) => {
+        const { rerender } = render(<InferenceCapsSection />);
+
+        fireEvent.change(otherField()!, { target: { value: "900" } });
+
+        subscriptionState({ data: { status } });
+        rerender(<InferenceCapsSection />);
+
+        expect(otherField()!.value).toBe("250");
+        expect(otherField()!.disabled).toBe(true);
+        expect(saveButton(OTHER_LABEL)!.hasAttribute("disabled")).toBe(true);
+      },
+    );
+
+    // The pay-as-you-go tier predates Stripe, so an organization can hold it
+    // without a Stripe subscription behind it. Its keys can still be
+    // materialized and capped, so the caps show; only the editing goes away,
+    // along with a recheck that would find nothing.
+    describe("with no Stripe subscription behind the tier", () => {
+      beforeEach(() => {
+        subscriptionState({ isError: true, error: notFound() });
+      });
+
+      it("says why the caps can't be changed", () => {
+        render(<InferenceCapsSection />);
+
+        expect(heading()).not.toBeNull();
+        expect(
+          screen.getByText(/this organization has no stripe subscription/i),
+        ).toBeTruthy();
+        expect(
+          screen.queryByText(/couldn't check your subscription/i),
+        ).toBeNull();
+      });
+
+      it("still shows every materialized cap, read-only", () => {
+        render(<InferenceCapsSection />);
+
+        expect(otherField()!.value).toBe("250");
+        expect(otherField()!.disabled).toBe(true);
+        expect(securityField()!.disabled).toBe(true);
+        expect(meters()).toHaveLength(2);
+        expect(mocks.query).toHaveBeenCalled();
+        expect(mocks.mutation).not.toHaveBeenCalled();
+        expect(mocks.mutate).not.toHaveBeenCalled();
+      });
+
+      it("offers nothing to recheck", () => {
+        render(<InferenceCapsSection />);
+
+        expect(screen.queryByRole("button", { name: /recheck/i })).toBeNull();
+        expect(mocks.subscriptionRefetch).not.toHaveBeenCalled();
+      });
+
+      // The answer is definitive, so it outranks whatever the cache still
+      // holds — and it stays fail-closed either way.
+      it("outranks a cached subscription", () => {
+        subscriptionState({
+          data: { status: "active" },
+          isError: true,
+          error: notFound(),
+        });
+
+        render(<InferenceCapsSection />);
+
+        expect(otherField()!.disabled).toBe(true);
+        expect(
+          screen.getByText(/this organization has no stripe subscription/i),
+        ).toBeTruthy();
+      });
+    });
+
+    // The billing state is unknown rather than known-bad. The caps are known,
+    // so they stay on screen; what goes away is the ability to change them.
+    it("shows the caps locked when the subscription can't be read", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(true);
+      expect(securityField()!.disabled).toBe(true);
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn't check your subscription/i,
+      );
+    });
+
+    // The cached copy goes stale across exactly the moment that matters — a
+    // trial converting, or a subscription ending — so a read that is failing
+    // right now must not re-open the controls on the strength of it.
+    it("keeps the caps locked when a failing read still holds a cached subscription", () => {
+      subscriptionState({
+        data: { status: "active" },
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(true);
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn't check your subscription/i,
+      );
+    });
+
+    it("rechecks the subscription in place", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<InferenceCapsSection />);
+
+      fireEvent.click(screen.getByRole("button", { name: /^recheck$/i }));
+
+      expect(mocks.subscriptionRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables the recheck while it is in flight", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+        isFetching: true,
+      });
+
+      render(<InferenceCapsSection />);
+
+      const button = screen.getByRole("button", { name: /rechecking/i });
+      expect(button.hasAttribute("disabled")).toBe(true);
+    });
+
+    it("returns the controls to editable once a recheck succeeds", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      const { rerender } = render(<InferenceCapsSection />);
+      expect(otherField()!.disabled).toBe(true);
+
+      billingSubscription();
+      rerender(<InferenceCapsSection />);
+
+      expect(otherField()!.disabled).toBe(false);
+      expect(securityField()!.disabled).toBe(false);
+    });
+  });
 
   // Only an *active* trial locks the caps. Once it is over, a PAYG org has the
   // bill they apply to and gets the controls back.
