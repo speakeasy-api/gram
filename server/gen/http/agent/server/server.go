@@ -18,13 +18,14 @@ import (
 
 // Server lists the agent service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	GetPlugins          http.Handler
-	ListSyncedUsers     http.Handler
-	GetConfiguration    http.Handler
-	UpdateConfiguration http.Handler
-	GetSessionMeta      http.Handler
-	ReportSessionMoved  http.Handler
+	Mounts               []*MountPoint
+	GetPlugins           http.Handler
+	ListSyncedUsers      http.Handler
+	GetConfiguration     http.Handler
+	UpdateConfiguration  http.Handler
+	GetSessionMeta       http.Handler
+	ReportSessionMoved   http.Handler
+	CreateSessionHandoff http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -60,13 +61,15 @@ func New(
 			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
 			{"GetSessionMeta", "GET", "/rpc/agent.getSessionMeta"},
 			{"ReportSessionMoved", "POST", "/rpc/agent.reportSessionMoved"},
+			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
 		},
-		GetPlugins:          NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
-		ListSyncedUsers:     NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
-		GetConfiguration:    NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
-		UpdateConfiguration: NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
-		GetSessionMeta:      NewGetSessionMetaHandler(e.GetSessionMeta, mux, decoder, encoder, errhandler, formatter),
-		ReportSessionMoved:  NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
+		GetPlugins:           NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
+		ListSyncedUsers:      NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
+		GetConfiguration:     NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
+		UpdateConfiguration:  NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
+		GetSessionMeta:       NewGetSessionMetaHandler(e.GetSessionMeta, mux, decoder, encoder, errhandler, formatter),
+		ReportSessionMoved:   NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
+		CreateSessionHandoff: NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -81,6 +84,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateConfiguration = m(s.UpdateConfiguration)
 	s.GetSessionMeta = m(s.GetSessionMeta)
 	s.ReportSessionMoved = m(s.ReportSessionMoved)
+	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
 }
 
 // MethodNames returns the methods served.
@@ -94,6 +98,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
 	MountGetSessionMetaHandler(mux, h.GetSessionMeta)
 	MountReportSessionMovedHandler(mux, h.ReportSessionMoved)
+	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -396,6 +401,59 @@ func NewReportSessionMovedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "reportSessionMoved")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateSessionHandoffHandler configures the mux to serve the "agent"
+// service "createSessionHandoff" endpoint.
+func MountCreateSessionHandoffHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.createSessionHandoff", f)
+}
+
+// NewCreateSessionHandoffHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "createSessionHandoff" endpoint.
+func NewCreateSessionHandoffHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateSessionHandoffRequest(mux, decoder)
+		encodeResponse = EncodeCreateSessionHandoffResponse(encoder)
+		encodeError    = EncodeCreateSessionHandoffError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createSessionHandoff")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

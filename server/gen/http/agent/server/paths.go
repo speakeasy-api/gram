@@ -36,3 +36,8 @@ func GetSessionMetaAgentPath() string {
 func ReportSessionMovedAgentPath() string {
 	return "/rpc/agent.reportSessionMoved"
 }
+
+// CreateSessionHandoffAgentPath returns the URL path to the agent service createSessionHandoff HTTP endpoint.
+func CreateSessionHandoffAgentPath() string {
+	return "/rpc/agent.createSessionHandoff"
+}

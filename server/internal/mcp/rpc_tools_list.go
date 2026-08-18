@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -59,6 +60,7 @@ func handleToolsList(
 	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
+	clientInfoStore sessionClientInfoStore,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -78,6 +80,21 @@ func handleToolsList(
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		// Identity and protocol-version parity with `mcp_initialized`: under
+		// 2026-07-28 there is no initialize to capture them at, so this event
+		// carries them per request. For handshake-era clients the identity
+		// resolution below falls back to the Redis-backed initialize record —
+		// a deliberate read on the tools/list path so those clients stay
+		// attributable in PostHog, accepted because it only runs when the
+		// event is actually emitted. The `_meta` decode is equally scoped to
+		// the event: tools/list params are tiny, so the scan is negligible.
+		reqMeta := mcprequests.ParseMeta(req.Params)
+		identity, storedProtocolVersion := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
+		protocolVersion := reqMeta.DeclaredProtocolVersion(payload.protocolVersionHeader)
+		if protocolVersion == "" {
+			protocolVersion = storedProtocolVersion
+		}
+
 		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
@@ -90,6 +107,10 @@ func handleToolsList(
 			"mcp_enabled":          toolset.McpEnabled,
 			"disable_notification": true,
 			"mcp_session_id":       payload.sessionID,
+			"protocol_version":     protocolVersion,
+			"client_name":          conv.PtrEmpty(identity.Name),
+			"client_version":       conv.PtrEmpty(identity.Version),
+			"capabilities":         reqMeta.CapabilityKeys,
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
 		}
@@ -153,6 +174,7 @@ func handleToolsList(
 		Result: toolsListResultTools{
 			Tools: tools,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	}
 
 	bs, err := json.Marshal(result)

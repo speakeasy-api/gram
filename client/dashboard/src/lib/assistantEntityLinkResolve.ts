@@ -69,7 +69,7 @@ export function resolveEntityLink(
         : UNRESOLVABLE;
     case "user_session":
       // No per-session detail route — link to the connections list.
-      return newTab(`${org}/user-sessions`);
+      return newTab(`${org}/mcp-sessions`);
   }
 
   // --- Project-scoped ---

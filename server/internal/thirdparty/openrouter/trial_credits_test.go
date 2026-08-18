@@ -285,10 +285,10 @@ func TestGetCreditsUsed_ReportsKeyLimitOverTierDefault(t *testing.T) {
 	require.Equal(t, raised, reported, "the reported ceiling must follow the key, not the account type")
 }
 
-// TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy covers the keys minted
-// before the monthly_credits column carried a value. Those rows hold zero, and
-// reporting it would tell the customer they have no credits at all.
-func TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy(t *testing.T) {
+// TestGetCreditsUsed_ZeroKeyLimitReportsUncapped covers a provider key whose
+// authoritative limit is unlimited. Zero is the local representation of that
+// absence, not a request to invent the account-type default.
+func TestGetCreditsUsed_ZeroKeyLimitReportsUncapped(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -307,6 +307,5 @@ func TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy(t *testing.T) {
 
 	_, reported, err := fixture.provisioner.GetCreditsUsed(ctx, fixture.orgID, KeyTypeChat)
 	require.NoError(t, err)
-	require.Equal(t, wantEnterpriseLimit, reported,
-		"a key with no recorded ceiling must report the account-type amount")
+	require.Zero(t, reported, "a key with no provider ceiling must report no cap")
 }

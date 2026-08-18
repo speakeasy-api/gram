@@ -907,11 +907,11 @@ paths:
                     description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
                     type: string
                 - allowEmptyValue: true
-                  description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                  description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                   in: query
                   name: account_type
                   schema:
-                    description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                    description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                     type: string
                 - allowEmptyValue: true
                   description: Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.
@@ -5977,6 +5977,107 @@ paths:
             x-speakeasy-name-override: updateGlobalIssuer
             x-speakeasy-react-hook:
                 name: UpdateGlobalRemoteSessionIssuer
+    /rpc/agent.createSessionHandoff:
+        post:
+            description: 'Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).'
+            operationId: createAgentSessionHandoff
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine minting the link, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine minting the link, when the agent can read it.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hostname of the machine minting the link, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Hostname
+                  schema:
+                    description: Hostname of the machine minting the link, when the agent can read it.
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSessionHandoffRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateSessionHandoffResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: createSessionHandoff agent
+            tags:
+                - agent
+            x-speakeasy-name-override: createSessionHandoff
+            x-speakeasy-react-hook:
+                name: CreateAgentSessionHandoff
     /rpc/agent.getConfiguration:
         get:
             description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -7207,6 +7308,110 @@ paths:
             x-speakeasy-name-override: createSignedChatAttachmentURL
             x-speakeasy-react-hook:
                 name: CreateSignedChatAttachmentURL
+    /rpc/assets.fetchImageFromURL:
+        post:
+            description: Fetch an image from a URL and upload it to Gram as an image asset.
+            operationId: fetchImageFromURL
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchImageFromURLForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadImageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: fetchImageFromURL assets
+            tags:
+                - assets
+            x-speakeasy-name-override: fetchImageFromURL
+            x-speakeasy-react-hook:
+                name: FetchImageFromURL
     /rpc/assets.fetchOpenAPIv3FromURL:
         post:
             description: Fetch an OpenAPI v3 document from a URL and upload it to Gram.
@@ -9521,6 +9726,13 @@ paths:
                   name: subject_id
                   schema:
                     description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+                    type: string
+                - allowEmptyValue: true
+                  description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
+                  in: query
+                  name: acting_surface
+                  schema:
+                    description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -29915,6 +30127,89 @@ paths:
             x-speakeasy-name-override: recordAgentConfigurationCopied
             x-speakeasy-react-hook:
                 name: RecordPlatformMCPAgentConfigurationCopied
+    /rpc/platformMcp.recordDashboardCtaEvent:
+        post:
+            description: Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.
+            operationId: recordPlatformMCPDashboardCtaEvent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecordDashboardCtaEventRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: recordDashboardCtaEvent platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: recordDashboardCtaEvent
+            x-speakeasy-react-hook:
+                name: RecordPlatformMCPDashboardCtaEvent
     /rpc/platformMcp.recordInstallIntent:
         post:
             description: Record a selected manual-install client family for the current user's Platform MCP workflow.
@@ -30188,6 +30483,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/StartOnboardingRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -30823,6 +31124,121 @@ paths:
             tags:
                 - plugins
             x-speakeasy-name-override: downloadObservabilityPlugin
+    /rpc/plugins.downloadPlatformMCPPlugin:
+        get:
+            description: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.
+            operationId: downloadPlatformMCPPlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: Target package format.
+                  in: query
+                  name: platform
+                  required: true
+                  schema:
+                    description: Target package format.
+                    enum:
+                        - claude
+                        - cursor
+                        - codex
+                        - opencode
+                        - agent-plugin
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/zip:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
+                        Content-Type:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: downloadPlatformMCPPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: downloadPlatformMCPPlugin
     /rpc/plugins.downloadPluginPackage:
         get:
             description: Download a ZIP of a single plugin package for direct installation.
@@ -31035,6 +31451,87 @@ paths:
             x-speakeasy-name-override: getMarketplaceSettings
             x-speakeasy-react-hook:
                 name: MarketplaceSettings
+    /rpc/plugins.getPlatformMCPPackageStatus:
+        get:
+            description: Get the organization-scoped Platform MCP package and canonical default-project marketplace status.
+            operationId: getPlatformMCPPackageStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getPlatformMCPPackageStatus plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getPlatformMCPPackageStatus
+            x-speakeasy-react-hook:
+                name: PlatformMCPPackageStatus
     /rpc/plugins.getPlugin:
         get:
             description: Get a plugin with its servers and assignments.
@@ -31505,6 +32002,101 @@ paths:
             x-speakeasy-name-override: removePluginServer
             x-speakeasy-react-hook:
                 name: RemovePluginServer
+    /rpc/plugins.repairPlatformMCPPackage:
+        post:
+            description: Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.
+            operationId: repairPlatformMCPPackage
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: repairPlatformMCPPackage plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: repairPlatformMCPPackage
+            x-speakeasy-react-hook:
+                name: RepairPlatformMCPPackage
     /rpc/plugins.setPluginAssignments:
         put:
             description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -53043,6 +53635,87 @@ paths:
             x-speakeasy-name-override: listTools
             x-speakeasy-react-hook:
                 name: UnproxiedMcpServerTools
+    /rpc/usage.cancelStripeSubscription:
+        post:
+            description: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period
+            operationId: cancelStripeSubscription
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StripeSubscription'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: cancelStripeSubscription usage
+            tags:
+                - usage
+            x-speakeasy-name-override: cancelStripeSubscription
+            x-speakeasy-react-hook:
+                name: cancelStripeSubscription
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -53205,6 +53878,168 @@ paths:
             x-speakeasy-name-override: createCustomerSession
             x-speakeasy-react-hook:
                 name: createCustomerSession
+    /rpc/usage.createStripeCheckout:
+        post:
+            description: Create a Stripe Checkout link for starting PAYG billing
+            operationId: createStripeCheckout
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createStripeCheckout usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createStripeCheckout
+            x-speakeasy-react-hook:
+                name: createStripeCheckout
+    /rpc/usage.createStripePortalSession:
+        post:
+            description: Create a Stripe customer portal session for the organization's PAYG subscription
+            operationId: createStripePortalSession
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createStripePortalSession usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createStripePortalSession
+            x-speakeasy-react-hook:
+                name: createStripePortalSession
     /rpc/usage.createTopUpCheckout:
         post:
             description: Create a checkout link for a one-time credit top-up purchase
@@ -53286,6 +54121,251 @@ paths:
             x-speakeasy-name-override: createTopUpCheckout
             x-speakeasy-react-hook:
                 name: createTopUpCheckout
+    /rpc/usage.getBillingEmail:
+        get:
+            description: Get the billing notification email for a PAYG organization
+            operationId: getBillingEmail
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BillingEmail'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getBillingEmail usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getBillingEmail
+            x-speakeasy-react-hook:
+                name: getBillingEmail
+    /rpc/usage.getInferenceSpendCaps:
+        get:
+            description: List current usage and caps for the organization's materialized platform-managed inference keys
+            operationId: getInferenceSpendCaps
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/InferenceSpendCap'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getInferenceSpendCaps usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getInferenceSpendCaps
+            x-speakeasy-react-hook:
+                name: getInferenceSpendCaps
+    /rpc/usage.getPaygBillingSummary:
+        get:
+            description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
+            operationId: getPaygBillingSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PaygBillingSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getPaygBillingSummary usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getPaygBillingSummary
+            x-speakeasy-react-hook:
+                name: getPaygBillingSummary
     /rpc/usage.getPeriodUsage:
         get:
             description: Get the usage for an organization for a given period
@@ -53367,6 +54447,87 @@ paths:
             x-speakeasy-name-override: getPeriodUsage
             x-speakeasy-react-hook:
                 name: getPeriodUsage
+    /rpc/usage.getStripeSubscription:
+        get:
+            description: Get the live lifecycle state of the organization's Stripe PAYG subscription
+            operationId: getStripeSubscription
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StripeSubscription'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getStripeSubscription usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getStripeSubscription
+            x-speakeasy-react-hook:
+                name: getStripeSubscription
     /rpc/usage.getTokensUnderManagement:
         get:
             description: Get tokens under management for the active billing cycle alongside the contracted terms
@@ -53519,6 +54680,174 @@ paths:
             x-speakeasy-name-override: getUsageTiers
             x-speakeasy-react-hook:
                 name: getUsageTiers
+    /rpc/usage.resumeStripeSubscription:
+        post:
+            description: Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription
+            operationId: resumeStripeSubscription
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StripeSubscription'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: resumeStripeSubscription usage
+            tags:
+                - usage
+            x-speakeasy-name-override: resumeStripeSubscription
+            x-speakeasy-react-hook:
+                name: resumeStripeSubscription
+    /rpc/usage.setBillingEmail:
+        post:
+            description: Set or clear the billing notification email for a PAYG organization
+            operationId: setBillingEmail
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BillingEmail'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BillingEmail'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setBillingEmail usage
+            tags:
+                - usage
+            x-speakeasy-name-override: setBillingEmail
+            x-speakeasy-react-hook:
+                name: setBillingEmail
     /rpc/usage.setBillingMetadata:
         post:
             description: Set an organization's billing contract terms. Restricted to platform admins.
@@ -53606,6 +54935,93 @@ paths:
             x-speakeasy-name-override: setBillingMetadata
             x-speakeasy-react-hook:
                 name: setBillingMetadata
+    /rpc/usage.setSpendCap:
+        post:
+            description: Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
+            operationId: setSpendCap
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSpendCapRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendCap'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSpendCap usage
+            tags:
+                - usage
+            x-speakeasy-name-override: setSpendCap
+            x-speakeasy-react-hook:
+                name: setSpendCap
     /rpc/userSessionClients.get:
         get:
             description: Get a user_session_client by id.
@@ -56963,7 +58379,7 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: Gram account type (e.g. free, pro, enterprise).
+                    description: Gram account type (e.g. free, pro, payg, enterprise).
                 created_at:
                     type: string
                     description: The creation date of the organization.
@@ -57749,6 +59165,12 @@ components:
         AuditLog:
             type: object
             properties:
+                acting_client_id:
+                    type: string
+                    description: The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+                acting_surface:
+                    type: string
+                    description: 'How the change was made: ''dashboard'', ''api_key'', ''platform_mcp'', ''project_assistant'', or ''unknown'' when no surface was identifiable. Always present.'
                 action:
                     type: string
                 actor_display_name:
@@ -57789,6 +59211,7 @@ components:
                 - action
                 - subject_id
                 - subject_type
+                - acting_surface
                 - created_at
         AuditLogFacetOption:
             type: object
@@ -58154,6 +59577,13 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        BillingEmail:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
+                    format: email
         BuiltinExclusionCategory:
             type: object
             properties:
@@ -58200,6 +59630,7 @@ components:
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 ids:
                     type: array
@@ -60556,6 +61987,42 @@ components:
             required:
                 - remote_mcp_server_id
                 - name
+        CreateSessionHandoffRequestBody:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.
+                    maxLength: 262144
+                session_id:
+                    type: string
+                    description: Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
+                    maxLength: 256
+                source_surface:
+                    type: string
+                    description: Harness the session originated in, as detected by the agent (e.g. claude-code, codex).
+                    maxLength: 64
+                ttl_seconds:
+                    type: integer
+                    description: Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900 when omitted.
+                    example: 900
+                    format: int64
+            required:
+                - session_id
+                - content
+        CreateSessionHandoffResult:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the link stops being served regardless of reads.
+                    format: date-time
+                url:
+                    type: string
+                    description: Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.
+            required:
+                - url
+                - expires_at
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:
@@ -62641,6 +64108,28 @@ components:
             required:
                 - slug
                 - metadata
+        FetchImageFromURLForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+                url:
+                    type: string
+                    description: The URL to fetch the image from
+            required:
+                - url
+        FetchImageFromURLForm2:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: The URL to fetch the image from
+            required:
+                - url
         FetchIssuerMetadataRequestBody:
             type: object
             properties:
@@ -64738,6 +66227,31 @@ components:
                 - success_count
                 - failure_count
                 - failure_rate
+        InferenceSpendCap:
+            type: object
+            properties:
+                credits_used:
+                    type: number
+                    description: Monthly usage in USD
+                    format: double
+                disabled:
+                    type: boolean
+                    description: Whether the platform-managed key is disabled
+                key_type:
+                    type: string
+                    description: The platform-managed inference function
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The enforced monthly spend cap in USD
+                    format: int64
+            required:
+                - key_type
+                - credits_used
+                - monthly_credits
+                - disabled
         InfoResponseBody:
             type: object
             properties:
@@ -65258,12 +66772,21 @@ components:
                     items:
                         $ref: '#/components/schemas/AuditLogFacetOption'
                     description: Available actor facets
+                surfaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuditLogFacetOption'
+                    description: Available acting surface facets
             required:
                 - actors
                 - actions
+                - surfaces
         ListAuditLogsForm:
             type: object
             properties:
+                acting_surface:
+                    type: string
+                    description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
                 action:
                     type: string
                     description: Action to filter audit logs to a specific action.
@@ -68511,6 +70034,45 @@ components:
                 - visibility
                 - semver
                 - created_at
+        PaygBillingSummary:
+            type: object
+            properties:
+                estimated_total_usd:
+                    type: string
+                    description: Exact estimated current-cycle total in USD through recorded_through
+                other_inference_spend_usd:
+                    type: string
+                    description: Exact durable Other inference spend in USD through recorded_through
+                period_end:
+                    type: string
+                    description: End of the live paid Stripe service period (exclusive)
+                    format: date-time
+                period_start:
+                    type: string
+                    description: Start of the live paid Stripe service period
+                    format: date-time
+                recorded_through:
+                    type: string
+                    description: Most recent completed durable UTC spend day included in the estimate
+                    format: date
+                tum_cost_usd:
+                    type: string
+                    description: Exact estimated tokens-under-management cost in USD
+                tum_tokens:
+                    type: integer
+                    description: Tokens under management in the live paid service period
+                    format: int64
+                tum_unit_price_usd:
+                    type: string
+                    description: Exact flat USD price per token under management
+            required:
+                - period_start
+                - period_end
+                - tum_tokens
+                - tum_unit_price_usd
+                - tum_cost_usd
+                - other_inference_spend_usd
+                - estimated_total_usd
         PeriodUsage:
             type: object
             properties:
@@ -68574,6 +70136,13 @@ components:
                 client_family:
                     type: string
                     description: Selected manual-install client family when a workflow is active.
+                connection_auth_state:
+                    type: string
+                    description: Bounded authorization state for the authenticated user's latest Platform MCP connection.
+                    enum:
+                        - not_connected
+                        - active
+                        - reauthorization_required
                 connection_authorized:
                     type: boolean
                     description: Whether the authenticated user has a current authorized Platform MCP connection.
@@ -68610,6 +70179,9 @@ components:
                 mcp_url:
                     type: string
                     description: Canonical Platform MCP endpoint URL supplied by the server.
+                organization_setup_complete:
+                    type: boolean
+                    description: Whether the organization already has a durable Platform MCP value outcome or an attached distribution.
                 readiness_freshness:
                     type: string
                     description: Whether selected-registration readiness is currently fresh.
@@ -68636,6 +70208,17 @@ components:
                 readiness_verified:
                     type: boolean
                     description: Whether Platform MCP observed a successful ready status check for the workflow-bound MCP.
+                reauthorization_reason:
+                    type: string
+                    description: Bounded reason why interactive Platform MCP authorization is required again.
+                    enum:
+                        - ""
+                        - idle_expired
+                        - authorization_expired
+                        - refresh_invalidated
+                        - authorization_changed
+                        - revoked
+                        - security_reset
                 registration_complete:
                     type: boolean
                     description: Whether the server-owned local candidate is registered for the selected project.
@@ -68680,9 +70263,12 @@ components:
                 - stage
                 - mcp_url
                 - workflow_active
+                - organization_setup_complete
                 - client_family
                 - agent_configuration_copied
                 - connection_authorized
+                - connection_auth_state
+                - reauthorization_reason
                 - connection_ready
                 - catalog_explored
                 - selected_project_name
@@ -68698,6 +70284,72 @@ components:
                 - selected_use_verified
                 - distribution_expected_version
                 - repair_action
+        PlatformMCPPackageStatusResult:
+            type: object
+            properties:
+                admission:
+                    type: string
+                    description: 'Organization package admission: enabled, disabled, or indeterminate.'
+                    enum:
+                        - enabled
+                        - disabled
+                        - indeterminate
+                agent_plugin_filename:
+                    type: string
+                    description: Deterministic portable Agent Plugins direct-download ZIP filename.
+                available:
+                    type: boolean
+                    description: Whether organization admission currently permits installing the package.
+                canonical_project_slug:
+                    type: string
+                    description: Literal default project that owns the canonical organization marketplace, when present.
+                claude_filename:
+                    type: string
+                    description: Deterministic Claude direct-download ZIP filename.
+                direct_download_available:
+                    type: boolean
+                    description: Whether keyless direct downloads are currently admitted.
+                freshness:
+                    type: string
+                    description: 'Platform package freshness: current, stale, missing, unavailable, or indeterminate.'
+                    enum:
+                        - current
+                        - stale
+                        - missing
+                        - unavailable
+                        - indeterminate
+                marketplace_connected:
+                    type: boolean
+                    description: Whether the canonical default project has a published GitHub marketplace.
+                marketplace_name:
+                    type: string
+                    description: Effective name of the canonical marketplace, when its default project is present.
+                marketplace_url:
+                    type: string
+                    description: Git URL used by supported clients to register the canonical marketplace.
+                package_name:
+                    type: string
+                    description: Fixed Platform MCP package identity.
+                package_present:
+                    type: boolean
+                    description: Whether the last successful canonical publish recorded the Platform package fingerprint.
+                repair_allowed:
+                    type: boolean
+                    description: Whether an organization admin can publish or repair the canonical package now.
+                repo_url:
+                    type: string
+                    description: Canonical GitHub repository URL.
+            required:
+                - admission
+                - available
+                - package_name
+                - claude_filename
+                - agent_plugin_filename
+                - marketplace_connected
+                - package_present
+                - freshness
+                - repair_allowed
+                - direct_download_available
         PlatformToolDefinition:
             type: object
             properties:
@@ -69898,6 +71550,27 @@ components:
             required:
                 - id
                 - days
+        RecordDashboardCtaEventRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: CTA action.
+                    enum:
+                        - impression
+                        - selected
+                        - dismissed
+                surface:
+                    type: string
+                    description: CTA surface.
+                    enum:
+                        - sidebar_footer
+                        - sources_empty
+                        - project_overview_zero_data
+                        - organization_home
+            required:
+                - action
+                - surface
         RecordDecisionRequestBody:
             type: object
             properties:
@@ -73304,6 +74977,23 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SetSpendCapRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: The platform-managed inference key to update. Defaults to chat for compatibility.
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The monthly inference spend cap in USD
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+            required:
+                - monthly_credits
         SetToolMetadataBatchRequestBody:
             type: object
             properties:
@@ -74760,6 +76450,24 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendCap:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: The platform-managed inference key whose cap is reported
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The monthly inference spend cap in USD
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+            required:
+                - key_type
+                - monthly_credits
         SpendRule:
             type: object
             properties:
@@ -75050,6 +76758,71 @@ components:
                 - rules_total
                 - spend_over_budget_usd
                 - rules
+        StartOnboardingRequestBody:
+            type: object
+            properties:
+                source_surface:
+                    type: string
+                    description: Bounded dashboard surface that opened setup.
+                    enum:
+                        - platform_mcp_settings
+                        - organization_setup
+                        - platform_plugins
+                        - sidebar_footer
+                        - sources_empty
+                        - project_overview_zero_data
+                        - organization_home
+        StripeSubscription:
+            type: object
+            properties:
+                cancel_at:
+                    type: string
+                    description: Scheduled cancellation time, when present
+                    format: date-time
+                cancel_at_period_end:
+                    type: boolean
+                    description: Whether Stripe will cancel the subscription at the end of the current period
+                canceled_at:
+                    type: string
+                    description: Time cancellation was requested or completed, when present
+                    format: date-time
+                current_period_end:
+                    type: string
+                    description: End of the current Stripe service period (exclusive)
+                    format: date-time
+                current_period_start:
+                    type: string
+                    description: Start of the current Stripe service period
+                    format: date-time
+                payment_failed:
+                    type: boolean
+                    description: Whether a past-due subscription has an open latest invoice with an unpaid balance
+                status:
+                    type: string
+                    description: The live Stripe subscription status
+                    enum:
+                        - incomplete
+                        - incomplete_expired
+                        - trialing
+                        - active
+                        - past_due
+                        - canceled
+                        - unpaid
+                        - paused
+                trial_end:
+                    type: string
+                    description: End of the Stripe trial, when one is configured
+                    format: date-time
+                trial_start:
+                    type: string
+                    description: Start of the Stripe trial, when the subscription is trialing
+                    format: date-time
+            required:
+                - status
+                - current_period_start
+                - current_period_end
+                - cancel_at_period_end
+                - payment_failed
         SubmitFeedbackRequestBody:
             type: object
             properties:
@@ -75494,6 +77267,9 @@ components:
                     type: number
                     description: The price per additional tool call
                     format: double
+                tum_price_per_million_usd:
+                    type: string
+                    description: Exact USD list price per million tokens under management (optional)
             required:
                 - base_price
                 - included_tool_calls
@@ -77998,10 +79774,11 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: New gram_account_type.
+                    description: New gram_account_type (free, pro, payg, or enterprise).
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 id:
                     type: string
@@ -78208,8 +79985,7 @@ components:
                     description: Upstream JWKS URI.
                 logo_asset_id:
                     type: string
-                    description: Set the logo asset id.
-                    format: uuid
+                    description: Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.
                 name:
                     type: string
                     description: Set or clear the display name. An empty string clears it to NULL.
@@ -79204,11 +80980,14 @@ components:
                     $ref: '#/components/schemas/TierLimits'
                 free:
                     $ref: '#/components/schemas/TierLimits'
+                payg:
+                    $ref: '#/components/schemas/TierLimits'
                 pro:
                     $ref: '#/components/schemas/TierLimits'
             required:
                 - free
                 - pro
+                - payg
                 - enterprise
         UserAccount:
             type: object
@@ -79260,6 +81039,10 @@ components:
                 jti:
                     type: string
                     description: Current access-token JTI; used by the revocation path.
+                last_used_at:
+                    type: string
+                    description: When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.
+                    format: date-time
                 refresh_expires_at:
                     type: string
                     description: Next refresh deadline.
@@ -79283,6 +81066,11 @@ components:
                 updated_at:
                     type: string
                     format: date-time
+                upstreams:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionUpstream'
+                    description: 'The upstream providers Gram holds tokens for on this session''s subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.'
                 user_session_client_id:
                     type: string
                     description: The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
@@ -79303,6 +81091,7 @@ components:
                 - updated_at
                 - issuer_slug
                 - subject_type
+                - upstreams
         UserSessionClient:
             type: object
             properties:
@@ -79496,6 +81285,60 @@ components:
                 - client_id_metadata_uri
                 - created_at
                 - updated_at
+        UserSessionUpstream:
+            type: object
+            properties:
+                access_expires_at:
+                    type: string
+                    description: Upstream access-token expiry. Null when the upstream issued a non-expiring token.
+                    format: date-time
+                authorization_expires_at:
+                    type: string
+                    description: Absolute upstream authorization deadline. Unlike refresh_expires_at, exchanging a token does not extend this.
+                    format: date-time
+                auto_refresh:
+                    type: boolean
+                    description: Whether the subject opted this connection into automated keepalive.
+                has_refresh_token:
+                    type: boolean
+                    description: Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token.
+                issuer_slug:
+                    type: string
+                    description: Display slug of the upstream provider, e.g. 'mcp.linear.app'.
+                last_used_at:
+                    type: string
+                    description: When this upstream token was last spent on a proxied call. Same five-minute resolution as the inbound leg, so the two are directly comparable.
+                    format: date-time
+                refresh_expires_at:
+                    type: string
+                    description: Upstream refresh-token expiry. Null when the session holds no refresh token or the upstream issued a non-expiring one.
+                    format: date-time
+                remote_session_client_id:
+                    type: string
+                    description: The remote_session_client the session was minted against.
+                    format: uuid
+                remote_session_id:
+                    type: string
+                    description: The remote_session id. Target for revoke and force-refresh.
+                    format: uuid
+                remote_session_issuer_id:
+                    type: string
+                    description: The remote_session_issuer the client belongs to.
+                    format: uuid
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes held by this upstream session.
+            description: An upstream remote_session held for the same subject and issuer as the user_session that carries it. Token material is never returned.
+            required:
+                - remote_session_id
+                - remote_session_client_id
+                - remote_session_issuer_id
+                - issuer_slug
+                - has_refresh_token
+                - auto_refresh
+                - scopes
         UserSummary:
             type: object
             properties:
@@ -79920,7 +81763,7 @@ tags:
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
-      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
     - name: assets

@@ -24,6 +24,16 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { BillingEmailSection } from "@/components/billing/billing-email-section";
+import {
+  PaygCapReachedBanners,
+  PaygPaymentFailedBanner,
+} from "@/components/billing/billing-banners";
+import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
+import { PaygPlanSection } from "@/components/billing/payg-plan-section";
+import { PaygUsageSection } from "@/components/billing/payg-usage-section";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { TumUsageSection } from "@/components/billing/tum-section";
@@ -34,6 +44,13 @@ export default function Billing(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
+      {/* A failed payment is what stops the whole account, so it precedes the
+          cap notices when both states apply. The global header suppresses its
+          cap banners on this route to avoid a duplicate query and notice. */}
+      <Page.Banner>
+        <PaygPaymentFailedBanner />
+        <PaygCapReachedBanners />
+      </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <BillingInner />
@@ -48,11 +65,17 @@ function BillingInner() {
   const isPlatformAdmin = useIsPlatformAdmin();
 
   // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters.
+  // see the TUM view instead of the self-serve usage meters. Trials run on the
+  // enterprise tier, so the pay-as-you-go CTA has to be repeated here — the
+  // early return is exactly the path an org in an active trial takes.
   if (productTier === "enterprise") {
     return (
       <>
+        <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
+        {/* Renders only during an active trial — the section owns that rule. */}
+        <InferenceCapsSection />
+        <PaygPriceList />
         {isPlatformAdmin && <TumAdminSection />}
       </>
     );
@@ -60,7 +83,18 @@ function BillingInner() {
 
   return (
     <>
-      <UsageSection />
+      <StartPaygCheckoutCTA label="Add payment method" />
+      {/* Pay as you go bills through Stripe, so it gets the cycle usage and
+          invoice estimate. Every other self-serve tier still meters against
+          Polar period usage, which says nothing about a Stripe invoice. */}
+      {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <PaygPlanSection />
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <InferenceCapsSection />
+      {/* Only pay-as-you-go organizations get product billing notifications;
+          enterprise contracts are billed through their contract terms. */}
+      {productTier === "payg" && <BillingEmailSection />}
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />

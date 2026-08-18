@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.109.1
+
+### Patch Changes
+
+- d1e0a84: Activate pay-as-you-go billing atomically when Stripe confirms a completed checkout, including replay-safe webhook processing, subscription ownership validation, trial conversion, and entitlement setup for organizations without a prior trial.
+- e635665: Offer the self-serve pay-as-you-go checkout above the booking calendar on both dashboard lockout gates, so an organization admin whose organization never trialed or whose trial expired can unlock the workspace with a card instead of only booking a call. Members, organizations that are not walled off, and every unresolved state of the rollout flag keep the booking-only gate.
+- e935bdb: Two refinements to the PAYG rate adjustment in the TUM contract price estimator: a cheaper-than-committed PAYG outcome is only attributed to the adjustment when it is a discount — under an uplift the modelling-error warning ("check the platform fee against the baseline") is kept, since an uplift only raises PAYG above list rates; and adjustments at or past -100% are now ignored (list rates) at every layer instead of pricing PAYG as free.
+- 3a8f15f: Add pay-as-you-go as a first-class billing tier across server entitlements, management API tier data, and dashboard and admin tier controls. PAYG organizations receive enterprise feature access with capped PAYG billing behavior, and Stripe-authoritative tier state cannot be overwritten by stale Polar data.
+- b938a56: Allow eligible organization admins to start a self-serve pay-as-you-go Stripe checkout from the billing page. The server reuses a stable Stripe customer, preserves active trials, and records the checkout request in the audit log.
+
 ## 0.109.0
 
 ### Minor Changes

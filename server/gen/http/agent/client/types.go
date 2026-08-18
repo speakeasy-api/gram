@@ -41,6 +41,24 @@ type ReportSessionMovedRequestBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
+// CreateSessionHandoffRequestBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP request body.
+type CreateSessionHandoffRequestBody struct {
+	// Native harness session identifier the handoff was rendered from. Gram
+	// derives its chat id from this the same way hook ingest does; a
+	// not-yet-captured session can still mint a link.
+	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
+	// The rendered handoff document (markdown). Size-capped; the daemon renders
+	// deterministically from the local transcript.
+	Content string `form:"content" json:"content" xml:"content"`
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
+	// when omitted.
+	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
+}
+
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
@@ -109,6 +127,17 @@ type GetSessionMetaResponseBody struct {
 	// Metadata for the requested sessions that exist and are owned by the calling
 	// user. Requested ids with no captured chat or another owner are omitted.
 	Sessions []*AgentSessionMetaResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// CreateSessionHandoffResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body.
+type CreateSessionHandoffResponseBody struct {
+	// Capability URL serving the uploaded handoff markdown. Unauthenticated by
+	// design — the unguessable token is the credential — and dead after the first
+	// read or expiry.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// When the link stops being served regardless of reads.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
@@ -1206,6 +1235,192 @@ type ReportSessionMovedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateSessionHandoffUnauthorizedResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateSessionHandoffUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffForbiddenResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "forbidden" error.
+type CreateSessionHandoffForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffBadRequestResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateSessionHandoffBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffNotFoundResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "not_found" error.
+type CreateSessionHandoffNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffConflictResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "conflict" error.
+type CreateSessionHandoffConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffUnsupportedMediaResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSessionHandoffUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffInvalidResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "invalid" error.
+type CreateSessionHandoffInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffInvariantViolationResponseBody is the type of the
+// "agent" service "createSessionHandoff" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSessionHandoffInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffUnexpectedResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateSessionHandoffUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSessionHandoffGatewayErrorResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateSessionHandoffGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -1294,6 +1509,18 @@ func NewReportSessionMovedRequestBody(p *agent.ReportSessionMovedPayload) *Repor
 		TargetHarness: p.TargetHarness,
 		SourceSurface: p.SourceSurface,
 		Email:         p.Email,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffRequestBody builds the HTTP request body from the
+// payload of the "createSessionHandoff" endpoint of the "agent" service.
+func NewCreateSessionHandoffRequestBody(p *agent.CreateSessionHandoffPayload) *CreateSessionHandoffRequestBody {
+	body := &CreateSessionHandoffRequestBody{
+		SessionID:     p.SessionID,
+		Content:       p.Content,
+		SourceSurface: p.SourceSurface,
+		TTLSeconds:    p.TTLSeconds,
 	}
 	return body
 }
@@ -2297,6 +2524,167 @@ func NewReportSessionMovedGatewayError(body *ReportSessionMovedGatewayErrorRespo
 	return v
 }
 
+// NewCreateSessionHandoffResultOK builds a "agent" service
+// "createSessionHandoff" endpoint result from a HTTP "OK" response.
+func NewCreateSessionHandoffResultOK(body *CreateSessionHandoffResponseBody) *agent.CreateSessionHandoffResult {
+	v := &agent.CreateSessionHandoffResult{
+		URL:       *body.URL,
+		ExpiresAt: *body.ExpiresAt,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffUnauthorized builds a agent service
+// createSessionHandoff endpoint unauthorized error.
+func NewCreateSessionHandoffUnauthorized(body *CreateSessionHandoffUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffForbidden builds a agent service createSessionHandoff
+// endpoint forbidden error.
+func NewCreateSessionHandoffForbidden(body *CreateSessionHandoffForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffBadRequest builds a agent service
+// createSessionHandoff endpoint bad_request error.
+func NewCreateSessionHandoffBadRequest(body *CreateSessionHandoffBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffNotFound builds a agent service createSessionHandoff
+// endpoint not_found error.
+func NewCreateSessionHandoffNotFound(body *CreateSessionHandoffNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffConflict builds a agent service createSessionHandoff
+// endpoint conflict error.
+func NewCreateSessionHandoffConflict(body *CreateSessionHandoffConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffUnsupportedMedia builds a agent service
+// createSessionHandoff endpoint unsupported_media error.
+func NewCreateSessionHandoffUnsupportedMedia(body *CreateSessionHandoffUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffInvalid builds a agent service createSessionHandoff
+// endpoint invalid error.
+func NewCreateSessionHandoffInvalid(body *CreateSessionHandoffInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffInvariantViolation builds a agent service
+// createSessionHandoff endpoint invariant_violation error.
+func NewCreateSessionHandoffInvariantViolation(body *CreateSessionHandoffInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffUnexpected builds a agent service
+// createSessionHandoff endpoint unexpected error.
+func NewCreateSessionHandoffUnexpected(body *CreateSessionHandoffUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSessionHandoffGatewayError builds a agent service
+// createSessionHandoff endpoint gateway_error error.
+func NewCreateSessionHandoffGatewayError(body *CreateSessionHandoffGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetPluginsResponseBody runs the validations defined on
 // GetPluginsResponseBody
 func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
@@ -2411,6 +2799,21 @@ func ValidateGetSessionMetaResponseBody(body *GetSessionMetaResponseBody) (err e
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffResponseBody runs the validations defined on
+// CreateSessionHandoffResponseBody
+func ValidateCreateSessionHandoffResponseBody(body *CreateSessionHandoffResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -3834,6 +4237,246 @@ func ValidateReportSessionMovedUnexpectedResponseBody(body *ReportSessionMovedUn
 // ValidateReportSessionMovedGatewayErrorResponseBody runs the validations
 // defined on reportSessionMoved_gateway_error_response_body
 func ValidateReportSessionMovedGatewayErrorResponseBody(body *ReportSessionMovedGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffUnauthorizedResponseBody runs the validations
+// defined on createSessionHandoff_unauthorized_response_body
+func ValidateCreateSessionHandoffUnauthorizedResponseBody(body *CreateSessionHandoffUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffForbiddenResponseBody runs the validations
+// defined on createSessionHandoff_forbidden_response_body
+func ValidateCreateSessionHandoffForbiddenResponseBody(body *CreateSessionHandoffForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffBadRequestResponseBody runs the validations
+// defined on createSessionHandoff_bad_request_response_body
+func ValidateCreateSessionHandoffBadRequestResponseBody(body *CreateSessionHandoffBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffNotFoundResponseBody runs the validations
+// defined on createSessionHandoff_not_found_response_body
+func ValidateCreateSessionHandoffNotFoundResponseBody(body *CreateSessionHandoffNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffConflictResponseBody runs the validations
+// defined on createSessionHandoff_conflict_response_body
+func ValidateCreateSessionHandoffConflictResponseBody(body *CreateSessionHandoffConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffUnsupportedMediaResponseBody runs the
+// validations defined on createSessionHandoff_unsupported_media_response_body
+func ValidateCreateSessionHandoffUnsupportedMediaResponseBody(body *CreateSessionHandoffUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffInvalidResponseBody runs the validations defined
+// on createSessionHandoff_invalid_response_body
+func ValidateCreateSessionHandoffInvalidResponseBody(body *CreateSessionHandoffInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffInvariantViolationResponseBody runs the
+// validations defined on createSessionHandoff_invariant_violation_response_body
+func ValidateCreateSessionHandoffInvariantViolationResponseBody(body *CreateSessionHandoffInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffUnexpectedResponseBody runs the validations
+// defined on createSessionHandoff_unexpected_response_body
+func ValidateCreateSessionHandoffUnexpectedResponseBody(body *CreateSessionHandoffUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffGatewayErrorResponseBody runs the validations
+// defined on createSessionHandoff_gateway_error_response_body
+func ValidateCreateSessionHandoffGatewayErrorResponseBody(body *CreateSessionHandoffGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

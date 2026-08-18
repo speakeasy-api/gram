@@ -6,6 +6,7 @@ import {
   effectiveRatePerMillion,
   formatTokensCompact,
   overageLines,
+  paygDeltaMessage,
   paygLines,
   sumLines,
   type VolumeBasisOption,
@@ -90,12 +91,46 @@ describe("pay-as-you-go rate adjustment", () => {
     expect(paygLines(80 * B, 0)).toEqual(paygLines(80 * B));
   });
 
-  it("floors rates at zero rather than pricing negative past -100%", () => {
-    // A -150% swing is nonsense input; free is the least-wrong reading.
-    for (const line of paygLines(80 * B, -150)) {
-      expect(line.ratePerMillion).toBe(0);
-      expect(line.cost).toBe(0);
-    }
+  it("ignores swings at or past -100% and prices at list rates", () => {
+    // -100% would zero every rate and anything past it would go negative.
+    // Both are invalid input, and the pure function applies the same
+    // fallback as the estimator's input field — list rates — so no layer
+    // ever prices PAYG as free.
+    expect(paygLines(80 * B, -100)).toEqual(paygLines(80 * B));
+    expect(paygLines(80 * B, -150)).toEqual(paygLines(80 * B));
+  });
+});
+
+describe("paygDeltaMessage", () => {
+  it("frames a dearer PAYG as the case for committing", () => {
+    expect(paygDeltaMessage(5000, 0)).toMatch(/costs \$5,000\/yr more/);
+  });
+
+  it("flags a cheaper PAYG at list rates as a modelling error", () => {
+    expect(paygDeltaMessage(-5000, 0)).toMatch(/check the platform fee/);
+  });
+
+  it("attributes a cheaper PAYG under a discount to the discount", () => {
+    const message = paygDeltaMessage(-5000, -15);
+    expect(message).toMatch(/adjusted rates \(-15% vs list\)/);
+    expect(message).not.toMatch(/check the platform fee/);
+  });
+
+  it("keeps the modelling-error warning under an uplift", () => {
+    // An uplift only raises PAYG above list, so PAYG still undercutting the
+    // committed model is a stronger anomaly signal, not a discount story.
+    expect(paygDeltaMessage(-5000, 10)).toMatch(/check the platform fee/);
+  });
+
+  it("keeps the modelling-error warning for out-of-window swings", () => {
+    // paygLines ignores swings at or past -100% and prices at list rates,
+    // so the message must not credit an adjustment that was never applied.
+    expect(paygDeltaMessage(-5000, -100)).toMatch(/check the platform fee/);
+    expect(paygDeltaMessage(-5000, -150)).toMatch(/check the platform fee/);
+  });
+
+  it("reports an exact tie as identical pricing", () => {
+    expect(paygDeltaMessage(0, 0)).toMatch(/identically/);
   });
 });
 

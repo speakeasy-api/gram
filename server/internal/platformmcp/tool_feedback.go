@@ -56,9 +56,7 @@ func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
 		Title:       "Send Platform MCP Feedback",
 		Description: "Store one bounded Platform MCP feedback report for local review. Ask for consent outside this tool before submitting feedback. Never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
 	}, ToolMeta{
-		// External-only: feedback rows require a connection, which a
-		// connection-less surface cannot satisfy.
-		Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err

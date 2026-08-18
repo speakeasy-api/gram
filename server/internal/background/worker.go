@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -77,6 +78,7 @@ type WorkerOptions struct {
 	SiteURL             *url.URL
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
 	RedisClient         *redis.Client
 	CacheAdapter        cache.Cache
 	EmailService        *email.Service
@@ -158,6 +160,7 @@ func ForDeploymentProcessing(
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
+		StripeClient:        nil,
 		RagService:          nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
@@ -217,6 +220,7 @@ func NewTemporalWorker(
 		SiteURL:                   nil,
 		BillingTracker:            nil,
 		BillingRepository:         nil,
+		StripeClient:              nil,
 		RedisClient:               nil,
 		PosthogClient:             nil,
 		FunctionsDeployer:         nil,
@@ -264,6 +268,7 @@ func NewTemporalWorker(
 			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
 			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -349,6 +354,7 @@ func NewTemporalWorker(
 		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
+		opts.StripeClient,
 		opts.PosthogClient,
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
@@ -387,6 +393,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
+	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
+	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
@@ -397,6 +405,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FindOrphanCustomDomainResources)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterDailySpend)
+	temporalWorker.RegisterActivity(activities.SettleStripeInvoiceAllocations)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
@@ -406,6 +415,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
@@ -472,6 +482,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
+	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
+	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
+	temporalWorker.RegisterActivity(activities.SendAccessPausedEmail)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -512,6 +525,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
+	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
+	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -586,6 +601,7 @@ func NewTemporalWorker(
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
+	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))

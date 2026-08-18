@@ -26,8 +26,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -47,6 +48,8 @@ type Service struct {
 	enc         *encryption.Client
 	provisioner openrouter.Provisioner
 }
+
+const keyBillingLockWaitTimeout = 5 * time.Second
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
@@ -180,29 +183,41 @@ func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	// Existence check first: DisableAPIKey treats a missing key as a no-op,
-	// but the admin surface should 404 instead of pretending success.
-	row, err := repo.New(s.db).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
+	changed := false
+	err = keybillinglock.WithAcquireTimeout(ctx, logger, s.db, payload.OrganizationID, openrouter.KeyType(payload.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		// DisableAPIKey treats a missing key as a no-op, but the admin surface
+		// should 404 instead of pretending success.
+		row, err := repo.New(conn).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
+			OrganizationID: payload.OrganizationID,
+			KeyType:        payload.KeyType,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+		case row.Disabled:
+			return nil
+		}
+
+		if err := s.provisioner.DisableAPIKey(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType)); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "disable openrouter key").LogError(ctx, logger)
+		}
+		changed = true
+		return nil
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+	if err != nil {
+		var shareable *oops.ShareableError
+		if errors.As(err, &shareable) {
+			return nil, shareable
+		}
+		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+			return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key for disable").LogError(ctx, logger)
 	}
-
-	if row.Disabled {
-		// Already disabled; skip the upstream round-trip and the audit entry,
-		// mirroring EnableKey's no-op behavior.
+	if !changed {
 		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// The upstream PATCH runs outside any transaction; the audit entry lands
-	// in its own transaction after the action succeeds.
-	if err := s.provisioner.DisableAPIKey(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable openrouter key").LogError(ctx, logger)
 	}
 
 	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyDisable); err != nil {
@@ -219,28 +234,49 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	row, err := repo.New(s.db).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
+	changed := false
+	err = keybillinglock.WithAcquireTimeout(ctx, logger, s.db, payload.OrganizationID, openrouter.KeyType(payload.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		row, err := repo.New(conn).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
+			OrganizationID: payload.OrganizationID,
+			KeyType:        payload.KeyType,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+		case !row.Disabled:
+			return nil
+		}
+
+		// Keep a recorded ceiling. Legacy zero rows resolve to the current
+		// account policy before the explicit refresh.
+		limit := int(row.MonthlyCredits)
+		if limit == 0 {
+			var ok bool
+			limit, ok = openrouter.ResolveDefaultCreditLimit(ctx, logger, conn, row.OrganizationID, billing.Tier(row.GramAccountType))
+			if !ok {
+				return oops.E(oops.CodeUnexpected, fmt.Errorf("no OpenRouter credit policy for account type %q", row.GramAccountType), "enable openrouter key").LogError(ctx, logger)
+			}
+		}
+		if _, err := s.provisioner.RefreshAPIKeyLimit(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType), &limit); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enable openrouter key").LogError(ctx, logger)
+		}
+		changed = true
+		return nil
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+	if err != nil {
+		var shareable *oops.ShareableError
+		if errors.As(err, &shareable) {
+			return nil, shareable
+		}
+		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+			return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key for enable").LogError(ctx, logger)
 	}
-
-	if !row.Disabled {
-		// Already enabled; skip the upstream round-trip.
+	if !changed {
 		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// Keep the recorded ceiling rather than resetting to the policy default;
-	// a zero ceiling falls back to the policy default because RefreshAPIKeyLimit
-	// refuses to write zero.
-	limit := conv.PtrEmpty(int(row.MonthlyCredits))
-	if _, err := s.provisioner.RefreshAPIKeyLimit(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType), limit); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable openrouter key").LogError(ctx, logger)
 	}
 
 	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyEnable); err != nil {

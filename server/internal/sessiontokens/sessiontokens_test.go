@@ -127,6 +127,18 @@ func TestSigner_VerifiedJTI(t *testing.T) {
 	require.Equal(t, jti, verifiedJTI)
 }
 
+func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	claims := sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp", "other-resource"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-multiple-audiences"}}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-jwt-secret"))
+	require.NoError(t, err)
+
+	_, err = signer.ValidateExactAudience(token, "platform-mcp")
+	require.ErrorContains(t, err, "audience must exactly match")
+}
+
 func TestSigner_RejectsWrongAudience(t *testing.T) {
 	t.Parallel()
 

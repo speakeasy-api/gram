@@ -1,4 +1,4 @@
-h1:GPpJhKevegDFVRCJc8PwvtGS9hhS47eWdlGZT8CcCC4=
+h1:VElYTLYkSuIo5ZDAi9FuSSxo1o4KfgL/xNohfgeSgzM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -346,3 +346,9 @@ h1:GPpJhKevegDFVRCJc8PwvtGS9hhS47eWdlGZT8CcCC4=
 20260817103730_sessions-add-last-used-at.sql h1:0jWcIgtofs44J8WODluI5Or8lBDyWXGq948j10Zi/o0=
 20260817183037_trials-sweep-index.sql h1:Vd4zXwW0xF48mg0dDPxAN9IzYgPMtUil9vcloAbuGjU=
 20260817190001_chats-add-cwd.sql h1:e+ExLDhu7He8Eh0nXIJzsndNFxbOgggnhArcBkrWF94=
+20260817191238_session-handoff-links.sql h1:siwUqZKazb04TWF+UgfRZA3W1VbNdxVfqjP8UdmXB1s=
+20260817231000_dno-877-billing-delivery-and-invoice-allocation.sql h1:MVlVK+soioM2/VTw+q92GSFsP+l+UJ5/BEr16LLGs8A=
+20260818003149_platform-mcp-auth-state.sql h1:/43k71KTF8KXbOL/H1cNWD8UD2Brplx9yr+bCtbjdAs=
+20260818084059_audit-logs-add-acting-surface.sql h1:oAWlHYz8B3yYoaS8x5IYSvT7Y/MPBnNS50ACQoaEZ5c=
+20260818093227_platform-mcp-connectionless-surfaces.sql h1:dPsVJ4U8Ck18wb+vlUnHguxBW/cbDmzAejccBs9x/2w=
+20260818121359_platform-mcp-connectionless-onboarding-evidence.sql h1:TQQ0kyMRLQ7G78JCsZ1vRhbU39erV7r1a7QAxjiohi4=

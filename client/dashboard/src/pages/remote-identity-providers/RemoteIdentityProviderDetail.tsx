@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -79,9 +80,18 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
               />
             )}
           </div>
-          <Heading variant="h1" className="break-all normal-case">
-            {label}
-          </Heading>
+          <div className="flex items-center gap-3">
+            {issuer?.logoAssetId && (
+              <AssetImage
+                assetId={issuer.logoAssetId}
+                alt=""
+                className="size-10 shrink-0 object-contain"
+              />
+            )}
+            <Heading variant="h1" className="break-all normal-case">
+              {label}
+            </Heading>
+          </div>
         </DetailHero>
 
         <RequireScope scope={["org:read", "org:admin"]} level="page">

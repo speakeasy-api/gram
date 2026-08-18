@@ -19,13 +19,16 @@ const (
 	openRouterDailySpendScheduleID          = "v1:collect-openrouter-daily-spend-schedule"
 	openRouterDailySpendScheduledWorkflowID = "v1:collect-openrouter-daily-spend/scheduled"
 
-	openRouterDailySpendLookbackDays        = 3
+	// Four completed days keeps the last invoice day in the +76h final
+	// observation collected immediately before settlement.
+	openRouterDailySpendLookbackDays        = 4
 	openRouterDailySpendActivityMaxAttempts = 3
 	openRouterDailySpendActivityTimeout     = 2 * time.Hour
 	// Schedule-to-close covers all three two-hour attempts, retry backoff, and
-	// queueing delay. The workflow gets a further hour to record the result.
+	// queueing delay. Collection and settlement run serially, and the workflow
+	// gets a further hour to record their results.
 	openRouterDailySpendActivityScheduleToCloseTimeout = 7 * time.Hour
-	openRouterDailySpendWorkflowRunTimeout             = openRouterDailySpendActivityScheduleToCloseTimeout + time.Hour
+	openRouterDailySpendWorkflowRunTimeout             = 2*openRouterDailySpendActivityScheduleToCloseTimeout + time.Hour
 )
 
 func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
@@ -45,14 +48,28 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.CollectOpenRouterDailySpend, activities.CollectOpenRouterDailySpendArgs{
+	var collected activities.CollectOpenRouterDailySpendResult
+	collectionErr := workflow.ExecuteActivity(ctx, a.CollectOpenRouterDailySpend, activities.CollectOpenRouterDailySpendArgs{
 		StartDay: startDay,
 		EndDay:   endDay,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("collect openrouter daily spend: %w", err)
+	}).Get(ctx, &collected)
+	if collectionErr != nil {
+		collectionErr = fmt.Errorf("collect openrouter daily spend: %w", collectionErr)
+		collected.ReadyOrganizationIDs = nil
 	}
 
-	return nil
+	// A failed collection leaves the ready set empty, so settlement still routes
+	// independent TUM carries without freezing stale OpenRouter spend.
+	settlementErr := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
+		Now:                                    workflow.Now(ctx).UTC(),
+		RestrictOpenRouterToReadyOrganizations: true,
+		OpenRouterReadyOrganizationIDs:         collected.ReadyOrganizationIDs,
+	}).Get(ctx, nil)
+	if settlementErr != nil {
+		settlementErr = fmt.Errorf("settle Stripe invoice allocations: %w", settlementErr)
+	}
+
+	return errors.Join(collectionErr, settlementErr)
 }
 
 func openRouterDailySpendScheduleOptions(taskQueue string) client.ScheduleOptions {

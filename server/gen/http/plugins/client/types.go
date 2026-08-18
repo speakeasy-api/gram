@@ -230,6 +230,82 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
+// GetPlatformMCPPackageStatusResponseBody is the type of the "plugins" service
+// "getPlatformMCPPackageStatus" endpoint HTTP response body.
+type GetPlatformMCPPackageStatusResponseBody struct {
+	// Organization package admission: enabled, disabled, or indeterminate.
+	Admission *string `form:"admission,omitempty" json:"admission,omitempty" xml:"admission,omitempty"`
+	// Whether organization admission currently permits installing the package.
+	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
+	// Fixed Platform MCP package identity.
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
+	// Deterministic Claude direct-download ZIP filename.
+	ClaudeFilename *string `form:"claude_filename,omitempty" json:"claude_filename,omitempty" xml:"claude_filename,omitempty"`
+	// Deterministic portable Agent Plugins direct-download ZIP filename.
+	AgentPluginFilename *string `form:"agent_plugin_filename,omitempty" json:"agent_plugin_filename,omitempty" xml:"agent_plugin_filename,omitempty"`
+	// Literal default project that owns the canonical organization marketplace,
+	// when present.
+	CanonicalProjectSlug *string `form:"canonical_project_slug,omitempty" json:"canonical_project_slug,omitempty" xml:"canonical_project_slug,omitempty"`
+	// Effective name of the canonical marketplace, when its default project is
+	// present.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether the canonical default project has a published GitHub marketplace.
+	MarketplaceConnected *bool `form:"marketplace_connected,omitempty" json:"marketplace_connected,omitempty" xml:"marketplace_connected,omitempty"`
+	// Git URL used by supported clients to register the canonical marketplace.
+	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Canonical GitHub repository URL.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
+	// Whether the last successful canonical publish recorded the Platform package
+	// fingerprint.
+	PackagePresent *bool `form:"package_present,omitempty" json:"package_present,omitempty" xml:"package_present,omitempty"`
+	// Platform package freshness: current, stale, missing, unavailable, or
+	// indeterminate.
+	Freshness *string `form:"freshness,omitempty" json:"freshness,omitempty" xml:"freshness,omitempty"`
+	// Whether an organization admin can publish or repair the canonical package
+	// now.
+	RepairAllowed *bool `form:"repair_allowed,omitempty" json:"repair_allowed,omitempty" xml:"repair_allowed,omitempty"`
+	// Whether keyless direct downloads are currently admitted.
+	DirectDownloadAvailable *bool `form:"direct_download_available,omitempty" json:"direct_download_available,omitempty" xml:"direct_download_available,omitempty"`
+}
+
+// RepairPlatformMCPPackageResponseBody is the type of the "plugins" service
+// "repairPlatformMCPPackage" endpoint HTTP response body.
+type RepairPlatformMCPPackageResponseBody struct {
+	// Organization package admission: enabled, disabled, or indeterminate.
+	Admission *string `form:"admission,omitempty" json:"admission,omitempty" xml:"admission,omitempty"`
+	// Whether organization admission currently permits installing the package.
+	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
+	// Fixed Platform MCP package identity.
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
+	// Deterministic Claude direct-download ZIP filename.
+	ClaudeFilename *string `form:"claude_filename,omitempty" json:"claude_filename,omitempty" xml:"claude_filename,omitempty"`
+	// Deterministic portable Agent Plugins direct-download ZIP filename.
+	AgentPluginFilename *string `form:"agent_plugin_filename,omitempty" json:"agent_plugin_filename,omitempty" xml:"agent_plugin_filename,omitempty"`
+	// Literal default project that owns the canonical organization marketplace,
+	// when present.
+	CanonicalProjectSlug *string `form:"canonical_project_slug,omitempty" json:"canonical_project_slug,omitempty" xml:"canonical_project_slug,omitempty"`
+	// Effective name of the canonical marketplace, when its default project is
+	// present.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether the canonical default project has a published GitHub marketplace.
+	MarketplaceConnected *bool `form:"marketplace_connected,omitempty" json:"marketplace_connected,omitempty" xml:"marketplace_connected,omitempty"`
+	// Git URL used by supported clients to register the canonical marketplace.
+	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Canonical GitHub repository URL.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
+	// Whether the last successful canonical publish recorded the Platform package
+	// fingerprint.
+	PackagePresent *bool `form:"package_present,omitempty" json:"package_present,omitempty" xml:"package_present,omitempty"`
+	// Platform package freshness: current, stale, missing, unavailable, or
+	// indeterminate.
+	Freshness *string `form:"freshness,omitempty" json:"freshness,omitempty" xml:"freshness,omitempty"`
+	// Whether an organization admin can publish or repair the canonical package
+	// now.
+	RepairAllowed *bool `form:"repair_allowed,omitempty" json:"repair_allowed,omitempty" xml:"repair_allowed,omitempty"`
+	// Whether keyless direct downloads are currently admitted.
+	DirectDownloadAvailable *bool `form:"direct_download_available,omitempty" json:"direct_download_available,omitempty" xml:"direct_download_available,omitempty"`
+}
+
 // GetPublishStatusResponseBody is the type of the "plugins" service
 // "getPublishStatus" endpoint HTTP response body.
 type GetPublishStatusResponseBody struct {
@@ -2166,6 +2242,215 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DownloadPlatformMCPPluginFailedPreconditionResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "failed_precondition" error.
+type DownloadPlatformMCPPluginFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginUnauthorizedResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "unauthorized" error.
+type DownloadPlatformMCPPluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginForbiddenResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "forbidden" error.
+type DownloadPlatformMCPPluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginBadRequestResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "bad_request" error.
+type DownloadPlatformMCPPluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginNotFoundResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "not_found" error.
+type DownloadPlatformMCPPluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginConflictResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "conflict" error.
+type DownloadPlatformMCPPluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginUnsupportedMediaResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DownloadPlatformMCPPluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginInvalidResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "invalid" error.
+type DownloadPlatformMCPPluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DownloadPlatformMCPPluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginUnexpectedResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "unexpected" error.
+type DownloadPlatformMCPPluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadPlatformMCPPluginGatewayErrorResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "gateway_error" error.
+type DownloadPlatformMCPPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2531,6 +2816,405 @@ type DownloadCodexInstallScriptUnexpectedResponseBody struct {
 // "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
 // for the "gateway_error" error.
 type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusUnauthorizedResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetPlatformMCPPackageStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusForbiddenResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "forbidden" error.
+type GetPlatformMCPPackageStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusBadRequestResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "bad_request" error.
+type GetPlatformMCPPackageStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusNotFoundResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetPlatformMCPPackageStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusConflictResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "conflict" error.
+type GetPlatformMCPPackageStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetPlatformMCPPackageStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusInvalidResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "invalid" error.
+type GetPlatformMCPPackageStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusInvariantViolationResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetPlatformMCPPackageStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusUnexpectedResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unexpected" error.
+type GetPlatformMCPPackageStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPlatformMCPPackageStatusGatewayErrorResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetPlatformMCPPackageStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageFailedPreconditionResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "failed_precondition" error.
+type RepairPlatformMCPPackageFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageUnauthorizedResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "unauthorized" error.
+type RepairPlatformMCPPackageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageForbiddenResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "forbidden" error.
+type RepairPlatformMCPPackageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageBadRequestResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "bad_request" error.
+type RepairPlatformMCPPackageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageNotFoundResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "not_found" error.
+type RepairPlatformMCPPackageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageConflictResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "conflict" error.
+type RepairPlatformMCPPackageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageUnsupportedMediaResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RepairPlatformMCPPackageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageInvalidResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "invalid" error.
+type RepairPlatformMCPPackageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageInvariantViolationResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RepairPlatformMCPPackageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageUnexpectedResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "unexpected" error.
+type RepairPlatformMCPPackageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairPlatformMCPPackageGatewayErrorResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "gateway_error" error.
+type RepairPlatformMCPPackageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5185,6 +5869,181 @@ func NewDownloadPluginPackageGatewayError(body *DownloadPluginPackageGatewayErro
 	return v
 }
 
+// NewDownloadPlatformMCPPluginResultOK builds a "plugins" service
+// "downloadPlatformMCPPlugin" endpoint result from a HTTP "OK" response.
+func NewDownloadPlatformMCPPluginResultOK(contentType string, contentDisposition string) *plugins.DownloadPlatformMCPPluginResult {
+	v := &plugins.DownloadPlatformMCPPluginResult{}
+	v.ContentType = contentType
+	v.ContentDisposition = contentDisposition
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginFailedPrecondition builds a plugins service
+// downloadPlatformMCPPlugin endpoint failed_precondition error.
+func NewDownloadPlatformMCPPluginFailedPrecondition(body *DownloadPlatformMCPPluginFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginUnauthorized builds a plugins service
+// downloadPlatformMCPPlugin endpoint unauthorized error.
+func NewDownloadPlatformMCPPluginUnauthorized(body *DownloadPlatformMCPPluginUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginForbidden builds a plugins service
+// downloadPlatformMCPPlugin endpoint forbidden error.
+func NewDownloadPlatformMCPPluginForbidden(body *DownloadPlatformMCPPluginForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginBadRequest builds a plugins service
+// downloadPlatformMCPPlugin endpoint bad_request error.
+func NewDownloadPlatformMCPPluginBadRequest(body *DownloadPlatformMCPPluginBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginNotFound builds a plugins service
+// downloadPlatformMCPPlugin endpoint not_found error.
+func NewDownloadPlatformMCPPluginNotFound(body *DownloadPlatformMCPPluginNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginConflict builds a plugins service
+// downloadPlatformMCPPlugin endpoint conflict error.
+func NewDownloadPlatformMCPPluginConflict(body *DownloadPlatformMCPPluginConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginUnsupportedMedia builds a plugins service
+// downloadPlatformMCPPlugin endpoint unsupported_media error.
+func NewDownloadPlatformMCPPluginUnsupportedMedia(body *DownloadPlatformMCPPluginUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginInvalid builds a plugins service
+// downloadPlatformMCPPlugin endpoint invalid error.
+func NewDownloadPlatformMCPPluginInvalid(body *DownloadPlatformMCPPluginInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginInvariantViolation builds a plugins service
+// downloadPlatformMCPPlugin endpoint invariant_violation error.
+func NewDownloadPlatformMCPPluginInvariantViolation(body *DownloadPlatformMCPPluginInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginUnexpected builds a plugins service
+// downloadPlatformMCPPlugin endpoint unexpected error.
+func NewDownloadPlatformMCPPluginUnexpected(body *DownloadPlatformMCPPluginUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadPlatformMCPPluginGatewayError builds a plugins service
+// downloadPlatformMCPPlugin endpoint gateway_error error.
+func NewDownloadPlatformMCPPluginGatewayError(body *DownloadPlatformMCPPluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDownloadObservabilityPluginResultOK builds a "plugins" service
 // "downloadObservabilityPlugin" endpoint result from a HTTP "OK" response.
 func NewDownloadObservabilityPluginResultOK(contentType string, contentDisposition string) *plugins.DownloadObservabilityPluginResult {
@@ -5493,6 +6352,369 @@ func NewDownloadCodexInstallScriptUnexpected(body *DownloadCodexInstallScriptUne
 // NewDownloadCodexInstallScriptGatewayError builds a plugins service
 // downloadCodexInstallScript endpoint gateway_error error.
 func NewDownloadCodexInstallScriptGatewayError(body *DownloadCodexInstallScriptGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusPlatformMCPPackageStatusResultOK builds a
+// "plugins" service "getPlatformMCPPackageStatus" endpoint result from a HTTP
+// "OK" response.
+func NewGetPlatformMCPPackageStatusPlatformMCPPackageStatusResultOK(body *GetPlatformMCPPackageStatusResponseBody) *plugins.PlatformMCPPackageStatusResult {
+	v := &plugins.PlatformMCPPackageStatusResult{
+		Admission:               *body.Admission,
+		Available:               *body.Available,
+		PackageName:             *body.PackageName,
+		ClaudeFilename:          *body.ClaudeFilename,
+		AgentPluginFilename:     *body.AgentPluginFilename,
+		CanonicalProjectSlug:    body.CanonicalProjectSlug,
+		MarketplaceName:         body.MarketplaceName,
+		MarketplaceConnected:    *body.MarketplaceConnected,
+		MarketplaceURL:          body.MarketplaceURL,
+		RepoURL:                 body.RepoURL,
+		PackagePresent:          *body.PackagePresent,
+		Freshness:               *body.Freshness,
+		RepairAllowed:           *body.RepairAllowed,
+		DirectDownloadAvailable: *body.DirectDownloadAvailable,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusUnauthorized builds a plugins service
+// getPlatformMCPPackageStatus endpoint unauthorized error.
+func NewGetPlatformMCPPackageStatusUnauthorized(body *GetPlatformMCPPackageStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusForbidden builds a plugins service
+// getPlatformMCPPackageStatus endpoint forbidden error.
+func NewGetPlatformMCPPackageStatusForbidden(body *GetPlatformMCPPackageStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusBadRequest builds a plugins service
+// getPlatformMCPPackageStatus endpoint bad_request error.
+func NewGetPlatformMCPPackageStatusBadRequest(body *GetPlatformMCPPackageStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusNotFound builds a plugins service
+// getPlatformMCPPackageStatus endpoint not_found error.
+func NewGetPlatformMCPPackageStatusNotFound(body *GetPlatformMCPPackageStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusConflict builds a plugins service
+// getPlatformMCPPackageStatus endpoint conflict error.
+func NewGetPlatformMCPPackageStatusConflict(body *GetPlatformMCPPackageStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusUnsupportedMedia builds a plugins service
+// getPlatformMCPPackageStatus endpoint unsupported_media error.
+func NewGetPlatformMCPPackageStatusUnsupportedMedia(body *GetPlatformMCPPackageStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusInvalid builds a plugins service
+// getPlatformMCPPackageStatus endpoint invalid error.
+func NewGetPlatformMCPPackageStatusInvalid(body *GetPlatformMCPPackageStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusInvariantViolation builds a plugins service
+// getPlatformMCPPackageStatus endpoint invariant_violation error.
+func NewGetPlatformMCPPackageStatusInvariantViolation(body *GetPlatformMCPPackageStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusUnexpected builds a plugins service
+// getPlatformMCPPackageStatus endpoint unexpected error.
+func NewGetPlatformMCPPackageStatusUnexpected(body *GetPlatformMCPPackageStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusGatewayError builds a plugins service
+// getPlatformMCPPackageStatus endpoint gateway_error error.
+func NewGetPlatformMCPPackageStatusGatewayError(body *GetPlatformMCPPackageStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackagePlatformMCPPackageStatusResultOK builds a
+// "plugins" service "repairPlatformMCPPackage" endpoint result from a HTTP
+// "OK" response.
+func NewRepairPlatformMCPPackagePlatformMCPPackageStatusResultOK(body *RepairPlatformMCPPackageResponseBody) *plugins.PlatformMCPPackageStatusResult {
+	v := &plugins.PlatformMCPPackageStatusResult{
+		Admission:               *body.Admission,
+		Available:               *body.Available,
+		PackageName:             *body.PackageName,
+		ClaudeFilename:          *body.ClaudeFilename,
+		AgentPluginFilename:     *body.AgentPluginFilename,
+		CanonicalProjectSlug:    body.CanonicalProjectSlug,
+		MarketplaceName:         body.MarketplaceName,
+		MarketplaceConnected:    *body.MarketplaceConnected,
+		MarketplaceURL:          body.MarketplaceURL,
+		RepoURL:                 body.RepoURL,
+		PackagePresent:          *body.PackagePresent,
+		Freshness:               *body.Freshness,
+		RepairAllowed:           *body.RepairAllowed,
+		DirectDownloadAvailable: *body.DirectDownloadAvailable,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageFailedPrecondition builds a plugins service
+// repairPlatformMCPPackage endpoint failed_precondition error.
+func NewRepairPlatformMCPPackageFailedPrecondition(body *RepairPlatformMCPPackageFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageUnauthorized builds a plugins service
+// repairPlatformMCPPackage endpoint unauthorized error.
+func NewRepairPlatformMCPPackageUnauthorized(body *RepairPlatformMCPPackageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageForbidden builds a plugins service
+// repairPlatformMCPPackage endpoint forbidden error.
+func NewRepairPlatformMCPPackageForbidden(body *RepairPlatformMCPPackageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageBadRequest builds a plugins service
+// repairPlatformMCPPackage endpoint bad_request error.
+func NewRepairPlatformMCPPackageBadRequest(body *RepairPlatformMCPPackageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageNotFound builds a plugins service
+// repairPlatformMCPPackage endpoint not_found error.
+func NewRepairPlatformMCPPackageNotFound(body *RepairPlatformMCPPackageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageConflict builds a plugins service
+// repairPlatformMCPPackage endpoint conflict error.
+func NewRepairPlatformMCPPackageConflict(body *RepairPlatformMCPPackageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageUnsupportedMedia builds a plugins service
+// repairPlatformMCPPackage endpoint unsupported_media error.
+func NewRepairPlatformMCPPackageUnsupportedMedia(body *RepairPlatformMCPPackageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageInvalid builds a plugins service
+// repairPlatformMCPPackage endpoint invalid error.
+func NewRepairPlatformMCPPackageInvalid(body *RepairPlatformMCPPackageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageInvariantViolation builds a plugins service
+// repairPlatformMCPPackage endpoint invariant_violation error.
+func NewRepairPlatformMCPPackageInvariantViolation(body *RepairPlatformMCPPackageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageUnexpected builds a plugins service
+// repairPlatformMCPPackage endpoint unexpected error.
+func NewRepairPlatformMCPPackageUnexpected(body *RepairPlatformMCPPackageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairPlatformMCPPackageGatewayError builds a plugins service
+// repairPlatformMCPPackage endpoint gateway_error error.
+func NewRepairPlatformMCPPackageGatewayError(body *RepairPlatformMCPPackageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6404,6 +7626,98 @@ func ValidateSetPluginAssignmentsResponseBody(body *SetPluginAssignmentsResponse
 			if err2 := ValidatePluginAssignmentResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusResponseBody runs the validations defined
+// on GetPlatformMCPPackageStatusResponseBody
+func ValidateGetPlatformMCPPackageStatusResponseBody(body *GetPlatformMCPPackageStatusResponseBody) (err error) {
+	if body.Admission == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admission", "body"))
+	}
+	if body.Available == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("available", "body"))
+	}
+	if body.PackageName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("package_name", "body"))
+	}
+	if body.ClaudeFilename == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("claude_filename", "body"))
+	}
+	if body.AgentPluginFilename == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugin_filename", "body"))
+	}
+	if body.MarketplaceConnected == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_connected", "body"))
+	}
+	if body.PackagePresent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("package_present", "body"))
+	}
+	if body.Freshness == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("freshness", "body"))
+	}
+	if body.RepairAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repair_allowed", "body"))
+	}
+	if body.DirectDownloadAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("direct_download_available", "body"))
+	}
+	if body.Admission != nil {
+		if !(*body.Admission == "enabled" || *body.Admission == "disabled" || *body.Admission == "indeterminate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.admission", *body.Admission, []any{"enabled", "disabled", "indeterminate"}))
+		}
+	}
+	if body.Freshness != nil {
+		if !(*body.Freshness == "current" || *body.Freshness == "stale" || *body.Freshness == "missing" || *body.Freshness == "unavailable" || *body.Freshness == "indeterminate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.freshness", *body.Freshness, []any{"current", "stale", "missing", "unavailable", "indeterminate"}))
+		}
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageResponseBody runs the validations defined on
+// RepairPlatformMCPPackageResponseBody
+func ValidateRepairPlatformMCPPackageResponseBody(body *RepairPlatformMCPPackageResponseBody) (err error) {
+	if body.Admission == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admission", "body"))
+	}
+	if body.Available == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("available", "body"))
+	}
+	if body.PackageName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("package_name", "body"))
+	}
+	if body.ClaudeFilename == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("claude_filename", "body"))
+	}
+	if body.AgentPluginFilename == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugin_filename", "body"))
+	}
+	if body.MarketplaceConnected == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_connected", "body"))
+	}
+	if body.PackagePresent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("package_present", "body"))
+	}
+	if body.Freshness == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("freshness", "body"))
+	}
+	if body.RepairAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repair_allowed", "body"))
+	}
+	if body.DirectDownloadAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("direct_download_available", "body"))
+	}
+	if body.Admission != nil {
+		if !(*body.Admission == "enabled" || *body.Admission == "disabled" || *body.Admission == "indeterminate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.admission", *body.Admission, []any{"enabled", "disabled", "indeterminate"}))
+		}
+	}
+	if body.Freshness != nil {
+		if !(*body.Freshness == "current" || *body.Freshness == "stale" || *body.Freshness == "missing" || *body.Freshness == "unavailable" || *body.Freshness == "indeterminate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.freshness", *body.Freshness, []any{"current", "stale", "missing", "unavailable", "indeterminate"}))
 		}
 	}
 	return
@@ -8888,6 +10202,273 @@ func ValidateDownloadPluginPackageGatewayErrorResponseBody(body *DownloadPluginP
 	return
 }
 
+// ValidateDownloadPlatformMCPPluginFailedPreconditionResponseBody runs the
+// validations defined on
+// downloadPlatformMCPPlugin_failed_precondition_response_body
+func ValidateDownloadPlatformMCPPluginFailedPreconditionResponseBody(body *DownloadPlatformMCPPluginFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginUnauthorizedResponseBody runs the
+// validations defined on downloadPlatformMCPPlugin_unauthorized_response_body
+func ValidateDownloadPlatformMCPPluginUnauthorizedResponseBody(body *DownloadPlatformMCPPluginUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginForbiddenResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_forbidden_response_body
+func ValidateDownloadPlatformMCPPluginForbiddenResponseBody(body *DownloadPlatformMCPPluginForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginBadRequestResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_bad_request_response_body
+func ValidateDownloadPlatformMCPPluginBadRequestResponseBody(body *DownloadPlatformMCPPluginBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginNotFoundResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_not_found_response_body
+func ValidateDownloadPlatformMCPPluginNotFoundResponseBody(body *DownloadPlatformMCPPluginNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginConflictResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_conflict_response_body
+func ValidateDownloadPlatformMCPPluginConflictResponseBody(body *DownloadPlatformMCPPluginConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginUnsupportedMediaResponseBody runs the
+// validations defined on
+// downloadPlatformMCPPlugin_unsupported_media_response_body
+func ValidateDownloadPlatformMCPPluginUnsupportedMediaResponseBody(body *DownloadPlatformMCPPluginUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginInvalidResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_invalid_response_body
+func ValidateDownloadPlatformMCPPluginInvalidResponseBody(body *DownloadPlatformMCPPluginInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginInvariantViolationResponseBody runs the
+// validations defined on
+// downloadPlatformMCPPlugin_invariant_violation_response_body
+func ValidateDownloadPlatformMCPPluginInvariantViolationResponseBody(body *DownloadPlatformMCPPluginInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginUnexpectedResponseBody runs the validations
+// defined on downloadPlatformMCPPlugin_unexpected_response_body
+func ValidateDownloadPlatformMCPPluginUnexpectedResponseBody(body *DownloadPlatformMCPPluginUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadPlatformMCPPluginGatewayErrorResponseBody runs the
+// validations defined on downloadPlatformMCPPlugin_gateway_error_response_body
+func ValidateDownloadPlatformMCPPluginGatewayErrorResponseBody(body *DownloadPlatformMCPPluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDownloadObservabilityPluginUnauthorizedResponseBody runs the
 // validations defined on downloadObservabilityPlugin_unauthorized_response_body
 func ValidateDownloadObservabilityPluginUnauthorizedResponseBody(body *DownloadObservabilityPluginUnauthorizedResponseBody) (err error) {
@@ -9352,6 +10933,516 @@ func ValidateDownloadCodexInstallScriptUnexpectedResponseBody(body *DownloadCode
 // ValidateDownloadCodexInstallScriptGatewayErrorResponseBody runs the
 // validations defined on downloadCodexInstallScript_gateway_error_response_body
 func ValidateDownloadCodexInstallScriptGatewayErrorResponseBody(body *DownloadCodexInstallScriptGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusUnauthorizedResponseBody runs the
+// validations defined on getPlatformMCPPackageStatus_unauthorized_response_body
+func ValidateGetPlatformMCPPackageStatusUnauthorizedResponseBody(body *GetPlatformMCPPackageStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusForbiddenResponseBody runs the
+// validations defined on getPlatformMCPPackageStatus_forbidden_response_body
+func ValidateGetPlatformMCPPackageStatusForbiddenResponseBody(body *GetPlatformMCPPackageStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusBadRequestResponseBody runs the
+// validations defined on getPlatformMCPPackageStatus_bad_request_response_body
+func ValidateGetPlatformMCPPackageStatusBadRequestResponseBody(body *GetPlatformMCPPackageStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusNotFoundResponseBody runs the validations
+// defined on getPlatformMCPPackageStatus_not_found_response_body
+func ValidateGetPlatformMCPPackageStatusNotFoundResponseBody(body *GetPlatformMCPPackageStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusConflictResponseBody runs the validations
+// defined on getPlatformMCPPackageStatus_conflict_response_body
+func ValidateGetPlatformMCPPackageStatusConflictResponseBody(body *GetPlatformMCPPackageStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getPlatformMCPPackageStatus_unsupported_media_response_body
+func ValidateGetPlatformMCPPackageStatusUnsupportedMediaResponseBody(body *GetPlatformMCPPackageStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusInvalidResponseBody runs the validations
+// defined on getPlatformMCPPackageStatus_invalid_response_body
+func ValidateGetPlatformMCPPackageStatusInvalidResponseBody(body *GetPlatformMCPPackageStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusInvariantViolationResponseBody runs the
+// validations defined on
+// getPlatformMCPPackageStatus_invariant_violation_response_body
+func ValidateGetPlatformMCPPackageStatusInvariantViolationResponseBody(body *GetPlatformMCPPackageStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusUnexpectedResponseBody runs the
+// validations defined on getPlatformMCPPackageStatus_unexpected_response_body
+func ValidateGetPlatformMCPPackageStatusUnexpectedResponseBody(body *GetPlatformMCPPackageStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPlatformMCPPackageStatusGatewayErrorResponseBody runs the
+// validations defined on
+// getPlatformMCPPackageStatus_gateway_error_response_body
+func ValidateGetPlatformMCPPackageStatusGatewayErrorResponseBody(body *GetPlatformMCPPackageStatusGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageFailedPreconditionResponseBody runs the
+// validations defined on
+// repairPlatformMCPPackage_failed_precondition_response_body
+func ValidateRepairPlatformMCPPackageFailedPreconditionResponseBody(body *RepairPlatformMCPPackageFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageUnauthorizedResponseBody runs the
+// validations defined on repairPlatformMCPPackage_unauthorized_response_body
+func ValidateRepairPlatformMCPPackageUnauthorizedResponseBody(body *RepairPlatformMCPPackageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageForbiddenResponseBody runs the validations
+// defined on repairPlatformMCPPackage_forbidden_response_body
+func ValidateRepairPlatformMCPPackageForbiddenResponseBody(body *RepairPlatformMCPPackageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageBadRequestResponseBody runs the validations
+// defined on repairPlatformMCPPackage_bad_request_response_body
+func ValidateRepairPlatformMCPPackageBadRequestResponseBody(body *RepairPlatformMCPPackageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageNotFoundResponseBody runs the validations
+// defined on repairPlatformMCPPackage_not_found_response_body
+func ValidateRepairPlatformMCPPackageNotFoundResponseBody(body *RepairPlatformMCPPackageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageConflictResponseBody runs the validations
+// defined on repairPlatformMCPPackage_conflict_response_body
+func ValidateRepairPlatformMCPPackageConflictResponseBody(body *RepairPlatformMCPPackageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageUnsupportedMediaResponseBody runs the
+// validations defined on
+// repairPlatformMCPPackage_unsupported_media_response_body
+func ValidateRepairPlatformMCPPackageUnsupportedMediaResponseBody(body *RepairPlatformMCPPackageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageInvalidResponseBody runs the validations
+// defined on repairPlatformMCPPackage_invalid_response_body
+func ValidateRepairPlatformMCPPackageInvalidResponseBody(body *RepairPlatformMCPPackageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageInvariantViolationResponseBody runs the
+// validations defined on
+// repairPlatformMCPPackage_invariant_violation_response_body
+func ValidateRepairPlatformMCPPackageInvariantViolationResponseBody(body *RepairPlatformMCPPackageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageUnexpectedResponseBody runs the validations
+// defined on repairPlatformMCPPackage_unexpected_response_body
+func ValidateRepairPlatformMCPPackageUnexpectedResponseBody(body *RepairPlatformMCPPackageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairPlatformMCPPackageGatewayErrorResponseBody runs the
+// validations defined on repairPlatformMCPPackage_gateway_error_response_body
+func ValidateRepairPlatformMCPPackageGatewayErrorResponseBody(body *RepairPlatformMCPPackageGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

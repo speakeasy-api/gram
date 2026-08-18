@@ -49,6 +49,12 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: captureMock }),
 }));
 
+// The panel does its own gating (flag, org:admin, walled-off organization);
+// here only its placement relative to the calendar matters.
+vi.mock("@/components/billing/lockout-payg-checkout-panel", () => ({
+  LockoutPaygCheckoutPanel: () => <div data-testid="payg-panel" />,
+}));
+
 import { DemoBookingFlow } from "./DemoBookingFlow";
 
 beforeEach(() => {
@@ -67,6 +73,17 @@ describe("DemoBookingFlow", () => {
     render(<DemoBookingFlow />);
     const embed = screen.getByTestId("cal-embed");
     expect(embed.getAttribute("data-cal-link")).toBe(CAL_DEMO_LINK);
+  });
+
+  // Checkout is the shortcut past the gate, so it has to read before the
+  // calendar rather than under it.
+  it("places the checkout panel above the calendar", () => {
+    render(<DemoBookingFlow />);
+    const panel = screen.getByTestId("payg-panel");
+    const embed = screen.getByTestId("cal-embed");
+    expect(
+      panel.compareDocumentPosition(embed) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("prefills name, email, and company from the session", () => {

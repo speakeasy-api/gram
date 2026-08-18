@@ -14,7 +14,7 @@ packages:
 
 catalog:
   "@ai-sdk/react": ^4.0.58
-  "@modelcontextprotocol/sdk": ^1.29.0
+  "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.101.4
   "@types/react": ^19.2.18

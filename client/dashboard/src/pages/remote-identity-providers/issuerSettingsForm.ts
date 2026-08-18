@@ -8,6 +8,9 @@ import type { DiscoveredEndpoints } from "../mcp/x/tabs/settings/sections/authen
 export type IssuerSettingsFormState = {
   id: string;
   name: string;
+  // The logo's asset id, empty when the issuer has no logo. Like the other
+  // optional strings, "" on update is the explicit "clear to NULL" sentinel.
+  logoAssetId: string;
   slug: string;
   clientSetupDocumentationUrl: string;
   issuerUrl: string;
@@ -45,6 +48,7 @@ export function buildUpdateIssuerForm(
   return {
     id: state.id,
     name: state.name.trim(),
+    logoAssetId: state.logoAssetId.trim(),
     slug: state.slug.trim(),
     clientSetupDocumentationUrl: state.clientSetupDocumentationUrl.trim(),
     issuer,
@@ -98,6 +102,7 @@ export function buildCreateIssuerForm(
     slug: state.slug.trim(),
     issuer,
     name: state.name.trim() || undefined,
+    logoAssetId: state.logoAssetId.trim() || undefined,
     clientSetupDocumentationUrl:
       state.clientSetupDocumentationUrl.trim() || undefined,
     authorizationEndpoint: state.authorizationEndpoint.trim() || undefined,

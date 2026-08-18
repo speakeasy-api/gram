@@ -301,7 +301,9 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 STRIPE_API_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
+STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
 
 #########################
 ## Polar configuration ##
