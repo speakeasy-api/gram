@@ -95,6 +95,7 @@ trackedFiles:
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
+  src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
   src/funcs/assetsListAssets.ts: {}
   src/funcs/assetsServeChatAttachment.ts: {}
@@ -795,6 +796,7 @@ trackedFiles:
   src/models/components/externalmcptooldefinition.ts: {}
   src/models/components/externaloauthserver.ts: {}
   src/models/components/externaloauthserverform.ts: {}
+  src/models/components/fetchimagefromurlform2.ts: {}
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
@@ -1583,6 +1585,7 @@ trackedFiles:
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
+  src/models/operations/fetchimagefromurl.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
   src/models/operations/fetchorganizationremotesessionissuermetadata.ts: {}
   src/models/operations/fetchremotesessionissuermetadata.ts: {}
@@ -2184,6 +2187,7 @@ trackedFiles:
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/fetchImageFromURL.ts: {}
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
@@ -4626,6 +4630,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  fetchImageFromURL:
+    speakeasy-default-fetch-image-from-URL:
+      requestBody:
+        application/json: {"url": "https://early-casement.biz"}
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 716034, "content_type": "<value>", "created_at": "2024-10-20T05:41:34.144Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2026-03-08T00:48:36.490Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   fetchOpenAPIv3FromURL:
     speakeasy-default-fetch-open-AP-iv3-from-URL:
       requestBody:

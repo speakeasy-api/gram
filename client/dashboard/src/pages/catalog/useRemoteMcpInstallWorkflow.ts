@@ -19,6 +19,7 @@ import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
@@ -190,6 +191,47 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
 }
 
 /**
+ * Best-effort: a logo failure never fails the install, and the returned
+ * promise never rejects. Resolves true only when the logo actually landed on
+ * mcp_metadata, so callers know whether a metadata refetch is warranted.
+ */
+async function persistServerIconBestEffort(
+  client: Gram,
+  target: InstallTarget,
+  mcpServerId: string,
+  reqOpts: RequestOptions | undefined,
+): Promise<boolean> {
+  const iconUrl = target.server.iconUrl;
+  if (!iconUrl) return false;
+
+  try {
+    const uploaded = await client.assets.fetchImageFromURL(
+      { fetchImageFromURLForm2: { url: iconUrl } },
+      undefined,
+      reqOpts,
+    );
+    await client.mcpMetadata.set(
+      {
+        setMcpMetadataRequestBody: {
+          mcpServerId,
+          logoAssetId: uploaded.asset.id,
+        },
+      },
+      undefined,
+      reqOpts,
+    );
+    return true;
+  } catch (iconError) {
+    console.warn("Failed to persist server icon during install.", {
+      mcpServerId,
+      iconUrl,
+      iconError,
+    });
+    return false;
+  }
+}
+
+/**
  * Installs one target as an unproxied MCP server instead of a Gram-proxied
  * remote one: creates the unproxied_mcp_servers row, links an mcp_servers
  * wrapper (rolling back the former on failure, mirroring installTarget's own
@@ -205,6 +247,7 @@ async function installUnproxiedTarget(
   mcpServer: McpServer;
   mcpEndpointUrl?: string;
   authConfigured: boolean;
+  iconPersistence: Promise<boolean>;
 }> {
   const unproxiedMcpServer = await client.unproxiedMcp.createServer(
     {
@@ -254,7 +297,21 @@ async function installUnproxiedTarget(
     throw linkError instanceof Error ? linkError : new Error(String(linkError));
   }
 
-  return { mcpServer, mcpEndpointUrl: undefined, authConfigured: false };
+  // Runs detached: a slow icon host must not hold up install completion. The
+  // caller chains a metadata refetch onto the returned promise instead.
+  const iconPersistence = persistServerIconBestEffort(
+    client,
+    target,
+    mcpServer.id,
+    reqOpts,
+  );
+
+  return {
+    mcpServer,
+    mcpEndpointUrl: undefined,
+    authConfigured: false,
+    iconPersistence,
+  };
 }
 
 /**
@@ -487,6 +544,7 @@ export function useRemoteMcpInstallWorkflow({
       mcpServer: McpServer;
       mcpEndpointUrl?: string;
       authConfigured: boolean;
+      iconPersistence: Promise<boolean>;
     }> => {
       if (isFigmaCatalogServer(target.server)) {
         return installUnproxiedTarget(client, target, reqOpts);
@@ -575,6 +633,15 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
+      // Runs detached: a slow icon host must not hold up install completion.
+      // startInstall chains a metadata refetch onto the returned promise.
+      const iconPersistence = persistServerIconBestEffort(
+        client,
+        target,
+        mcpServer.id,
+        reqOpts,
+      );
+
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,
         authedFetch,
@@ -607,6 +674,7 @@ export function useRemoteMcpInstallWorkflow({
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
         authConfigured: authAutoConfig.status === "configured",
+        iconPersistence,
       };
     },
     [authedFetch, client, orgSlug],
@@ -658,10 +726,12 @@ export function useRemoteMcpInstallWorkflow({
 
     let anyAuthConfigured = false;
     let anyUnproxiedInstalled = false;
+    const iconPersistences: Promise<boolean>[] = [];
     for (const [index, target] of targets.entries()) {
       setStatusAt(index, { status: "creating" });
       try {
         const result = await installTarget(target, reqOpts);
+        iconPersistences.push(result.iconPersistence);
         anyAuthConfigured ||= result.authConfigured;
         anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
         setStatusAt(index, {
@@ -685,6 +755,8 @@ export function useRemoteMcpInstallWorkflow({
       invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
       invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      // Installs may have persisted a catalog icon into MCP metadata.
+      invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" }),
       // Every create links a fresh user_session_issuer.
       invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
     ];
@@ -705,6 +777,19 @@ export function useRemoteMcpInstallWorkflow({
       );
     }
     await Promise.all(invalidations);
+
+    // Icon persistence runs detached from the install loop, so the metadata
+    // invalidation above usually fires before the logos land. Refetch again
+    // once they settle — without gating the "complete" transition on it. The
+    // persistence promises never reject, so Promise.all is safe here.
+    void Promise.all(iconPersistences).then((persisted) => {
+      if (persisted.some(Boolean)) {
+        return invalidateAllGetMcpMetadata(queryClient, {
+          refetchType: "all",
+        });
+      }
+      return undefined;
+    });
 
     setPhase("complete");
   }, [canInstall, installTarget, projectSlug, queryClient, serverConfigs]);
