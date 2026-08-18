@@ -14,12 +14,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type captureAccessPausedScheduler struct {
-	inputs []SendAccessPausedInput
+type captureBillingEmailScheduler struct {
+	inputs    []SendAccessPausedInput
+	activated []SendPaygActivatedInput
 }
 
-func (s *captureAccessPausedScheduler) ScheduleAccessPaused(_ context.Context, input SendAccessPausedInput) error {
+func (s *captureBillingEmailScheduler) ScheduleAccessPaused(_ context.Context, input SendAccessPausedInput) error {
 	s.inputs = append(s.inputs, input)
+	return nil
+}
+
+func (s *captureBillingEmailScheduler) SchedulePaygActivated(_ context.Context, input SendPaygActivatedInput) error {
+	s.activated = append(s.activated, input)
 	return nil
 }
 
@@ -44,9 +50,9 @@ func billingNotificationEvent(t *testing.T, eventType string, action audit.Actio
 	}.Build()
 }
 
-func TestEventHandlerSchedulesOnlyAccessPausedTransitions(t *testing.T) {
+func TestEventHandlerRoutesBillingTransitionsByAuditedAction(t *testing.T) {
 	t.Parallel()
-	scheduler := &captureAccessPausedScheduler{}
+	scheduler := &captureBillingEmailScheduler{}
 	handler := NewEventHandler(testenv.NewLogger(t), scheduler)
 	metadata := gcp.MessageMetadata{ID: "<MESSAGE_ID>", Attributes: nil, DeliveryAttempt: nil}
 
@@ -58,11 +64,18 @@ func TestEventHandlerSchedulesOnlyAccessPausedTransitions(t *testing.T) {
 
 	require.NoError(t, handler.Handle(t.Context(), billingNotificationEvent(t, string(events.OrganizationBillingV1.EventType()), audit.ActionOrganizationPaygActivated), metadata))
 	require.Len(t, scheduler.inputs, 2)
+	require.Len(t, scheduler.activated, 1)
+	require.Equal(t, "<EVENT_ID>", scheduler.activated[0].EventID)
+	require.Equal(t, "<ORGANIZATION_ID>", scheduler.activated[0].OrganizationID)
+
+	require.NoError(t, handler.Handle(t.Context(), billingNotificationEvent(t, string(events.OrganizationBillingV1.EventType()), audit.ActionOrganizationWebhooksEnabled), metadata))
+	require.Len(t, scheduler.inputs, 2)
+	require.Len(t, scheduler.activated, 1)
 }
 
 func TestEventHandlerDropsMismatchedEnvelope(t *testing.T) {
 	t.Parallel()
-	scheduler := &captureAccessPausedScheduler{}
+	scheduler := &captureBillingEmailScheduler{}
 	handler := NewEventHandler(testenv.NewLogger(t), scheduler)
 	event := billingNotificationEvent(t, string(events.OrganizationBillingV1.EventType()), audit.ActionOrganizationPaygDeactivated)
 	payload, err := json.Marshal(map[string]string{
@@ -76,4 +89,5 @@ func TestEventHandlerDropsMismatchedEnvelope(t *testing.T) {
 
 	require.NoError(t, handler.Handle(t.Context(), event, gcp.MessageMetadata{ID: "<MESSAGE_ID>", Attributes: nil, DeliveryAttempt: nil}))
 	require.Empty(t, scheduler.inputs)
+	require.Empty(t, scheduler.activated)
 }

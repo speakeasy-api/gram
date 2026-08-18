@@ -13,16 +13,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-type AccessPausedScheduler interface {
+type BillingEmailScheduler interface {
 	ScheduleAccessPaused(context.Context, SendAccessPausedInput) error
+	SchedulePaygActivated(context.Context, SendPaygActivatedInput) error
 }
 
 type EventHandler struct {
 	logger    *slog.Logger
-	scheduler AccessPausedScheduler
+	scheduler BillingEmailScheduler
 }
 
-func NewEventHandler(logger *slog.Logger, scheduler AccessPausedScheduler) *EventHandler {
+func NewEventHandler(logger *slog.Logger, scheduler BillingEmailScheduler) *EventHandler {
 	return &EventHandler{
 		logger:    logger.With(attr.SlogComponent("billing-notification-events")),
 		scheduler: scheduler,
@@ -45,13 +46,12 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 		return nil
 	}
 
-	var kind AccessPausedKind
-	switch event.GetEventType() {
-	case string(events.OrganizationBillingV1.EventType()):
-		kind = AccessPausedSubscriptionLoss
-	case string(events.OrganizationEnterpriseTrialV1.EventType()):
-		kind = AccessPausedTrialDemotion
-	default:
+	// Every webhook event on the topic reaches this handler, so anything that is
+	// not an audited billing transition must leave before the payload is read.
+	billingEvent := string(events.OrganizationBillingV1.EventType())
+	trialEvent := string(events.OrganizationEnterpriseTrialV1.EventType())
+	eventType := event.GetEventType()
+	if eventType != billingEvent && eventType != trialEvent {
 		return nil
 	}
 
@@ -60,22 +60,52 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 		h.logger.ErrorContext(ctx, "dropping unreadable billing notification event", attr.SlogOutboxPublicID(eventID), attr.SlogError(err))
 		return nil
 	}
-	expectedAction := audit.ActionOrganizationPaygDeactivated
-	if kind == AccessPausedTrialDemotion {
-		expectedAction = audit.ActionOrganizationEnterpriseTrialDemoted
-	}
-	if audit.Action(payload.Action) != expectedAction || payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {
-		if audit.Action(payload.Action) == expectedAction {
-			h.logger.ErrorContext(ctx, "dropping mismatched billing notification event",
-				attr.SlogOrganizationID(organizationID),
-				attr.SlogOutboxPublicID(eventID),
-			)
+
+	// Activation and subscription loss share the billing event type, so the
+	// audited action is what separates them.
+	action := audit.Action(payload.Action)
+	var schedule func(context.Context) error
+	switch {
+	case eventType == billingEvent && action == audit.ActionOrganizationPaygActivated:
+		schedule = func(ctx context.Context) error {
+			return h.schedulePaygActivated(ctx, eventID, organizationID)
 		}
+	case eventType == billingEvent && action == audit.ActionOrganizationPaygDeactivated:
+		schedule = func(ctx context.Context) error {
+			return h.scheduleAccessPaused(ctx, eventID, organizationID, AccessPausedSubscriptionLoss)
+		}
+	case eventType == trialEvent && action == audit.ActionOrganizationEnterpriseTrialDemoted:
+		schedule = func(ctx context.Context) error {
+			return h.scheduleAccessPaused(ctx, eventID, organizationID, AccessPausedTrialDemotion)
+		}
+	default:
+		return nil
+	}
+
+	if payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {
+		h.logger.ErrorContext(ctx, "dropping mismatched billing notification event",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogOutboxPublicID(eventID),
+		)
 		return nil
 	}
 	if h.scheduler == nil {
-		return fmt.Errorf("access paused scheduler is unavailable")
+		return fmt.Errorf("billing email scheduler is unavailable")
 	}
+	return schedule(ctx)
+}
+
+func (h *EventHandler) schedulePaygActivated(ctx context.Context, eventID, organizationID string) error {
+	if err := h.scheduler.SchedulePaygActivated(ctx, SendPaygActivatedInput{
+		EventID:        eventID,
+		OrganizationID: organizationID,
+	}); err != nil {
+		return fmt.Errorf("schedule PAYG activation email: %w", err)
+	}
+	return nil
+}
+
+func (h *EventHandler) scheduleAccessPaused(ctx context.Context, eventID, organizationID string, kind AccessPausedKind) error {
 	if err := h.scheduler.ScheduleAccessPaused(ctx, SendAccessPausedInput{
 		EventID:        eventID,
 		OrganizationID: organizationID,

@@ -469,6 +469,16 @@ func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnot
 	return nil
 }
 
+func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingnotifications.SendPaygActivatedInput) error {
+	if a.billingNotifications == nil {
+		return fmt.Errorf("billing notification service is not configured")
+	}
+	if err := a.billingNotifications.SendPaygActivated(ctx, input); err != nil {
+		return fmt.Errorf("send PAYG activated notification: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }

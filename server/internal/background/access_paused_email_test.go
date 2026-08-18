@@ -34,5 +34,5 @@ func TestAccessPausedEmailWorkflowStopsAfterBoundedRetries(t *testing.T) {
 	})
 
 	require.ErrorContains(t, env.GetWorkflowError(), "send access paused email")
-	require.Equal(t, accessPausedEmailRetryMaximumAttempts, attempts.Load())
+	require.Equal(t, billingEmailRetryMaximumAttempts, attempts.Load())
 }
