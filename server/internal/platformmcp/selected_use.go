@@ -119,8 +119,8 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 	}
 	if err := q.RecordPlatformMCPFirstValueAchieved(ctx, repo.RecordPlatformMCPFirstValueAchievedParams{
 		OrganizationID:       observation.OrganizationID,
-		ConnectionID:         uuid.NullUUID{UUID: target.ConnectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: target.ConnectionGeneration, Valid: true},
+		ConnectionID:         uuid.NullUUID{UUID: target.ConnectionID.UUID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: target.ConnectionGeneration.UUID, Valid: true},
 		ProjectID:            uuid.NullUUID{UUID: observation.ProjectID, Valid: true},
 		McpKey:               target.McpKey,
 	}); err != nil {

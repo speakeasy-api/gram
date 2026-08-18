@@ -2442,8 +2442,8 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		State:                "attached",
 		Version:              1,
 		AttachmentWasCreated: true,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: connectionGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
 	})
 	require.NoError(t, err)
 
