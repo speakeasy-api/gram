@@ -69,6 +69,18 @@ func redeem(ctx context.Context, ti *testInstance, token string) (*gen.PolicyByp
 	return ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		SessionToken: nil,
 		RequestToken: token,
+		Note:         nil,
+	})
+}
+
+// redeemWithNote redeems the way the request page does: with the requester's
+// own justification for wanting the server.
+func redeemWithNote(ctx context.Context, ti *testInstance, token, note string) (*gen.PolicyBypassRedemption, error) {
+	//nolint:wrapcheck // tests assert on the service error exactly as returned
+	return ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		SessionToken: nil,
+		RequestToken: token,
+		Note:         &note,
 	})
 }
 

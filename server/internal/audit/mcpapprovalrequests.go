@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	ActionMCPApprovalRequestCreate        Action = "mcp_approval_request:create"
-	ActionMCPApprovalRequestApprove       Action = "mcp_approval_request:approve"
-	ActionMCPApprovalRequestDeny          Action = "mcp_approval_request:deny"
-	ActionMCPApprovalRequestResearchStart Action = "mcp_approval_request:research_start"
+	ActionMCPApprovalRequestCreate          Action = "mcp_approval_request:create"
+	ActionMCPApprovalRequestApprove         Action = "mcp_approval_request:approve"
+	ActionMCPApprovalRequestDeny            Action = "mcp_approval_request:deny"
+	ActionMCPApprovalRequestEvidenceChanged Action = "mcp_approval_request:evidence_changed"
+	ActionMCPApprovalRequestResearchStart   Action = "mcp_approval_request:research_start"
 )
 
 type LogMCPApprovalRequestCreateEvent struct {
@@ -116,6 +117,61 @@ func (l *Logger) LogMCPApprovalRequestDecide(ctx context.Context, dbtx repo.DBTX
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpApprovalRequestV1})
+}
+
+type LogMCPApprovalRequestEvidenceChangedEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	// Actor is who the feed credits. The recheck sweep passes the system
+	// principal — no person acted, the sweep observed — and it stays on the
+	// event so this entry is written the same way as every other one rather
+	// than by a rule hidden in the logger.
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	RequestURN urn.MCPApprovalRequest
+
+	// TargetRaw is the stored (redacted) form of the server reference,
+	// recorded as the subject display name so a feed entry is readable
+	// without a second lookup.
+	TargetRaw string
+
+	// DiffSummary is the compact JSON rendering of what moved (scopes,
+	// demanded secrets, authority mode, advisories), carried as event
+	// metadata so a webhook consumer can see what changed without a
+	// follow-up API call.
+	DiffSummary []byte
+}
+
+// LogMCPApprovalRequestEvidenceChanged records that the daily recheck found
+// the permission-relevant evidence for an approved server has drifted from
+// the snapshot its latest approval rested on. Announced once per distinct
+// drift — the guarded fingerprint write on the request row is what decides
+// that, and it runs in the same transaction as this entry.
+func (l *Logger) LogMCPApprovalRequestEvidenceChanged(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestEvidenceChangedEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.ToPGTextEmpty(""),
+
+		Action: string(ActionMCPApprovalRequestEvidenceChanged),
+
+		SubjectID:          event.RequestURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpApprovalRequest),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.TargetRaw),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       event.DiffSummary,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpApprovalRequestV1})

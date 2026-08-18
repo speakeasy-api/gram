@@ -1724,6 +1724,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						GitHubEvidenceToken:       c.String("github-evidence-token"),
 						SiteURL:                   siteURL,
 						BillingTracker:            billingTracker,
 						BillingRepository:         billingRepo,

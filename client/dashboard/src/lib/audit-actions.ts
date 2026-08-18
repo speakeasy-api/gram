@@ -68,6 +68,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
   "mcp_approval_request:deny",
+  "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
   "mcp_collection:attach_server",
   "mcp_collection:create",
@@ -352,6 +353,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "requested MCP access to";
     case "mcp_approval_request:deny":
       return "denied MCP access to";
+    case "mcp_approval_request:evidence_changed":
+      return "detected changed evidence for approved MCP server";
     case "mcp_approval_request:research_start":
       return "started research on";
 

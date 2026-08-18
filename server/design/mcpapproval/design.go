@@ -277,6 +277,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")
 	Attribute("status", String, "The request's current status.")
 	Attribute("requester_count", Int, "How many people have asked for this server.")
+	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted. Cleared only by recording a new decision.", func() { Format(FormatDateTime) })
 	Attribute("created_at", String, "When the request was first raised.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the request last changed.", func() { Format(FormatDateTime) })
 
@@ -332,6 +333,40 @@ var ResearchReport = Type("ResearchReport", func() {
 	Required("id", "status", "report_version", "created_at")
 })
 
+var EvidenceFieldChange = Type("EvidenceFieldChange", func() {
+	Description("One scalar drift between the decision's evidence snapshot and the current gather.")
+
+	Attribute("field", String, "Which fact moved: authority_mode, dynamic_registration, or known_advisories.")
+	Attribute("before", String, "The value the decision rested on.")
+	Attribute("after", String, "The value the latest gather found.")
+
+	Required("field", "before", "after")
+})
+
+var EvidenceAdvisoryChange = Type("EvidenceAdvisoryChange", func() {
+	Description("A published advisory the decision's snapshot did not carry.")
+
+	Attribute("id", String, "The advisory identifier.")
+	Attribute("summary", String, "The advisory's summary, when the database published one.")
+	Attribute("severity", String, "The advisory's severity, when the database published one.")
+
+	Required("id")
+})
+
+var EvidenceDiff = Type("EvidenceDiff", func() {
+	Description("What moved between the latest decision's evidence snapshot and the current gather, restricted to the permission-relevant slice: OAuth scopes, authority mode, demanded credentials, and published advisories. A change here is a re-review trigger, never a verdict — an unchanged published interface says nothing about unchanged behavior.")
+
+	Attribute("changed", Boolean, "Whether anything below is non-empty.")
+	Attribute("scopes_added", ArrayOf(String), "OAuth scopes the server's published authority metadata gained since the decision.")
+	Attribute("scopes_removed", ArrayOf(String), "OAuth scopes the published authority metadata lost since the decision.")
+	Attribute("secrets_added", ArrayOf(String), "Credentials the server now demands that it did not at decision time.")
+	Attribute("secrets_removed", ArrayOf(String), "Credentials the server demanded at decision time and no longer does.")
+	Attribute("fields", ArrayOf(EvidenceFieldChange), "Scalar drifts: authority mode, dynamic client registration, published-advisory count.")
+	Attribute("advisories_added", ArrayOf(EvidenceAdvisoryChange), "Advisories in the current gather's most-recent sample that the snapshot's sample did not carry.")
+
+	Required("changed")
+})
+
 var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 	Description("An approval request with everything needed to decide it.")
 
@@ -341,6 +376,7 @@ var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 	Attribute("evidence_version", Int, "Shape version of the evidence payload, so an older snapshot stays interpretable.")
 	Attribute("evidence_collected_at", String, "When the evidence was last gathered.", func() { Format(FormatDateTime) })
 	Attribute("decisions", ArrayOf(ApprovalDecision), "Every decision made on this server, newest first. A repeat request starts from the last rationale rather than from zero.")
+	Attribute("evidence_diff", EvidenceDiff, "What moved since the latest decision, compared on read between that decision's frozen snapshot and the current evidence. Absent when the request has no decisions or either side cannot be decoded.")
 	Attribute("research_reports", ArrayOf(ResearchReport), "Every research-agent run for this request, newest first.")
 
 	Required("request", "requesters", "decisions", "research_reports")

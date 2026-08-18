@@ -12,6 +12,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearApprovalRequestEvidenceChange = `-- name: ClearApprovalRequestEvidenceChange :exec
+UPDATE mcp_approval_requests
+SET evidence_changed_at = NULL
+  , notified_change_fingerprint = NULL
+  , updated_at = clock_timestamp()
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type ClearApprovalRequestEvidenceChangeParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// A new decision freezes a fresh snapshot, and that is the only thing that
+// clears an outstanding drift flag — a reverted gather or a quieter sweep
+// never un-flags what an admin has not looked at.
+func (q *Queries) ClearApprovalRequestEvidenceChange(ctx context.Context, arg ClearApprovalRequestEvidenceChangeParams) error {
+	_, err := q.db.Exec(ctx, clearApprovalRequestEvidenceChange, arg.ID, arg.ProjectID)
+	return err
+}
+
 const completeResearchReport = `-- name: CompleteResearchReport :one
 UPDATE mcp_research_reports
 SET status = 'completed'
@@ -474,6 +497,72 @@ func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetAppr
 	return i, err
 }
 
+const getApprovalRequestForRecheck = `-- name: GetApprovalRequestForRecheck :one
+SELECT
+    r.target_raw
+  , r.current_evidence
+  , r.evidence_version
+  , r.evidence_collected_at
+  , d.id AS decision_id
+  , d.decided_at AS decision_decided_at
+  , d.evidence_snapshot AS decision_evidence_snapshot
+  , d.evidence_version AS decision_evidence_version
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT id, decided_at, evidence_snapshot, evidence_version
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    -- id breaks a decided_at tie so the pick is stable: without it two
+    -- decisions sharing a timestamp would resolve arbitrarily, and the
+    -- recheck could compare against the older frozen snapshot on one sweep
+    -- and the newer one on the next.
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.id = $1
+  AND r.project_id = $2
+  AND r.status = 'approved'
+  AND r.deleted IS FALSE
+`
+
+type GetApprovalRequestForRecheckParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetApprovalRequestForRecheckRow struct {
+	TargetRaw                string
+	CurrentEvidence          []byte
+	EvidenceVersion          int32
+	EvidenceCollectedAt      pgtype.Timestamptz
+	DecisionID               uuid.UUID
+	DecisionDecidedAt        pgtype.Timestamptz
+	DecisionEvidenceSnapshot []byte
+	DecisionEvidenceVersion  int32
+}
+
+// Loads both sides of one recheck's comparison at the moment it runs: the
+// request's current gather and the evidence its latest decision froze. Read
+// here rather than at scan time so a decision recorded mid-sweep is seen by
+// the recheck that follows it, not compared against a superseded snapshot.
+func (q *Queries) GetApprovalRequestForRecheck(ctx context.Context, arg GetApprovalRequestForRecheckParams) (GetApprovalRequestForRecheckRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalRequestForRecheck, arg.ID, arg.ProjectID)
+	var i GetApprovalRequestForRecheckRow
+	err := row.Scan(
+		&i.TargetRaw,
+		&i.CurrentEvidence,
+		&i.EvidenceVersion,
+		&i.EvidenceCollectedAt,
+		&i.DecisionID,
+		&i.DecisionDecidedAt,
+		&i.DecisionEvidenceSnapshot,
+		&i.DecisionEvidenceVersion,
+	)
+	return i, err
+}
+
 const getBypassRequestForPromotion = `-- name: GetBypassRequestForPromotion :one
 SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note
@@ -650,6 +739,7 @@ SELECT
   , r.target_raw
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , r.created_at
   , r.updated_at
   , (
@@ -666,14 +756,15 @@ ORDER BY r.updated_at DESC, r.id DESC
 `
 
 type ListApprovalRequestTargetsRow struct {
-	ID             uuid.UUID
-	TargetKind     string
-	TargetRaw      string
-	TargetKey      string
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	RequesterCount int64
+	ID                uuid.UUID
+	TargetKind        string
+	TargetRaw         string
+	TargetKey         string
+	Status            string
+	EvidenceChangedAt pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	RequesterCount    int64
 }
 
 // Every review in a project, any kind and any status, with the requester
@@ -694,6 +785,7 @@ func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid
 			&i.TargetRaw,
 			&i.TargetKey,
 			&i.Status,
+			&i.EvidenceChangedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RequesterCount,
@@ -807,6 +899,7 @@ SELECT
   r.id
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -827,10 +920,11 @@ type ListApprovalRequestsByTargetKeysParams struct {
 }
 
 type ListApprovalRequestsByTargetKeysRow struct {
-	ID             uuid.UUID
-	TargetKey      string
-	Status         string
-	RequesterCount int64
+	ID                uuid.UUID
+	TargetKey         string
+	Status            string
+	EvidenceChangedAt pgtype.Timestamptz
+	RequesterCount    int64
 }
 
 // Resolves the approval request tracking each of a set of canonical server
@@ -850,8 +944,67 @@ func (q *Queries) ListApprovalRequestsByTargetKeys(ctx context.Context, arg List
 			&i.ID,
 			&i.TargetKey,
 			&i.Status,
+			&i.EvidenceChangedAt,
 			&i.RequesterCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApprovedRequestsForRecheck = `-- name: ListApprovedRequestsForRecheck :many
+SELECT
+    r.id
+  , r.project_id
+  , r.organization_id
+FROM mcp_approval_requests r
+WHERE r.status = 'approved'
+  AND r.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+  )
+  AND r.id > $1
+ORDER BY r.id
+LIMIT $2
+`
+
+type ListApprovedRequestsForRecheckParams struct {
+	AfterID  uuid.UUID
+	PageSize int32
+}
+
+type ListApprovedRequestsForRecheckRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Global scan for the daily change-detection sweep: the identity of every
+// approved request that has at least one decision to compare against.
+// Deliberately unscoped by project — the sweep serves every tenant — and
+// deliberately narrow: the evidence itself is loaded per request when its
+// recheck runs, so the sweep never carries evidence documents through the
+// workflow. Each row carries its own project id, and every write the sweep
+// makes is qualified by it.
+func (q *Queries) ListApprovedRequestsForRecheck(ctx context.Context, arg ListApprovedRequestsForRecheckParams) ([]ListApprovedRequestsForRecheckRow, error) {
+	rows, err := q.db.Query(ctx, listApprovedRequestsForRecheck, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListApprovedRequestsForRecheckRow
+	for rows.Next() {
+		var i ListApprovedRequestsForRecheckRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.OrganizationID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -868,7 +1021,7 @@ FROM mcp_approval_decisions
 WHERE mcp_approval_request_id = $1
   AND project_id = $2
   AND deleted IS FALSE
-ORDER BY decided_at DESC
+ORDER BY decided_at DESC, id DESC
 `
 
 type ListDecisionsForApprovalRequestParams struct {
@@ -876,6 +1029,9 @@ type ListDecisionsForApprovalRequestParams struct {
 	ProjectID            uuid.UUID
 }
 
+// Newest first. The head is what the read-path evidence diff compares
+// against, so the id tie-break is what stops two decisions sharing a
+// timestamp from making that comparison arbitrary.
 func (q *Queries) ListDecisionsForApprovalRequest(ctx context.Context, arg ListDecisionsForApprovalRequestParams) ([]McpApprovalDecision, error) {
 	rows, err := q.db.Query(ctx, listDecisionsForApprovalRequest, arg.McpApprovalRequestID, arg.ProjectID)
 	if err != nil {
@@ -1081,6 +1237,69 @@ func (q *Queries) LockApprovalRequestForResearch(ctx context.Context, arg LockAp
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const markApprovalRequestEvidenceChanged = `-- name: MarkApprovalRequestEvidenceChanged :execrows
+UPDATE mcp_approval_requests r
+SET evidence_changed_at = COALESCE(r.evidence_changed_at, clock_timestamp())
+  , notified_change_fingerprint = $1
+  , updated_at = clock_timestamp()
+WHERE r.id = $2
+  AND r.project_id = $3
+  AND r.deleted IS FALSE
+  AND r.status = 'approved'
+  AND r.notified_change_fingerprint IS DISTINCT FROM $1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+      AND (d.decided_at, d.id) > (
+        $4::timestamptz,
+        $5::uuid
+      )
+  )
+`
+
+type MarkApprovalRequestEvidenceChangedParams struct {
+	Fingerprint        pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ComparedDecisionAt pgtype.Timestamptz
+	ComparedDecisionID uuid.UUID
+}
+
+// Flags a permission-relevant drift from the latest decision's snapshot. The
+// first detection stamps evidence_changed_at; a later, materially different
+// drift updates only the announce-once fingerprint, so the flag keeps the
+// original drift time until a new decision clears it.
+//
+// Three predicates make this the single arbiter of whether a drift is news,
+// so the caller can announce exactly when a row was written:
+//   - a fingerprint that already matches means this drift was announced —
+//     which is also what makes an activity retry a no-op rather than a
+//     second webhook;
+//   - a request no longer approved is not something a re-review flag has
+//     anything to say about;
+//   - a decision recorded after the one the caller compared against has
+//     already answered this drift, so re-flagging would resurrect a flag the
+//     admin just cleared, permanently — only a decision clears it. "After" is
+//     ordered by (decided_at, id), the same order the caller picked its
+//     comparison decision by, so a decision that won a decided_at tie by id
+//     blocks the write instead of slipping past a decided_at-only test.
+func (q *Queries) MarkApprovalRequestEvidenceChanged(ctx context.Context, arg MarkApprovalRequestEvidenceChangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markApprovalRequestEvidenceChanged,
+		arg.Fingerprint,
+		arg.ID,
+		arg.ProjectID,
+		arg.ComparedDecisionAt,
+		arg.ComparedDecisionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const refreshApprovalRequestEvidence = `-- name: RefreshApprovalRequestEvidence :execrows

@@ -1862,16 +1862,17 @@ func EncodeRecordDecisionError(encoder func(context.Context, http.ResponseWriter
 // type *mcpapproval.ApprovalRequestSummary.
 func marshalMcpapprovalApprovalRequestSummaryToApprovalRequestSummaryResponseBody(v *mcpapproval.ApprovalRequestSummary) *ApprovalRequestSummaryResponseBody {
 	res := &ApprovalRequestSummaryResponseBody{
-		ID:             v.ID,
-		TargetKind:     v.TargetKind,
-		TargetRaw:      v.TargetRaw,
-		ServerSlug:     v.ServerSlug,
-		ArtifactRef:    v.ArtifactRef,
-		VersionPinned:  v.VersionPinned,
-		Status:         v.Status,
-		RequesterCount: v.RequesterCount,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		TargetKind:        v.TargetKind,
+		TargetRaw:         v.TargetRaw,
+		ServerSlug:        v.ServerSlug,
+		ArtifactRef:       v.ArtifactRef,
+		VersionPinned:     v.VersionPinned,
+		Status:            v.Status,
+		RequesterCount:    v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
 	}
 
 	return res
@@ -1912,6 +1913,96 @@ func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpappr
 		}
 	} else {
 		res.GrantedPrincipalUrns = []string{}
+	}
+
+	return res
+}
+
+// marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody builds a value of
+// type *EvidenceDiffResponseBody from a value of type
+// *mcpapproval.EvidenceDiff.
+func marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody(v *mcpapproval.EvidenceDiff) *EvidenceDiffResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceDiffResponseBody{
+		Changed: v.Changed,
+	}
+	if v.ScopesAdded != nil {
+		res.ScopesAdded = make([]string, len(v.ScopesAdded))
+		for i, val := range v.ScopesAdded {
+			res.ScopesAdded[i] = val
+		}
+	}
+	if v.ScopesRemoved != nil {
+		res.ScopesRemoved = make([]string, len(v.ScopesRemoved))
+		for i, val := range v.ScopesRemoved {
+			res.ScopesRemoved[i] = val
+		}
+	}
+	if v.SecretsAdded != nil {
+		res.SecretsAdded = make([]string, len(v.SecretsAdded))
+		for i, val := range v.SecretsAdded {
+			res.SecretsAdded[i] = val
+		}
+	}
+	if v.SecretsRemoved != nil {
+		res.SecretsRemoved = make([]string, len(v.SecretsRemoved))
+		for i, val := range v.SecretsRemoved {
+			res.SecretsRemoved[i] = val
+		}
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*EvidenceFieldChangeResponseBody, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody(val)
+		}
+	}
+	if v.AdvisoriesAdded != nil {
+		res.AdvisoriesAdded = make([]*EvidenceAdvisoryChangeResponseBody, len(v.AdvisoriesAdded))
+		for i, val := range v.AdvisoriesAdded {
+			if val == nil {
+				res.AdvisoriesAdded[i] = nil
+				continue
+			}
+			res.AdvisoriesAdded[i] = marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody
+// builds a value of type *EvidenceFieldChangeResponseBody from a value of type
+// *mcpapproval.EvidenceFieldChange.
+func marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody(v *mcpapproval.EvidenceFieldChange) *EvidenceFieldChangeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceFieldChangeResponseBody{
+		Field:  v.Field,
+		Before: v.Before,
+		After:  v.After,
+	}
+
+	return res
+}
+
+// marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody
+// builds a value of type *EvidenceAdvisoryChangeResponseBody from a value of
+// type *mcpapproval.EvidenceAdvisoryChange.
+func marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody(v *mcpapproval.EvidenceAdvisoryChange) *EvidenceAdvisoryChangeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceAdvisoryChangeResponseBody{
+		ID:       v.ID,
+		Summary:  v.Summary,
+		Severity: v.Severity,
 	}
 
 	return res

@@ -65,6 +65,7 @@ SELECT
   r.id
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -88,6 +89,7 @@ SELECT
   , r.target_raw
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , r.created_at
   , r.updated_at
   , (
@@ -126,12 +128,15 @@ WHERE mcp_approval_request_id = @mcp_approval_request_id
 ORDER BY requested_at ASC;
 
 -- name: ListDecisionsForApprovalRequest :many
+-- Newest first. The head is what the read-path evidence diff compares
+-- against, so the id tie-break is what stops two decisions sharing a
+-- timestamp from making that comparison arbitrary.
 SELECT *
 FROM mcp_approval_decisions
 WHERE mcp_approval_request_id = @mcp_approval_request_id
   AND project_id = @project_id
   AND deleted IS FALSE
-ORDER BY decided_at DESC;
+ORDER BY decided_at DESC, id DESC;
 
 -- name: GetResearchReportForDecision :one
 -- Resolves a report a decision wants to cite, pinned to the request being
@@ -444,3 +449,114 @@ WHERE id = @id
   AND status = 'running'
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListApprovedRequestsForRecheck :many
+-- Global scan for the daily change-detection sweep: the identity of every
+-- approved request that has at least one decision to compare against.
+-- Deliberately unscoped by project — the sweep serves every tenant — and
+-- deliberately narrow: the evidence itself is loaded per request when its
+-- recheck runs, so the sweep never carries evidence documents through the
+-- workflow. Each row carries its own project id, and every write the sweep
+-- makes is qualified by it.
+SELECT
+    r.id
+  , r.project_id
+  , r.organization_id
+FROM mcp_approval_requests r
+WHERE r.status = 'approved'
+  AND r.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+  )
+  AND r.id > @after_id
+ORDER BY r.id
+LIMIT @page_size;
+
+-- name: GetApprovalRequestForRecheck :one
+-- Loads both sides of one recheck's comparison at the moment it runs: the
+-- request's current gather and the evidence its latest decision froze. Read
+-- here rather than at scan time so a decision recorded mid-sweep is seen by
+-- the recheck that follows it, not compared against a superseded snapshot.
+SELECT
+    r.target_raw
+  , r.current_evidence
+  , r.evidence_version
+  , r.evidence_collected_at
+  , d.id AS decision_id
+  , d.decided_at AS decision_decided_at
+  , d.evidence_snapshot AS decision_evidence_snapshot
+  , d.evidence_version AS decision_evidence_version
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT id, decided_at, evidence_snapshot, evidence_version
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    -- id breaks a decided_at tie so the pick is stable: without it two
+    -- decisions sharing a timestamp would resolve arbitrarily, and the
+    -- recheck could compare against the older frozen snapshot on one sweep
+    -- and the newer one on the next.
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.id = @id
+  AND r.project_id = @project_id
+  AND r.status = 'approved'
+  AND r.deleted IS FALSE;
+
+-- name: MarkApprovalRequestEvidenceChanged :execrows
+-- Flags a permission-relevant drift from the latest decision's snapshot. The
+-- first detection stamps evidence_changed_at; a later, materially different
+-- drift updates only the announce-once fingerprint, so the flag keeps the
+-- original drift time until a new decision clears it.
+--
+-- Three predicates make this the single arbiter of whether a drift is news,
+-- so the caller can announce exactly when a row was written:
+--   * a fingerprint that already matches means this drift was announced —
+--     which is also what makes an activity retry a no-op rather than a
+--     second webhook;
+--   * a request no longer approved is not something a re-review flag has
+--     anything to say about;
+--   * a decision recorded after the one the caller compared against has
+--     already answered this drift, so re-flagging would resurrect a flag the
+--     admin just cleared, permanently — only a decision clears it. "After" is
+--     ordered by (decided_at, id), the same order the caller picked its
+--     comparison decision by, so a decision that won a decided_at tie by id
+--     blocks the write instead of slipping past a decided_at-only test.
+UPDATE mcp_approval_requests r
+SET evidence_changed_at = COALESCE(r.evidence_changed_at, clock_timestamp())
+  , notified_change_fingerprint = @fingerprint
+  , updated_at = clock_timestamp()
+WHERE r.id = @id
+  AND r.project_id = @project_id
+  AND r.deleted IS FALSE
+  AND r.status = 'approved'
+  AND r.notified_change_fingerprint IS DISTINCT FROM @fingerprint
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_approval_decisions d
+    WHERE d.mcp_approval_request_id = r.id
+      AND d.project_id = r.project_id
+      AND d.deleted IS FALSE
+      AND (d.decided_at, d.id) > (
+        sqlc.arg(compared_decision_at)::timestamptz,
+        sqlc.arg(compared_decision_id)::uuid
+      )
+  );
+
+-- name: ClearApprovalRequestEvidenceChange :exec
+-- A new decision freezes a fresh snapshot, and that is the only thing that
+-- clears an outstanding drift flag — a reverted gather or a quieter sweep
+-- never un-flags what an admin has not looked at.
+UPDATE mcp_approval_requests
+SET evidence_changed_at = NULL
+  , notified_change_fingerprint = NULL
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

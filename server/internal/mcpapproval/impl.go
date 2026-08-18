@@ -1149,6 +1149,15 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 		reports = append(reports, researchReportView(report))
 	}
 
+	// The diff is computed on read from the two stored sides — the latest
+	// decision's frozen snapshot and the current gather — so it is always
+	// consistent with what the page displays, even when the drift flag has
+	// not been swept yet.
+	var evidenceDiff *gen.EvidenceDiff
+	if len(decisionRows) > 0 {
+		evidenceDiff = evidenceDiffView(decisionRows[0], row.CurrentEvidence, row.EvidenceVersion)
+	}
+
 	return &gen.ApprovalRequestDetail{
 		Request:             summaryView(fromGetRow(row)),
 		Requesters:          requesters,
@@ -1157,6 +1166,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 		EvidenceCollectedAt: optionalTime(row.EvidenceCollectedAt),
 		Decisions:           decisions,
 		ResearchReports:     reports,
+		EvidenceDiff:        evidenceDiff,
 	}, nil
 }
 
@@ -1328,6 +1338,16 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// The snapshot this decision just froze answers any outstanding
+	// evidence-change flag; recording a decision is the only thing that
+	// clears it.
+	if err := queries.ClearApprovalRequestEvidenceChange(ctx, repo.ClearApprovalRequestEvidenceChangeParams{
+		ID:        requestID,
+		ProjectID: projectID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing evidence change flag").LogError(ctx, s.logger)
 	}
 
 	// The decision resolves the legacy bypass rows it answers too — in the

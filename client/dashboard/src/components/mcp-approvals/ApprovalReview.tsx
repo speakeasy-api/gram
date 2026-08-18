@@ -1,10 +1,16 @@
 import {
+  EvidenceGroup,
   EvidencePanel,
   StatusBadge,
 } from "@/components/mcp-approvals/EvidencePanel";
-import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
+import { EvidenceChangedNotice } from "@/components/mcp-approvals/EvidenceChangedNotice";
+import {
+  parseEvidenceDocument,
+  USAGE_QUESTION,
+} from "@/components/mcp-approvals/evidence";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -41,8 +47,24 @@ import { toast } from "sonner";
  */
 export function ApprovalReview({
   requestId,
+  title,
+  description,
+  usage,
 }: {
   requestId: string;
+  /**
+   * Section title, when this review is a section of a larger page. Given
+   * one, the request's status shares its row instead of costing a strip of
+   * its own; the review sheet, which has its own title, omits it.
+   */
+  title?: string;
+  description?: string;
+  /**
+   * Who is calling the server today. Owned by the caller, which holds the
+   * traffic query, and rendered inside the evidence as one more question
+   * about the server.
+   */
+  usage?: React.ReactNode;
 }): JSX.Element {
   const project = useProject();
 
@@ -70,54 +92,85 @@ export function ApprovalReview({
 
   // A failed fetch must not read as "still loading" forever: name the
   // failure and offer a retry.
+  // Observed traffic comes from the caller's own query, so it survives a
+  // review that will not load: what the server is doing right now is exactly
+  // what an admin still wants when the dossier is unavailable.
   if (detailQuery.error && !detail) {
     return (
-      <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
-        <p className="text-sm font-medium">The review could not be loaded</p>
-        <p className="text-muted-foreground mt-1 max-w-md text-sm">
-          It may be a temporary problem — try again.
-        </p>
-        <Button
-          className="mt-3"
-          variant="secondary"
-          onClick={() => void detailQuery.refetch()}
-        >
-          <Button.Text>Retry</Button.Text>
-        </Button>
+      <div className="space-y-4">
+        <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+          <p className="text-sm font-medium">The review could not be loaded</p>
+          <p className="text-muted-foreground mt-1 max-w-md text-sm">
+            It may be a temporary problem — try again.
+          </p>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            onClick={() => void detailQuery.refetch()}
+          >
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </div>
+        {usage && (
+          <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
+        )}
       </div>
     );
   }
 
   if (!detail) {
-    return <SkeletonTable />;
+    return (
+      <div className="space-y-4">
+        <SkeletonTable />
+        {usage && (
+          <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
+        )}
+      </div>
+    );
   }
 
+  const unreviewed = detail.request.status === "unreviewed";
+
   return (
-    <div className="space-y-6">
-      {/* Request context and decision history read before the evidence: one
-          column, so a sparse review (nobody asked, no decisions) is two short
-          lines instead of a mostly-empty rail. */}
+    <div className="space-y-4">
       {/* An unreviewed dossier is evidence without a review: no status to
-          report, nobody waiting. The request card and requester list only
+          report, nobody waiting. The requester list and decision history only
           exist once someone actually asks or decides. */}
-      {detail.request.status === "unreviewed" ? (
-        <p className="text-muted-foreground text-sm">
-          No one has asked for this server and no decision has been recorded.
-        </p>
+      <ReviewHeader
+        title={title}
+        description={description}
+        status={detail.request.status}
+        createdAt={unreviewed ? undefined : detail.request.createdAt}
+        versionPinned={detail.request.versionPinned}
+      />
+      {detail.request.status === "approved" && detail.evidenceDiff?.changed && (
+        <EvidenceChangedNotice
+          diff={detail.evidenceDiff}
+          changedAt={detail.request.evidenceChangedAt}
+        />
+      )}
+      {unreviewed ? (
+        <>
+          <p className="text-muted-foreground text-sm">
+            No one has asked for this server and no decision has been recorded.
+          </p>
+          <PriorDecisions decisions={detail.decisions} />
+        </>
       ) : (
         <>
-          <RequestSummary
-            status={detail.request.status}
-            createdAt={detail.request.createdAt}
-            versionPinned={detail.request.versionPinned}
-          />
-          <Requesters requesters={detail.requesters} />
+          {/* Who asked and what we last decided are both short lists read
+              before the evidence, so they sit side by side rather than
+              pushing the evidence a screen further down. */}
+          <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
+            <Requesters requesters={detail.requesters} />
+            <PriorDecisions decisions={detail.decisions} />
+          </div>
         </>
       )}
-      <PriorDecisions decisions={detail.decisions} />
       <EvidencePanel
         document={document}
         collectedAt={detail.evidenceCollectedAt}
+        usage={usage}
       />
       <ResearchReports reports={detail.researchReports} requestId={requestId} />
     </div>
@@ -174,34 +227,53 @@ export function RefreshEvidenceButton({
   );
 }
 
-function RequestSummary({
+/**
+ * The section title and the request's standing on one row. The status was a
+ * bordered card of its own until the labels came off it and nothing was left
+ * that the badge and the date did not already say — so it rides along in the
+ * space beside the heading instead of costing a band of its own.
+ */
+function ReviewHeader({
+  title,
+  description,
   status,
   createdAt,
   versionPinned,
 }: {
+  title: string | undefined;
+  description: string | undefined;
   status: string;
-  createdAt: Date;
+  /** Absent for an unreviewed dossier: nobody raised it. */
+  createdAt: Date | undefined;
   versionPinned: boolean;
 }): JSX.Element {
   return (
-    <section className="space-y-2">
-      <h3 className="text-eyebrow">Request</h3>
-      <div className="border-border space-y-1.5 border p-3 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Status</span>
-          <StatusBadge status={status} />
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
+      {title && (
+        <div className="min-w-0 flex-1">
+          <Text variant="subheading">{title}</Text>
+          {description && (
+            <Text muted small>
+              {description}
+            </Text>
+          )}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">First raised</span>
-          <HumanizeDateTime date={createdAt} includeTime={false} />
-        </div>
+      )}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <StatusBadge status={status} />
+        {createdAt && (
+          <span className="text-muted-foreground">
+            First raised{" "}
+            <HumanizeDateTime date={createdAt} includeTime={false} />
+          </span>
+        )}
         {!versionPinned && (
-          <p className="text-muted-foreground border-border border-t pt-2 text-xs">
+          <span className="text-muted-foreground">
             No pinned version — what runs may differ from the evidence.
-          </p>
+          </span>
         )}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -219,13 +291,13 @@ function Requesters({
           user.
         </p>
       ) : (
-        <ul className="space-y-3">
+        // One framed list with hairline rules, not a stack of cards: three
+        // requesters cost three rows here instead of three bordered blocks
+        // with gaps between them.
+        <ul className="divide-border border-border divide-y border">
           {requesters.map((requester) => (
-            <li
-              key={requester.userId}
-              className="border-border border p-2.5 text-xs"
-            >
-              <div className="flex items-center justify-between gap-2">
+            <li key={requester.userId} className="px-3 py-1.5 text-xs">
+              <div className="flex items-baseline justify-between gap-2">
                 <span className="truncate font-medium">
                   {requester.userEmail ?? requester.userId}
                 </span>
@@ -237,7 +309,9 @@ function Requesters({
                 </span>
               </div>
               {requester.note && (
-                <p className="text-muted-foreground mt-1">"{requester.note}"</p>
+                <p className="text-muted-foreground mt-0.5">
+                  "{requester.note}"
+                </p>
               )}
             </li>
           ))}
@@ -260,12 +334,9 @@ function PriorDecisions({
           No prior decisions. This is the first review of this server here.
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="divide-border border-border divide-y border">
           {decisions.map((decision) => (
-            <li
-              key={decision.id}
-              className="border-border border p-2.5 text-xs"
-            >
+            <li key={decision.id} className="px-3 py-1.5 text-xs">
               <div className="flex items-center justify-between gap-2">
                 <StatusBadge status={decision.decision} />
                 <span className="text-muted-foreground shrink-0 text-xs">
@@ -276,7 +347,7 @@ function PriorDecisions({
                 </span>
               </div>
               {decision.rationale && (
-                <p className="text-muted-foreground mt-2">
+                <p className="text-muted-foreground mt-1">
                   "{decision.rationale}"
                 </p>
               )}

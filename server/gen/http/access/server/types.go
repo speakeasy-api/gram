@@ -3749,6 +3749,10 @@ type ShadowMCPInventoryApprovalRequestResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many distinct people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted; cleared only by a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
