@@ -608,6 +608,43 @@ func TestService_Callback(t *testing.T) {
 	})
 }
 
+func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	for _, org := range userInfo.Organizations {
+		require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+	}
+
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code: "impersonation_code",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+	require.NotEmpty(t, result.SessionToken)
+	require.Equal(t, result.SessionToken, result.SessionCookie)
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err, "load impersonation session after callback")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context should be set after callback")
+	require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID)
+}
+
+func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance := newTestAuthService(t, defaultMockUserInfo())
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "impersonation_code")
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", idpUser.ImpersonatorEmail())
+}
+
 // extractStateFromURL extracts the state query parameter from a URL string.
 func extractStateFromURL(t *testing.T, urlStr string) string {
 	t.Helper()
