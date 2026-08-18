@@ -474,10 +474,6 @@ async function main() {
         "features[subscription_cancel][mode]": "at_period_end",
         "features[subscription_cancel][proration_behavior]": "none",
         "features[subscription_cancel][cancellation_reason][enabled]": "false",
-        "features[subscription_cancel][cancellation_reason][options][0]":
-          "missing_features",
-        "features[subscription_cancel][cancellation_reason][options][1]":
-          "other",
         "features[subscription_update][enabled]": "false",
       },
     );
