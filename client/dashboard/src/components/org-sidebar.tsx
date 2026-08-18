@@ -92,7 +92,7 @@ export function OrgSidebar({
   ].some((r) => r.active);
 
   const identityActive = [
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
@@ -133,7 +133,7 @@ export function OrgSidebar({
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
     orgRoutes.platformAdminOverview,
@@ -245,7 +245,7 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
                   ...(isUserSessionsEnabled
-                    ? [{ item: orgRoutes.userSessions, scope: orgReadOrAdmin }]
+                    ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),
                   { item: orgRoutes.identity, scope: orgReadOrAdmin },
                   {

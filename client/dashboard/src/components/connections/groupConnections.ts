@@ -18,10 +18,13 @@ import type { UserSessionUpstream } from "@gram/client/models/components/userses
  */
 export type ConnectionGrouping = "subject" | "provider" | "client";
 
+// "Agent" rather than "client": the OAuth client on the other side of a
+// connection is an agent, and that is what it is called everywhere else in the
+// product. `client` stays as the key, which names the protocol record.
 export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
   subject: "Person",
   provider: "Provider",
-  client: "Client",
+  client: "Agent",
 };
 
 export type ConnectionGroup = {

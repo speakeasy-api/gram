@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import {
+  CONNECTION_GROUPING_LABELS,
   connectionGroupSummary,
   groupAttentionState,
   groupConnections,
@@ -22,6 +23,7 @@ import {
   connectionActivityLabel,
   connectionDeadlineLabel,
   connectionState,
+  type ConnectionState,
 } from "@/lib/connection-state";
 import { getInitials } from "@/lib/initials";
 import { providerLabel } from "@/lib/provider-label";
@@ -78,18 +80,28 @@ function useNow(): number {
   return now;
 }
 
-const GROUPING_HEADERS: Record<ConnectionGrouping, string> = {
-  subject: "Person",
-  provider: "Provider",
-  client: "Client",
-};
-
 /** What a sub-row stands for, given what its parent row stands for. */
-const CHILD_OF: Record<ConnectionGrouping, "client" | "person"> = {
-  subject: "client",
+const CHILD_OF: Record<ConnectionGrouping, "agent" | "person"> = {
+  subject: "agent",
   provider: "person",
   client: "person",
 };
+
+/**
+ * The state read at a glance, before the word beside it is read at all. A
+ * roster is scanned for the one row that is wrong, and a colour carries that
+ * faster than text — green live, red spent, amber about to be, grey dormant.
+ */
+function StatusDot({ state }: { state: ConnectionState }): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        CONNECTION_STATE_PRESENTATION[state].dotClass,
+      )}
+    />
+  );
+}
 
 /**
  * The providers this group's subject holds tokens for, named.
@@ -199,12 +211,12 @@ function ConnectionSubRow({
   now: number;
   actions?: React.ReactNode;
 }): JSX.Element {
-  const presentation =
-    CONNECTION_STATE_PRESENTATION[connectionState(session, now)];
+  const state = connectionState(session, now);
+  const presentation = CONNECTION_STATE_PRESENTATION[state];
   const childIsPerson = CHILD_OF[grouping] === "person";
   const label = childIsPerson
     ? subjectLabel(session)
-    : (session.clientName ?? "Unknown client");
+    : (session.clientName ?? "Unknown agent");
 
   // A person's providers are a property of the person, not of each client they
   // connect through, so they belong on the parent row under person grouping and
@@ -252,10 +264,11 @@ function ConnectionSubRow({
 
         <span
           className={cn(
-            "hidden truncate text-xs sm:block",
+            "hidden items-center gap-2 truncate text-xs sm:flex",
             presentation.toneClass,
           )}
         >
+          <StatusDot state={state} />
           {presentation.label}
         </span>
       </div>
@@ -328,9 +341,15 @@ function ConnectionGroupRow({
     group.sessions.every(
       (session) => connectionState(session, now) === attention,
     );
-  const attentionTone = unanimous
-    ? CONNECTION_STATE_PRESENTATION[attention]
-    : null;
+
+  // The dot still shows on a mixed group, where the word does not: a colour
+  // beside a row that also carries an accent reads as "something in here",
+  // which is true, while the word would read as a claim about all of it. With
+  // nothing wrong, the group states the plain fact — carrying traffic or not.
+  const groupState: ConnectionState =
+    attention ?? (group.liveCount > 0 ? "live" : "idle");
+  const groupPresentation = CONNECTION_STATE_PRESENTATION[groupState];
+  const showStateLabel = attention === null || unanimous;
 
   return (
     <div
@@ -398,11 +417,12 @@ function ConnectionGroupRow({
 
           <span
             className={cn(
-              "hidden truncate text-xs sm:block",
-              attentionTone?.toneClass,
+              "hidden items-center gap-2 truncate text-xs sm:flex",
+              groupPresentation.toneClass,
             )}
           >
-            {attentionTone?.label ?? ""}
+            <StatusDot state={groupState} />
+            {showStateLabel ? groupPresentation.label : ""}
           </span>
         </button>
 
@@ -532,7 +552,7 @@ export function ConnectionsList({
                 name. */}
             <span />
             <span />
-            <span>{GROUPING_HEADERS[grouping]}</span>
+            <span>{CONNECTION_GROUPING_LABELS[grouping]}</span>
             <span className="hidden sm:block">Last used</span>
             <span className="hidden sm:block">Connections</span>
             <span className="hidden sm:block">Status</span>

@@ -114,7 +114,7 @@ export function ClientsAndSessionsTab({
       <InlineEmptyState
         icon="unplug"
         heading="No connections can be made yet"
-        description="This server has no session issuer, so no client can register against it and no session can be established. Turn on authentication to start accepting OAuth connections."
+        description="This server has no session issuer, so no agent can register against it and no session can be established. Turn on authentication to start accepting OAuth connections."
         action={
           // The last path segment is swapped rather than using a `../` link:
           // these tabs are a switch on a route param, not nested routes, so
@@ -146,7 +146,7 @@ export function ClientsAndSessionsTab({
           subtext="Currently authenticated MCP sessions"
         />
         <StatTile
-          title="Clients"
+          title="Agents"
           value={clients.length}
           tone="information"
           icon="app-window"
@@ -158,7 +158,7 @@ export function ClientsAndSessionsTab({
           cap cut short has to say so rather than read as the whole picture. */}
       {isTruncated && (
         <Text small muted>
-          Showing {sessions.length} sessions and {clients.length} clients. Later
+          Showing {sessions.length} sessions and {clients.length} agents. Later
           pages were not loaded, so the counts, search, and filters on this tab
           cover only these.
         </Text>

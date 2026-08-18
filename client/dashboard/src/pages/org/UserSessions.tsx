@@ -259,7 +259,7 @@ function UserSessionsInner(): JSX.Element {
   return (
     <ResourceListPage
       scope="org:read"
-      title="MCP Connections"
+      title="MCP Sessions"
       description="Every connection Gram brokers: what an agent connects through, the MCP server it reaches, and the upstream provider Gram holds credentials for on that person's behalf. Revoke a connection to immediately cut off access."
     >
       <div className="space-y-8">
