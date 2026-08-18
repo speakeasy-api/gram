@@ -31,6 +31,7 @@ import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
   useIdentifyUserForTelemetry,
+  useRegisterOrganizationForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 import {
@@ -87,6 +88,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
+  // Runs above every gate below, including the ones that return before
+  // ProjectProvider (and its own group registration) can mount, so
+  // organization-targeted feature flags resolve on the lockout pages too.
+  useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 

@@ -191,18 +191,6 @@ WHERE d.activated IS TRUE
   AND d.ingress_name IS NOT NULL
   AND d.deleted IS FALSE;
 
--- name: ListOrganizationUsersForHealthNotification :many
--- Authorization filtering is applied by the caller.
-SELECT users.id, users.email
-FROM organization_user_relationships AS our
-JOIN users
-  ON users.id = our.user_id
-WHERE our.organization_id = @organization_id
-  AND our.deleted IS FALSE
-  AND users.deleted_at IS NULL
-  AND users.email <> ''
-ORDER BY users.email, users.id;
-
 -- name: GetOrganizationSlugForHealthNotification :one
 SELECT slug
 FROM organization_metadata

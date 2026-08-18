@@ -19,6 +19,7 @@ func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *tes
 		"environment":             "local",
 		"stripe-api-key":          "unset",
 		"stripe-price-id-tum":     "partial-price",
+		"stripe-meter-id-tum":     "",
 		"stripe-meter-event-name": "",
 	})
 
@@ -40,6 +41,7 @@ func TestNewStripeClientRealClientValidatesCatalog(t *testing.T) {
 		"environment":             "local",
 		"stripe-api-key":          "sk_test_placeholder",
 		"stripe-price-id-tum":     "partial-price",
+		"stripe-meter-id-tum":     "mtr_placeholder",
 		"stripe-meter-event-name": "",
 	})
 
@@ -79,6 +81,7 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 		"stripe-api-key":          "sk_test_placeholder",
 		"stripe-webhook-secret":   "whsec_placeholder",
 		"stripe-price-id-tum":     "price_placeholder",
+		"stripe-meter-id-tum":     "mtr_placeholder",
 		"stripe-meter-event-name": "tum",
 	})
 
@@ -92,6 +95,7 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
 		PriceIDTUM:     "price_placeholder",
+		MeterIDTUM:     "mtr_placeholder",
 		MeterEventName: "tum",
 	}, client.Catalog())
 }
@@ -147,6 +151,7 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
+	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {

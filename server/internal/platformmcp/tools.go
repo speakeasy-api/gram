@@ -52,7 +52,7 @@ type ListProjectsOutput struct {
 }
 
 type ListProjectMCPsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"Gram project ID to inspect"`
+	ProjectID string `json:"project_id" jsonschema:"AICP project ID to inspect"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
 }
 
@@ -70,7 +70,7 @@ type ListProjectMCPsOutput struct {
 }
 
 type GetMCPInput struct {
-	ProjectID string `json:"project_id" jsonschema:"Gram project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
 }
 

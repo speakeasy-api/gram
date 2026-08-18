@@ -136,7 +136,7 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, enterprise).
+	// Gram account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
@@ -321,6 +321,10 @@ type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+	// Organization the project must belong to, by id or slug. A project outside it
+	// is reported as not found. Optional, because the global project lookup has no
+	// organization to scope by.
+	OrganizationIDOrSlug *string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service
@@ -350,7 +354,7 @@ type ListOrganizationsPayload struct {
 	// otherwise hide; it still respects account_type, account_types, trial_states
 	// and cursor.
 	Q *string
-	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
 	// set.
 	AccountType *string
@@ -426,7 +430,7 @@ type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type.
+	// New gram_account_type (free, pro, payg, or enterprise).
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool

@@ -2169,6 +2169,7 @@ func EncodeVerifyGcpIamCredentialRequest(encoder func(*http.Request) goahttp.Enc
 // restoreBody controls whether the response body should be restored after
 // having been read.
 // DecodeVerifyGcpIamCredentialResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2210,6 +2211,20 @@ func DecodeVerifyGcpIamCredentialResponse(decoder func(*http.Response) goahttp.D
 			}
 			res := NewVerifyGcpIamCredentialVerifyCredentialResultOK(&body)
 			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body VerifyGcpIamCredentialRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body VerifyGcpIamCredentialUnauthorizedResponseBody

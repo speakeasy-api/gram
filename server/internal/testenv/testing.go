@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -76,6 +77,50 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	t.Helper()
 
 	return metricnoop.NewMeterProvider()
+}
+
+// WaitForBlockedBackend blocks until some backend in this database is waiting
+// on a lock another one holds. A concurrency test needs it to know its second
+// connection has really blocked: a sleep long enough to be safe would still let
+// a slow start pass the test for the wrong reason.
+//
+// The query is raw because pg_stat_activity is a system view sqlc's catalog does
+// not carry, and it is scoped to the current database because the Postgres
+// instance is shared with every other package's cloned test databases. It reads
+// pg_stat_activity rather than pg_locks because a backend queued behind a row
+// lock waits on a transactionid lock, whose pg_locks row has no database.
+func WaitForBlockedBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		var blocked int64
+		err := conn.QueryRow(ctx, `
+			SELECT count(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND wait_event_type = 'Lock'
+		`).Scan(&blocked)
+
+		return err == nil && blocked > 0
+	}, 30*time.Second, 10*time.Millisecond, "expected a backend to block on a lock")
+}
+
+// RejectWritesTo makes every insert and update on one table fail with a check
+// constraint violation, so a caller can prove how its handler reports a database
+// error that is not pgx.ErrNoRows. NOT VALID leaves the rows already there
+// alone, so fixtures seeded beforehand stay readable.
+//
+// It alters the schema, so it is only sound in a test that owns its database,
+// and it can be called once per table per database.
+func RejectWritesTo(t *testing.T, ctx context.Context, conn *pgxpool.Pool, table string) {
+	t.Helper()
+
+	name := pgx.Identifier{"testenv_reject_writes_" + table}.Sanitize()
+	stmt := "ALTER TABLE " + pgx.Identifier{table}.Sanitize() +
+		" ADD CONSTRAINT " + name + " CHECK (false) NOT VALID"
+
+	_, err := conn.Exec(ctx, stmt)
+	require.NoError(t, err)
 }
 
 // BeginTx starts a transaction that's rolled back on test cleanup, so tests

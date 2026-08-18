@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -152,6 +154,26 @@ func TestSnapshotBillingCycleUsage_SkipsAlertWithoutLimit(t *testing.T) {
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 950)
 
 	require.Empty(t, captured.Sent(), "no contracted limit means no thresholds to cross")
+}
+
+func TestSnapshotBillingCycleUsage_SkipsContractAlertForPayg(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_payg")
+
+	require.NoError(t, orgrepo.New(conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: string(billing.TierPayg),
+	}))
+	// A legacy contract limit and an explicit PAYG billing email may coexist
+	// after conversion. Neither makes the contracted-allowance ladder valid.
+	upsertTumAlertMetadata(t, ctx, conn, orgID, 1000, "billing@example.com")
+
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 950)
+	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 950)
+
+	require.Empty(t, captured.Sent(), "PAYG never receives contracted TUM threshold emails")
 }
 
 func TestSnapshotBillingCycleUsage_RetriesAlertAfterSendFailure(t *testing.T) {

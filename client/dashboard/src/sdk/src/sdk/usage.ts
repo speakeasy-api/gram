@@ -4,12 +4,16 @@
 
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
+import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
+import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
+import { usageSetBillingEmail } from "../funcs/usageSetBillingEmail.js";
 import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { BillingEmail } from "../models/components/billingemail.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
@@ -22,9 +26,17 @@ import {
   CreateCustomerSessionSecurity,
 } from "../models/operations/createcustomersession.js";
 import {
+  CreateStripeCheckoutRequest,
+  CreateStripeCheckoutSecurity,
+} from "../models/operations/createstripecheckout.js";
+import {
   CreateTopUpCheckoutRequest,
   CreateTopUpCheckoutSecurity,
 } from "../models/operations/createtopupcheckout.js";
+import {
+  GetBillingEmailRequest,
+  GetBillingEmailSecurity,
+} from "../models/operations/getbillingemail.js";
 import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
@@ -33,6 +45,10 @@ import {
   GetTokensUnderManagementRequest,
   GetTokensUnderManagementSecurity,
 } from "../models/operations/gettokensundermanagement.js";
+import {
+  SetBillingEmailRequest,
+  SetBillingEmailSecurity,
+} from "../models/operations/setbillingemail.js";
 import {
   SetBillingMetadataRequest,
   SetBillingMetadataSecurity,
@@ -79,6 +95,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * createStripeCheckout usage
+   *
+   * @remarks
+   * Create a Stripe Checkout link for starting PAYG billing
+   */
+  async createStripeCheckout(
+    request?: CreateStripeCheckoutRequest | undefined,
+    security?: CreateStripeCheckoutSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<string> {
+    return unwrapAsync(usageCreateStripeCheckout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * createTopUpCheckout usage
    *
    * @remarks
@@ -90,6 +125,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateTopUpCheckout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getBillingEmail usage
+   *
+   * @remarks
+   * Get the billing notification email for a PAYG organization
+   */
+  async getBillingEmail(
+    request?: GetBillingEmailRequest | undefined,
+    security?: GetBillingEmailSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BillingEmail> {
+    return unwrapAsync(usageGetBillingEmail(
       this,
       request,
       security,
@@ -146,6 +200,25 @@ export class Usage extends ClientSDK {
   ): Promise<UsageTiers> {
     return unwrapAsync(usageGetUsageTiers(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * setBillingEmail usage
+   *
+   * @remarks
+   * Set or clear the billing notification email for a PAYG organization
+   */
+  async setBillingEmail(
+    request: SetBillingEmailRequest,
+    security?: SetBillingEmailSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BillingEmail> {
+    return unwrapAsync(usageSetBillingEmail(
+      this,
+      request,
+      security,
       options,
     ));
   }

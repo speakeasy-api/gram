@@ -495,7 +495,7 @@ func effectiveTunneledMcpServerLimit(accountType string, configured pgtype.Int4)
 	switch billing.Tier(strings.ToLower(strings.TrimSpace(accountType))) {
 	case billing.TierPro:
 		return 10
-	case billing.TierEnterprise:
+	case billing.TierEnterprise, billing.TierPayg:
 		return 25
 	default:
 		return 0

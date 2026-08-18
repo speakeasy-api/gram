@@ -53,8 +53,8 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: IsDefaultProject :one
--- Whether @project_id is the org's default project — the oldest (first by id
--- ASC) non-deleted project, created at org setup. Mirrors the default-project
+-- Whether @project_id is the org's default project — the oldest non-deleted
+-- project by created_at, then id. Mirrors the default-project
 -- definition the agent's getPlugins read path uses, so the audience the seeding
 -- side grants matches the project the delivery side treats as default. Used to
 -- decide whether a new plugin defaults to the org-wide audience: only plugins in
@@ -64,7 +64,7 @@ SELECT (
   FROM projects p
   WHERE p.organization_id = @organization_id
     AND p.deleted IS FALSE
-  ORDER BY p.id ASC
+  ORDER BY p.created_at ASC, p.id ASC
   LIMIT 1
 ) = @project_id AS is_default;
 
@@ -684,7 +684,7 @@ WHERE project_id = @project_id;
 
 -- name: GetProjectMarketplaceNameContext :one
 -- Returns a project's slug and whether it's its org's default project (oldest by
--- id ASC), the two inputs needed to resolve its marketplace name — read from the
+-- created_at, then id), the two inputs needed to resolve its marketplace name — read from the
 -- project row rather than trusting auth-context fields that some auth flows
 -- (e.g. project-scoped API keys) leave unset.
 SELECT
@@ -694,7 +694,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = pr.organization_id
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project
 FROM projects pr

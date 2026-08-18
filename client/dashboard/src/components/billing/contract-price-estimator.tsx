@@ -17,9 +17,11 @@ import {
   BASELINE_RATE_PER_MILLION,
   derivedAnnualPlatformFee,
   effectiveRatePerMillion,
+  formatSignedPct,
   formatTokensCompact,
   formatUSD,
   overageLines,
+  paygDeltaMessage,
   paygLines,
   sumLines,
   type TierLine,
@@ -135,29 +137,6 @@ function ModelCard({
       {children}
     </div>
   );
-}
-
-// "+10%" / "-15%": the sign is the information — an unsigned "10%" wouldn't
-// say which way the rates moved.
-function formatSignedPct(pct: number): string {
-  return `${pct > 0 ? "+" : ""}${pct.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
-}
-
-// Reads the annual gap between the two models. PAYG undercutting the
-// committed contract is a modelling error at list rates — but the expected
-// outcome of a big enough negotiated discount — so the two cases have to read
-// differently, or a deliberate discount gets reported as a pricing bug.
-function paygDeltaMessage(delta: number, rateAdjustPct: number): string {
-  if (delta > 0) {
-    return `Pay-as-you-go costs ${formatUSD(delta)}/yr more than the committed contract at this volume — the number to point at in a "should we commit?" conversation.`;
-  }
-  if (delta < 0 && rateAdjustPct !== 0) {
-    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here at the adjusted rates (${formatSignedPct(rateAdjustPct)} vs list).`;
-  }
-  if (delta < 0) {
-    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here, which the model isn't meant to allow — check the platform fee against the baseline.`;
-  }
-  return "Both models price identically at this volume.";
 }
 
 // How hard the account team should be looking at this contract. Steady

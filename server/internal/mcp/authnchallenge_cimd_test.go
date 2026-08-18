@@ -684,7 +684,10 @@ func TestOAuthCIMD_PurgeForcesUnconditionalReread(t *testing.T) {
 	first := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 	require.Equal(t, `"v1"`, first.ClientIDMetadataEtag.String)
 
-	purged, err := usersessions_repo.New(ti.conn).PurgeUserSessionClientCIMDCache(ctx, first.ID)
+	purged, err := usersessions_repo.New(ti.conn).PurgeUserSessionClientCIMDCache(ctx, usersessions_repo.PurgeUserSessionClientCIMDCacheParams{
+		ID:        first.ID,
+		ProjectID: first.ProjectID,
+	})
 	require.NoError(t, err)
 	require.False(t, purged.ClientIDMetadataCacheExpiresAt.Valid)
 	require.False(t, purged.ClientIDMetadataEtag.Valid)

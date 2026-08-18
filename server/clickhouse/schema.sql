@@ -1393,7 +1393,16 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- migration-built ones.
     chat_source LowCardinality(String) DEFAULT '' COMMENT 'Canonical product surface the scanned message came from (chat_messages.source canonicalized at ingest, e.g. codex, cursor, claude-code). Empty for rows written before the column existed or when attribution is unresolved.',
     team LowCardinality(String) DEFAULT '' COMMENT 'WorkOS directory department_name of the resolved user at ingest. Empty when the user has no directory profile or attribution is unresolved.',
-    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD)
+    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD),
+
+    -- Suppression convergence: why excluded_at is set. Extends the exclusion
+    -- annotation above (excluded_at/exclusion_id) so rule-based exclusions,
+    -- manual dismissals and the automated false-positive sweep all record
+    -- suppression on the same fields, replacing the parallel false_positive_at
+    -- flow. Declared last for the same append-only migration reason as the
+    -- watchdog attribution columns above.
+    excluded_reason LowCardinality(String) DEFAULT '' COMMENT 'Why the finding was suppressed: rule (exclusion rule, exclusion_id set), manual (dismissed by a user via UI or agent tool) or automated (offline false-positive sweep). Empty when the finding is not suppressed or on legacy rows written before this column existed.',
+    excluded_detail String DEFAULT '' COMMENT 'Free-form context for the suppression: the user-supplied dismissal reason for manual rows, the false-positive catalog reason for automated rows. Empty for rule rows and when no reason was given.' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)

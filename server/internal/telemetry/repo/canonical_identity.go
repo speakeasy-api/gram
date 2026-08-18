@@ -45,29 +45,49 @@ func canonicalIdentityOrgLiteral(orgID string) string {
 // verbatim. Folding never maps an empty value to a non-empty one or back, so
 // "(unset)"-bucket semantics are unchanged.
 func canonicalEmailExpr(orgLiteral, expr string) string {
-	get := "joinGet('identity_map', 'canonical_email', " + orgLiteral + ", lower(" + expr + "))"
-	return "if(position(" + expr + ", '@') > 0, coalesce(nullIf(" + get + ", ''), lower(" + expr + ")), " + expr + ")"
+	// lowerUTF8, not lower: the map keys are built with Postgres lower(),
+	// which is Unicode-aware; ClickHouse lower() only folds ASCII and would
+	// split any non-ASCII-cased email into a permanent literal bucket.
+	get := "joinGet('identity_map', 'canonical_email', " + orgLiteral + ", lowerUTF8(" + expr + "))"
+	return "if(position(" + expr + ", '@') > 0, coalesce(nullIf(" + get + ", ''), lowerUTF8(" + expr + ")), " + expr + ")"
 }
 
 // canonicalEmailValueList renders the right-hand side of an IN comparison:
-// one SQL fragment per requested value, folding email values through the same
-// joinGet the column side uses and binding everything else literally. The
-// email constants are normalized (lowercased, trimmed) in Go, so only the
-// joinGet itself is left to ClickHouse.
-func canonicalEmailValueList(orgLiteral string, values []string) (fragments []string, args []any) {
+// one SQL fragment per requested email value, folded through the same joinGet
+// the column side uses. Non-email values are returned separately so callers
+// can match them with the literal path's case-insensitive semantics (the
+// pre-fold code compared lower(col) to lowered values for hostnames too).
+func canonicalEmailValueList(orgLiteral string, values []string) (fragments []string, args []any, plain []string) {
 	fragments = make([]string, 0, len(values))
 	args = make([]any, 0, len(values)*2)
 	for _, value := range values {
 		if !strings.Contains(value, "@") {
-			fragments = append(fragments, "?")
-			args = append(args, value)
+			plain = append(plain, strings.ToLower(value))
 			continue
 		}
 		normalized := strings.ToLower(strings.TrimSpace(value))
 		fragments = append(fragments, "coalesce(nullIf(joinGet('identity_map', 'canonical_email', "+orgLiteral+", ?), ''), ?)")
 		args = append(args, normalized, normalized)
 	}
-	return fragments, args
+	return fragments, args, plain
+}
+
+// canonicalEmailPredicate is the shared comparison: folded emails match the
+// folded column; plain values (hostnames, the ” bucket) match the raw column
+// case-insensitively, mirroring the literal path.
+func canonicalEmailPredicate(orgLiteral, column string, values []string) squirrel.Sqlizer {
+	fragments, args, plain := canonicalEmailValueList(orgLiteral, values)
+	var preds squirrel.Or
+	if len(fragments) > 0 {
+		preds = append(preds, squirrel.Expr(canonicalEmailExpr(orgLiteral, column)+" IN ("+strings.Join(fragments, ", ")+")", args...))
+	}
+	if len(plain) > 0 {
+		preds = append(preds, squirrel.Eq{"lowerUTF8(" + column + ")": plain})
+	}
+	if len(preds) == 0 {
+		return squirrel.Expr("0")
+	}
+	return preds
 }
 
 // canonicalEmailFilter is the WHERE predicate for the email dimension on the
@@ -75,22 +95,49 @@ func canonicalEmailValueList(orgLiteral string, values []string) (fragments []st
 // literal "" bucket — an empty requested value binds as ” and an empty column
 // value folds to itself.
 func canonicalEmailFilter(orgLiteral, column string, values []string) squirrel.Sqlizer {
-	fragments, args := canonicalEmailValueList(orgLiteral, values)
-	return squirrel.Expr(canonicalEmailExpr(orgLiteral, column)+" IN ("+strings.Join(fragments, ", ")+")", args...)
+	return canonicalEmailPredicate(orgLiteral, column, values)
+}
+
+// canonicalEmailOpPredicate is the single home of the drill-filter operator
+// contract on the email dimension: eq considers only the first value
+// (mirroring the literal path), in matches all values, and not_eq negates the
+// whole folded identity — excluding a bucket must exclude every linked email,
+// or the excluded employee reappears as a partial bucket. Any other operator
+// (contains, exists, not_exists) returns ok=false and keeps literal
+// semantics: emptiness is fold-neutral and substring matching has no
+// meaningful fold.
+func canonicalEmailOpPredicate(orgLiteral, column, op string, values []string) (pred squirrel.Sqlizer, ok bool) {
+	if len(values) == 0 {
+		return nil, false
+	}
+	switch op {
+	case "", "eq":
+		return canonicalEmailPredicate(orgLiteral, column, values[:1]), true
+	case "in":
+		return canonicalEmailPredicate(orgLiteral, column, values), true
+	case "not_eq":
+		inner, args, err := canonicalEmailPredicate(orgLiteral, column, values[:1]).ToSql()
+		if err != nil {
+			// Expression building cannot fail for these shapes; fall back to
+			// the literal filter rather than dropping the exclusion.
+			return nil, false
+		}
+		return squirrel.Expr("NOT ("+inner+")", args...), true
+	default:
+		return nil, false
+	}
 }
 
 // canonicalScalarRowPredicate mirrors sessionScalarRowPredicate with the fold
 // applied to both sides: a requested "" means "this row has an empty value".
 func canonicalScalarRowPredicate(orgLiteral, expr string, values []string) squirrel.Sqlizer {
-	folded := canonicalEmailExpr(orgLiteral, expr)
 	hasEmpty, nonEmpty := splitEmptyValue(values)
 
 	emptyPred := squirrel.Expr(expr + " = ''")
 	if len(nonEmpty) == 0 {
 		return emptyPred
 	}
-	fragments, args := canonicalEmailValueList(orgLiteral, nonEmpty)
-	nonEmptyPred := squirrel.Expr(folded+" IN ("+strings.Join(fragments, ", ")+")", args...)
+	nonEmptyPred := canonicalEmailPredicate(orgLiteral, expr, nonEmpty)
 	if !hasEmpty {
 		return nonEmptyPred
 	}
@@ -101,15 +148,19 @@ func canonicalScalarRowPredicate(orgLiteral, expr string, values []string) squir
 // both sides: a chat matches when any row folds to a requested identity, and
 // a requested "" matches chats with no non-empty value on any row.
 func canonicalScalarHaving(orgLiteral, expr string, values []string) squirrel.Sqlizer {
-	folded := canonicalEmailExpr(orgLiteral, expr)
 	hasEmpty, nonEmpty := splitEmptyValue(values)
 
 	emptyPred := squirrel.Expr("countIf(" + expr + " != '') = 0")
 	if len(nonEmpty) == 0 {
 		return emptyPred
 	}
-	fragments, args := canonicalEmailValueList(orgLiteral, nonEmpty)
-	nonEmptyPred := squirrel.Expr("countIf("+folded+" IN ("+strings.Join(fragments, ", ")+")) > 0", args...)
+	inner, innerArgs, err := canonicalEmailPredicate(orgLiteral, expr, nonEmpty).ToSql()
+	if err != nil {
+		// squirrel expression building cannot fail for these shapes; match on
+		// nothing rather than panic in a query builder.
+		return squirrel.Expr("0")
+	}
+	nonEmptyPred := squirrel.Expr("countIf("+inner+") > 0", innerArgs...)
 	if !hasEmpty {
 		return nonEmptyPred
 	}
@@ -127,8 +178,17 @@ func canonicalSummaryValuesHaving(orgLiteral, column string, values []string) sq
 	if len(nonEmpty) == 0 {
 		return emptyPred
 	}
-	fragments, args := canonicalEmailValueList(orgLiteral, nonEmpty)
-	nonEmptyPred := squirrel.Expr("hasAny("+merged+", array("+strings.Join(fragments, ", ")+"))", args...)
+	fragments, args, plain := canonicalEmailValueList(orgLiteral, nonEmpty)
+	var preds squirrel.Or
+	if len(fragments) > 0 {
+		preds = append(preds, squirrel.Expr("hasAny("+merged+", array("+strings.Join(fragments, ", ")+"))", args...))
+	}
+	if len(plain) > 0 {
+		// Plain values match the raw elements case-insensitively, like the
+		// literal path's arrayMap(lower) comparison.
+		preds = append(preds, squirrel.Expr("hasAny(groupUniqArrayArray(arrayMap(x -> lowerUTF8(x), "+column+")), ?)", plain))
+	}
+	nonEmptyPred := squirrel.Sqlizer(preds)
 	if !hasEmpty {
 		return nonEmptyPred
 	}
@@ -201,10 +261,12 @@ func withCanonicalUserIdentityFilter(sb squirrel.SelectBuilder, ident CanonicalU
 			ident.EmailLower))
 	}
 	if ident.EmailLower != "" {
-		fragments, args := canonicalEmailValueList(orgLit, []string{ident.EmailLower})
-		match = append(match, squirrel.Expr(
-			"(telemetry_logs.user_id = '' AND "+canonicalEmailExpr(orgLit, "telemetry_logs.user_email")+" = "+fragments[0]+")",
-			args...))
+		fragments, args, _ := canonicalEmailValueList(orgLit, []string{ident.EmailLower})
+		if len(fragments) > 0 {
+			match = append(match, squirrel.Expr(
+				"(telemetry_logs.user_id = '' AND "+canonicalEmailExpr(orgLit, "telemetry_logs.user_email")+" = "+fragments[0]+")",
+				args...))
+		}
 	}
 	return sb.Where(match)
 }

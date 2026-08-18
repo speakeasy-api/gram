@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  DownloadPluginPackageQueryParamPlatform,
   DownloadPluginPackageRequest,
   DownloadPluginPackageSecurity,
-  QueryParamPlatform,
 } from "../models/operations/downloadpluginpackage.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -119,7 +119,7 @@ export function setPluginsDownloadPluginPackageData(
   queryKeyBase: [
     parameters: {
       pluginId: string;
-      platform: QueryParamPlatform;
+      platform: DownloadPluginPackageQueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -136,7 +136,7 @@ export function invalidatePluginsDownloadPluginPackage(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       pluginId: string;
-      platform: QueryParamPlatform;
+      platform: DownloadPluginPackageQueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

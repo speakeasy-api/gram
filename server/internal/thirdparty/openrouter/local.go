@@ -2,13 +2,17 @@ package openrouter
 
 import (
 	"context"
+	"time"
 )
 
 type Development struct {
 	apiKey string
 }
 
-var _ Provisioner = (*Development)(nil)
+var (
+	_ Provisioner = (*Development)(nil)
+	_ SpendClient = (*Development)(nil)
+)
 
 func NewDevelopment(apiKey string) *Development {
 	return &Development{apiKey: apiKey}
@@ -50,4 +54,8 @@ func (o *Development) GetModelUsage(ctx context.Context, generationID string, or
 		NativeTokensCached:    0,
 		NativeTokensReasoning: 0,
 	}, nil
+}
+
+func (o *Development) GetDailySpend(ctx context.Context, keyHash string, startDay, endDay time.Time) (DailySpendResult, error) {
+	return DailySpendResult{Days: nil, Source: DailySpendSourceAnalytics}, nil
 }
