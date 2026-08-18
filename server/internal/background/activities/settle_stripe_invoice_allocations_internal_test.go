@@ -39,8 +39,24 @@ func TestAllocationAlreadyClaimed(t *testing.T) {
 		},
 		{
 			name: "wrapped by the caller's context",
-			err:  fmt.Errorf("freeze baseline for 2026-07-01: %w", &pgconn.PgError{Code: pgerrcode.UniqueViolation}),
+			err:  fmt.Errorf("freeze baseline for 2026-07-01: %w", &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "stripe_invoice_allocations_idempotency_key_key"}),
 			want: true,
+		},
+		{
+			name: "a unique violation from the primary key is a real fault",
+			err: &pgconn.PgError{
+				Code:           pgerrcode.UniqueViolation,
+				ConstraintName: "stripe_invoice_allocations_pkey",
+			},
+			want: false,
+		},
+		{
+			name: "a unique violation from an index this activity has never reasoned about is a real fault",
+			err: &pgconn.PgError{
+				Code:           pgerrcode.UniqueViolation,
+				ConstraintName: "stripe_invoice_allocations_some_future_key",
+			},
+			want: false,
 		},
 		{
 			name: "a foreign key violation is a real fault",

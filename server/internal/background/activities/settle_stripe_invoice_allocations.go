@@ -28,6 +28,11 @@ const (
 
 	stripeAllocationSourceOpenRouter = "openrouter_daily_spend"
 	stripeAllocationSourceTUM        = "tum_cycle"
+
+	// The unique indexes on stripe_invoice_allocations that a concurrent settle
+	// can trip while storing an allocation this run also wanted.
+	stripeAllocationIdempotencyKeyIndex = "stripe_invoice_allocations_idempotency_key_key"
+	stripeAllocationOrgSourceSeqIndex   = "stripe_invoice_allocations_org_source_seq_key"
 )
 
 // SettleStripeInvoiceAllocationsArgs fixes the observation time for one daily
@@ -306,9 +311,22 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 // that reaches the idempotency-key index first still raises a unique violation.
 // Either conflict means the row this run wanted is already stored, and these
 // rows are immutable once written, so the loser has nothing left to do.
+//
+// Only those two indexes qualify. A violation from any other constraint —
+// including one added later — is a fault this activity has never reasoned
+// about, so it still has to surface.
 func allocationAlreadyClaimed(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
+	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
+		return false
+	}
+
+	switch pgErr.ConstraintName {
+	case stripeAllocationIdempotencyKeyIndex, stripeAllocationOrgSourceSeqIndex:
+		return true
+	default:
+		return false
+	}
 }
 
 func openRouterAllocationParams(
