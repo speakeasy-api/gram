@@ -113,17 +113,18 @@ const (
 	TemporalWorkflowIDKey    = attribute.Key("temporal.workflow.id")
 	TemporalRunIDKey         = attribute.Key("temporal.run.id")
 
-	AuthAccountTypeKey      = attribute.Key("gram.auth.account_type")
-	AuthAPIKeyIDKey         = attribute.Key("gram.auth.api_key.id")
-	AuthOrganizationIDKey   = attribute.Key("gram.auth.organization_id")
-	AuthOrganizationSlugKey = attribute.Key("gram.auth.organization_slug")
-	AuthProjectIDKey        = attribute.Key("gram.auth.project_id")
-	AuthProjectSlugKey      = attribute.Key("gram.auth.project_slug")
-	AuthSchemeKey           = attribute.Key("gram.auth.scheme")
-	AuthSessionIDKey        = attribute.Key("gram.auth.session_id")
-	AuthUserEmailKey        = attribute.Key("gram.auth.user_email")
-	AuthUserIDKey           = attribute.Key("gram.auth.user_id")
-	AuthUserExternalIDKey   = attribute.Key("gram.auth.external_user_id")
+	AuthAccountTypeKey       = attribute.Key("gram.auth.account_type")
+	AuthAPIKeyIDKey          = attribute.Key("gram.auth.api_key.id")
+	AuthOrganizationIDKey    = attribute.Key("gram.auth.organization_id")
+	AuthOrganizationSlugKey  = attribute.Key("gram.auth.organization_slug")
+	AuthProjectIDKey         = attribute.Key("gram.auth.project_id")
+	AuthProjectSlugKey       = attribute.Key("gram.auth.project_slug")
+	AuthSchemeKey            = attribute.Key("gram.auth.scheme")
+	AuthSessionIDKey         = attribute.Key("gram.auth.session_id")
+	AuthUserEmailKey         = attribute.Key("gram.auth.user_email")
+	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
+	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
+	AuthImpersonatorEmailKey = attribute.Key("gram.auth.impersonator_email")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1004,6 +1005,11 @@ func SlogAuthSessionID(v string) slog.Attr      { return slog.String(string(Auth
 
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
+
+func AuthImpersonatorEmail(v string) attribute.KeyValue { return AuthImpersonatorEmailKey.String(v) }
+func SlogAuthImpersonatorEmail(v string) slog.Attr {
+	return slog.String(string(AuthImpersonatorEmailKey), v)
+}
 
 func AuthUserID(v string) attribute.KeyValue { return AuthUserIDKey.String(v) }
 func SlogAuthUserID(v string) slog.Attr      { return slog.String(string(AuthUserIDKey), v) }

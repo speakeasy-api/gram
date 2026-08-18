@@ -635,6 +635,16 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID)
 }
 
+func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance := newTestAuthService(t, defaultMockUserInfo())
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "impersonation_code")
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", idpUser.ImpersonatorEmail())
+}
+
 // extractStateFromURL extracts the state query parameter from a URL string.
 func extractStateFromURL(t *testing.T, urlStr string) string {
 	t.Helper()
