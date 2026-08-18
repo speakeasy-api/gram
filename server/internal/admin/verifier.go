@@ -74,7 +74,7 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 			_ = v.sessions.Delete(ctx, session.SessionID)
 			return ctx, oops.C(oops.CodeUnauthorized).LogError(ctx, v.logger, attr.SlogError(err))
 		}
-		session, err = v.sessions.UpdateAccessToken(ctx, session, tok.AccessToken, tok.Expiry)
+		session, err = v.sessions.UpdateTokens(ctx, session, tok.AccessToken, tok.RefreshToken, tok.Expiry)
 		if err != nil {
 			return ctx, oops.E(oops.CodeUnexpected, err, "persist refreshed admin session").LogError(ctx, v.logger)
 		}

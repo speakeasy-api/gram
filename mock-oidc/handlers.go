@@ -75,7 +75,7 @@ func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {
 		"userinfo_endpoint":                     iss + "/userinfo",
 		"jwks_uri":                              iss + "/jwks.json",
 		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
 		"scopes_supported":                      []string{"openid", "email", "profile"},
@@ -277,8 +277,9 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.PostForm.Get("grant_type") != "authorization_code" {
-		writeTokenError(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code is supported")
+	grantType := r.PostForm.Get("grant_type")
+	if grantType != "authorization_code" && grantType != "refresh_token" {
+		writeTokenError(w, http.StatusBadRequest, "unsupported_grant_type", "supported grants are authorization_code and refresh_token")
 		return
 	}
 
@@ -291,6 +292,33 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	client, found := s.provider.cfg.FindClient(clientID)
 	if !found || client.ClientSecret != clientSecret {
 		writeTokenError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+		return
+	}
+
+	if grantType == "refresh_token" {
+		refreshToken := r.PostForm.Get("refresh_token")
+		entry, ok := s.provider.LookupRefreshToken(refreshToken, clientID)
+		if !ok {
+			writeTokenError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
+			return
+		}
+
+		accessToken, accessExpires, err := s.provider.MintAccessToken(entry.user, entry.scope)
+		if err != nil {
+			s.logger.ErrorContext(r.Context(), "mint access token", o11y.ErrAttr(err))
+			writeTokenError(w, http.StatusInternalServerError, "server_error", "could not mint token")
+			return
+		}
+		resp := map[string]any{
+			"access_token":  accessToken,
+			"refresh_token": refreshToken,
+			"token_type":    "Bearer",
+			"expires_in":    int(time.Until(accessExpires).Seconds()),
+		}
+		if entry.scope != "" {
+			resp["scope"] = entry.scope
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
@@ -324,6 +352,13 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	refreshToken, err := s.provider.MintRefreshToken(clientID, entry.user, entry.scope)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "mint refresh token", o11y.ErrAttr(err))
+		writeTokenError(w, http.StatusInternalServerError, "server_error", "could not mint token")
+		return
+	}
+
 	idToken, err := s.provider.SignIDToken(entry.user, clientID, entry.nonce, accessExpires)
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "sign id token", o11y.ErrAttr(err))
@@ -337,10 +372,11 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	resp := map[string]any{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-		"expires_in":   int(time.Until(accessExpires).Seconds()),
-		"id_token":     idToken,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    int(time.Until(accessExpires).Seconds()),
+		"id_token":      idToken,
 	}
 	if entry.scope != "" {
 		resp["scope"] = entry.scope

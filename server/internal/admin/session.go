@@ -149,14 +149,22 @@ func (s *SessionStore) Delete(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// UpdateAccessToken re-encrypts and persists a freshly refreshed OAuth
-// access token onto an existing session record.
-func (s *SessionStore) UpdateAccessToken(ctx context.Context, session Session, accessToken string, expiresAt time.Time) (Session, error) {
-	enc, err := s.enc.Encrypt([]byte(accessToken))
+// UpdateTokens encrypts and persists a refreshed OAuth token pair. Providers
+// may omit the refresh token when it did not rotate; retain the existing one
+// in that case.
+func (s *SessionStore) UpdateTokens(ctx context.Context, session Session, accessToken, refreshToken string, expiresAt time.Time) (Session, error) {
+	accessEnc, err := s.enc.Encrypt([]byte(accessToken))
 	if err != nil {
 		return session, fmt.Errorf("encrypt access token: %w", err)
 	}
-	session.AccessTokenEnc = enc
+	if refreshToken != "" {
+		refreshEnc, err := s.enc.Encrypt([]byte(refreshToken))
+		if err != nil {
+			return session, fmt.Errorf("encrypt refresh token: %w", err)
+		}
+		session.RefreshTokenEnc = refreshEnc
+	}
+	session.AccessTokenEnc = accessEnc
 	session.AccessTokenExpiresAt = expiresAt
 	if err := s.cache.Store(ctx, session); err != nil {
 		return session, fmt.Errorf("store admin session: %w", err)

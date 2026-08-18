@@ -364,9 +364,8 @@ describe("logout", () => {
     expect(window.location.href).toContain("prompt=select_account");
   });
 
-  // The 401 handler retries with prompt=none, which the provider honours
-  // silently. Taking it here would sign the operator back in behind the Logout
-  // they just pressed.
+  // Taking the read-side 401 handler here would start a new login behind the
+  // Logout the operator just pressed.
   it("reports a 401 instead of signing the operator back in", async () => {
     vi.stubGlobal(
       "fetch",

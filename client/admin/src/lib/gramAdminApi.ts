@@ -87,11 +87,9 @@ async function gramAdminRequest(
   const res = await fetch(url, { ...init, headers });
 
   if (res.status === 401 && redirectOnUnauthorized) {
-    // Top-level redirect into the OIDC flow. Use prompt=none so the identity
-    // provider returns silently when the operator already has a session with
-    // it. The gram admin backend falls back to interactive login if the
-    // provider returns error=login_required (see Callback in
-    // server/internal/admin/impl.go).
+    // Top-level redirect into the OIDC flow. Interactive consent ensures the
+    // provider returns a refresh token; without one the one-hour access token
+    // would send the operator through login again on every expiry.
     //
     // return_to must stay a relative path. sanitizeReturnTo in
     // server/internal/admin/oauth.go keeps an absolute URL only when its origin
@@ -103,7 +101,7 @@ async function gramAdminRequest(
       window.location.pathname + window.location.search,
     );
     redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
+    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
     // Setting window.location starts the navigation but does not stop the code
     // that follows it. Throw to unwind the in-flight call.
     throw new GramAdminError(401, null, "redirecting to admin login");
@@ -169,10 +167,8 @@ export function getSession(): Promise<AdminSessionInfo> {
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
-// cookie in the browser. The next request would therefore 401, and the 401
-// handler retries with prompt=none, which the identity provider honours
-// silently and signs the operator straight back in. Asking for select_account
-// instead forces the account chooser, so logging out is visible.
+// cookie in the browser. Asking for select_account after deleting the session
+// makes logout visible and lets the operator choose a different account.
 export async function logout(): Promise<void> {
   await gramAdminSend("/admin/auth.logout", { method: "POST" });
   window.location.href = "/admin/auth.login?prompt=select_account";
