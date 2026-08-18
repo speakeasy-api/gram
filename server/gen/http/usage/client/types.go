@@ -33,6 +33,16 @@ type SetBillingEmailRequestBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
+// SetSpendCapRequestBody is the type of the "usage" service "setSpendCap"
+// endpoint HTTP request body.
+type SetSpendCapRequestBody struct {
+	// The platform-managed inference key to update. Defaults to chat for
+	// compatibility.
+	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// The monthly inference spend cap in USD
+	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
+
 // GetPeriodUsageResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body.
 type GetPeriodUsageResponseBody struct {
@@ -117,6 +127,15 @@ type SetBillingEmailResponseBody struct {
 	// The configured billing notification email. Omitted when organization
 	// administrators receive billing notifications.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+}
+
+// SetSpendCapResponseBody is the type of the "usage" service "setSpendCap"
+// endpoint HTTP response body.
+type SetSpendCapResponseBody struct {
+	// The platform-managed inference key whose cap is reported
+	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// The monthly inference spend cap in USD
+	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -1037,6 +1056,375 @@ type SetBillingEmailUnexpectedResponseBody struct {
 // SetBillingEmailGatewayErrorResponseBody is the type of the "usage" service
 // "setBillingEmail" endpoint HTTP response body for the "gateway_error" error.
 type SetBillingEmailGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapUnauthorizedResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unauthorized" error.
+type SetSpendCapUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapForbiddenResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "forbidden" error.
+type SetSpendCapForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapBadRequestResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "bad_request" error.
+type SetSpendCapBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapNotFoundResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "not_found" error.
+type SetSpendCapNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapConflictResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "conflict" error.
+type SetSpendCapConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapUnsupportedMediaResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unsupported_media" error.
+type SetSpendCapUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapInvalidResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "invalid" error.
+type SetSpendCapInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapInvariantViolationResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "invariant_violation"
+// error.
+type SetSpendCapInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapUnexpectedResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unexpected" error.
+type SetSpendCapUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSpendCapGatewayErrorResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "gateway_error" error.
+type SetSpendCapGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsUnauthorizedResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetInferenceSpendCapsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsForbiddenResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "forbidden" error.
+type GetInferenceSpendCapsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsBadRequestResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "bad_request" error.
+type GetInferenceSpendCapsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsNotFoundResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "not_found"
+// error.
+type GetInferenceSpendCapsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsConflictResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "conflict" error.
+type GetInferenceSpendCapsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsUnsupportedMediaResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetInferenceSpendCapsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsInvalidResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "invalid" error.
+type GetInferenceSpendCapsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsInvariantViolationResponseBody is the type of the
+// "usage" service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetInferenceSpendCapsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsUnexpectedResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unexpected" error.
+type GetInferenceSpendCapsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendCapsGatewayErrorResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetInferenceSpendCapsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1995,6 +2383,18 @@ type TUMPeriodDayResponseBody struct {
 	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
 }
 
+// InferenceSpendCapResponse is used to define fields on response body types.
+type InferenceSpendCapResponse struct {
+	// The platform-managed inference function
+	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// Monthly usage in USD
+	CreditsUsed *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
+	// The enforced monthly spend cap in USD
+	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+	// Whether the platform-managed key is disabled
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -2037,6 +2437,16 @@ func NewSetBillingMetadataRequestBody(p *usage.SetBillingMetadataPayload) *SetBi
 func NewSetBillingEmailRequestBody(p *usage.SetBillingEmailPayload) *SetBillingEmailRequestBody {
 	body := &SetBillingEmailRequestBody{
 		Email: p.Email,
+	}
+	return body
+}
+
+// NewSetSpendCapRequestBody builds the HTTP request body from the payload of
+// the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapRequestBody(p *usage.SetSpendCapPayload) *SetSpendCapRequestBody {
+	body := &SetSpendCapRequestBody{
+		KeyType:        p.KeyType,
+		MonthlyCredits: p.MonthlyCredits,
 	}
 	return body
 }
@@ -2864,6 +3274,332 @@ func NewSetBillingEmailUnexpected(body *SetBillingEmailUnexpectedResponseBody) *
 // NewSetBillingEmailGatewayError builds a usage service setBillingEmail
 // endpoint gateway_error error.
 func NewSetBillingEmailGatewayError(body *SetBillingEmailGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapSpendCapOK builds a "usage" service "setSpendCap" endpoint
+// result from a HTTP "OK" response.
+func NewSetSpendCapSpendCapOK(body *SetSpendCapResponseBody) *usage.SpendCap {
+	v := &usage.SpendCap{
+		KeyType:        *body.KeyType,
+		MonthlyCredits: *body.MonthlyCredits,
+	}
+
+	return v
+}
+
+// NewSetSpendCapUnauthorized builds a usage service setSpendCap endpoint
+// unauthorized error.
+func NewSetSpendCapUnauthorized(body *SetSpendCapUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapForbidden builds a usage service setSpendCap endpoint
+// forbidden error.
+func NewSetSpendCapForbidden(body *SetSpendCapForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapBadRequest builds a usage service setSpendCap endpoint
+// bad_request error.
+func NewSetSpendCapBadRequest(body *SetSpendCapBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapNotFound builds a usage service setSpendCap endpoint not_found
+// error.
+func NewSetSpendCapNotFound(body *SetSpendCapNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapConflict builds a usage service setSpendCap endpoint conflict
+// error.
+func NewSetSpendCapConflict(body *SetSpendCapConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapUnsupportedMedia builds a usage service setSpendCap endpoint
+// unsupported_media error.
+func NewSetSpendCapUnsupportedMedia(body *SetSpendCapUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapInvalid builds a usage service setSpendCap endpoint invalid
+// error.
+func NewSetSpendCapInvalid(body *SetSpendCapInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapInvariantViolation builds a usage service setSpendCap endpoint
+// invariant_violation error.
+func NewSetSpendCapInvariantViolation(body *SetSpendCapInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapUnexpected builds a usage service setSpendCap endpoint
+// unexpected error.
+func NewSetSpendCapUnexpected(body *SetSpendCapUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSpendCapGatewayError builds a usage service setSpendCap endpoint
+// gateway_error error.
+func NewSetSpendCapGatewayError(body *SetSpendCapGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsInferenceSpendCapOK builds a "usage" service
+// "getInferenceSpendCaps" endpoint result from a HTTP "OK" response.
+func NewGetInferenceSpendCapsInferenceSpendCapOK(body []*InferenceSpendCapResponse) []*usage.InferenceSpendCap {
+	v := make([]*usage.InferenceSpendCap, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalInferenceSpendCapResponseToUsageInferenceSpendCap(val)
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsUnauthorized builds a usage service
+// getInferenceSpendCaps endpoint unauthorized error.
+func NewGetInferenceSpendCapsUnauthorized(body *GetInferenceSpendCapsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsForbidden builds a usage service
+// getInferenceSpendCaps endpoint forbidden error.
+func NewGetInferenceSpendCapsForbidden(body *GetInferenceSpendCapsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsBadRequest builds a usage service
+// getInferenceSpendCaps endpoint bad_request error.
+func NewGetInferenceSpendCapsBadRequest(body *GetInferenceSpendCapsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsNotFound builds a usage service
+// getInferenceSpendCaps endpoint not_found error.
+func NewGetInferenceSpendCapsNotFound(body *GetInferenceSpendCapsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsConflict builds a usage service
+// getInferenceSpendCaps endpoint conflict error.
+func NewGetInferenceSpendCapsConflict(body *GetInferenceSpendCapsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsUnsupportedMedia builds a usage service
+// getInferenceSpendCaps endpoint unsupported_media error.
+func NewGetInferenceSpendCapsUnsupportedMedia(body *GetInferenceSpendCapsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsInvalid builds a usage service getInferenceSpendCaps
+// endpoint invalid error.
+func NewGetInferenceSpendCapsInvalid(body *GetInferenceSpendCapsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsInvariantViolation builds a usage service
+// getInferenceSpendCaps endpoint invariant_violation error.
+func NewGetInferenceSpendCapsInvariantViolation(body *GetInferenceSpendCapsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsUnexpected builds a usage service
+// getInferenceSpendCaps endpoint unexpected error.
+func NewGetInferenceSpendCapsUnexpected(body *GetInferenceSpendCapsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendCapsGatewayError builds a usage service
+// getInferenceSpendCaps endpoint gateway_error error.
+func NewGetInferenceSpendCapsGatewayError(body *GetInferenceSpendCapsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3744,6 +4480,33 @@ func ValidateGetBillingEmailResponseBody(body *GetBillingEmailResponseBody) (err
 func ValidateSetBillingEmailResponseBody(body *SetBillingEmailResponseBody) (err error) {
 	if body.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", *body.Email, goa.FormatEmail))
+	}
+	return
+}
+
+// ValidateSetSpendCapResponseBody runs the validations defined on
+// SetSpendCapResponseBody
+func ValidateSetSpendCapResponseBody(body *SetSpendCapResponseBody) (err error) {
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.MonthlyCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 1, true))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 10000, false))
+		}
 	}
 	return
 }
@@ -4967,6 +5730,487 @@ func ValidateSetBillingEmailUnexpectedResponseBody(body *SetBillingEmailUnexpect
 // ValidateSetBillingEmailGatewayErrorResponseBody runs the validations defined
 // on setBillingEmail_gateway_error_response_body
 func ValidateSetBillingEmailGatewayErrorResponseBody(body *SetBillingEmailGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapUnauthorizedResponseBody runs the validations defined on
+// setSpendCap_unauthorized_response_body
+func ValidateSetSpendCapUnauthorizedResponseBody(body *SetSpendCapUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapForbiddenResponseBody runs the validations defined on
+// setSpendCap_forbidden_response_body
+func ValidateSetSpendCapForbiddenResponseBody(body *SetSpendCapForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapBadRequestResponseBody runs the validations defined on
+// setSpendCap_bad_request_response_body
+func ValidateSetSpendCapBadRequestResponseBody(body *SetSpendCapBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapNotFoundResponseBody runs the validations defined on
+// setSpendCap_not_found_response_body
+func ValidateSetSpendCapNotFoundResponseBody(body *SetSpendCapNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapConflictResponseBody runs the validations defined on
+// setSpendCap_conflict_response_body
+func ValidateSetSpendCapConflictResponseBody(body *SetSpendCapConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapUnsupportedMediaResponseBody runs the validations defined
+// on setSpendCap_unsupported_media_response_body
+func ValidateSetSpendCapUnsupportedMediaResponseBody(body *SetSpendCapUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapInvalidResponseBody runs the validations defined on
+// setSpendCap_invalid_response_body
+func ValidateSetSpendCapInvalidResponseBody(body *SetSpendCapInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapInvariantViolationResponseBody runs the validations
+// defined on setSpendCap_invariant_violation_response_body
+func ValidateSetSpendCapInvariantViolationResponseBody(body *SetSpendCapInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapUnexpectedResponseBody runs the validations defined on
+// setSpendCap_unexpected_response_body
+func ValidateSetSpendCapUnexpectedResponseBody(body *SetSpendCapUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSpendCapGatewayErrorResponseBody runs the validations defined on
+// setSpendCap_gateway_error_response_body
+func ValidateSetSpendCapGatewayErrorResponseBody(body *SetSpendCapGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsUnauthorizedResponseBody runs the validations
+// defined on getInferenceSpendCaps_unauthorized_response_body
+func ValidateGetInferenceSpendCapsUnauthorizedResponseBody(body *GetInferenceSpendCapsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsForbiddenResponseBody runs the validations
+// defined on getInferenceSpendCaps_forbidden_response_body
+func ValidateGetInferenceSpendCapsForbiddenResponseBody(body *GetInferenceSpendCapsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsBadRequestResponseBody runs the validations
+// defined on getInferenceSpendCaps_bad_request_response_body
+func ValidateGetInferenceSpendCapsBadRequestResponseBody(body *GetInferenceSpendCapsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsNotFoundResponseBody runs the validations
+// defined on getInferenceSpendCaps_not_found_response_body
+func ValidateGetInferenceSpendCapsNotFoundResponseBody(body *GetInferenceSpendCapsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsConflictResponseBody runs the validations
+// defined on getInferenceSpendCaps_conflict_response_body
+func ValidateGetInferenceSpendCapsConflictResponseBody(body *GetInferenceSpendCapsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsUnsupportedMediaResponseBody runs the
+// validations defined on getInferenceSpendCaps_unsupported_media_response_body
+func ValidateGetInferenceSpendCapsUnsupportedMediaResponseBody(body *GetInferenceSpendCapsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsInvalidResponseBody runs the validations
+// defined on getInferenceSpendCaps_invalid_response_body
+func ValidateGetInferenceSpendCapsInvalidResponseBody(body *GetInferenceSpendCapsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsInvariantViolationResponseBody runs the
+// validations defined on
+// getInferenceSpendCaps_invariant_violation_response_body
+func ValidateGetInferenceSpendCapsInvariantViolationResponseBody(body *GetInferenceSpendCapsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsUnexpectedResponseBody runs the validations
+// defined on getInferenceSpendCaps_unexpected_response_body
+func ValidateGetInferenceSpendCapsUnexpectedResponseBody(body *GetInferenceSpendCapsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendCapsGatewayErrorResponseBody runs the validations
+// defined on getInferenceSpendCaps_gateway_error_response_body
+func ValidateGetInferenceSpendCapsGatewayErrorResponseBody(body *GetInferenceSpendCapsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6231,6 +7475,29 @@ func ValidateTUMPeriodDayResponseBody(body *TUMPeriodDayResponseBody) (err error
 	}
 	if body.Date != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.date", *body.Date, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateInferenceSpendCapResponse runs the validations defined on
+// InferenceSpendCapResponse
+func ValidateInferenceSpendCapResponse(body *InferenceSpendCapResponse) (err error) {
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.CreditsUsed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credits_used", "body"))
+	}
+	if body.MonthlyCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	if body.Disabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
 	}
 	return
 }

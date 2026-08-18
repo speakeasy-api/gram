@@ -36,15 +36,15 @@
     },
     "openrouter_chat_credits_threshold": {
       "managed_name": "gram.transactional.v2.openrouter_chat_credits_threshold",
-      "subject": "Chat credits at {data.threshold_percent}% for {data.organization_name}",
-      "preview_text": "Review your platform-managed chat credit usage.",
+      "subject": "Other inference cap at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review your other inference usage.",
       "source": "openrouter_chat_credits_threshold.lmx",
       "variables": ["organization_name", "threshold_percent", "exhausted"]
     },
     "openrouter_internal_credits_threshold": {
       "managed_name": "gram.transactional.v2.openrouter_internal_credits_threshold",
-      "subject": "Internal AI credits at {data.threshold_percent}% for {data.organization_name}",
-      "preview_text": "Review credits used by platform analysis.",
+      "subject": "Security inference cap at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review your security inference usage.",
       "source": "openrouter_internal_credits_threshold.lmx",
       "variables": ["organization_name", "threshold_percent", "exhausted"]
     },

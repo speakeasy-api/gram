@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -55,6 +57,7 @@ type Service struct {
 	auditLogger     *audit.Logger
 	posthogClient   *posthog.Posthog
 	openRouter      openrouter.Provisioner
+	keyRefresher    openRouterKeyRefreshScheduler
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
 	stripeMetrics   stripeWebhookMetricsRecorder
@@ -69,7 +72,13 @@ type productFeatureCacheUpdater interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
+const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
+
+type openRouterBillingDBProvisioner interface {
+	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
+}
+
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -91,6 +100,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:     auditLogger,
 		posthogClient:   posthogClient,
 		openRouter:      openRouter,
+		keyRefresher:    keyRefresher,
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
@@ -192,13 +202,10 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").LogError(ctx, logger)
 	}
-	updatedAccountType := refreshedOrg.GramAccountType
-
 	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
 	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
-		updatedAccountType = "free"
 		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
-			GramAccountType: updatedAccountType,
+			GramAccountType: "free",
 			ID:              refreshedOrg.ID,
 		})
 		if err != nil {
@@ -206,19 +213,33 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		}
 	}
 
-	if previousAccountType != updatedAccountType {
-		for _, keyType := range openrouter.AllKeyTypes {
-			if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil); err != nil {
-				// Keys are provisioned lazily on first use (chat on the first
-				// completion, internal on the first judge call), so an org
-				// that changes account type before ever running a completion
-				// has no row yet — skip, don't fail, or Polar retries the
-				// webhook forever.
-				if errors.Is(err, pgx.ErrNoRows) {
-					continue
-				}
-				return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+	// Reconcile on every accepted delivery, even when the account type already
+	// matches. The provider persists its state before this handler runs, so a
+	// retry after one key timed out sees no tier delta; tying reconciliation to
+	// that delta would permanently leave the later key stale.
+	for _, keyType := range openrouter.AllKeyTypes {
+		err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, refreshedOrg.ID, keyType, polarWebhookKeyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+			dbProvisioner, ok := s.openRouter.(openRouterBillingDBProvisioner)
+			if !ok {
+				return errors.New("OpenRouter key provisioner cannot use the locked database session")
 			}
+			_, refreshErr := dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, refreshedOrg.ID, keyType, nil)
+			if refreshErr != nil {
+				return fmt.Errorf("refresh OpenRouter %s key after billing event: %w", keyType, refreshErr)
+			}
+			return nil
+		})
+		if err != nil {
+			// Keys are provisioned lazily on first use (other inference on the
+			// first completion, security inference on the first judge call), so
+			// an org that changes account type before using one has no row yet.
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+				return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
 		}
 	}
 

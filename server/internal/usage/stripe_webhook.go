@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -145,15 +146,18 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
 	}
 
-	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
-		if err := queries.AcquireOpenRouterChatBillingLock(ctx, organizationID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter chat billing state").LogError(ctx, logger)
-		}
-	}
-
 	if event.Type == "checkout.session.completed" && checkoutEligible {
 		if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
+		}
+	}
+
+	// Trial demotion locks the trial row before it takes the platform-key
+	// locks. Checkout must use the same order so a conversion racing the hourly
+	// sweep cannot deadlock on the inverse trials-row/key-lock sequence.
+	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
+		if err := acquireOpenRouterBillingLocks(ctx, queries, organizationID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter billing state").LogError(ctx, logger)
 		}
 	}
 
@@ -195,6 +199,18 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		s.stripeMetrics.RecordSubscriptionLost(ctx)
 	}
 
+	return nil
+}
+
+func acquireOpenRouterBillingLocks(ctx context.Context, queries *repo.Queries, organizationID string) error {
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := queries.AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+			KeyType:        string(keyType),
+			OrganizationID: organizationID,
+		}); err != nil {
+			return fmt.Errorf("lock %s inference billing state: %w", keyType, err)
+		}
+	}
 	return nil
 }
 

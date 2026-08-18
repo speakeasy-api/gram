@@ -96,8 +96,8 @@ type initializeRequestResult struct {
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
 	// risk-analysis inference is always platform-initiated (the completions
 	// proxy clamps client-supplied claims to a customer surface), so a
-	// chat-key pairing can only be a miswired caller — fail fast instead of
-	// silently draining the customer's chat cap. The gram source cannot get
+	// Other-inference-key pairing can only be a miswired caller — fail fast
+	// instead of silently draining the customer's Other inference cap. The gram source cannot get
 	// the same mechanical check: the proxy legitimately accepts it from
 	// Elements on the chat key.
 	if req.UsageSource == billing.ModelUsageSourceRiskAnalysis && req.KeyType.OrDefault() != KeyTypeInternal {

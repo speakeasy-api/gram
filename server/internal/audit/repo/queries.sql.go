@@ -12,6 +12,67 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLatestOpenRouterSpendCapAuditOperation = `-- name: GetLatestOpenRouterSpendCapAuditOperation :one
+SELECT
+  COALESCE(latest.operation_id, '')::text AS operation_id,
+  COALESCE(latest.monthly_credits, 0)::bigint AS monthly_credits
+FROM (VALUES (1)) AS singleton(value)
+LEFT JOIN LATERAL (
+  SELECT
+    metadata->>'operation_id' AS operation_id,
+    (after_snapshot->>'monthly_credits')::bigint AS monthly_credits
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = $2
+  ORDER BY seq DESC
+  LIMIT 1
+) AS latest ON TRUE
+`
+
+type GetLatestOpenRouterSpendCapAuditOperationParams struct {
+	OrganizationID string
+	SubjectID      string
+}
+
+type GetLatestOpenRouterSpendCapAuditOperationRow struct {
+	OperationID    string
+	MonthlyCredits int64
+}
+
+func (q *Queries) GetLatestOpenRouterSpendCapAuditOperation(ctx context.Context, arg GetLatestOpenRouterSpendCapAuditOperationParams) (GetLatestOpenRouterSpendCapAuditOperationRow, error) {
+	row := q.db.QueryRow(ctx, getLatestOpenRouterSpendCapAuditOperation, arg.OrganizationID, arg.SubjectID)
+	var i GetLatestOpenRouterSpendCapAuditOperationRow
+	err := row.Scan(&i.OperationID, &i.MonthlyCredits)
+	return i, err
+}
+
+const hasOpenRouterSpendCapAuditOperation = `-- name: HasOpenRouterSpendCapAuditOperation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = $2
+    AND metadata->>'operation_id' = $3::text
+) AS recorded
+`
+
+type HasOpenRouterSpendCapAuditOperationParams struct {
+	OrganizationID string
+	SubjectID      string
+	OperationID    string
+}
+
+func (q *Queries) HasOpenRouterSpendCapAuditOperation(ctx context.Context, arg HasOpenRouterSpendCapAuditOperationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOpenRouterSpendCapAuditOperation, arg.OrganizationID, arg.SubjectID, arg.OperationID)
+	var recorded bool
+	err := row.Scan(&recorded)
+	return recorded, err
+}
+
 const insertAuditLog = `-- name: InsertAuditLog :one
 INSERT INTO audit_logs (
   organization_id,

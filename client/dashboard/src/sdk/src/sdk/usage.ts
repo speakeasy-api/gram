@@ -7,14 +7,18 @@ import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.
 import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
+import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { usageSetBillingEmail } from "../funcs/usageSetBillingEmail.js";
 import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
+import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
+import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
+import { SpendCap } from "../models/components/spendcap.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
 import {
@@ -38,6 +42,10 @@ import {
   GetBillingEmailSecurity,
 } from "../models/operations/getbillingemail.js";
 import {
+  GetInferenceSpendCapsRequest,
+  GetInferenceSpendCapsSecurity,
+} from "../models/operations/getinferencespendcaps.js";
+import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
 } from "../models/operations/getperiodusage.js";
@@ -53,6 +61,10 @@ import {
   SetBillingMetadataRequest,
   SetBillingMetadataSecurity,
 } from "../models/operations/setbillingmetadata.js";
+import {
+  SetSpendCapRequest,
+  SetSpendCapSecurity,
+} from "../models/operations/setspendcap.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Usage extends ClientSDK {
@@ -152,6 +164,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * getInferenceSpendCaps usage
+   *
+   * @remarks
+   * List current usage and caps for the organization's materialized platform-managed inference keys
+   */
+  async getInferenceSpendCaps(
+    request?: GetInferenceSpendCapsRequest | undefined,
+    security?: GetInferenceSpendCapsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<InferenceSpendCap>> {
+    return unwrapAsync(usageGetInferenceSpendCaps(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getPeriodUsage usage
    *
    * @remarks
@@ -235,6 +266,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TokensUnderManagement> {
     return unwrapAsync(usageSetBillingMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSpendCap usage
+   *
+   * @remarks
+   * Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
+   */
+  async setSpendCap(
+    request: SetSpendCapRequest,
+    security?: SetSpendCapSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SpendCap> {
+    return unwrapAsync(usageSetSpendCap(
       this,
       request,
       security,

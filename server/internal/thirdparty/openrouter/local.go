@@ -26,8 +26,24 @@ func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyT
 	return 0, nil
 }
 
+func (o *Development) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.RefreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (o *Development) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return 0, nil
+}
+
+func (o *Development) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.ReinstateAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
+}
+
+func (o *Development) DisableAPIKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
+	return o.DisableAPIKey(ctx, orgID, keyType)
 }
 
 func (o *Development) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
@@ -40,6 +56,10 @@ func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, 
 
 func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
+}
+
+func (o *Development) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+	return o.ReconcileMonthlyCredits(ctx, orgID, keyType, currentLimit, upstreamLimit)
 }
 
 func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {

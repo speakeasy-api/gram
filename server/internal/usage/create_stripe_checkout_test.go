@@ -444,7 +444,9 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
 	require.Equal(t, checkouts[0].SuccessURL, checkouts[0].CancelURL)
 	require.Nil(t, checkouts[0].TrialEnd)
-	require.Equal(t, stripeCheckoutExpirySafetyMargin, checkouts[0].BillingCycleAnchor.Sub(checkouts[0].ExpiresAt))
+	require.GreaterOrEqual(t, checkouts[0].BillingCycleAnchor.Sub(checkouts[0].ExpiresAt), stripeCheckoutExpirySafetyMargin)
+	require.Greater(t, checkouts[0].ExpiresAt, time.Now().UTC())
+	require.LessOrEqual(t, checkouts[0].ExpiresAt.Sub(time.Now().UTC()), maximumStripeCheckoutSessionLifetime)
 	require.Contains(t, checkouts[0].IdempotencyKey, "checkout-session:"+ti.orgID+":")
 }
 

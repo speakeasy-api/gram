@@ -37,15 +37,6 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
--- name: AcquireOpenRouterKeyBillingLock :exec
--- Billing transitions take the matching transaction lock before changing an
--- organization's projection. Holding this session lock through the final
--- eligibility read and delivery makes either the old or new tier win cleanly.
-SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
-
--- name: ReleaseOpenRouterKeyBillingLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
-
 -- name: GetAllOrganizationsWithToolsets :many
 SELECT
     organization_metadata.id,
@@ -58,15 +49,15 @@ WHERE toolsets.deleted = false
 GROUP BY organization_metadata.id
 HAVING COUNT(toolsets.id) > 0;
 
--- name: AcquirePaygOpenRouterChatKeyLock :exec
+-- name: AcquireOpenRouterKeyBillingLock :exec
 -- A session lock lets the reconciler serialize a billing projection read and
 -- its upstream PATCH without holding a database transaction across the
 -- network call. Billing writers take the same key transactionally before
 -- changing the projection.
-SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
 
--- name: ReleasePaygOpenRouterChatKeyLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0)) AS unlocked;
+-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
 
 -- name: GetPaygOpenRouterChatKeyProjection :one
 SELECT

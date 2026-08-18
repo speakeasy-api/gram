@@ -37,6 +37,14 @@ type Client struct {
 	// setBillingEmail endpoint.
 	SetBillingEmailDoer goahttp.Doer
 
+	// SetSpendCap Doer is the HTTP client used to make requests to the setSpendCap
+	// endpoint.
+	SetSpendCapDoer goahttp.Doer
+
+	// GetInferenceSpendCaps Doer is the HTTP client used to make requests to the
+	// getInferenceSpendCaps endpoint.
+	GetInferenceSpendCapsDoer goahttp.Doer
+
 	// GetUsageTiers Doer is the HTTP client used to make requests to the
 	// getUsageTiers endpoint.
 	GetUsageTiersDoer goahttp.Doer
@@ -82,6 +90,8 @@ func NewClient(
 		SetBillingMetadataDoer:       doer,
 		GetBillingEmailDoer:          doer,
 		SetBillingEmailDoer:          doer,
+		SetSpendCapDoer:              doer,
+		GetInferenceSpendCapsDoer:    doer,
 		GetUsageTiersDoer:            doer,
 		CreateCustomerSessionDoer:    doer,
 		CreateCheckoutDoer:           doer,
@@ -210,6 +220,54 @@ func (c *Client) SetBillingEmail() goa.Endpoint {
 		resp, err := c.SetBillingEmailDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "setBillingEmail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSpendCap returns an endpoint that makes HTTP requests to the usage
+// service setSpendCap server.
+func (c *Client) SetSpendCap() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSpendCapRequest(c.encoder)
+		decodeResponse = DecodeSetSpendCapResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSpendCapRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSpendCapDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "setSpendCap", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetInferenceSpendCaps returns an endpoint that makes HTTP requests to the
+// usage service getInferenceSpendCaps server.
+func (c *Client) GetInferenceSpendCaps() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetInferenceSpendCapsRequest(c.encoder)
+		decodeResponse = DecodeGetInferenceSpendCapsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetInferenceSpendCapsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetInferenceSpendCapsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getInferenceSpendCaps", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -53936,6 +53936,89 @@ paths:
             x-speakeasy-name-override: getBillingEmail
             x-speakeasy-react-hook:
                 name: getBillingEmail
+    /rpc/usage.getInferenceSpendCaps:
+        get:
+            description: List current usage and caps for the organization's materialized platform-managed inference keys
+            operationId: getInferenceSpendCaps
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/InferenceSpendCap'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getInferenceSpendCaps usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getInferenceSpendCaps
+            x-speakeasy-react-hook:
+                name: getInferenceSpendCaps
     /rpc/usage.getPeriodUsage:
         get:
             description: Get the usage for an organization for a given period
@@ -54343,6 +54426,93 @@ paths:
             x-speakeasy-name-override: setBillingMetadata
             x-speakeasy-react-hook:
                 name: setBillingMetadata
+    /rpc/usage.setSpendCap:
+        post:
+            description: Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
+            operationId: setSpendCap
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSpendCapRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendCap'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSpendCap usage
+            tags:
+                - usage
+            x-speakeasy-name-override: setSpendCap
+            x-speakeasy-react-hook:
+                name: setSpendCap
     /rpc/userSessionClients.get:
         get:
             description: Get a user_session_client by id.
@@ -65526,6 +65696,31 @@ components:
                 - success_count
                 - failure_count
                 - failure_rate
+        InferenceSpendCap:
+            type: object
+            properties:
+                credits_used:
+                    type: number
+                    description: Monthly usage in USD
+                    format: double
+                disabled:
+                    type: boolean
+                    description: Whether the platform-managed key is disabled
+                key_type:
+                    type: string
+                    description: The platform-managed inference function
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The enforced monthly spend cap in USD
+                    format: int64
+            required:
+                - key_type
+                - credits_used
+                - monthly_credits
+                - disabled
         InfoResponseBody:
             type: object
             properties:
@@ -74212,6 +74407,23 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SetSpendCapRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: The platform-managed inference key to update. Defaults to chat for compatibility.
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The monthly inference spend cap in USD
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+            required:
+                - monthly_credits
         SetToolMetadataBatchRequestBody:
             type: object
             properties:
@@ -75668,6 +75880,24 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendCap:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: The platform-managed inference key whose cap is reported
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    description: The monthly inference spend cap in USD
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+            required:
+                - key_type
+                - monthly_credits
         SpendRule:
             type: object
             properties:

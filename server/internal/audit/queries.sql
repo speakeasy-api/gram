@@ -36,6 +36,35 @@ INSERT INTO audit_logs (
 )
 RETURNING id, organization_id;
 
+-- name: HasOpenRouterSpendCapAuditOperation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+    AND metadata->>'operation_id' = @operation_id::text
+) AS recorded;
+
+-- name: GetLatestOpenRouterSpendCapAuditOperation :one
+SELECT
+  COALESCE(latest.operation_id, '')::text AS operation_id,
+  COALESCE(latest.monthly_credits, 0)::bigint AS monthly_credits
+FROM (VALUES (1)) AS singleton(value)
+LEFT JOIN LATERAL (
+  SELECT
+    metadata->>'operation_id' AS operation_id,
+    (after_snapshot->>'monthly_credits')::bigint AS monthly_credits
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+  ORDER BY seq DESC
+  LIMIT 1
+) AS latest ON TRUE;
+
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform

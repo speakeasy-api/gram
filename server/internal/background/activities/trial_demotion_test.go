@@ -58,6 +58,10 @@ func (p *trialProvisioner) DisableAPIKey(_ context.Context, orgID string, keyTyp
 	return nil
 }
 
+func (p *trialProvisioner) DisableAPIKeyWithDB(ctx context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType) error {
+	return p.DisableAPIKey(ctx, orgID, keyType)
+}
+
 type trialTestInstance struct {
 	conn        *pgxpool.Pool
 	trials      *trialsrepo.Queries
