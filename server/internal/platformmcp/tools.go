@@ -136,7 +136,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Platform MCP Feedback",
 			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
@@ -150,6 +150,8 @@ func registerReadTools(reg *Registrar, reader Reader) {
 	registerGetMCPTool(reg, reader)
 }
 
+// Each stub declares the audiences its live counterpart declares, so a tool
+// does not appear on and disappear from a surface as the rollout flips.
 func registerUnavailableCatalogTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name        string
@@ -164,7 +166,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
@@ -181,7 +183,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
 		Description: "Create a secure setup handoff. Provider setup is not available in the current preview.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
 func registerUnavailableTools(reg *Registrar) {
