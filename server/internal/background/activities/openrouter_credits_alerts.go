@@ -8,17 +8,21 @@ import (
 	"strconv"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
@@ -117,6 +121,7 @@ type MaybeSendOpenRouterCreditsAlerts struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	repo         *repo.Queries
+	auditRepo    *auditrepo.Queries
 	cache        cache.Cache
 	emails       *email.Service
 	alertsSent   metric.Int64Counter
@@ -159,6 +164,7 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 		logger:       componentLogger,
 		db:           db,
 		repo:         repo.New(db),
+		auditRepo:    auditrepo.New(db),
 		cache:        cacheAdapter,
 		emails:       emails,
 		alertsSent:   sent,
@@ -166,16 +172,26 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 	}
 }
 
+// openRouterCreditsAlertGenerationKey stores the explicit cap-change operation
+// that owns the current alert ladder. Reconciliation never writes this key, so
+// upstream/local limit flaps cannot re-arm alerts.
+func openRouterCreditsAlertGenerationKey(orgID string, keyType openrouter.KeyType) string {
+	return fmt.Sprintf("openrouter-credits-alert-generation:%s:%s", orgID, keyType)
+}
+
 // openRouterCreditsAlertKey is the Redis dedup key for one org's crossed
 // threshold. The calendar month and the credit limit are deliberately NOT part
 // of the key: monthly re-arming comes from the reservation's TTL expiring
 // shortly after the cycle ends (see openRouterCreditsAlertGrace), and keying on
-// the limit would let the limit flapping between the upstream and DB-cached
-// values (when ReconcileMonthlyCredits fails) mint duplicate alerts for one
-// unchanged usage state. The trade-off: raising the cap mid-month does not
-// re-arm already-sent thresholds until the next month.
-func openRouterCreditsAlertKey(orgID string, keyType openrouter.KeyType, threshold int) string {
-	return fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, keyType, threshold)
+// the limit would let reconciliation flaps mint duplicate alerts. A successful
+// explicit cap change rotates generation instead. The empty-generation shape
+// is the legacy key, preserving reservations that predate generation tracking.
+func openRouterCreditsAlertKey(orgID string, keyType openrouter.KeyType, threshold int, generation string) string {
+	key := fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, keyType, threshold)
+	if generation != "" {
+		key += ":" + generation
+	}
+	return key
 }
 
 // openRouterCreditsAlertCycle keeps provider idempotency on the prior month
@@ -192,9 +208,54 @@ func openRouterCreditsAlertRecipientKey(idempotencyKey string) string {
 // openRouterCreditsAlertCandidate is one (org, key type) pair that crossed a
 // threshold this tick and holds a fresh dedup reservation.
 type openRouterCreditsAlertCandidate struct {
-	orgID     string
-	keyType   openrouter.KeyType
-	threshold int
+	orgID           string
+	keyType         openrouter.KeyType
+	threshold       int
+	generation      string
+	generationAware bool
+	creditLimit     int64
+}
+
+type openRouterCreditsAlertGeneration struct {
+	OperationID    string `json:"operation_id"`
+	MonthlyCredits int64  `json:"monthly_credits"`
+}
+
+var errOpenRouterCreditsAlertGenerationChanged = errors.New("openrouter credits alert generation changed")
+
+func (a *MaybeSendOpenRouterCreditsAlerts) readGeneration(
+	ctx context.Context,
+	orgID string,
+	keyType openrouter.KeyType,
+	restoreCache bool,
+) (openRouterCreditsAlertGeneration, error) {
+	var generation openRouterCreditsAlertGeneration
+	err := a.cache.Get(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), &generation)
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		latest, err := a.auditRepo.GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
+			OrganizationID: orgID,
+			SubjectID:      urn.NewOpenRouterAPIKey(orgID, string(keyType)).ID,
+		})
+		if err != nil {
+			return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("read durable OpenRouter credits alert generation: %w", err)
+		}
+		generation := openRouterCreditsAlertGeneration{
+			OperationID:    latest.OperationID,
+			MonthlyCredits: latest.MonthlyCredits,
+		}
+		if restoreCache {
+			now := time.Now().UTC()
+			_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+			if err := a.cache.Set(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), generation, cycleEnd.Sub(now)+openRouterCreditsAlertGrace); err != nil {
+				return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("restore OpenRouter credits alert generation cache: %w", err)
+			}
+		}
+		return generation, nil
+	}
+	if err != nil {
+		return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("read OpenRouter credits alert generation: %w", err)
+	}
+	return generation, nil
 }
 
 func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []OpenRouterCreditsMetric) error {
@@ -208,13 +269,31 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 		if _, ok := openRouterCreditsAlertConfigs[keyType]; !ok {
 			continue
 		}
-		if threshold := highestCrossedOpenRouterCreditsThreshold(m.CreditsUsed, m.CreditLimit); threshold != 0 {
-			candidates = append(candidates, openRouterCreditsAlertCandidate{
-				orgID:     m.OrganizationID,
-				keyType:   keyType,
-				threshold: threshold,
-			})
+		threshold := highestCrossedOpenRouterCreditsThreshold(m.CreditsUsed, m.CreditLimit)
+		if threshold == 0 {
+			continue
 		}
+
+		generationAware := m.AccountType == string(billing.TierPayg)
+		generation := openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}
+		if generationAware {
+			loadedGeneration, err := a.readGeneration(ctx, m.OrganizationID, keyType, false)
+			if err != nil {
+				a.logger.ErrorContext(ctx, "read openrouter credits alert generation",
+					attr.SlogOrganizationID(m.OrganizationID), attr.SlogOpenRouterKeyType(string(keyType)), attr.SlogError(err))
+				a.recordFailure(ctx, m.OrganizationID, keyType)
+				continue
+			}
+			generation = loadedGeneration
+		}
+		candidates = append(candidates, openRouterCreditsAlertCandidate{
+			orgID:           m.OrganizationID,
+			keyType:         keyType,
+			threshold:       threshold,
+			generation:      generation.OperationID,
+			generationAware: generationAware,
+			creditLimit:     m.CreditLimit,
+		})
 	}
 	if len(candidates) == 0 {
 		return nil
@@ -226,7 +305,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 	// reservation is extended to month length only after a successful send.
 	pending := make([]openRouterCreditsAlertCandidate, 0, len(candidates))
 	for _, c := range candidates {
-		won, err := a.cache.Add(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), openRouterCreditsAlertRetryTTL)
+		won, err := a.cache.Add(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold, c.generation), openRouterCreditsAlertRetryTTL)
 		if err != nil {
 			a.logger.ErrorContext(ctx, "failed to reserve openrouter credits alert",
 				attr.SlogOrganizationID(c.orgID), attr.SlogOpenRouterKeyType(string(c.keyType)), attr.SlogError(err))
@@ -303,27 +382,90 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			continue
 		}
 
-		deliveryErrors := []error{audience.err}
-		for _, recipient := range audience.recipients {
-			if err := a.sendOne(ctx, c, r.OrganizationName, recipient, now); err != nil {
-				deliveryErrors = append(deliveryErrors, err)
+		deliver := func(queries *repo.Queries) error {
+			// Cap writes and alert delivery share one per-org/key lock. The final
+			// generation check therefore orders an in-flight poll either wholly
+			// before the cap change, or skips it after the new ladder is installed.
+			if c.generationAware {
+				generation, err := a.readGeneration(ctx, c.orgID, c.keyType, true)
+				if err != nil {
+					return err
+				}
+				if generation.OperationID != c.generation {
+					return errOpenRouterCreditsAlertGenerationChanged
+				}
+				if generation.OperationID != "" && generation.MonthlyCredits != c.creditLimit {
+					currentLimit, err := queries.GetOpenRouterInferenceKeyLimit(ctx, repo.GetOpenRouterInferenceKeyLimitParams{
+						OrganizationID: c.orgID,
+						KeyType:        string(c.keyType),
+					})
+					if err != nil {
+						return fmt.Errorf("read current OpenRouter inference cap: %w", err)
+					}
+					if currentLimit != c.creditLimit {
+						return errOpenRouterCreditsAlertGenerationChanged
+					}
+
+					generation.MonthlyCredits = currentLimit
+					now := time.Now().UTC()
+					_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+					if err := a.cache.Set(ctx, openRouterCreditsAlertGenerationKey(c.orgID, c.keyType), generation, cycleEnd.Sub(now)+openRouterCreditsAlertGrace); err != nil {
+						return fmt.Errorf("rebase OpenRouter credits alert generation: %w", err)
+					}
+				}
 			}
+
+			deliveryErrors := []error{audience.err}
+			for _, recipient := range audience.recipients {
+				if err := a.sendOne(ctx, c, r.OrganizationName, recipient, now); err != nil {
+					deliveryErrors = append(deliveryErrors, err)
+				}
+			}
+			if err := errors.Join(deliveryErrors...); err != nil {
+				return err
+			}
+
+			// Finalize the org-level reservation only after the full audience has
+			// accepted the send. Provider idempotency keys make a partial retry safe.
+			_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+			ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
+			expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold, c.generation), ttl); err != nil {
+				logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+			}
+			// A generation must outlive every reservation created beneath it. If it
+			// expired first, the next poll would fall back to the legacy namespace
+			// and could resend the same threshold during the current cycle.
+			if c.generation != "" {
+				if err := a.cache.Expire(expireCtx, openRouterCreditsAlertGenerationKey(c.orgID, c.keyType), ttl); err != nil {
+					logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert generation", attr.SlogError(err))
+				}
+			}
+			return nil
 		}
-		if err := errors.Join(deliveryErrors...); err != nil {
-			logger.ErrorContext(ctx, "failed to deliver openrouter credits alert audience", attr.SlogError(err))
+
+		var deliveryErr error
+		if c.generationAware {
+			deliveryErr = withOpenRouterKeyBillingLock(ctx, a.logger, a.db, c.orgID, c.keyType, func(queries *repo.Queries) error {
+				return deliver(queries)
+			})
+		} else {
+			deliveryErr = deliver(nil)
+		}
+		if errors.Is(deliveryErr, errOpenRouterCreditsAlertGenerationChanged) {
+			logger.InfoContext(ctx, "skipping stale OpenRouter credits alert generation")
+			if err := a.cache.Delete(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold, c.generation)); err != nil {
+				logger.ErrorContext(ctx, "release stale OpenRouter credits alert reservation", attr.SlogError(err))
+				a.recordFailure(ctx, c.orgID, c.keyType)
+			}
+			continue
+		}
+		if deliveryErr != nil {
+			logger.ErrorContext(ctx, "failed to deliver openrouter credits alert audience", attr.SlogError(deliveryErr))
 			a.recordFailure(ctx, c.orgID, c.keyType)
 			continue
 		}
-
-		// Finalize the org-level reservation only after the full audience has
-		// accepted the send. Provider idempotency keys make a partial retry safe.
-		_, cycleEnd := usage.CurrentBillingCycle(now, 1)
-		ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
-		expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
-			logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
-		}
-		cancel()
 	}
 
 	return nil
@@ -346,7 +488,11 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		strconv.Itoa(c.threshold),
 		c.threshold >= 100,
 	)
-	idempotencyKey := recipientEmailIdempotencyKey(recipient, "openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), openRouterCreditsAlertCycle(now))
+	idempotencyParts := []string{"openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), openRouterCreditsAlertCycle(now)}
+	if c.generation != "" {
+		idempotencyParts = append(idempotencyParts, c.generation)
+	}
+	idempotencyKey := recipientEmailIdempotencyKey(recipient, idempotencyParts...)
 	recipientKey := openRouterCreditsAlertRecipientKey(idempotencyKey)
 	won, err := a.cache.Add(ctx, recipientKey, openRouterCreditsAlertRecipientRetryTTL)
 	if err != nil {

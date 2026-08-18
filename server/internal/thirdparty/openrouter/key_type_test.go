@@ -104,9 +104,9 @@ func TestChatClient_GetCompletion_ExplicitInternalKeyType(t *testing.T) {
 }
 
 // TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey pins the
-// pairing guard: risk-analysis inference never legitimately bills the chat
+// pairing guard: risk-analysis inference never legitimately bills the Other inference
 // key, so a caller that forgets KeyType must fail fast rather than silently
-// drain the customer's chat cap.
+// drain the customer's Other inference cap.
 func TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey(t *testing.T) {
 	t.Parallel()
 

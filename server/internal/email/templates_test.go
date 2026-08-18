@@ -32,7 +32,9 @@ func TestParseTemplateIDs_ValidatesCompleteRegistry(t *testing.T) {
 		"openrouter_internal_credits_threshold":"id-6",
 		"custom_domain_unhealthy":"id-7",
 		"weekly_usage_summary":"id-8",
-		"access_request":"id-9"
+		"access_request":"id-9",
+		"trial_ending_soon":"id-10",
+		"access_paused":"id-11"
 	}`)
 	require.NoError(t, err)
 	require.NoError(t, ids.ValidateRegistered())

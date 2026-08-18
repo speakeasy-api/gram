@@ -206,7 +206,9 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		existing.State == distributionStateAttached &&
 		existing.PluginServerID.Valid &&
 		existing.PluginServerID.UUID == live.ID &&
+		existing.ConnectionID.Valid &&
 		existing.ConnectionID.UUID == connectionID &&
+		existing.ConnectionGeneration.Valid &&
 		existing.ConnectionGeneration.UUID == generation {
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution: %w", err)

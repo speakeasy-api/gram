@@ -27,6 +27,12 @@ type Service interface {
 	GetBillingEmail(context.Context, *GetBillingEmailPayload) (res *BillingEmail, err error)
 	// Set or clear the billing notification email for a PAYG organization
 	SetBillingEmail(context.Context, *SetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set the monthly spend cap for one of a PAYG organization's platform-managed
+	// inference keys
+	SetSpendCap(context.Context, *SetSpendCapPayload) (res *SpendCap, err error)
+	// List current usage and caps for the organization's materialized
+	// platform-managed inference keys
+	GetInferenceSpendCaps(context.Context, *GetInferenceSpendCapsPayload) (res []*InferenceSpendCap, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
@@ -59,7 +65,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+var MethodNames = [12]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -98,6 +104,12 @@ type GetBillingEmailPayload struct {
 	SessionToken *string
 }
 
+// GetInferenceSpendCapsPayload is the payload type of the usage service
+// getInferenceSpendCaps method.
+type GetInferenceSpendCapsPayload struct {
+	SessionToken *string
+}
+
 // GetPeriodUsagePayload is the payload type of the usage service
 // getPeriodUsage method.
 type GetPeriodUsagePayload struct {
@@ -108,6 +120,17 @@ type GetPeriodUsagePayload struct {
 // getTokensUnderManagement method.
 type GetTokensUnderManagementPayload struct {
 	SessionToken *string
+}
+
+type InferenceSpendCap struct {
+	// The platform-managed inference function
+	KeyType string
+	// Monthly usage in USD
+	CreditsUsed float64
+	// The enforced monthly spend cap in USD
+	MonthlyCredits int
+	// Whether the platform-managed key is disabled
+	Disabled bool
 }
 
 // PeriodUsage is the result type of the usage service getPeriodUsage method.
@@ -152,6 +175,25 @@ type SetBillingMetadataPayload struct {
 	AlertEmail *string
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int
+}
+
+// SetSpendCapPayload is the payload type of the usage service setSpendCap
+// method.
+type SetSpendCapPayload struct {
+	SessionToken *string
+	// The platform-managed inference key to update. Defaults to chat for
+	// compatibility.
+	KeyType *string
+	// The monthly inference spend cap in USD
+	MonthlyCredits int
+}
+
+// SpendCap is the result type of the usage service setSpendCap method.
+type SpendCap struct {
+	// The platform-managed inference key whose cap is reported
+	KeyType string
+	// The monthly inference spend cap in USD
+	MonthlyCredits int
 }
 
 type TUMPeriod struct {

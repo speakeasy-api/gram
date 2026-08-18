@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestPaygOpenRouterChatKeyReconcileWorkflowUsesCurrentStateActivity(t *testing.T) {
@@ -94,4 +95,39 @@ func TestSchedulePaygOpenRouterChatKeyReconciliationDedupesExactEventReplay(t *t
 	require.NoError(t, scheduler.SchedulePaygOpenRouterChatKeyReconciliation(t.Context(), "event_placeholder", "organization_placeholder", openrouter.KeyDesiredStateDisabled))
 	require.NoError(t, scheduler.SchedulePaygOpenRouterChatKeyReconciliation(t.Context(), "event_placeholder", "organization_placeholder", openrouter.KeyDesiredStateDisabled))
 	temporalClient.AssertExpectations(t)
+}
+
+func TestSetOpenRouterSpendCapNormalizesLegacyEmptyKeyType(t *testing.T) {
+	t.Parallel()
+
+	temporalClient := &temporalmocks.Client{}
+	run := &temporalmocks.WorkflowRun{}
+	run.On("Get", mock.Anything, mock.Anything).Return(nil).Once()
+
+	workflowOptions := mock.MatchedBy(func(options client.StartWorkflowOptions) bool {
+		return options.ID == "v1:openrouter-spend-cap:chat:operation_placeholder" &&
+			options.WorkflowIDReusePolicy == enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	})
+	workflowParams := OpenRouterSpendCapParams{
+		OperationID:      "operation_placeholder",
+		OrganizationID:   "organization_placeholder",
+		KeyType:          string(openrouter.KeyTypeChat),
+		Limit:            100,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
+		ActorDisplayName: nil,
+	}
+	temporalClient.On("ExecuteWorkflow", mock.Anything, workflowOptions, mock.Anything, workflowParams).Return(run, nil).Once()
+
+	scheduler := &OpenRouterKeyRefresher{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
+	require.NoError(t, scheduler.SetOpenRouterSpendCap(
+		t.Context(),
+		"operation_placeholder",
+		"organization_placeholder",
+		openrouter.KeyType(""),
+		100,
+		workflowParams.Actor,
+		nil,
+	))
+	temporalClient.AssertExpectations(t)
+	run.AssertExpectations(t)
 }

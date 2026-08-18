@@ -10,6 +10,21 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: ListMaterializedOpenRouterInferenceKeys :many
+SELECT key_type, disabled
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = ANY(@key_types::text[])
+  AND deleted IS FALSE
+ORDER BY key_type;
+
+-- name: GetMaterializedOpenRouterInferenceKey :one
+SELECT key_type, disabled
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: LockBillingMetadata :one
 SELECT *
 FROM billing_metadata
@@ -190,9 +205,12 @@ SELECT EXISTS (
 -- Serializes distinct Stripe events that refer to the same subscription.
 SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
 
--- name: AcquireOpenRouterChatBillingLock :exec
--- Serializes billing state changes with the chat-key reconciler.
-SELECT pg_advisory_xact_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+-- name: AcquireOpenRouterBillingLock :exec
+-- Serializes one platform inference key with cap writes/reconciliation. The
+-- caller acquires every platform key in the order defined by AllKeyTypes.
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
 
 -- name: GetPaygActivationState :one
 SELECT

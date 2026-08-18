@@ -11,6 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const compareAndSetOpenRouterKeyMonthlyCredits = `-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
+UPDATE openrouter_api_keys
+SET monthly_credits = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = $2
+  AND key_type = $3
+  AND monthly_credits = $4
+  AND (extract(epoch FROM updated_at) * 1000000)::bigint = $5::bigint
+  AND deleted IS FALSE
+`
+
+type CompareAndSetOpenRouterKeyMonthlyCreditsParams struct {
+	MonthlyCredits        int64
+	OrganizationID        string
+	KeyType               string
+	CurrentMonthlyCredits int64
+	CurrentGeneration     int64
+}
+
+// Reconciles an upstream observation only while the local mirror still equals
+// what the caller observed. A concurrent explicit cap change wins this CAS.
+func (q *Queries) CompareAndSetOpenRouterKeyMonthlyCredits(ctx context.Context, arg CompareAndSetOpenRouterKeyMonthlyCreditsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, compareAndSetOpenRouterKeyMonthlyCredits,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.CurrentMonthlyCredits,
+		arg.CurrentGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createOpenRouterAPIKey = `-- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
@@ -134,7 +169,8 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = disabled AND NOT $3::boolean
+    disabled = disabled AND NOT $3::boolean,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $4
   AND key_type = $5
   AND deleted IS FALSE
@@ -176,7 +212,8 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 
 const updateOpenRouterKeyMonthlyCredits = `-- name: UpdateOpenRouterKeyMonthlyCredits :exec
 UPDATE openrouter_api_keys
-SET monthly_credits = $1
+SET monthly_credits = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $2
   AND key_type = $3
   AND deleted IS FALSE

@@ -98,14 +98,26 @@ func (*m3OpenRouterProvisioner) ProvisionAPIKey(context.Context, string, openrou
 }
 
 func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimit(ctx context.Context, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	key, err := openrouterrepo.New(p.db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+	return p.reinstateAPIKeyLimit(ctx, p.db, organizationID, keyType, limit)
+}
+
+func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
+}
+
+func (p *m3OpenRouterProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
+}
+
+func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(keyType),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
-	refreshed, err := openrouterrepo.New(p.db).UpdateOpenRouterKey(ctx, openrouterrepo.UpdateOpenRouterKeyParams{
+	refreshed, err := openrouterrepo.New(db).UpdateOpenRouterKey(ctx, openrouterrepo.UpdateOpenRouterKeyParams{
 		MonthlyCredits: int64(*limit),
 		KeyHash:        key.KeyHash,
 		Reinstate:      key.Disabled,
@@ -120,8 +132,16 @@ func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimit(ctx context.Context, organi
 }
 
 func (p *m3OpenRouterProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {
+	return p.disableAPIKey(ctx, p.db, organizationID, keyType)
+}
+
+func (p *m3OpenRouterProvisioner) DisableAPIKeyWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
+	return p.disableAPIKey(ctx, db, organizationID, keyType)
+}
+
+func (p *m3OpenRouterProvisioner) disableAPIKey(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
 	p.disableCalls = append(p.disableCalls, keyType)
-	if err := openrouterrepo.New(p.db).DisableOpenRouterAPIKey(ctx, openrouterrepo.DisableOpenRouterAPIKeyParams{
+	if err := openrouterrepo.New(db).DisableOpenRouterAPIKey(ctx, openrouterrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(keyType),
 	}); err != nil {
@@ -138,8 +158,12 @@ func (*m3OpenRouterProvisioner) GetKeyUsage(context.Context, string) (float64, *
 	return 0, nil, errors.New("not implemented")
 }
 
-func (*m3OpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, *int64) (int64, error) {
+func (*m3OpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, int64, *int64) (int64, error) {
 	return 0, errors.New("not implemented")
+}
+
+func (p *m3OpenRouterProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return p.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
 func (*m3OpenRouterProvisioner) GetModelUsage(context.Context, string, string, openrouter.KeyType) (*openrouter.ModelUsage, error) {
@@ -242,6 +266,7 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	}))
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.disableCalls)
 	require.Empty(t, provisioner.refreshCalls)
+	require.EqualValues(t, 70, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
 
 	secondAnchor := time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC)
 	checkout("event_recheckout", "subscription_replacement", secondAnchor)
@@ -252,6 +277,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	}))
 	require.False(t, keyState(openrouter.KeyTypeChat).Disabled)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
+	require.EqualValues(t, 100, keyState(openrouter.KeyTypeChat).MonthlyCredits)
+	require.EqualValues(t, 70, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
 	require.Equal(t, "hash_placeholder_chat", keyState(openrouter.KeyTypeChat).KeyHash)
 	require.Equal(t, "hash_placeholder_internal", keyState(openrouter.KeyTypeInternal).KeyHash)
 

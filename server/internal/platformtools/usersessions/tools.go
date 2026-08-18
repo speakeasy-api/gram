@@ -72,6 +72,14 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		clientID = &s
 	}
 
+	// Null means the session has not been used since the column was introduced,
+	// which is distinct from the zero time.
+	var lastUsedAt *string
+	if row.LastUsedAt.Valid {
+		s := row.LastUsedAt.Time.Format(time.RFC3339)
+		lastUsedAt = &s
+	}
+
 	return &types.UserSession{
 		ID:                  row.ID.String(),
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
@@ -91,6 +99,12 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		// NULL for API key and anonymous subjects.
 		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),
 		RevokedAt:       revokedAt,
+		LastUsedAt:      lastUsedAt,
+		// The platform tool answers "which sessions exist", not "what is this
+		// connection wired to", so it does not pay for the upstream join. Empty
+		// rather than nil: the field is required, and absent upstreams is a
+		// meaningful answer this caller simply is not computing.
+		Upstreams: []*types.UserSessionUpstream{},
 	}
 }
 

@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
+import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
@@ -59,6 +60,8 @@ function BillingInner() {
       <>
         <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
+        {/* Renders only during an active trial — the section owns that rule. */}
+        <InferenceCapsSection />
         <PaygPriceList />
         {isPlatformAdmin && <TumAdminSection />}
       </>
@@ -69,6 +72,8 @@ function BillingInner() {
     <>
       <StartPaygCheckoutCTA label="Add payment method" />
       <UsageSection />
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <InferenceCapsSection />
       {/* Only pay-as-you-go organizations get product billing notifications;
           enterprise contracts are billed through their contract terms. */}
       {productTier === "payg" && <BillingEmailSection />}

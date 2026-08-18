@@ -53113,6 +53113,90 @@ paths:
       x-speakeasy-name-override: getBillingEmail
       x-speakeasy-react-hook:
         name: getBillingEmail
+  /rpc/usage.getInferenceSpendCaps:
+    get:
+      description: List current usage and caps for the organization's materialized platform-managed inference keys
+      operationId: getInferenceSpendCaps
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/InferenceSpendCap'
+                type: array
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getInferenceSpendCaps usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getInferenceSpendCaps
+      x-speakeasy-react-hook:
+        name: getInferenceSpendCaps
   /rpc/usage.getPeriodUsage:
     get:
       description: Get the usage for an organization for a given period
@@ -53524,6 +53608,94 @@ paths:
       x-speakeasy-name-override: setBillingMetadata
       x-speakeasy-react-hook:
         name: setBillingMetadata
+  /rpc/usage.setSpendCap:
+    post:
+      description: Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
+      operationId: setSpendCap
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSpendCapRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpendCap'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setSpendCap usage
+      tags:
+        - usage
+      x-speakeasy-name-override: setSpendCap
+      x-speakeasy-react-hook:
+        name: setSpendCap
   /rpc/userSessionClients.get:
     get:
       description: Get a user_session_client by id.
@@ -64735,6 +64907,31 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    InferenceSpendCap:
+      type: object
+      properties:
+        credits_used:
+          type: number
+          description: Monthly usage in USD
+          format: double
+        disabled:
+          type: boolean
+          description: Whether the platform-managed key is disabled
+        key_type:
+          type: string
+          description: The platform-managed inference function
+          enum:
+            - chat
+            - internal
+        monthly_credits:
+          type: integer
+          description: The enforced monthly spend cap in USD
+          format: int64
+      required:
+        - key_type
+        - credits_used
+        - monthly_credits
+        - disabled
     InfoResponseBody:
       type: object
       properties:
@@ -73424,6 +73621,23 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SetSpendCapRequestBody:
+      type: object
+      properties:
+        key_type:
+          type: string
+          description: The platform-managed inference key to update. Defaults to chat for compatibility.
+          enum:
+            - chat
+            - internal
+        monthly_credits:
+          type: integer
+          description: The monthly inference spend cap in USD
+          format: int64
+          minimum: 1
+          maximum: 10000
+      required:
+        - monthly_credits
     SetToolMetadataBatchRequestBody:
       type: object
       properties:
@@ -74880,6 +75094,24 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SpendCap:
+      type: object
+      properties:
+        key_type:
+          type: string
+          description: The platform-managed inference key whose cap is reported
+          enum:
+            - chat
+            - internal
+        monthly_credits:
+          type: integer
+          description: The monthly inference spend cap in USD
+          format: int64
+          minimum: 1
+          maximum: 10000
+      required:
+        - key_type
+        - monthly_credits
     SpendRule:
       type: object
       properties:
@@ -79401,6 +79633,10 @@ components:
         jti:
           type: string
           description: Current access-token JTI; used by the revocation path.
+        last_used_at:
+          type: string
+          description: When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.
+          format: date-time
         refresh_expires_at:
           type: string
           description: Next refresh deadline.
@@ -79424,6 +79660,11 @@ components:
         updated_at:
           type: string
           format: date-time
+        upstreams:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionUpstream'
+          description: 'The upstream providers Gram holds tokens for on this session''s subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.'
         user_session_client_id:
           type: string
           description: The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
@@ -79444,6 +79685,7 @@ components:
         - updated_at
         - issuer_slug
         - subject_type
+        - upstreams
     UserSessionClient:
       type: object
       properties:
@@ -79637,6 +79879,60 @@ components:
         - client_id_metadata_uri
         - created_at
         - updated_at
+    UserSessionUpstream:
+      type: object
+      properties:
+        access_expires_at:
+          type: string
+          description: Upstream access-token expiry. Null when the upstream issued a non-expiring token.
+          format: date-time
+        authorization_expires_at:
+          type: string
+          description: Absolute upstream authorization deadline. Unlike refresh_expires_at, exchanging a token does not extend this.
+          format: date-time
+        auto_refresh:
+          type: boolean
+          description: Whether the subject opted this connection into automated keepalive.
+        has_refresh_token:
+          type: boolean
+          description: Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token.
+        issuer_slug:
+          type: string
+          description: Display slug of the upstream provider, e.g. 'mcp.linear.app'.
+        last_used_at:
+          type: string
+          description: When this upstream token was last spent on a proxied call. Same five-minute resolution as the inbound leg, so the two are directly comparable.
+          format: date-time
+        refresh_expires_at:
+          type: string
+          description: Upstream refresh-token expiry. Null when the session holds no refresh token or the upstream issued a non-expiring one.
+          format: date-time
+        remote_session_client_id:
+          type: string
+          description: The remote_session_client the session was minted against.
+          format: uuid
+        remote_session_id:
+          type: string
+          description: The remote_session id. Target for revoke and force-refresh.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: The remote_session_issuer the client belongs to.
+          format: uuid
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes held by this upstream session.
+      description: An upstream remote_session held for the same subject and issuer as the user_session that carries it. Token material is never returned.
+      required:
+        - remote_session_id
+        - remote_session_client_id
+        - remote_session_issuer_id
+        - issuer_slug
+        - has_refresh_token
+        - auto_refresh
+        - scopes
     UserSummary:
       type: object
       properties:

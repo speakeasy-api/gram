@@ -1,3 +1,7 @@
+import {
+  BrandMeshLayers,
+  BRAND_MESH_SURFACE_CLASS,
+} from "@/components/brand-mesh";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -90,9 +94,17 @@ export function RemoteSessionRefreshPolicySetting(): JSX.Element {
   );
 
   return (
-    <section className="border-border bg-card border p-5">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="border-border flex size-9 shrink-0 items-center justify-center border">
+    // The same brand-mesh surface as the project home assistant card, composed
+    // from the shared treatment rather than restated: a neutral theme-following
+    // gradient with the rainbow breathing in from one edge and grain over the
+    // top. No `overflow-hidden` — the decorative layers clip themselves.
+    <section
+      className={cn(BRAND_MESH_SURFACE_CLASS, "border-border border p-8")}
+    >
+      <BrandMeshLayers />
+
+      <div className="mb-6 flex items-start gap-3">
+        <div className="border-border bg-card flex size-9 shrink-0 items-center justify-center border">
           <RefreshCw className="text-muted-foreground size-4" />
         </div>
         <div>
@@ -122,7 +134,10 @@ export function RemoteSessionRefreshPolicySetting(): JSX.Element {
                 <label
                   key={option.value}
                   className={cn(
-                    "border-border focus-within:border-ring focus-within:ring-ring/50 flex min-h-28 cursor-pointer flex-col border p-4 transition-[color,box-shadow] focus-within:ring-[3px]",
+                    // Opaque cards, not transparent panels: they have to sit on
+                    // the mesh rather than let it show through, or the option
+                    // text competes with the gradient behind it.
+                    "border-border bg-card focus-within:border-ring focus-within:ring-ring/50 flex min-h-28 cursor-pointer flex-col border p-4 transition-[color,box-shadow] focus-within:ring-[3px]",
                     selected && "border-foreground",
                     (disabled || mutation.isPending) &&
                       "cursor-not-allowed opacity-60",
