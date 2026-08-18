@@ -511,10 +511,10 @@ var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
 })
 
 var ChatSessionLink = Type("ChatSessionLink", func() {
-	Attribute("parent_chat_id", String, "Chat id of the session the move originated from.", func() {
+	Attribute("parent_chat_id", String, "Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).", func() {
+	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.")
@@ -530,7 +530,7 @@ var ChatSessionLink = Type("ChatSessionLink", func() {
 		Description("When the move was recorded.")
 		Format(FormatDateTime)
 	})
-	Required("parent_chat_id", "parent_captured", "child_captured", "kind", "target_harness", "created_at")
+	Required("parent_captured", "child_captured", "kind", "target_harness", "created_at")
 })
 
 var ListSessionLinksResult = Type("ListSessionLinksResult", func() {

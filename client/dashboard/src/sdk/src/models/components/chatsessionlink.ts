@@ -18,7 +18,7 @@ export type ChatSessionLink = {
    */
   childCaptured: boolean;
   /**
-   * Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).
+   * Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
    */
   childChatId?: string | undefined;
   /**
@@ -42,9 +42,9 @@ export type ChatSessionLink = {
    */
   parentCaptured: boolean;
   /**
-   * Chat id of the session the move originated from.
+   * Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
    */
-  parentChatId: string;
+  parentChatId?: string | undefined;
   /**
    * Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.
    */
@@ -76,7 +76,7 @@ export const ChatSessionLink$inboundSchema: z.ZodMiniType<
     device_hostname: z.optional(z.string()),
     kind: z.string(),
     parent_captured: z.boolean(),
-    parent_chat_id: z.string(),
+    parent_chat_id: z.optional(z.string()),
     parent_title: z.optional(z.string()),
     source_surface: z.optional(z.string()),
     target_harness: z.string(),

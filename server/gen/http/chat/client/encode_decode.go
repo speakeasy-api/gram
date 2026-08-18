@@ -3377,7 +3377,7 @@ func unmarshalChatTotalsResponseBodyToChatChatTotals(v *ChatTotalsResponseBody) 
 // type *chat.ChatSessionLink from a value of type *ChatSessionLinkResponseBody.
 func unmarshalChatSessionLinkResponseBodyToChatChatSessionLink(v *ChatSessionLinkResponseBody) *chat.ChatSessionLink {
 	res := &chat.ChatSessionLink{
-		ParentChatID:   *v.ParentChatID,
+		ParentChatID:   v.ParentChatID,
 		ChildChatID:    v.ChildChatID,
 		ParentTitle:    v.ParentTitle,
 		ChildTitle:     v.ChildTitle,

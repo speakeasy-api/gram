@@ -742,10 +742,15 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		return nil, oops.E(oops.CodeUnexpected, err, "list session links").LogError(ctx, s.logger)
 	}
 
+	// A masked end must expose no identity: for restricted callers, an end's
+	// chat id is only revealed when that end is visible to them (captured and
+	// in scope), so a foreign continuation stays indistinguishable from a
+	// not-yet-captured one. Unrestricted callers see raw ids even pre-capture.
+	unrestricted := externalUserID == "" && userID == ""
 	links := make([]*gen.ChatSessionLink, 0, len(rows))
 	for _, row := range rows {
 		link := &gen.ChatSessionLink{
-			ParentChatID:   row.ParentChatID.String(),
+			ParentChatID:   nil,
 			ChildChatID:    nil,
 			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
 			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
@@ -758,7 +763,10 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 			DeviceHostname: conv.FromPGText[string](row.DeviceHostname),
 			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		}
-		if row.ChildChatID.Valid {
+		if unrestricted || row.ParentCaptured {
+			link.ParentChatID = conv.PtrEmpty(row.ParentChatID.String())
+		}
+		if row.ChildChatID.Valid && (unrestricted || row.ChildCaptured) {
 			link.ChildChatID = conv.PtrEmpty(row.ChildChatID.UUID.String())
 		}
 		links = append(links, link)

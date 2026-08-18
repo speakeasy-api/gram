@@ -2850,10 +2850,14 @@ type ChatTotalsResponseBody struct {
 
 // ChatSessionLinkResponseBody is used to define fields on response body types.
 type ChatSessionLinkResponseBody struct {
-	// Chat id of the session the move originated from.
-	ParentChatID string `form:"parent_chat_id" json:"parent_chat_id" xml:"parent_chat_id"`
+	// Chat id of the session the move originated from. Absent when the caller's
+	// visibility scope cannot read the parent — a masked end exposes no identity,
+	// matching parent_captured.
+	ParentChatID *string `form:"parent_chat_id,omitempty" json:"parent_chat_id,omitempty" xml:"parent_chat_id,omitempty"`
 	// Chat id derived for the continuation. Absent when the continuation's session
-	// id was unknowable at move time (e.g. Cursor mints ids server-side).
+	// id was unknowable at move time (e.g. Cursor mints ids server-side) — or when
+	// the caller's visibility scope cannot read the child, which is deliberately
+	// indistinguishable.
 	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
 	// Title of the parent chat, when it has been captured and titled and the
 	// caller's visibility scope can read it.

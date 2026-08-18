@@ -874,9 +874,9 @@ function SessionLinksSection({
         Linked sessions
       </div>
       <div className="mt-1">
-        {inbound.map((link) =>
+        {inbound.map((link, i) =>
           row(
-            `in-${link.parentChatId}-${link.createdAt.toISOString()}`,
+            `in-${i}-${link.createdAt.toISOString()}`,
             <>Derived from {link.parentTitle ?? "an earlier session"}</>,
             link.createdAt,
             hop(link.parentChatId, link.parentCaptured),
@@ -885,9 +885,9 @@ function SessionLinksSection({
               : "not yet captured",
           ),
         )}
-        {outbound.map((link) =>
+        {outbound.map((link, i) =>
           row(
-            `out-${link.childChatId ?? "pending"}-${link.createdAt.toISOString()}`,
+            `out-${i}-${link.createdAt.toISOString()}`,
             <>Moved to {harnessLabel(link.targetHarness)}</>,
             link.createdAt,
             hop(link.childChatId, link.childCaptured),

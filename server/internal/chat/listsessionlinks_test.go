@@ -62,7 +62,8 @@ func TestListSessionLinks_ParentAndChildDirections(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fromParent.Links, 1)
 	link := fromParent.Links[0]
-	require.Equal(t, parentID.String(), link.ParentChatID)
+	require.NotNil(t, link.ParentChatID)
+	require.Equal(t, parentID.String(), *link.ParentChatID)
 	require.NotNil(t, link.ChildChatID)
 	require.Equal(t, childID.String(), *link.ChildChatID)
 	require.True(t, link.ChildCaptured)
@@ -82,7 +83,8 @@ func TestListSessionLinks_ParentAndChildDirections(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, fromChild.Links, 1)
-	require.Equal(t, parentID.String(), fromChild.Links[0].ParentChatID)
+	require.NotNil(t, fromChild.Links[0].ParentChatID)
+	require.Equal(t, parentID.String(), *fromChild.Links[0].ParentChatID)
 }
 
 // A move whose continuation id was unknowable (Cursor) renders as a dangling
@@ -143,10 +145,12 @@ func TestListSessionLinks_MemberVisibilityScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Links, 2, "only edges touching the member's own chats are visible")
 	for _, link := range res.Links {
-		require.Equal(t, mineParent.String(), link.ParentChatID)
+		require.NotNil(t, link.ParentChatID, "the member's own end keeps its id")
+		require.Equal(t, mineParent.String(), *link.ParentChatID)
 		require.True(t, link.ParentCaptured)
 		require.Nil(t, link.ChildTitle, "foreign child titles stay masked")
 		require.False(t, link.ChildCaptured, "foreign children read as not navigable")
+		require.Nil(t, link.ChildChatID, "foreign child ids stay masked — indistinguishable from dangling")
 	}
 
 	adminRes, err := ti.service.ListSessionLinks(adminCtx, &gen.ListSessionLinksPayload{

@@ -323,10 +323,14 @@ type ChatOverview struct {
 }
 
 type ChatSessionLink struct {
-	// Chat id of the session the move originated from.
-	ParentChatID string
+	// Chat id of the session the move originated from. Absent when the caller's
+	// visibility scope cannot read the parent — a masked end exposes no identity,
+	// matching parent_captured.
+	ParentChatID *string
 	// Chat id derived for the continuation. Absent when the continuation's session
-	// id was unknowable at move time (e.g. Cursor mints ids server-side).
+	// id was unknowable at move time (e.g. Cursor mints ids server-side) — or when
+	// the caller's visibility scope cannot read the child, which is deliberately
+	// indistinguishable.
 	ChildChatID *string
 	// Title of the parent chat, when it has been captured and titled and the
 	// caller's visibility scope can read it.

@@ -59760,7 +59760,7 @@ components:
           description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
         child_chat_id:
           type: string
-          description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).
+          description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
           format: uuid
         child_title:
           type: string
@@ -59780,7 +59780,7 @@ components:
           description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
         parent_chat_id:
           type: string
-          description: Chat id of the session the move originated from.
+          description: Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
           format: uuid
         parent_title:
           type: string
@@ -59792,7 +59792,6 @@ components:
           type: string
           description: Harness the session was moved to (e.g. cursor, codex, claude-code).
       required:
-        - parent_chat_id
         - parent_captured
         - child_captured
         - kind
