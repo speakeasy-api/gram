@@ -24,13 +24,27 @@ import (
 // codes and refresh tokens hashed, and uses transactions for every transition
 // that locks or invalidates a grant/session family.
 type PostgresOAuthStore struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	telemetry OAuthTelemetry
 }
 
 var _ platformoauth.Store = (*PostgresOAuthStore)(nil)
 
 func NewPostgresOAuthStore(db *pgxpool.Pool) *PostgresOAuthStore {
-	return &PostgresOAuthStore{db: db}
+	return &PostgresOAuthStore{db: db, telemetry: noopOAuthTelemetry{}}
+}
+
+func (s *PostgresOAuthStore) WithTelemetry(telemetry OAuthTelemetry) *PostgresOAuthStore {
+	if telemetry != nil {
+		s.telemetry = telemetry
+	}
+	return s
+}
+
+func (s *PostgresOAuthStore) recordTerminalTransition(ctx context.Context, reason platformoauth.ReauthorizationReason) {
+	if s != nil && s.telemetry != nil {
+		s.telemetry.RecordTerminalTransition(ctx, reason)
+	}
 }
 
 func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client platformoauth.Client) error {
@@ -91,6 +105,9 @@ func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, 
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit revoke platform mcp client: %w", err)
+	}
+	for range connections {
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonClientRevoked)
 	}
 	return nil
 }
@@ -262,6 +279,7 @@ func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, organizationI
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit revoke platform mcp connection: %w", err)
 	}
+	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonConnectionRevoked)
 	return nil
 }
 
@@ -442,6 +460,7 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit reused platform mcp session family: %w", err)
 	}
+	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
 	return true, nil
 }
 
@@ -472,6 +491,7 @@ func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformo
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp refresh: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
 		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
 	}
 	if row.ConnectionRevokedAt.Valid || row.ClientRevokedAt.Valid || row.ReauthorizationRequiredAt.Valid {
@@ -487,6 +507,7 @@ func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformo
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp authorization: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonAuthorizationExpired)
 		return platformoauth.Session{}, platformoauth.ErrExpired
 	}
 	if !row.RefreshExpiresAt.Valid || !input.Now.Before(row.RefreshExpiresAt.Time) {
@@ -496,6 +517,7 @@ func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformo
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp refresh: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshIdleExpired)
 		return platformoauth.Session{}, platformoauth.ErrExpired
 	}
 	session := sessionFromRefreshRow(row)
@@ -532,6 +554,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp session family: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
 		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
 	}
 	if row.OrganizationID != input.OrganizationID || row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() || input.Replacement.Connection.Generation != row.ConnectionGeneration.String() {
@@ -547,6 +570,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp authorization: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonAuthorizationExpired)
 		return platformoauth.Session{}, platformoauth.ErrExpired
 	}
 	if !row.RefreshExpiresAt.Valid || !input.Now.Before(row.RefreshExpiresAt.Time) {
@@ -556,6 +580,7 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp session: %w", err)
 		}
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshIdleExpired)
 		return platformoauth.Session{}, platformoauth.ErrExpired
 	}
 	if input.Replacement.ExpiresAt.After(row.EffectiveAuthorizationExpiresAt.Time) || input.Replacement.RefreshExpiresAt.After(row.EffectiveAuthorizationExpiresAt.Time) {
@@ -603,6 +628,7 @@ func (s *PostgresOAuthStore) MarkAuthorizationLost(ctx context.Context, organiza
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit mark platform mcp authorization lost: %w", err)
 	}
+	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonAuthorizationLost)
 	return nil
 }
 
@@ -632,6 +658,7 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, 
 	if err := tx.Commit(ctx); err != nil {
 		return platformoauth.Session{}, fmt.Errorf("commit revoke platform mcp session: %w", err)
 	}
+	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonConnectionRevoked)
 	return platformoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, RevokedAt: &now, Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}, nil
 }
 

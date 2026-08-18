@@ -109,6 +109,7 @@ type Runtime struct {
 	authorizer           Authorizer
 	protectedResourceURL string
 	readiness            ReadinessRecorder
+	telemetry            OAuthTelemetry
 	server               *mcp.Server
 }
 
@@ -132,6 +133,7 @@ func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, g
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
 		readiness:            readiness,
+		telemetry:            noopOAuthTelemetry{},
 		server:               server,
 		registrar:            registrar,
 	}
@@ -155,6 +157,19 @@ func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, g
 	return runtime
 }
 
+func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
+	if telemetry != nil {
+		r.telemetry = telemetry
+	}
+	return r
+}
+
+func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string) {
+	if r.telemetry != nil {
+		r.telemetry.Record(ctx, OAuthEvent{Operation: "runtime_auth", Outcome: outcome, Reason: reason})
+	}
+}
+
 func (r *Runtime) Handler() http.Handler {
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
@@ -173,6 +188,7 @@ func (r *Runtime) Handler() http.Handler {
 
 		principal, err := r.authenticate(req)
 		if err != nil {
+			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
 				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
 			}
@@ -181,18 +197,22 @@ func (r *Runtime) Handler() http.Handler {
 		}
 		enabled, err := r.gate.Enabled(req.Context(), principal.OrganizationID)
 		if err != nil {
+			r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if !enabled {
+			r.recordAuthOutcome(req.Context(), "access_denied", "platform_disabled")
 			http.Error(w, "unavailable", http.StatusForbidden)
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
+			r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 
+		r.recordAuthOutcome(req.Context(), "succeeded", "")
 		req = req.WithContext(contextWithPrincipal(req.Context(), principal))
 		req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
 		w.Header().Set("Cache-Control", "no-store")
