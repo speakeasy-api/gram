@@ -1,5 +1,19 @@
 # server
 
+## 1.14.0
+
+### Minor Changes
+
+- 7a88cd7: Add session-portability endpoints to the agent service: `agent.getSessionMeta` resolves picker metadata (title, chat id, last activity) for captured sessions the calling user owns — per-user keys only, owner-matched, personal-account sessions included for their owner — and `agent.reportSessionMoved` records a content-free `chat_session:move` audit event when the device agent moves a session to another harness. Both are gated behind the new `session_portability` product feature.
+- 8cb9507: Session portability can now mint short-lived capability URLs for handoff documents. The device agent uploads the handoff it rendered locally via the new `agent.createSessionHandoff` endpoint (per-user key only) and receives a burn-after-read URL served at `/shared/handoffs/{token}` — letting a cloud agent or another machine continue the session. Links expire after a clamped TTL (default 15 minutes), die on first read, and every mint lands as a content-free `chat_session:handoff_export` audit event.
+
+### Patch Changes
+
+- d1e0a84: Activate pay-as-you-go billing atomically when Stripe confirms a completed checkout, including replay-safe webhook processing, subscription ownership validation, trial conversion, and entitlement setup for organizations without a prior trial.
+- 3a8f15f: Add pay-as-you-go as a first-class billing tier across server entitlements, management API tier data, and dashboard and admin tier controls. PAYG organizations receive enterprise feature access with capped PAYG billing behavior, and Stripe-authoritative tier state cannot be overwritten by stale Polar data.
+- 8cb9507: Persist the captured agent session's working directory (`session.cwd`) onto chats at hook ingest. The value was already on the wire for canonical (hook.ingest.v1), legacy Claude, and legacy Codex events but previously discarded; it is groundwork for session portability (materializing a moved session into the right project directory).
+- b938a56: Allow eligible organization admins to start a self-serve pay-as-you-go Stripe checkout from the billing page. The server reuses a stable Stripe customer, preserves active trials, and records the checkout request in the audit log.
+
 ## 1.13.0
 
 ### Minor Changes
