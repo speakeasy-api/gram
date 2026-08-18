@@ -47,7 +47,7 @@ WHERE id = $4
   AND project_id = $5
   AND status = 'running'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 `
 
 type CompleteResearchReportParams struct {
@@ -79,6 +79,7 @@ func (q *Queries) CompleteResearchReport(ctx context.Context, arg CompleteResear
 		&i.Status,
 		&i.Report,
 		&i.ReportVersion,
+		&i.ToolCalls,
 		&i.Model,
 		&i.PromptVersion,
 		&i.RequestedBy,
@@ -199,7 +200,7 @@ INSERT INTO mcp_research_reports (
   , $11::timestamptz
   , $12::text
 )
-RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateResearchReportParams struct {
@@ -241,6 +242,7 @@ func (q *Queries) CreateResearchReport(ctx context.Context, arg CreateResearchRe
 		&i.Status,
 		&i.Report,
 		&i.ReportVersion,
+		&i.ToolCalls,
 		&i.Model,
 		&i.PromptVersion,
 		&i.RequestedBy,
@@ -265,7 +267,7 @@ WHERE id = $2
   AND project_id = $3
   AND status = 'running'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 `
 
 type FailResearchReportParams struct {
@@ -287,6 +289,7 @@ func (q *Queries) FailResearchReport(ctx context.Context, arg FailResearchReport
 		&i.Status,
 		&i.Report,
 		&i.ReportVersion,
+		&i.ToolCalls,
 		&i.Model,
 		&i.PromptVersion,
 		&i.RequestedBy,
@@ -651,7 +654,7 @@ func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResea
 }
 
 const getRunningResearchReport = `-- name: GetRunningResearchReport :one
-SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 FROM mcp_research_reports
 WHERE mcp_approval_request_id = $1
   AND organization_id = $2
@@ -679,6 +682,7 @@ func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningRe
 		&i.Status,
 		&i.Report,
 		&i.ReportVersion,
+		&i.ToolCalls,
 		&i.Model,
 		&i.PromptVersion,
 		&i.RequestedBy,
@@ -1117,7 +1121,7 @@ func (q *Queries) ListRequestersForApprovalRequest(ctx context.Context, arg List
 }
 
 const listResearchReportsForApprovalRequest = `-- name: ListResearchReportsForApprovalRequest :many
-SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 FROM mcp_research_reports
 WHERE mcp_approval_request_id = $1
   AND project_id = $2
@@ -1147,6 +1151,7 @@ func (q *Queries) ListResearchReportsForApprovalRequest(ctx context.Context, arg
 			&i.Status,
 			&i.Report,
 			&i.ReportVersion,
+			&i.ToolCalls,
 			&i.Model,
 			&i.PromptVersion,
 			&i.RequestedBy,

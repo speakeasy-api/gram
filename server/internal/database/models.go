@@ -1189,6 +1189,7 @@ type McpResearchReport struct {
 	Status               string
 	Report               []byte
 	ReportVersion        int32
+	ToolCalls            []byte
 	Model                pgtype.Text
 	PromptVersion        pgtype.Text
 	RequestedBy          pgtype.Text
