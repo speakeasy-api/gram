@@ -6928,8 +6928,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and setup handoffs must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_key TEXT NOT NULL,
   intent TEXT NOT NULL,
   handoff_hash TEXT NOT NULL,
@@ -6940,6 +6947,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_setup_handoffs_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_setup_handoffs_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_setup_handoffs_provider_key_check CHECK (provider_key <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_intent_check CHECK (intent <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_handoff_hash_check CHECK (handoff_hash <> ''),
@@ -6958,8 +6967,13 @@ ON platform_mcp_setup_handoffs (handoff_hash);
 
 -- Issuers must invalidate an expired unredeemed handoff before issuing its
 -- replacement; a partial-index predicate cannot depend on clock time.
+-- NULLS NOT DISTINCT so the one-active-handoff invariant survives a
+-- connection-less issuer: with the default NULLS DISTINCT, two rows whose
+-- connection columns are both NULL would not collide and a surface acting
+-- under assistant identity could hold several active handoffs at once.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_active_binding_key
 ON platform_mcp_setup_handoffs (registration_id, connection_id, connection_generation, intent)
+NULLS NOT DISTINCT
 WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
@@ -6981,8 +6995,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and readiness evidence must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_authorization_fingerprint TEXT NOT NULL,
   state TEXT NOT NULL,
   evidence_code TEXT,
@@ -6992,6 +7013,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_readiness_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_readiness_provider_authorization_fingerprint_check CHECK (provider_authorization_fingerprint <> ''),
   CONSTRAINT platform_mcp_readiness_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_readiness_organization_id_fkey
@@ -7004,8 +7027,13 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
 
+-- NULLS NOT DISTINCT so readiness evidence stays one row per registration and
+-- fingerprint for a connection-less writer too. Otherwise the upsert never
+-- matches an existing NULL-connection row and each probe appends new evidence
+-- instead of refreshing the current row.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
-ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint);
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+NULLS NOT DISTINCT;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
 ON platform_mcp_readiness (registration_id, checked_at DESC);
@@ -7114,11 +7142,20 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   attachment_was_created boolean NOT NULL,
   publication_state TEXT NOT NULL DEFAULT 'pending',
   publication_updated_at timestamptz,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and distributions must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT platform_mcp_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_distributions_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_distributions_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_distributions_version_check CHECK (version > 0),
   CONSTRAINT platform_mcp_distributions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,

@@ -135,8 +135,8 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		Intent:               binding.Intent,
 	}); err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("invalidate platform mcp setup handoffs: %w", err)
@@ -146,8 +146,8 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		HandoffHash:          setupHandoffHash(value),
@@ -212,8 +212,8 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		SubjectUrn:           userSubjectURN(principal.UserID),
@@ -388,8 +388,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -397,8 +397,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -443,8 +443,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     connectionID,
-		ConnectionGeneration:             generation,
+		ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
@@ -456,8 +456,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     connectionID,
-			ConnectionGeneration:             generation,
+			ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
+			ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
 			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		})
 		if loadErr == nil {
@@ -479,8 +479,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         connectionID,
-			ConnectionGeneration: generation,
+			ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+			ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {
@@ -611,8 +611,8 @@ func setupHandoffFromRow(row platformrepo.PlatformMcpSetupHandoff) SetupHandoff 
 		ProviderKey:          row.ProviderKey,
 		Intent:               row.Intent,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 	}
 }
 
@@ -625,8 +625,8 @@ func readinessFromRow(row platformrepo.PlatformMcpReadiness, now time.Time) Read
 		EvidenceCode:         row.EvidenceCode.String,
 		CheckedAt:            row.CheckedAt.Time,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 		Fresh:                row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now),
 	}
 }

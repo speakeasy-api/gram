@@ -283,7 +283,7 @@ WHERE handoff.handoff_hash = $1
         AND connection.active_generation = handoff.connection_generation
         AND connection.revoked_at IS NULL
   )
-RETURNING handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
+RETURNING handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.user_id, handoff.acting_surface, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
 `
 
 type ConsumePlatformMCPSetupHandoffParams struct {
@@ -291,8 +291,8 @@ type ConsumePlatformMCPSetupHandoffParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	ProviderKey          string
 	Intent               string
 	SubjectUrn           string
@@ -318,6 +318,8 @@ func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg Consum
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderKey,
 		&i.Intent,
 		&i.HandoffHash,
@@ -640,7 +642,7 @@ WHERE EXISTS (
       AND project.organization_id = $1
       AND project.deleted IS FALSE
 )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type CreatePlatformMCPDistributionParams struct {
@@ -652,8 +654,8 @@ type CreatePlatformMCPDistributionParams struct {
 	State                string
 	Version              int64
 	AttachmentWasCreated bool
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 func (q *Queries) CreatePlatformMCPDistribution(ctx context.Context, arg CreatePlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
@@ -684,6 +686,8 @@ func (q *Queries) CreatePlatformMCPDistribution(ctx context.Context, arg CreateP
 		&i.PublicationUpdatedAt,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1128,15 +1132,15 @@ WHERE EXISTS (
       AND registration.project_id = $2
       AND registration.deleted IS FALSE
 )
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, provider_key, intent, handoff_hash, expires_at, redeemed_at, invalidated_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_key, intent, handoff_hash, expires_at, redeemed_at, invalidated_at, created_at, updated_at
 `
 
 type CreatePlatformMCPSetupHandoffParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	ProviderKey          string
 	Intent               string
 	HandoffHash          string
@@ -1163,6 +1167,8 @@ func (q *Queries) CreatePlatformMCPSetupHandoff(ctx context.Context, arg CreateP
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderKey,
 		&i.Intent,
 		&i.HandoffHash,
@@ -1261,8 +1267,8 @@ type DeleteExpiredPlatformMCPReadinessParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 // Retain the newest expired projection as stale repair evidence. Only an older
@@ -1629,7 +1635,7 @@ func (q *Queries) GetActivePlatformMCPSessionByJTI(ctx context.Context, arg GetA
 }
 
 const getLatestPlatformMCPReadinessForLifecycle = `-- name: GetLatestPlatformMCPReadinessForLifecycle :one
-SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
 JOIN platform_mcp_catalog_registrations AS registration
   ON registration.id = readiness.registration_id
@@ -1659,8 +1665,8 @@ type GetLatestPlatformMCPReadinessForLifecycleParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	SubjectUrn           string
 }
 
@@ -1681,6 +1687,8 @@ func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context,
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderAuthorizationFingerprint,
 		&i.State,
 		&i.EvidenceCode,
@@ -1693,7 +1701,7 @@ func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context,
 }
 
 const getLatestRedeemedPlatformMCPSetupHandoff = `-- name: GetLatestRedeemedPlatformMCPSetupHandoff :one
-SELECT handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
+SELECT handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.user_id, handoff.acting_surface, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
 FROM platform_mcp_setup_handoffs AS handoff
 JOIN platform_mcp_catalog_registrations AS registration
   ON registration.id = handoff.registration_id
@@ -1725,8 +1733,8 @@ type GetLatestRedeemedPlatformMCPSetupHandoffParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	SubjectUrn           string
 }
 
@@ -1747,6 +1755,8 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderKey,
 		&i.Intent,
 		&i.HandoffHash,
@@ -2101,7 +2111,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 }
 
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
-SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.created_at, distribution.updated_at
+SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
 FROM platform_mcp_distributions AS distribution
 JOIN projects AS project
   ON project.id = distribution.project_id
@@ -2142,6 +2152,8 @@ func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatfor
 		&i.PublicationUpdatedAt,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2388,7 +2400,7 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 }
 
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
-SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
  JOIN platform_mcp_catalog_registrations AS registration
    ON registration.id = readiness.registration_id
@@ -2411,8 +2423,8 @@ type GetPlatformMCPReadinessParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.UUID
-	ConnectionGeneration             uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
 	ProviderAuthorizationFingerprint string
 }
 
@@ -2433,6 +2445,8 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderAuthorizationFingerprint,
 		&i.State,
 		&i.EvidenceCode,
@@ -2514,8 +2528,8 @@ type GetPlatformMCPSelectedUseTargetRow struct {
 	RegistrationID       uuid.UUID
 	McpKey               string
 	WorkflowID           uuid.NullUUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 func (q *Queries) GetPlatformMCPSelectedUseTarget(ctx context.Context, arg GetPlatformMCPSelectedUseTargetParams) (GetPlatformMCPSelectedUseTargetRow, error) {
@@ -2803,8 +2817,8 @@ type GetPlatformMCPSetupHandoffForDashboardStartRow struct {
 	RegistrationID       uuid.UUID
 	ProviderKey          string
 	Intent               string
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	CatalogReference     string
 	ProjectSlug          string
 }
@@ -3230,8 +3244,8 @@ type InvalidateActivePlatformMCPSetupHandoffsParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	Intent               string
 }
 
@@ -4764,7 +4778,7 @@ WHERE platform_mcp_distributions.id = $7
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionParams struct {
@@ -4772,8 +4786,8 @@ type UpdatePlatformMCPDistributionParams struct {
 	State                string
 	Version              int64
 	AttachmentWasCreated bool
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	ID                   uuid.UUID
 	OrganizationID       string
 	ProjectID            uuid.UUID
@@ -4810,6 +4824,8 @@ func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdateP
 		&i.PublicationUpdatedAt,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -4850,7 +4866,7 @@ WHERE platform_mcp_distributions.id = $2
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionPublicationParams struct {
@@ -4888,6 +4904,8 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 		&i.PublicationUpdatedAt,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -4938,15 +4956,15 @@ DO UPDATE SET
     expires_at = EXCLUDED.expires_at,
     updated_at = clock_timestamp()
 WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
 `
 
 type UpsertPlatformMCPReadinessParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.UUID
-	ConnectionGeneration             uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -4975,6 +4993,8 @@ func (q *Queries) UpsertPlatformMCPReadiness(ctx context.Context, arg UpsertPlat
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.ProviderAuthorizationFingerprint,
 		&i.State,
 		&i.EvidenceCode,
