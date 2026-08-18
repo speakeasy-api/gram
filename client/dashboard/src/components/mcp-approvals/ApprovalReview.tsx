@@ -646,6 +646,13 @@ function ResearchFetchRow({
     <li className="border-border border-l-2 pl-2 text-xs">
       <div className="flex items-center gap-1.5">
         <span className="font-medium">Fetched</span>
+        {fetch.citedByClaims && fetch.citedByClaims.length > 0 && (
+          <span className="border-border text-muted-foreground border px-1 text-[10px]">
+            {fetch.citedByClaims.length === 1
+              ? `cited by finding ${fetch.citedByClaims[0]! + 1}`
+              : `cited by ${fetch.citedByClaims.length} findings`}
+          </span>
+        )}
         {fetch.injectionFlagged && (
           <span className="border-warning text-warning border px-1 text-[10px]">
             flagged

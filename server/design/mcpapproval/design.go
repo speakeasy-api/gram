@@ -367,6 +367,7 @@ var ResearchPageFetchCall = Type("ResearchPageFetchCall", func() {
 	Attribute("injection_flagged", Boolean, "Whether the judge found the page tried to instruct its reader.")
 	Attribute("judge_rationale", String, "The judge's reasoning, when it flagged the page.")
 	Attribute("content_preview", String, "A bounded preview of the extracted page text. Untrusted web content.")
+	Attribute("cited_by_claims", ArrayOf(Int), "Indices of the report claims that cited this page — the link from a fetch to the evidence it became. Empty when the page was read but nothing in the final report rests on it.")
 })
 
 var EvidenceFieldChange = Type("EvidenceFieldChange", func() {

@@ -201,7 +201,19 @@ func researchPageFetchCallView(call *researchagent.FetchCall) *gen.ResearchPageF
 		InjectionFlagged: conv.PtrEmpty(call.InjectionFlagged),
 		JudgeRationale:   conv.PtrEmpty(call.JudgeRationale),
 		ContentPreview:   conv.PtrEmpty(call.ContentPreview),
+		CitedByClaims:    citedByClaimsView(call.CitedByClaims),
 	}
+}
+
+// citedByClaimsView maps stored claim indices to the API slice, nil when the
+// page was read but nothing cited it.
+func citedByClaimsView(indices []int) []int {
+	if len(indices) == 0 {
+		return nil
+	}
+	out := make([]int, len(indices))
+	copy(out, indices)
+	return out
 }
 
 // rawEvidence decodes the stored evidence document for the API boundary.

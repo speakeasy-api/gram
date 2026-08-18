@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ResearchPageFetchCall = {
   /**
+   * Indices of the report claims that cited this page — the link from a fetch to the evidence it became. Empty when the page was read but nothing in the final report rests on it.
+   */
+  citedByClaims?: Array<number> | undefined;
+  /**
    * The fetched page's extracted-text size.
    */
   contentBytes?: number | undefined;
@@ -56,6 +60,7 @@ export const ResearchPageFetchCall$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    cited_by_claims: z.optional(z.array(z.int())),
     content_bytes: z.optional(z.int()),
     content_preview: z.optional(z.string()),
     content_type: z.optional(z.string()),
@@ -68,6 +73,7 @@ export const ResearchPageFetchCall$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "cited_by_claims": "citedByClaims",
       "content_bytes": "contentBytes",
       "content_preview": "contentPreview",
       "content_type": "contentType",

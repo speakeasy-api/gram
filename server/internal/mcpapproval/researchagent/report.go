@@ -215,6 +215,12 @@ type FetchCall struct {
 	// ContentPreview is a bounded prefix of the extracted page text —
 	// untrusted web content, kept for review context, never a full body.
 	ContentPreview string `json:"content_preview,omitempty"`
+
+	// CitedByClaims holds the indices of the report claims whose citations
+	// point at this page — the link from a fetch back to the evidence it
+	// became. Empty when the page was read but nothing in the final report
+	// rests on it. Indices are into the report's claims array.
+	CitedByClaims []int `json:"cited_by_claims,omitempty"`
 }
 
 // RunMeta records what produced the report, for the audit trail and for

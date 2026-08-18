@@ -1959,6 +1959,10 @@ type ResearchPageFetchCallResponseBody struct {
 	JudgeRationale *string `form:"judge_rationale,omitempty" json:"judge_rationale,omitempty" xml:"judge_rationale,omitempty"`
 	// A bounded preview of the extracted page text. Untrusted web content.
 	ContentPreview *string `form:"content_preview,omitempty" json:"content_preview,omitempty" xml:"content_preview,omitempty"`
+	// Indices of the report claims that cited this page — the link from a fetch to
+	// the evidence it became. Empty when the page was read but nothing in the
+	// final report rests on it.
+	CitedByClaims []int `form:"cited_by_claims,omitempty" json:"cited_by_claims,omitempty" xml:"cited_by_claims,omitempty"`
 }
 
 // NewEnsureServerReviewRequestBody builds the HTTP request body from the

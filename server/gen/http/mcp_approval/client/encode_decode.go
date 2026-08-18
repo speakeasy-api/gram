@@ -2192,6 +2192,12 @@ func unmarshalResearchPageFetchCallResponseBodyToMcpapprovalResearchPageFetchCal
 		JudgeRationale:   v.JudgeRationale,
 		ContentPreview:   v.ContentPreview,
 	}
+	if v.CitedByClaims != nil {
+		res.CitedByClaims = make([]int, len(v.CitedByClaims))
+		for i, val := range v.CitedByClaims {
+			res.CitedByClaims[i] = val
+		}
+	}
 
 	return res
 }

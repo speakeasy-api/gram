@@ -71651,6 +71651,12 @@ components:
     ResearchPageFetchCall:
       type: object
       properties:
+        cited_by_claims:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Indices of the report claims that cited this page — the link from a fetch to the evidence it became. Empty when the page was read but nothing in the final report rests on it.
         content_bytes:
           type: integer
           description: The fetched page's extracted-text size.

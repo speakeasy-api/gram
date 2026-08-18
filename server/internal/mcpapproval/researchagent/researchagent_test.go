@@ -125,6 +125,46 @@ func (p *pageTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, _ io.Reader
 	return nil
 }
 
+// echoFetchTool returns whatever URL it was asked to fetch, so a test can tell
+// two fetches apart — unlike pageTool, which returns a fixed URL.
+type echoFetchTool struct {
+	content string
+}
+
+func (e *echoFetchTool) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "research",
+		HandlerName: "fetch_page",
+		Name:        "platform_fetch_page",
+		Description: "test fetch",
+		InputSchema: []byte(`{"type": "object"}`),
+		Variables:   nil,
+		Annotations: core.ReadOnlyAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (e *echoFetchTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	raw, err := io.ReadAll(payload)
+	if err != nil {
+		return fmt.Errorf("read payload: %w", err)
+	}
+	var input struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return fmt.Errorf("decode url: %w", err)
+	}
+	if _, err := fmt.Fprintf(wr, `{"url": %q, "content": %q}`, input.URL, e.content); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+func (e *echoFetchTool) Menu() *research.URLMenu { return research.NewURLMenu() }
+
 // Menu satisfies the select-class registration check; the fakes stand in for
 // the menu-locked fetch tool, so each discloses a live menu.
 func (e *echoTool) Menu() *research.URLMenu { return research.NewURLMenu() }
@@ -575,6 +615,40 @@ func TestRun_ReturnsAToolCallTrace(t *testing.T) {
 	require.Nil(t, trace[2].Search)
 	require.Nil(t, trace[2].Fetch)
 	require.NotEmpty(t, trace[2].Error, "an unregistered tool call records its refusal")
+}
+
+// A fetch that becomes a citation is linked back to the claim that cited it,
+// distinguishing the pages that became evidence from the ones read and
+// dropped.
+func TestRun_LinksFetchesToTheClaimsThatCiteThem(t *testing.T) {
+	t.Parallel()
+
+	cited := &echoFetchTool{content: "We rotate keys and publish a trust center."}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/security"}`),
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/blog"}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{
+			"summary": "s",
+			"coverage": {"level": "thin"},
+			"claims": [
+				{"tier": "independently_reported", "text": "cited claim", "citations": [{"url": "https://vendor.example.com/security"}], "source_reputation": "reputable"}
+			]
+		}`,
+	}
+
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(cited))
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 2)
+	require.NotNil(t, trace[0].Fetch)
+	require.Equal(t, "https://vendor.example.com/security", trace[0].Fetch.URL)
+	require.Equal(t, []int{0}, trace[0].Fetch.CitedByClaims, "the security page backs claim 0")
+	require.NotNil(t, trace[1].Fetch)
+	require.Empty(t, trace[1].Fetch.CitedByClaims, "the blog was read but nothing cited it")
 }
 
 // A bounded preview never carries a full page body.

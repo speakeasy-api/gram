@@ -38,6 +38,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -340,7 +342,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 			case "web_search":
 				record.Search = &SearchCall{Query: searchQueryArgument(call.Function.Arguments), ResultCount: 0, PromptTokens: 0, CompletionTokens: 0}
 			case "fetch_page":
-				record.Fetch = &FetchCall{URL: "", FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: ""}
+				record.Fetch = &FetchCall{URL: "", FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: "", CitedByClaims: nil}
 			}
 
 			// Snapshot before executeTool so the delta is this call's tool
@@ -394,6 +396,12 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// has just read the pages doing the manipulating, so what those pages
 	// tried to do cannot be left to it to report.
 	document.Injections = injections
+
+	// Link each fetch in the trace to the claims that cited it, now that the
+	// report's claims exist. Most fetched pages contribute nothing to the
+	// final claims; this marks the ones that became evidence, so the trace
+	// distinguishes "read and cited" from "read and dropped".
+	linkFetchesToCitations(toolCalls, document.Claims)
 
 	encoded, err := json.Marshal(document)
 	if err != nil {
@@ -846,4 +854,66 @@ func boundPreview(content string) string {
 		return trimmed
 	}
 	return string(runes[:maxToolCallPreviewRunes]) + "…"
+}
+
+// linkFetchesToCitations stamps each fetch record with the indices of the
+// report claims whose citations point at that page. Matching is by normalized
+// URL against both the requested and final URL, best-effort: a citation can
+// name a redirect target or a search-result URL the model cited without
+// fetching, so an unmatched citation is not an error. The indices are into
+// the final claims array, which is what the report stores and renders.
+func linkFetchesToCitations(toolCalls []ToolCallRecord, claims []Claim) {
+	citedBy := make(map[string][]int)
+	for claimIndex, claim := range claims {
+		for _, citation := range claim.Citations {
+			key := normalizeCitationURL(citation.URL)
+			if key == "" {
+				continue
+			}
+			citedBy[key] = append(citedBy[key], claimIndex)
+		}
+	}
+	if len(citedBy) == 0 {
+		return
+	}
+
+	for i := range toolCalls {
+		fetch := toolCalls[i].Fetch
+		if fetch == nil {
+			continue
+		}
+		seen := make(map[int]struct{})
+		var indices []int
+		for _, raw := range []string{fetch.URL, fetch.FinalURL} {
+			for _, claimIndex := range citedBy[normalizeCitationURL(raw)] {
+				if _, ok := seen[claimIndex]; ok {
+					continue
+				}
+				seen[claimIndex] = struct{}{}
+				indices = append(indices, claimIndex)
+			}
+		}
+		if len(indices) > 0 {
+			sort.Ints(indices)
+			fetch.CitedByClaims = indices
+		}
+	}
+}
+
+// normalizeCitationURL reduces a URL to a stable key for matching a citation
+// against a fetch: lowercased scheme and host, a trailing slash dropped.
+// Empty in, empty out.
+func normalizeCitationURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return strings.TrimRight(trimmed, "/")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/")
 }

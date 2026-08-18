@@ -327,6 +327,10 @@ type ResearchPageFetchCall struct {
 	JudgeRationale *string
 	// A bounded preview of the extracted page text. Untrusted web content.
 	ContentPreview *string
+	// Indices of the report claims that cited this page — the link from a fetch to
+	// the evidence it became. Empty when the page was read but nothing in the
+	// final report rests on it.
+	CitedByClaims []int
 }
 
 // ResearchReport is the result type of the mcpApproval service startResearch
