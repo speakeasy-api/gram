@@ -600,6 +600,7 @@ function ResearchActivity({
     <div className="border-border mt-2 border-t pt-2">
       <button
         type="button"
+        aria-expanded={open}
         className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
         onClick={() => setOpen((value) => !value)}
       >

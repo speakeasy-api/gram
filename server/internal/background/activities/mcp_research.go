@@ -65,7 +65,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 	// de-rolled run resolves its report as failed — silently skipping would
 	// strand it in running.
 	if reason, gated := m.researchGate(ctx, input.OrgID); gated {
-		if err := m.failReport(ctx, queries, input, reason); err != nil {
+		if err := m.failReport(ctx, queries, input, reason, nil); err != nil {
 			// Success here with the row still running would strand it until
 			// the staleness reaper; erroring hands it to the workflow's
 			// compensation instead.
@@ -79,7 +79,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		ProjectID: input.ProjectID,
 	})
 	if err != nil {
-		_ = m.failReport(ctx, queries, input, "the approval request could not be loaded")
+		_ = m.failReport(ctx, queries, input, "the approval request could not be loaded", nil)
 		return fmt.Errorf("load approval request for research: %w", err)
 	}
 
@@ -94,20 +94,14 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 	})
 	if err != nil {
 		m.logger.ErrorContext(ctx, "mcp research run failed", attr.SlogError(err))
-		_ = m.failReport(ctx, queries, input, err.Error())
+		// The run failed but may have done work first; keep its partial trace
+		// so a failed report is as observable as a completed one.
+		_ = m.failReport(ctx, queries, input, err.Error(), encodeToolCallTrace(m.logger, ctx, toolCalls))
 		return fmt.Errorf("run research agent: %w", err)
 	}
 
-	// The trace of what the run actually did. A run that produced a report
-	// made at least one tool call, so an empty array is a genuine edge, not
-	// the common case; marshal errors on our own record type are not
-	// expected and must not sink a completed run, so a failure stores the
-	// empty array and logs.
-	encodedToolCalls, err := json.Marshal(toolCalls)
-	if err != nil {
-		m.logger.ErrorContext(ctx, "encode research tool-call trace", attr.SlogError(err))
-		encodedToolCalls = []byte("[]")
-	}
+	// The trace of what the run actually did, persisted alongside the report.
+	encodedToolCalls := encodeToolCallTrace(m.logger, ctx, toolCalls)
 
 	if _, err := queries.CompleteResearchReport(ctx, approvalrepo.CompleteResearchReportParams{
 		ID:            input.ReportID,
@@ -132,7 +126,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		// rather than leaving it to the workflow's compensation, which can
 		// only report that something was interrupted.
 		m.logger.ErrorContext(ctx, "complete mcp research report failed", attr.SlogError(err))
-		_ = m.failReport(ctx, queries, input, "the research run finished but its report could not be stored")
+		_ = m.failReport(ctx, queries, input, "the research run finished but its report could not be stored", encodedToolCalls)
 		return fmt.Errorf("complete research report: %w", err)
 	}
 
@@ -153,6 +147,7 @@ func (m *McpResearch) MarkInterrupted(ctx context.Context, input McpResearchInpu
 		ID:        input.ReportID,
 		ProjectID: input.ProjectID,
 		Error:     conv.ToPGText("the research run was interrupted before it finished"),
+		ToolCalls: nil,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -172,7 +167,12 @@ func (m *McpResearch) MarkInterrupted(ctx context.Context, input McpResearchInpu
 // so a caller with no other resolution path — the gated branch, whose
 // activity would otherwise succeed around a still-running row — can hand the
 // row to the workflow's compensation instead.
-func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string) error {
+// failReport marks the report failed, optionally persisting the partial
+// tool-call trace a run assembled before it failed. toolCalls is nil for
+// failures with no trace (a gate, a load error before the run); a run that
+// failed mid-way passes what it did so far, so a failed run keeps the same
+// per-action observability a completed one has.
+func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string, toolCalls []byte) error {
 	// The run's context may already be dead — that must not keep the failure
 	// off the row.
 	ctx = context.WithoutCancel(ctx)
@@ -183,6 +183,7 @@ func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Quer
 		ID:        input.ReportID,
 		ProjectID: input.ProjectID,
 		Error:     conv.ToPGText(reason),
+		ToolCalls: toolCalls,
 	}); err != nil {
 		m.logger.ErrorContext(ctx, "record research failure", attr.SlogError(err))
 		return fmt.Errorf("record research failure: %w", err)
@@ -226,4 +227,16 @@ func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (
 	}
 
 	return "", false
+}
+
+// encodeToolCallTrace marshals a run's tool-call trace for storage. A marshal
+// failure on our own record type is not expected and must not sink the write
+// it accompanies, so it degrades to the empty array and logs.
+func encodeToolCallTrace(logger *slog.Logger, ctx context.Context, toolCalls []researchagent.ToolCallRecord) []byte {
+	encoded, err := json.Marshal(toolCalls)
+	if err != nil {
+		logger.ErrorContext(ctx, "encode research tool-call trace", attr.SlogError(err))
+		return []byte("[]")
+	}
+	return encoded
 }

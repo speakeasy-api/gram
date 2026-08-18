@@ -556,10 +556,6 @@ func TestRun_RecordsAPageThatTriesToSteerTheAgent(t *testing.T) {
 	require.Len(t, judge.seen, 1)
 }
 
-// The same page can be fetched twice — a search returns it again, a link
-// leads back to it — and a repeat is not a second attempt. The list is
-// rendered per URL, so a duplicate would both overstate the finding and
-// collide as a key.
 // The run returns a per-action trace of every tool call — what the report's
 // run-level synthesis drops. A search records its query and result count; a
 // fetch records its URL, a bounded content preview, and the injection
@@ -615,6 +611,35 @@ func TestRun_ReturnsAToolCallTrace(t *testing.T) {
 	require.Nil(t, trace[2].Search)
 	require.Nil(t, trace[2].Fetch)
 	require.NotEmpty(t, trace[2].Error, "an unregistered tool call records its refusal")
+}
+
+// A fetch that fails still identifies the URL it tried — the target is read
+// from the request at record time, not from a result that never came.
+func TestRun_FailedFetchKeepsItsTargetURL(t *testing.T) {
+	t.Parallel()
+
+	// A successful search first, so the run does not trip the all-tools-failed
+	// guard; the fetch that follows fails.
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_web_search", `{"query": "vendor"}`),
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/gone"}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil, nil,
+		researchagent.EgressSynthesizeTool(&searchTool{prompt: 0, completion: 0, drained: nil}, "the search provider"),
+		researchagent.EgressSelectTool(&failingTool{}),
+	)
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 2)
+	require.NotNil(t, trace[1].Fetch)
+	require.NotEmpty(t, trace[1].Error, "the fetch failed")
+	require.Equal(t, "https://vendor.example.com/gone", trace[1].Fetch.URL, "a failed fetch names its target")
 }
 
 // A fetch that becomes a citation is linked back to the claim that cited it,
@@ -675,6 +700,10 @@ func TestRun_BoundsTheContentPreview(t *testing.T) {
 	require.LessOrEqual(t, len([]rune(trace[0].Fetch.ContentPreview)), 501)
 }
 
+// The same page can be fetched twice — a search returns it again, a link
+// leads back to it — and a repeat is not a second attempt. The list is
+// rendered per URL, so a duplicate would both overstate the finding and
+// collide as a key.
 func TestRun_RecordsAFlaggedPageOnce(t *testing.T) {
 	t.Parallel()
 

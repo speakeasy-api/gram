@@ -342,7 +342,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 			case "web_search":
 				record.Search = &SearchCall{Query: searchQueryArgument(call.Function.Arguments), ResultCount: 0, PromptTokens: 0, CompletionTokens: 0}
 			case "fetch_page":
-				record.Fetch = &FetchCall{URL: "", FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: "", CitedByClaims: nil}
+				// URL from the request, so a fetch that fails before a result
+				// still names its target; a successful fetch overwrites it with
+				// the URL the tool reports.
+				record.Fetch = &FetchCall{URL: fetchURLArgument(call.Function.Arguments), FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: "", CitedByClaims: nil}
 			}
 
 			// Snapshot before executeTool so the delta is this call's tool
@@ -832,6 +835,19 @@ func describeToolOutcome(record *ToolCallRecord, result string) {
 			record.Search.ResultCount = len(search.Results)
 		}
 	}
+}
+
+// fetchURLArgument reads the url out of a fetch_page call's arguments,
+// falling back to the raw arguments when they do not parse — the trace
+// should identify the target even when the request was malformed.
+func fetchURLArgument(arguments string) string {
+	var input struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal([]byte(arguments), &input) == nil && input.URL != "" {
+		return input.URL
+	}
+	return arguments
 }
 
 // searchQueryArgument reads the query out of a web_search call's arguments,

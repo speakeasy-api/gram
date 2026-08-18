@@ -264,10 +264,11 @@ const failResearchReport = `-- name: FailResearchReport :one
 UPDATE mcp_research_reports
 SET status = 'failed'
   , error = $1::text
+  , tool_calls = COALESCE($2::jsonb, tool_calls)
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
+WHERE id = $3
+  AND project_id = $4
   AND status = 'running'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
@@ -275,6 +276,7 @@ RETURNING id, organization_id, project_id, mcp_approval_request_id, status, repo
 
 type FailResearchReportParams struct {
 	Error     pgtype.Text
+	ToolCalls []byte
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
@@ -282,7 +284,12 @@ type FailResearchReportParams struct {
 // Only a run still in flight can fail: a completed report must never be
 // retro-marked failed by a late compensation whose activity result got lost.
 func (q *Queries) FailResearchReport(ctx context.Context, arg FailResearchReportParams) (McpResearchReport, error) {
-	row := q.db.QueryRow(ctx, failResearchReport, arg.Error, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, failResearchReport,
+		arg.Error,
+		arg.ToolCalls,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i McpResearchReport
 	err := row.Scan(
 		&i.ID,

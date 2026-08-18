@@ -478,6 +478,7 @@ RETURNING *;
 UPDATE mcp_research_reports
 SET status = 'failed'
   , error = sqlc.narg(error)::text
+  , tool_calls = COALESCE(sqlc.narg(tool_calls)::jsonb, tool_calls)
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id
