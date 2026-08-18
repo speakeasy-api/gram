@@ -170,7 +170,7 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 	defer cancel()
 	tok, err := v.oidc.Refresh(refreshCtx, refreshToken)
 	if err != nil {
-		return current, "", fmt.Errorf("%w: %v", errAdminSessionRefreshRequired, err)
+		return current, "", fmt.Errorf("%w: %w", errAdminSessionRefreshRequired, err)
 	}
 	current, err = v.sessions.UpdateTokens(ctx, current, tok.AccessToken, tok.RefreshToken, tok.Expiry)
 	if err != nil {
@@ -194,7 +194,8 @@ func (v *Verifier) awaitRefreshedSession(ctx context.Context, sessionID string) 
 
 		select {
 		case <-waitCtx.Done():
-			return Session{SessionID: sessionID}, "", fmt.Errorf("wait for concurrent admin session refresh: %w", waitCtx.Err())
+			var session Session
+			return session, "", fmt.Errorf("wait for concurrent admin session refresh: %w", waitCtx.Err())
 		case <-ticker.C:
 		}
 	}

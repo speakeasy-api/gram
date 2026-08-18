@@ -230,6 +230,7 @@ func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
 
 	ctx := t.Context()
 	var refreshes atomic.Int32
+	releaseRefresh := make(chan struct{})
 	oidcClient := newTestOIDCClientWithToken(
 		t,
 		userinfoOK("sub-concurrent-refresh", "operator@example.com"),
@@ -237,7 +238,7 @@ func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
 			refreshes.Add(1)
 			assert.NoError(t, r.ParseForm())
 			assert.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
-			time.Sleep(100 * time.Millisecond)
+			<-releaseRefresh
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  "new-access-token",
@@ -276,6 +277,10 @@ func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
 		}()
 	}
 	close(start)
+	require.Eventually(t, func() bool {
+		return refreshes.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	close(releaseRefresh)
 	wg.Wait()
 	close(codes)
 
