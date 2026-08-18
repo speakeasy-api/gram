@@ -39,11 +39,11 @@ The scripts are written against the demo org's literals. Every other tenant is
 produced by rewriting those literals — one `demoseed.Spec` per tenant, applied
 by `Spec.Rewrite` before the SQL is executed:
 
-| Spec              | Org                       | Used by                                      |
-| ----------------- | ------------------------- | -------------------------------------------- |
-| `DefaultSpec()`   | `org_gram_demo_workspace` | production's daily run, `mise run seed:demo` |
-| `LocalSpec()`     | `org_devidp_speakeasy`    | `mise run seed` — your local dev org         |
-| `otherTenantSpec` | `org_gram_othr_workspace` | `TestDemoSeedSafety`'s adversarial fixture   |
+| Spec              | Org id                                     | Used by                                      |
+| ----------------- | ------------------------------------------ | -------------------------------------------- |
+| `DefaultSpec()`   | `org_gram_demo_workspace`                  | production's daily run, `mise run seed:demo` |
+| `LocalSpec()`     | derived from WorkOS `org_devidp_speakeasy` | `mise run seed` — your local dev org         |
+| `otherTenantSpec` | `org_gram_othr_workspace`                  | `TestDemoSeedSafety`'s adversarial fixture   |
 
 Rewriting with `DefaultSpec()` is a no-op, so production executes the scripts
 exactly as written (asserted by `TestDefaultSpecRewriteIsIdentity`). Adding a

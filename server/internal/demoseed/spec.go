@@ -168,10 +168,15 @@ func (s Spec) Rewrite(script string) string {
 }
 
 // Validate reports whether the Spec can safely coexist with the default demo
-// tenant in one database. Each field must be non-empty, must not collide with
-// the corresponding default field unless the whole Spec is the default, and
-// must not contain any default identifier — a target that embeds a source
-// would be rewritten again by a later replacement pass.
+// tenant in one database. Every field must be non-empty; must differ from the
+// corresponding default field, so the two tenants never share an identifier
+// family; must differ from this Spec's own other fields, since two fields
+// holding one value would collapse together under Rewrite and collide on a
+// globally-unique index; and must not contain any default identifier, because
+// a target that embeds a source gets rewritten again by a later pass.
+//
+// The default Spec is exempt: it is the tenant the scripts are written
+// against, so rewriting it is a no-op and none of this applies.
 func (s Spec) Validate() error {
 	def := DefaultSpec()
 	defFields, fields := def.fields(), s.fields()
@@ -180,6 +185,7 @@ func (s Spec) Validate() error {
 		return nil
 	}
 
+	seen := make(map[string]struct{}, len(fields))
 	for i, v := range fields {
 		if v == "" {
 			return fmt.Errorf("demo seed spec: field %d is empty", i)
@@ -187,6 +193,10 @@ func (s Spec) Validate() error {
 		if v == defFields[i] {
 			return fmt.Errorf("demo seed spec: field %q is shared with the default demo tenant; every identifier family must be distinct", v)
 		}
+		if _, dup := seen[v]; dup {
+			return fmt.Errorf("demo seed spec: field %q is used for two identifier families; Rewrite would collapse them into one value", v)
+		}
+		seen[v] = struct{}{}
 		for _, d := range defFields {
 			if strings.Contains(v, d) {
 				return fmt.Errorf("demo seed spec: field %q contains the default identifier %q, which a later rewrite pass would corrupt", v, d)

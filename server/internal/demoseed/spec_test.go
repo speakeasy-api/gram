@@ -60,6 +60,11 @@ func TestSpecValidateRejectsCollisions(t *testing.T) {
 	nested.NameSeed = "x-" + DefaultSpec().NameSeed
 	require.ErrorContains(t, nested.Validate(), "contains the default identifier")
 
+	// Two families holding one value collapse under Rewrite.
+	collapsed := LocalSpec()
+	collapsed.GroupPrefix = collapsed.UserPrefix
+	require.ErrorContains(t, collapsed.Validate(), "two identifier families")
+
 	require.NoError(t, DefaultSpec().Validate())
 }
 

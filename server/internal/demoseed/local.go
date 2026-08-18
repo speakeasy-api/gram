@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // Fixed local-only material. These are deliberately well-known constants, not
@@ -264,9 +266,18 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		return
 	}
 
-	keys := []string{"userInfo:" + userID + ":"}
-	for _, feature := range []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "platform_mcp"} {
-		keys = append(keys, "feature:"+orgID+":"+feature+":")
+	// Built through the owning packages' key functions rather than assembled
+	// by hand: redis.Del matches exactly, so a key that is even one character
+	// off deletes nothing and reports success.
+	keys := []string{sessions.UserInfoCacheKey(userID)}
+	for _, feature := range []productfeatures.Feature{
+		productfeatures.FeatureLogs,
+		productfeatures.FeatureToolIOLogs,
+		productfeatures.FeatureSessionCapture,
+		productfeatures.FeatureSkills,
+		productfeatures.FeaturePlatformMCP,
+	} {
+		keys = append(keys, productfeatures.FeatureCacheKey(orgID, feature))
 	}
 	if err := cache.Del(ctx, keys...).Err(); err != nil {
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
@@ -303,7 +314,10 @@ membership AS (
   SELECT $1, dev.id, dev.workos_id, 'devidp_mem_' || dev.id
   FROM dev
   ON CONFLICT (organization_id, user_id) WHERE deleted IS FALSE
-  DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
+  DO UPDATE SET
+    workos_user_id = EXCLUDED.workos_user_id,
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    deleted_at = NULL, updated_at = clock_timestamp()
   RETURNING user_id, workos_user_id, workos_membership_id
 ),
 admin_role AS (
