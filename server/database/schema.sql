@@ -6755,6 +6755,7 @@ WHERE connection_id IS NOT NULL
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_user_key
 ON platform_mcp_onboarding_milestones (organization_id, milestone, user_id)
 WHERE connection_id IS NULL
+  AND connection_generation IS NULL
   AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
