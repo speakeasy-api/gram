@@ -403,6 +403,7 @@ WHERE organization_id = @organization_id
 SELECT
     generated.source_timestamp::date AS source_day
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
+  , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
   invoice.service_period_start,
@@ -413,6 +414,13 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = generated.source_timestamp::date
+-- Surface a snapshot an earlier pass already froze; the caller must not reseed
+-- that day from spend backfilled since.
+LEFT JOIN stripe_invoice_allocations frozen
+  ON frozen.organization_id = invoice.organization_id
+ AND frozen.source_kind = 'openrouter_daily_spend'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.seq = 1
 WHERE invoice.organization_id = @organization_id
   AND invoice.stripe_invoice_id = @stripe_invoice_id
   AND invoice.service_period_end + interval '48 hours' <= @now
@@ -718,6 +726,13 @@ INSERT INTO stripe_invoice_allocations (
   , @idempotency_key
   , 'pending'
 );
+
+-- name: DeleteStripeInvoiceAllocationFixture :execrows
+DELETE FROM stripe_invoice_allocations
+WHERE organization_id = @organization_id
+  AND source_kind = @source_kind
+  AND source_key = @source_key
+  AND seq = @seq;
 
 -- name: ListStripeInvoiceAllocationsFixture :many
 SELECT

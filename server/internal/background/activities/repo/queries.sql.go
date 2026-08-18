@@ -702,6 +702,34 @@ func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, arg DeletePubli
 	return result.RowsAffected(), nil
 }
 
+const deleteStripeInvoiceAllocationFixture = `-- name: DeleteStripeInvoiceAllocationFixture :execrows
+DELETE FROM stripe_invoice_allocations
+WHERE organization_id = $1
+  AND source_kind = $2
+  AND source_key = $3
+  AND seq = $4
+`
+
+type DeleteStripeInvoiceAllocationFixtureParams struct {
+	OrganizationID pgtype.Text
+	SourceKind     string
+	SourceKey      string
+	Seq            int32
+}
+
+func (q *Queries) DeleteStripeInvoiceAllocationFixture(ctx context.Context, arg DeleteStripeInvoiceAllocationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStripeInvoiceAllocationFixture,
+		arg.OrganizationID,
+		arg.SourceKind,
+		arg.SourceKey,
+		arg.Seq,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
 SELECT
     o.id,
@@ -1553,6 +1581,7 @@ const listOpenRouterInvoiceSourceDays = `-- name: ListOpenRouterInvoiceSourceDay
 SELECT
     generated.source_timestamp::date AS source_day
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
+  , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
   invoice.service_period_start,
@@ -1563,6 +1592,11 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = generated.source_timestamp::date
+LEFT JOIN stripe_invoice_allocations frozen
+  ON frozen.organization_id = invoice.organization_id
+ AND frozen.source_kind = 'openrouter_daily_spend'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.seq = 1
 WHERE invoice.organization_id = $1
   AND invoice.stripe_invoice_id = $2
   AND invoice.service_period_end + interval '48 hours' <= $3
@@ -1576,10 +1610,13 @@ type ListOpenRouterInvoiceSourceDaysParams struct {
 }
 
 type ListOpenRouterInvoiceSourceDaysRow struct {
-	SourceDay pgtype.Date
-	SpendUsd  pgtype.Numeric
+	SourceDay         pgtype.Date
+	SpendUsd          pgtype.Numeric
+	FrozenSnapshotUsd pgtype.Numeric
 }
 
+// Surface a snapshot an earlier pass already froze; the caller must not reseed
+// that day from spend backfilled since.
 func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListOpenRouterInvoiceSourceDaysParams) ([]ListOpenRouterInvoiceSourceDaysRow, error) {
 	rows, err := q.db.Query(ctx, listOpenRouterInvoiceSourceDays, arg.OrganizationID, arg.StripeInvoiceID, arg.Now)
 	if err != nil {
@@ -1589,7 +1626,7 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 	var items []ListOpenRouterInvoiceSourceDaysRow
 	for rows.Next() {
 		var i ListOpenRouterInvoiceSourceDaysRow
-		if err := rows.Scan(&i.SourceDay, &i.SpendUsd); err != nil {
+		if err := rows.Scan(&i.SourceDay, &i.SpendUsd, &i.FrozenSnapshotUsd); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -177,8 +177,15 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 		frozenSnapshots := make([]pgtype.Numeric, 0, len(days))
 		previousCumulativeCents := int64(0)
 		for _, day := range days {
+			// A day frozen by an earlier pass is immovable, so the chain
+			// continues from the snapshot on record. Reseeding it from spend that
+			// backfilled since would shift every later day's cents away from the
+			// snapshots the carry pass reconciles against.
 			snapshot := day.SpendUsd
-			if missedFreeze {
+			switch {
+			case day.FrozenSnapshotUsd.Valid:
+				snapshot = day.FrozenSnapshotUsd
+			case missedFreeze:
 				snapshot = numericFromCents(0)
 			}
 			frozenSnapshots = append(frozenSnapshots, snapshot)
