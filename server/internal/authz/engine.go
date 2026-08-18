@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
-
-type IsRBACEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 // MembershipFetcher retrieves a WorkOS membership for a user+org pair.
 type MembershipFetcher interface {
@@ -27,20 +25,24 @@ type EngineOpts struct {
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
-// is enabled for a given organization. Same signature as IsRBACEnabled.
+// is enabled for a given organization.
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 type Engine struct {
 	logger                  *slog.Logger
 	db                      *pgxpool.Pool
-	chDB                    clickhouse.Conn
-	isEnabled               IsRBACEnabled
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
+func NewEngine(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	challengeLogging ChallengeLoggingEnabled,
+	membership MembershipFetcher,
+	opts ...EngineOpts,
+) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -51,8 +53,6 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 	return &Engine{
 		logger:                  authzLogger,
 		db:                      db,
-		chDB:                    chDB,
-		isEnabled:               isEnabled,
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
@@ -96,21 +96,19 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
 	}
+	if authCtx.ActiveOrganizationID == "" {
+		return GrantsToContext(ctx, nil), nil
+	}
+
+	// Sessions in the shared demo org (which has no membership rows) get a
+	// fixed read-only grant set. This must precede scope and admin overrides so
+	// neither can widen a demo session back to write grants.
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		return GrantsToContext(ctx, DemoScopeGrants()), nil
+	}
 
 	if overrides, ok := e.GetScopeOverrides(ctx); ok {
 		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
-	}
-
-	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		e.logger.WarnContext(ctx, "failed to check RBAC feature flag, skipping grant loading",
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
-		return ctx, nil
-	}
-	if !enabled {
-		return ctx, nil
 	}
 
 	// Admins impersonating a customer org have no WorkOS membership in that
@@ -197,7 +195,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 
@@ -213,7 +211,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 		if evaluation.Grant == nil {
@@ -234,7 +232,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
@@ -250,7 +248,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	return nil
 }
 
@@ -283,7 +281,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 	}
@@ -302,7 +300,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -320,7 +318,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil
 		}
 	}
@@ -342,7 +340,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
@@ -429,7 +427,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
@@ -446,7 +444,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -480,7 +478,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			EvaluatedGrantCount:  uint32(len(grants)),  //nolint:gosec // grant count is small
 			FilterCandidateCount: uint32(len(checks)),  //nolint:gosec // candidate count is small
 			FilterAllowedCount:   uint32(len(allowed)), //nolint:gosec // allowed count is small
-		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	}
 
 	return allowed, nil
@@ -534,7 +532,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
@@ -551,7 +549,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 		if evaluation.Denied {
@@ -586,7 +584,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 			FilterAllowedCount:   uint32(allowedCount),
-		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	}
 
 	return matched, nil
@@ -603,9 +601,8 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// When the caller has active scope overrides, enforce so the override scopes
-	// take effect regardless of the feature flag. Checked after
-	// API key exclusion so the toolbar doesn't interfere with API key auth flows.
+	// Scope overrides are checked after the API key exclusion so the toolbar
+	// doesn't interfere with API key auth flows.
 	if _, ok := e.GetScopeOverrides(ctx); ok {
 		return true, nil
 	}
@@ -615,12 +612,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
-	}
-
-	return enabled, nil
+	return true, nil
 }
 
 func validateInput(c Check) error {

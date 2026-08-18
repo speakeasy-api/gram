@@ -694,3 +694,134 @@ func TestCodexSessionMetadata_IgnoresCachedUserIDWhenEmailDoesNotResolve(t *test
 	require.Equal(t, email, metadata.UserEmail)
 	require.Empty(t, metadata.UserID)
 }
+
+// TestCodexSessionMetadata_ClassifiesTeamAndResolvesBillingMode: a Codex hook
+// whose user_email resolves to an org member classifies team and picks up the
+// org-level billing mode declared on the codex_compliance config (DNO-734).
+func TestCodexSessionMetadata_ClassifiesTeamAndResolvesBillingMode(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	sessionID := "codex-session-attribution-team"
+	email := "dev@example.com"
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	require.Equal(t, "flat_rate", metadata.BillingMode)
+	// user_email is the ChatGPT account's own report, kept as the observed
+	// email separate from actor identity.
+	require.Equal(t, email, metadata.ObservedUserEmail)
+}
+
+// TestCodexSessionMetadata_PersonalEmailClassifiesPersonal: an email that does
+// not resolve to an org member classifies personal and never inherits the
+// company's declared billing mode.
+func TestCodexSessionMetadata_PersonalEmailClassifiesPersonal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	sessionID := "codex-session-attribution-personal"
+	email := "someone@personal.example"
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+}
+
+// TestCodexSessionMetadata_AdoptsCachedAttributionForSameEmail: when the cached
+// classification was computed from the same email this event carries, the
+// event adopts it instead of re-resolving. No config is seeded, so a fresh
+// resolution could not produce the cached billing mode — proving adoption.
+func TestCodexSessionMetadata_AdoptsCachedAttributionForSameEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "codex-session-attribution-cached"
+	email := "dev@example.com"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   email,
+		UserID:      "cached-user-id",
+		Provider:    providerOpenAI,
+		AccountType: accountTypeTeam,
+		BillingMode: "flat_rate",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	require.Equal(t, "flat_rate", metadata.BillingMode)
+	// The adopted classification includes the resolved user — no per-event
+	// re-resolution.
+	require.Equal(t, "cached-user-id", metadata.UserID)
+}
+
+// TestCodexSessionMetadata_CachesFreshAttributionOnAnyEvent: attribution
+// computed on a non-SessionStart event is written back to the session cache,
+// so later events (and the OTEL/ingest paths) adopt it instead of
+// re-classifying — a session whose SessionStart was lost does not pay
+// attribution per event forever.
+func TestCodexSessionMetadata_CachesFreshAttributionOnAnyEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "codex-session-attribution-recache"
+	email := "someone@personal.example"
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, accountTypePersonal, cached.AccountType)
+	require.Equal(t, email, cached.UserEmail)
+}
+
+// TestBuildCodexTelemetryAttributes_StampsAccountAttribution verifies the
+// session's account attribution materializes onto the telemetry attribute map
+// (and so into the ClickHouse account_type / billing_mode columns).
+func TestBuildCodexTelemetryAttributes_StampsAccountAttribution(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	email := "dev@example.com"
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		UserEmail:     &email,
+	}, &SessionMetadata{
+		ServiceName: "Codex",
+		UserEmail:   email,
+		Provider:    providerOpenAI,
+		AccountType: accountTypeTeam,
+		BillingMode: "flat_rate",
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+
+	require.Equal(t, providerOpenAI, attrs[attr.ProviderKey])
+	require.Equal(t, accountTypeTeam, attrs[attr.AccountTypeKey])
+	require.Equal(t, "flat_rate", attrs[attr.BillingModeKey])
+}

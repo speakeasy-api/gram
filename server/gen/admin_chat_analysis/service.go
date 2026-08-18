@@ -24,6 +24,9 @@ type Service interface {
 	// Create or replace the active organization's chat analysis settings. Requires
 	// platform admin.
 	UpsertWorkUnitsSettings(context.Context, *UpsertWorkUnitsSettingsPayload) (res *ChatAnalysisSettings, err error)
+	// Create or replace the active organization's business-memory extraction
+	// settings. Requires platform admin.
+	UpsertBusinessMemorySettings(context.Context, *UpsertBusinessMemorySettingsPayload) (res *ChatAnalysisSettings, err error)
 	// Wake the chat analysis coordinator for every project in the active
 	// organization, instead of waiting for the periodic sweep. Requires platform
 	// admin.
@@ -50,7 +53,7 @@ const ServiceName = "adminChatAnalysis"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"getSettings", "upsertWorkUnitsSettings", "triggerAnalysis"}
+var MethodNames = [4]string{"getSettings", "upsertWorkUnitsSettings", "upsertBusinessMemorySettings", "triggerAnalysis"}
 
 // ChatAnalysisSettings is the result type of the adminChatAnalysis service
 // getSettings method.
@@ -62,6 +65,11 @@ type ChatAnalysisSettings struct {
 	// Maximum work-units evaluations reserved across the organization each UTC
 	// day. 0 disables scoring as surely as the switch.
 	WorkUnitsDailyCap int
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled bool
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap int
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault bool
@@ -83,6 +91,17 @@ type TriggerAnalysisPayload struct {
 type TriggerAnalysisResult struct {
 	// Number of projects whose analysis coordinator was woken.
 	ProjectsSignaled int
+}
+
+// UpsertBusinessMemorySettingsPayload is the payload type of the
+// adminChatAnalysis service upsertBusinessMemorySettings method.
+type UpsertBusinessMemorySettingsPayload struct {
+	SessionToken *string
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled bool
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap int
 }
 
 // UpsertWorkUnitsSettingsPayload is the payload type of the adminChatAnalysis

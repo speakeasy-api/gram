@@ -16,13 +16,14 @@ func TestListIncludesAllDefinitions(t *testing.T) {
 	t.Parallel()
 
 	definitions := List()
-	// cron, github, linear, slack, wake (dashboard is direct-ingress, excluded).
-	require.Len(t, definitions, 5)
+	// cron, github, linear, msteams, slack, wake (dashboard is direct-ingress, excluded).
+	require.Len(t, definitions, 6)
 	require.Equal(t, "cron", definitions[0].Slug)
 	require.Equal(t, "github", definitions[1].Slug)
 	require.Equal(t, "linear", definitions[2].Slug)
-	require.Equal(t, "slack", definitions[3].Slug)
-	require.Equal(t, "wake", definitions[4].Slug)
+	require.Equal(t, "msteams", definitions[3].Slug)
+	require.Equal(t, "slack", definitions[4].Slug)
+	require.Equal(t, "wake", definitions[5].Slug)
 	for _, d := range definitions {
 		require.NotEmpty(t, d.ConfigSchema, d.Slug)
 	}

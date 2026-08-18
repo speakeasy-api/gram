@@ -8,15 +8,65 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	goa "goa.design/goa/v3/pkg"
 )
 
+// UpdateConfigurationRequestBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP request body.
+type UpdateConfigurationRequestBody struct {
+	// Shareable device-agent settings. Supported keys include platforms,
+	// update_channel, auto_update, pinned_target, blocked_versions, and
+	// sync_interval_seconds. update_channel and blocked_versions can only be set
+	// by Speakeasy platform administrators; per-device identity and secret keys
+	// are forbidden.
+	Config map[string]any `form:"config,omitempty" json:"config,omitempty" xml:"config,omitempty"`
+}
+
+// ReportSessionMovedRequestBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP request body.
+type ReportSessionMovedRequestBody struct {
+	// Native harness session identifier of the moved session. Gram derives its
+	// chat id from this the same way hook ingest does; the move is recorded even
+	// if the session has not been captured yet.
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness *string `form:"target_harness,omitempty" json:"target_harness,omitempty" xml:"target_harness,omitempty"`
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+	// Email of the enrolled user. Authoritative when authenticating with an
+	// org-scoped agent install key (the MDM zero-touch path); ignored for a
+	// per-user key, whose owner is the enrolled user.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+}
+
+// CreateSessionHandoffRequestBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP request body.
+type CreateSessionHandoffRequestBody struct {
+	// Native harness session identifier the handoff was rendered from. Gram
+	// derives its chat id from this the same way hook ingest does; a
+	// not-yet-captured session can still mint a link.
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The rendered handoff document (markdown). Size-capped; the daemon renders
+	// deterministically from the local transcript.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
+	// when omitted.
+	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
+}
+
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the marketplace + plugin set. The agent
-	// stores this to detect changes between polls.
+	// Opaque revision identifier covering the marketplace, plugin, and
+	// remote-configuration set. The agent stores this to detect changes between
+	// polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -24,6 +74,10 @@ type GetPluginsResponseBody struct {
 	// Plugins the agent should enable. Each entry references one of the
 	// marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins" json:"plugins" xml:"plugins"`
+	// Organization-wide remote configuration. Absent until an administrator saves
+	// a configuration, allowing an agent with no cached remote layer to keep using
+	// its local configuration.
+	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -31,6 +85,61 @@ type GetPluginsResponseBody struct {
 type ListSyncedUsersResponseBody struct {
 	// Emails seen syncing the device agent, most recently active first.
 	Users []*SyncedAgentUserResponseBody `form:"users" json:"users" xml:"users"`
+}
+
+// GetConfigurationResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body.
+type GetConfigurationResponseBody struct {
+	// Schema version for this remote configuration envelope.
+	SchemaVersion int `form:"schema_version" json:"schema_version" xml:"schema_version"`
+	// Forward-compatible non-secret settings document. Platform values use false,
+	// user, or managed enforcement layers.
+	Config map[string]any `form:"config" json:"config" xml:"config"`
+	// Whether an administrator has saved a remote configuration. False means
+	// agents should not add a remote resolver layer.
+	IsConfigured bool `form:"is_configured" json:"is_configured" xml:"is_configured"`
+	// Opaque revision identifier for this configuration.
+	Etag string `form:"etag" json:"etag" xml:"etag"`
+	// When this remote configuration was last saved. Absent when is_configured is
+	// false.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateConfigurationResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body.
+type UpdateConfigurationResponseBody struct {
+	// Schema version for this remote configuration envelope.
+	SchemaVersion int `form:"schema_version" json:"schema_version" xml:"schema_version"`
+	// Forward-compatible non-secret settings document. Platform values use false,
+	// user, or managed enforcement layers.
+	Config map[string]any `form:"config" json:"config" xml:"config"`
+	// Whether an administrator has saved a remote configuration. False means
+	// agents should not add a remote resolver layer.
+	IsConfigured bool `form:"is_configured" json:"is_configured" xml:"is_configured"`
+	// Opaque revision identifier for this configuration.
+	Etag string `form:"etag" json:"etag" xml:"etag"`
+	// When this remote configuration was last saved. Absent when is_configured is
+	// false.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// GetSessionMetaResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body.
+type GetSessionMetaResponseBody struct {
+	// Metadata for the requested sessions that exist and are owned by the calling
+	// user. Requested ids with no captured chat or another owner are omitted.
+	Sessions []*AgentSessionMetaResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
+}
+
+// CreateSessionHandoffResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body.
+type CreateSessionHandoffResponseBody struct {
+	// Capability URL serving the uploaded handoff markdown. Unauthenticated by
+	// design — the unguessable token is the credential — and dead after the first
+	// read or expiry.
+	URL string `form:"url" json:"url" xml:"url"`
+	// When the link stops being served regardless of reads.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 }
 
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
@@ -395,6 +504,925 @@ type ListSyncedUsersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetConfigurationUnauthorizedResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "unauthorized" error.
+type GetConfigurationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationForbiddenResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "forbidden" error.
+type GetConfigurationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationBadRequestResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "bad_request" error.
+type GetConfigurationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationNotFoundResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "not_found" error.
+type GetConfigurationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationConflictResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "conflict" error.
+type GetConfigurationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationUnsupportedMediaResponseBody is the type of the "agent"
+// service "getConfiguration" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetConfigurationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationInvalidResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "invalid" error.
+type GetConfigurationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationInvariantViolationResponseBody is the type of the "agent"
+// service "getConfiguration" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetConfigurationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationUnexpectedResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "unexpected" error.
+type GetConfigurationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigurationGatewayErrorResponseBody is the type of the "agent" service
+// "getConfiguration" endpoint HTTP response body for the "gateway_error" error.
+type GetConfigurationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationUnauthorizedResponseBody is the type of the "agent"
+// service "updateConfiguration" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateConfigurationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationForbiddenResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "forbidden" error.
+type UpdateConfigurationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationBadRequestResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateConfigurationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationNotFoundResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "not_found" error.
+type UpdateConfigurationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationConflictResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "conflict" error.
+type UpdateConfigurationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationUnsupportedMediaResponseBody is the type of the "agent"
+// service "updateConfiguration" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateConfigurationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationInvalidResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "invalid" error.
+type UpdateConfigurationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationInvariantViolationResponseBody is the type of the "agent"
+// service "updateConfiguration" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateConfigurationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationUnexpectedResponseBody is the type of the "agent" service
+// "updateConfiguration" endpoint HTTP response body for the "unexpected" error.
+type UpdateConfigurationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateConfigurationGatewayErrorResponseBody is the type of the "agent"
+// service "updateConfiguration" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateConfigurationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaUnauthorizedResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "unauthorized" error.
+type GetSessionMetaUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaForbiddenResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "forbidden" error.
+type GetSessionMetaForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaBadRequestResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "bad_request" error.
+type GetSessionMetaBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaNotFoundResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "not_found" error.
+type GetSessionMetaNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaConflictResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "conflict" error.
+type GetSessionMetaConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaUnsupportedMediaResponseBody is the type of the "agent"
+// service "getSessionMeta" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSessionMetaUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaInvalidResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "invalid" error.
+type GetSessionMetaInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaInvariantViolationResponseBody is the type of the "agent"
+// service "getSessionMeta" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSessionMetaInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaUnexpectedResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "unexpected" error.
+type GetSessionMetaUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSessionMetaGatewayErrorResponseBody is the type of the "agent" service
+// "getSessionMeta" endpoint HTTP response body for the "gateway_error" error.
+type GetSessionMetaGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedUnauthorizedResponseBody is the type of the "agent"
+// service "reportSessionMoved" endpoint HTTP response body for the
+// "unauthorized" error.
+type ReportSessionMovedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedForbiddenResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "forbidden" error.
+type ReportSessionMovedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedBadRequestResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "bad_request" error.
+type ReportSessionMovedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedNotFoundResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "not_found" error.
+type ReportSessionMovedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedConflictResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "conflict" error.
+type ReportSessionMovedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedUnsupportedMediaResponseBody is the type of the "agent"
+// service "reportSessionMoved" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReportSessionMovedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedInvalidResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "invalid" error.
+type ReportSessionMovedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedInvariantViolationResponseBody is the type of the "agent"
+// service "reportSessionMoved" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReportSessionMovedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedUnexpectedResponseBody is the type of the "agent" service
+// "reportSessionMoved" endpoint HTTP response body for the "unexpected" error.
+type ReportSessionMovedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportSessionMovedGatewayErrorResponseBody is the type of the "agent"
+// service "reportSessionMoved" endpoint HTTP response body for the
+// "gateway_error" error.
+type ReportSessionMovedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffUnauthorizedResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateSessionHandoffUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffForbiddenResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "forbidden" error.
+type CreateSessionHandoffForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffBadRequestResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateSessionHandoffBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffNotFoundResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "not_found" error.
+type CreateSessionHandoffNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffConflictResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "conflict" error.
+type CreateSessionHandoffConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffUnsupportedMediaResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSessionHandoffUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffInvalidResponseBody is the type of the "agent" service
+// "createSessionHandoff" endpoint HTTP response body for the "invalid" error.
+type CreateSessionHandoffInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffInvariantViolationResponseBody is the type of the
+// "agent" service "createSessionHandoff" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSessionHandoffInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffUnexpectedResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateSessionHandoffUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSessionHandoffGatewayErrorResponseBody is the type of the "agent"
+// service "createSessionHandoff" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateSessionHandoffGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -417,6 +1445,24 @@ type AgentPluginResponseBody struct {
 	MarketplaceName string `form:"marketplace_name" json:"marketplace_name" xml:"marketplace_name"`
 }
 
+// DeviceAgentConfigurationResponseBody is used to define fields on response
+// body types.
+type DeviceAgentConfigurationResponseBody struct {
+	// Schema version for this remote configuration envelope.
+	SchemaVersion int `form:"schema_version" json:"schema_version" xml:"schema_version"`
+	// Forward-compatible non-secret settings document. Platform values use false,
+	// user, or managed enforcement layers.
+	Config map[string]any `form:"config" json:"config" xml:"config"`
+	// Whether an administrator has saved a remote configuration. False means
+	// agents should not add a remote resolver layer.
+	IsConfigured bool `form:"is_configured" json:"is_configured" xml:"is_configured"`
+	// Opaque revision identifier for this configuration.
+	Etag string `form:"etag" json:"etag" xml:"etag"`
+	// When this remote configuration was last saved. Absent when is_configured is
+	// false.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // SyncedAgentUserResponseBody is used to define fields on response body types.
 type SyncedAgentUserResponseBody struct {
 	// Email the device agent reported on sync. Resolve against org members for
@@ -426,6 +1472,20 @@ type SyncedAgentUserResponseBody struct {
 	FirstSeenAt string `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
 	// Most recent time this email was seen syncing the device agent.
 	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+}
+
+// AgentSessionMetaResponseBody is used to define fields on response body types.
+type AgentSessionMetaResponseBody struct {
+	// The native harness session identifier this entry resolves, echoed from the
+	// request.
+	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
+	// Gram chat id for the captured session.
+	ChatID string `form:"chat_id" json:"chat_id" xml:"chat_id"`
+	// Generated (or manually set) chat title. Absent when no title has been
+	// generated yet.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Last activity recorded for the captured session.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewGetPluginsResponseBody builds the HTTP response body from the result of
@@ -458,6 +1518,9 @@ func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseB
 	} else {
 		body.Plugins = []*AgentPluginResponseBody{}
 	}
+	if res.Configuration != nil {
+		body.Configuration = marshalAgentDeviceAgentConfigurationToDeviceAgentConfigurationResponseBody(res.Configuration)
+	}
 	return body
 }
 
@@ -476,6 +1539,75 @@ func NewListSyncedUsersResponseBody(res *agent.ListSyncedUsersResult) *ListSynce
 		}
 	} else {
 		body.Users = []*SyncedAgentUserResponseBody{}
+	}
+	return body
+}
+
+// NewGetConfigurationResponseBody builds the HTTP response body from the
+// result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationResponseBody(res *agent.DeviceAgentConfiguration) *GetConfigurationResponseBody {
+	body := &GetConfigurationResponseBody{
+		SchemaVersion: res.SchemaVersion,
+		IsConfigured:  res.IsConfigured,
+		Etag:          res.Etag,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	if res.Config != nil {
+		body.Config = make(map[string]any, len(res.Config))
+		for key, val := range res.Config {
+			tk := key
+			tv := val
+			body.Config[tk] = tv
+		}
+	}
+	return body
+}
+
+// NewUpdateConfigurationResponseBody builds the HTTP response body from the
+// result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationResponseBody(res *agent.DeviceAgentConfiguration) *UpdateConfigurationResponseBody {
+	body := &UpdateConfigurationResponseBody{
+		SchemaVersion: res.SchemaVersion,
+		IsConfigured:  res.IsConfigured,
+		Etag:          res.Etag,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	if res.Config != nil {
+		body.Config = make(map[string]any, len(res.Config))
+		for key, val := range res.Config {
+			tk := key
+			tv := val
+			body.Config[tk] = tv
+		}
+	}
+	return body
+}
+
+// NewGetSessionMetaResponseBody builds the HTTP response body from the result
+// of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaResponseBody(res *agent.GetSessionMetaResult) *GetSessionMetaResponseBody {
+	body := &GetSessionMetaResponseBody{}
+	if res.Sessions != nil {
+		body.Sessions = make([]*AgentSessionMetaResponseBody, len(res.Sessions))
+		for i, val := range res.Sessions {
+			if val == nil {
+				body.Sessions[i] = nil
+				continue
+			}
+			body.Sessions[i] = marshalAgentAgentSessionMetaToAgentSessionMetaResponseBody(val)
+		}
+	} else {
+		body.Sessions = []*AgentSessionMetaResponseBody{}
+	}
+	return body
+}
+
+// NewCreateSessionHandoffResponseBody builds the HTTP response body from the
+// result of the "createSessionHandoff" endpoint of the "agent" service.
+func NewCreateSessionHandoffResponseBody(res *agent.CreateSessionHandoffResult) *CreateSessionHandoffResponseBody {
+	body := &CreateSessionHandoffResponseBody{
+		URL:       res.URL,
+		ExpiresAt: res.ExpiresAt,
 	}
 	return body
 }
@@ -761,6 +1893,722 @@ func NewListSyncedUsersGatewayErrorResponseBody(res *goa.ServiceError) *ListSync
 	return body
 }
 
+// NewGetConfigurationUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationUnauthorizedResponseBody(res *goa.ServiceError) *GetConfigurationUnauthorizedResponseBody {
+	body := &GetConfigurationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationForbiddenResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationForbiddenResponseBody(res *goa.ServiceError) *GetConfigurationForbiddenResponseBody {
+	body := &GetConfigurationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationBadRequestResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationBadRequestResponseBody(res *goa.ServiceError) *GetConfigurationBadRequestResponseBody {
+	body := &GetConfigurationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationNotFoundResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationNotFoundResponseBody(res *goa.ServiceError) *GetConfigurationNotFoundResponseBody {
+	body := &GetConfigurationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationConflictResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationConflictResponseBody(res *goa.ServiceError) *GetConfigurationConflictResponseBody {
+	body := &GetConfigurationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getConfiguration" endpoint of the "agent"
+// service.
+func NewGetConfigurationUnsupportedMediaResponseBody(res *goa.ServiceError) *GetConfigurationUnsupportedMediaResponseBody {
+	body := &GetConfigurationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationInvalidResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationInvalidResponseBody(res *goa.ServiceError) *GetConfigurationInvalidResponseBody {
+	body := &GetConfigurationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getConfiguration" endpoint of the "agent"
+// service.
+func NewGetConfigurationInvariantViolationResponseBody(res *goa.ServiceError) *GetConfigurationInvariantViolationResponseBody {
+	body := &GetConfigurationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationUnexpectedResponseBody(res *goa.ServiceError) *GetConfigurationUnexpectedResponseBody {
+	body := &GetConfigurationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigurationGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getConfiguration" endpoint of the "agent" service.
+func NewGetConfigurationGatewayErrorResponseBody(res *goa.ServiceError) *GetConfigurationGatewayErrorResponseBody {
+	body := &GetConfigurationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationUnauthorizedResponseBody(res *goa.ServiceError) *UpdateConfigurationUnauthorizedResponseBody {
+	body := &UpdateConfigurationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationForbiddenResponseBody(res *goa.ServiceError) *UpdateConfigurationForbiddenResponseBody {
+	body := &UpdateConfigurationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationBadRequestResponseBody(res *goa.ServiceError) *UpdateConfigurationBadRequestResponseBody {
+	body := &UpdateConfigurationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationNotFoundResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationNotFoundResponseBody(res *goa.ServiceError) *UpdateConfigurationNotFoundResponseBody {
+	body := &UpdateConfigurationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationConflictResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationConflictResponseBody(res *goa.ServiceError) *UpdateConfigurationConflictResponseBody {
+	body := &UpdateConfigurationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateConfiguration" endpoint of the "agent"
+// service.
+func NewUpdateConfigurationUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateConfigurationUnsupportedMediaResponseBody {
+	body := &UpdateConfigurationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationInvalidResponseBody builds the HTTP response body from
+// the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationInvalidResponseBody(res *goa.ServiceError) *UpdateConfigurationInvalidResponseBody {
+	body := &UpdateConfigurationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateConfiguration" endpoint of the
+// "agent" service.
+func NewUpdateConfigurationInvariantViolationResponseBody(res *goa.ServiceError) *UpdateConfigurationInvariantViolationResponseBody {
+	body := &UpdateConfigurationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationUnexpectedResponseBody(res *goa.ServiceError) *UpdateConfigurationUnexpectedResponseBody {
+	body := &UpdateConfigurationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateConfigurationGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateConfiguration" endpoint of the "agent" service.
+func NewUpdateConfigurationGatewayErrorResponseBody(res *goa.ServiceError) *UpdateConfigurationGatewayErrorResponseBody {
+	body := &UpdateConfigurationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaUnauthorizedResponseBody(res *goa.ServiceError) *GetSessionMetaUnauthorizedResponseBody {
+	body := &GetSessionMetaUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaForbiddenResponseBody builds the HTTP response body from
+// the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaForbiddenResponseBody(res *goa.ServiceError) *GetSessionMetaForbiddenResponseBody {
+	body := &GetSessionMetaForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaBadRequestResponseBody builds the HTTP response body from
+// the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaBadRequestResponseBody(res *goa.ServiceError) *GetSessionMetaBadRequestResponseBody {
+	body := &GetSessionMetaBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaNotFoundResponseBody builds the HTTP response body from the
+// result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaNotFoundResponseBody(res *goa.ServiceError) *GetSessionMetaNotFoundResponseBody {
+	body := &GetSessionMetaNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaConflictResponseBody builds the HTTP response body from the
+// result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaConflictResponseBody(res *goa.ServiceError) *GetSessionMetaConflictResponseBody {
+	body := &GetSessionMetaConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSessionMetaUnsupportedMediaResponseBody {
+	body := &GetSessionMetaUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaInvalidResponseBody builds the HTTP response body from the
+// result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaInvalidResponseBody(res *goa.ServiceError) *GetSessionMetaInvalidResponseBody {
+	body := &GetSessionMetaInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaInvariantViolationResponseBody(res *goa.ServiceError) *GetSessionMetaInvariantViolationResponseBody {
+	body := &GetSessionMetaInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaUnexpectedResponseBody(res *goa.ServiceError) *GetSessionMetaUnexpectedResponseBody {
+	body := &GetSessionMetaUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSessionMetaGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getSessionMeta" endpoint of the "agent" service.
+func NewGetSessionMetaGatewayErrorResponseBody(res *goa.ServiceError) *GetSessionMetaGatewayErrorResponseBody {
+	body := &GetSessionMetaGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedUnauthorizedResponseBody(res *goa.ServiceError) *ReportSessionMovedUnauthorizedResponseBody {
+	body := &ReportSessionMovedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedForbiddenResponseBody builds the HTTP response body
+// from the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedForbiddenResponseBody(res *goa.ServiceError) *ReportSessionMovedForbiddenResponseBody {
+	body := &ReportSessionMovedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedBadRequestResponseBody builds the HTTP response body
+// from the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedBadRequestResponseBody(res *goa.ServiceError) *ReportSessionMovedBadRequestResponseBody {
+	body := &ReportSessionMovedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedNotFoundResponseBody builds the HTTP response body from
+// the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedNotFoundResponseBody(res *goa.ServiceError) *ReportSessionMovedNotFoundResponseBody {
+	body := &ReportSessionMovedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedConflictResponseBody builds the HTTP response body from
+// the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedConflictResponseBody(res *goa.ServiceError) *ReportSessionMovedConflictResponseBody {
+	body := &ReportSessionMovedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "reportSessionMoved" endpoint of the "agent"
+// service.
+func NewReportSessionMovedUnsupportedMediaResponseBody(res *goa.ServiceError) *ReportSessionMovedUnsupportedMediaResponseBody {
+	body := &ReportSessionMovedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedInvalidResponseBody builds the HTTP response body from
+// the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedInvalidResponseBody(res *goa.ServiceError) *ReportSessionMovedInvalidResponseBody {
+	body := &ReportSessionMovedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "reportSessionMoved" endpoint of the "agent"
+// service.
+func NewReportSessionMovedInvariantViolationResponseBody(res *goa.ServiceError) *ReportSessionMovedInvariantViolationResponseBody {
+	body := &ReportSessionMovedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedUnexpectedResponseBody builds the HTTP response body
+// from the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedUnexpectedResponseBody(res *goa.ServiceError) *ReportSessionMovedUnexpectedResponseBody {
+	body := &ReportSessionMovedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportSessionMovedGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "reportSessionMoved" endpoint of the "agent" service.
+func NewReportSessionMovedGatewayErrorResponseBody(res *goa.ServiceError) *ReportSessionMovedGatewayErrorResponseBody {
+	body := &ReportSessionMovedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffUnauthorizedResponseBody(res *goa.ServiceError) *CreateSessionHandoffUnauthorizedResponseBody {
+	body := &CreateSessionHandoffUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffForbiddenResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffForbiddenResponseBody(res *goa.ServiceError) *CreateSessionHandoffForbiddenResponseBody {
+	body := &CreateSessionHandoffForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffBadRequestResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffBadRequestResponseBody(res *goa.ServiceError) *CreateSessionHandoffBadRequestResponseBody {
+	body := &CreateSessionHandoffBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffNotFoundResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffNotFoundResponseBody(res *goa.ServiceError) *CreateSessionHandoffNotFoundResponseBody {
+	body := &CreateSessionHandoffNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffConflictResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffConflictResponseBody(res *goa.ServiceError) *CreateSessionHandoffConflictResponseBody {
+	body := &CreateSessionHandoffConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSessionHandoffUnsupportedMediaResponseBody {
+	body := &CreateSessionHandoffUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffInvalidResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffInvalidResponseBody(res *goa.ServiceError) *CreateSessionHandoffInvalidResponseBody {
+	body := &CreateSessionHandoffInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createSessionHandoff" endpoint of the
+// "agent" service.
+func NewCreateSessionHandoffInvariantViolationResponseBody(res *goa.ServiceError) *CreateSessionHandoffInvariantViolationResponseBody {
+	body := &CreateSessionHandoffInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffUnexpectedResponseBody(res *goa.ServiceError) *CreateSessionHandoffUnexpectedResponseBody {
+	body := &CreateSessionHandoffUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSessionHandoffGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createSessionHandoff" endpoint of the "agent"
+// service.
+func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *CreateSessionHandoffGatewayErrorResponseBody {
+	body := &CreateSessionHandoffGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
 func NewGetPluginsPayload(email string, apikeyToken *string, serialNumber *string, hostname *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
@@ -779,4 +2627,133 @@ func NewListSyncedUsersPayload(sessionToken *string) *agent.ListSyncedUsersPaylo
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// NewGetConfigurationPayload builds a agent service getConfiguration endpoint
+// payload.
+func NewGetConfigurationPayload(sessionToken *string) *agent.GetConfigurationPayload {
+	v := &agent.GetConfigurationPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpdateConfigurationPayload builds a agent service updateConfiguration
+// endpoint payload.
+func NewUpdateConfigurationPayload(body *UpdateConfigurationRequestBody, sessionToken *string) *agent.UpdateConfigurationPayload {
+	v := &agent.UpdateConfigurationPayload{}
+	v.Config = make(map[string]any, len(body.Config))
+	for key, val := range body.Config {
+		tk := key
+		tv := val
+		v.Config[tk] = tv
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetSessionMetaPayload builds a agent service getSessionMeta endpoint
+// payload.
+func NewGetSessionMetaPayload(sessionIds []string, apikeyToken *string) *agent.GetSessionMetaPayload {
+	v := &agent.GetSessionMetaPayload{}
+	v.SessionIds = sessionIds
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewReportSessionMovedPayload builds a agent service reportSessionMoved
+// endpoint payload.
+func NewReportSessionMovedPayload(body *ReportSessionMovedRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.ReportSessionMovedPayload {
+	v := &agent.ReportSessionMovedPayload{
+		SessionID:     *body.SessionID,
+		TargetHarness: *body.TargetHarness,
+		SourceSurface: body.SourceSurface,
+		Email:         body.Email,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v
+}
+
+// NewCreateSessionHandoffPayload builds a agent service createSessionHandoff
+// endpoint payload.
+func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.CreateSessionHandoffPayload {
+	v := &agent.CreateSessionHandoffPayload{
+		SessionID:     *body.SessionID,
+		Content:       *body.Content,
+		SourceSurface: body.SourceSurface,
+		TTLSeconds:    body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v
+}
+
+// ValidateUpdateConfigurationRequestBody runs the validations defined on
+// UpdateConfigurationRequestBody
+func ValidateUpdateConfigurationRequestBody(body *UpdateConfigurationRequestBody) (err error) {
+	if body.Config == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+	}
+	return
+}
+
+// ValidateReportSessionMovedRequestBody runs the validations defined on
+// ReportSessionMovedRequestBody
+func ValidateReportSessionMovedRequestBody(body *ReportSessionMovedRequestBody) (err error) {
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.TargetHarness == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_harness", "body"))
+	}
+	if body.SessionID != nil {
+		if utf8.RuneCountInString(*body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 256, false))
+		}
+	}
+	if body.TargetHarness != nil {
+		if utf8.RuneCountInString(*body.TargetHarness) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_harness", *body.TargetHarness, utf8.RuneCountInString(*body.TargetHarness), 64, false))
+		}
+	}
+	if body.SourceSurface != nil {
+		if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+		}
+	}
+	return
+}
+
+// ValidateCreateSessionHandoffRequestBody runs the validations defined on
+// CreateSessionHandoffRequestBody
+func ValidateCreateSessionHandoffRequestBody(body *CreateSessionHandoffRequestBody) (err error) {
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.SessionID != nil {
+		if utf8.RuneCountInString(*body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 256, false))
+		}
+	}
+	if body.Content != nil {
+		if utf8.RuneCountInString(*body.Content) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", *body.Content, utf8.RuneCountInString(*body.Content), 262144, false))
+		}
+	}
+	if body.SourceSurface != nil {
+		if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+		}
+	}
+	return
 }

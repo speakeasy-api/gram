@@ -26,10 +26,11 @@ export const ONBOARDING_CTA_CONTENT_VT_CLASS =
 const store = createPersistedFlagStore("gram-onboarding-banner-dismissed");
 
 /**
- * Coordinates the enterprise onboarding call-to-action across its two surfaces:
- * the dismissable banner in the page header and the persistent resume button in
- * the sidebar footer. Both gate on the same eligibility (enterprise org admin)
- * and the same dismissed flag, and `dismiss`/`resume` animate the swap.
+ * Coordinates the onboarding call-to-action across its two surfaces: the
+ * dismissable banner in the page header and the persistent resume button in the
+ * sidebar footer. Both gate on the same eligibility (org admin on a tier that
+ * carries the enterprise feature set) and the same dismissed flag, and
+ * `dismiss`/`resume` animate the swap.
  */
 export function useOnboardingCta(): {
   eligible: boolean;
@@ -44,7 +45,9 @@ export function useOnboardingCta(): {
   const dismissed = store.useFlag(orgSlug);
 
   const eligible =
-    Boolean(orgSlug) && productTier === "enterprise" && hasScope("org:admin");
+    Boolean(orgSlug) &&
+    (productTier === "enterprise" || productTier === "payg") &&
+    hasScope("org:admin");
 
   const dismiss = () => {
     if (orgSlug) withViewTransition(() => store.write(orgSlug, true));

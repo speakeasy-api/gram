@@ -7,17 +7,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
+import { ModelSelect } from "@/components/model-select";
 import { Slider } from "@/components/ui/Slider";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { AVAILABLE_MODELS } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
 import {
@@ -31,7 +24,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/McpIcon";
-import { Badge } from "@/components/ui/Badge";
 
 interface ToolsetInfo {
   name: string;
@@ -346,32 +338,31 @@ export function PlaygroundConfigPanel({
           onOpenChange={setToolsOpen}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <CollapsibleTrigger className="hover:bg-muted/30 group flex w-full items-center justify-between px-4 py-2.5 transition-colors">
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
-                Tools
-              </span>
-              {toolsOpen ? (
-                <ChevronDownIcon className="text-muted-foreground h-3.5 w-3.5" />
-              ) : (
-                <ChevronRightIcon className="text-muted-foreground h-3.5 w-3.5" />
-              )}
-            </div>
+          <div className="flex items-center justify-between pr-4">
+            <CollapsibleTrigger className="hover:bg-muted/30 group flex flex-1 items-center px-4 py-2.5 transition-colors">
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
+                  Tools
+                </span>
+                {toolsOpen ? (
+                  <ChevronDownIcon className="text-muted-foreground h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRightIcon className="text-muted-foreground h-3.5 w-3.5" />
+                )}
+              </div>
+            </CollapsibleTrigger>
 
             {onOpenToolsModal && (
               <Button
                 size="sm"
                 variant="tertiary"
                 className="h-6 px-2"
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  onOpenToolsModal();
-                }}
+                onClick={() => onOpenToolsModal()}
               >
                 <PlusIcon className="size-3.5" />
               </Button>
             )}
-          </CollapsibleTrigger>
+          </div>
           <CollapsibleContent className="flex min-h-0 flex-1 flex-col py-1">
             <div className="min-h-0 flex-1 overflow-y-auto">
               <ToolsBody
@@ -408,25 +399,11 @@ export function PlaygroundConfigPanel({
                 <Label htmlFor="model" className="text-xs font-medium">
                   Model
                 </Label>
-                <Select value={model} onValueChange={onModelChange}>
-                  <SelectTrigger size="sm" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AVAILABLE_MODELS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        <span className="flex items-center gap-2">
-                          {m.label}
-                          {m.expensive && (
-                            <Badge size="sm" variant="warning" background>
-                              <Badge.Text>Expensive</Badge.Text>
-                            </Badge>
-                          )}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ModelSelect
+                  value={model}
+                  onValueChange={onModelChange}
+                  triggerClassName="w-full"
+                />
               </div>
             )}
 

@@ -13,6 +13,7 @@ export const HookIngestEventType = {
   SessionStarted: "session.started",
   SessionUpdated: "session.updated",
   SessionEnded: "session.ended",
+  McpInventory: "mcp.inventory",
   PromptSubmitted: "prompt.submitted",
   ToolRequested: "tool.requested",
   ToolCompleted: "tool.completed",

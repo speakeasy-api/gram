@@ -363,14 +363,14 @@ function ChatElementsInner() {
         </Page.Section.Description>
         <Page.Section.Body>
           {/* Top-level tabs: Manual vs Hosted */}
-          <div className="border-border mt-3 overflow-hidden rounded-lg border p-0">
+          <div className="border-border mt-3 overflow-hidden border p-0">
             <Tabs
               value={installMethod}
               onValueChange={(v) => setInstallMethod(v as "manual" | "hosted")}
               className="gap-0"
             >
-              <div className="w-full rounded-t-lg bg-stone-200 px-4 py-2 dark:bg-stone-800">
-                <TabsList className="h-auto rounded-b-none bg-transparent p-0">
+              <div className="w-full bg-stone-200 px-4 py-2 dark:bg-stone-800">
+                <TabsList className="h-auto divide-x-0 border-0 bg-transparent p-0">
                   <TabsTrigger value="manual">Manual installation</TabsTrigger>
                   <TabsTrigger value="hosted">Hosted</TabsTrigger>
                 </TabsList>
@@ -737,7 +737,7 @@ function ChatElementsInner() {
 
                   {/* Preview Panel */}
                   <div className="flex h-[700px] w-2/3 flex-col">
-                    <div className="bg-muted/30 relative flex-1 overflow-hidden rounded-lg border">
+                    <div className="bg-muted/30 relative flex-1 overflow-hidden border">
                       <Button
                         variant="tertiary"
                         size="sm"
@@ -1250,7 +1250,7 @@ export default function GramChat() {
               key={product.id}
               onClick={() => handleProductSelect(product.id)}
               disabled={!product.available}
-              className={`group bg-background relative flex flex-col overflow-hidden rounded-lg border text-left transition-all ${
+              className={`group bg-background relative flex flex-col overflow-hidden border text-left transition-all ${
                 selectedProduct === product.id && product.available
                   ? "border-primary ring-primary ring-2"
                   : product.available
@@ -1324,7 +1324,7 @@ export default function GramChat() {
               <button
                 key={fw.id}
                 onClick={() => handleFrameworkSelect(fw.id)}
-                className={`relative flex min-w-[140px] flex-col items-start rounded-lg border p-4 text-left transition-all ${
+                className={`relative flex min-w-[140px] flex-col items-start border p-4 text-left transition-all ${
                   selectedFramework === fw.id
                     ? "border-primary ring-primary bg-primary/5 ring-2"
                     : "border-border hover:border-muted-foreground/50"
@@ -1376,7 +1376,7 @@ export default function GramChat() {
               description={
                 <>
                   Add to{" "}
-                  <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                  <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                     .env.local
                   </code>
                 </>
@@ -1399,14 +1399,14 @@ export default function GramChat() {
                 selectedFramework === "nextjs" ? (
                   <>
                     Create{" "}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                       pages/api/session.ts
                     </code>
                   </>
                 ) : (
                   <>
                     Create{" "}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                       server.ts
                     </code>
                   </>
@@ -1434,14 +1434,14 @@ export default function GramChat() {
                 selectedFramework === "nextjs" ? (
                   <>
                     Update{" "}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                       app/page.tsx
                     </code>
                   </>
                 ) : (
                   <>
                     Update{" "}
-                    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                       src/App.tsx
                     </code>
                   </>
@@ -1480,9 +1480,9 @@ export default function GramChat() {
                 href="https://github.com/speakeasy-api/gram/blob/@gram-ai/elements@1.42.1/elements/docs/_media/ElementsConfig.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-card hover:bg-muted/50 group flex items-center gap-3 rounded-lg border p-4 transition-colors"
+                className="bg-card hover:bg-muted/50 group flex items-center gap-3 border p-4 transition-colors"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#24292f] dark:bg-[#f0f6fc]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#24292f] dark:bg-[#f0f6fc]">
                   <svg
                     className="h-6 w-6 text-white dark:text-[#24292f]"
                     viewBox="0 0 24 24"
@@ -1512,7 +1512,7 @@ export default function GramChat() {
                 href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-card hover:bg-muted/50 group flex items-center gap-4 rounded-lg border p-4 transition-colors"
+                className="bg-card hover:bg-muted/50 group flex items-center gap-4 border p-4 transition-colors"
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-blue-500 to-blue-600">
                   <span className="text-lg font-semibold text-white">S</span>
@@ -1652,7 +1652,7 @@ function WizardStep({
             {onEdit && (
               <button
                 onClick={onEdit}
-                className="hover:bg-muted text-muted-foreground hover:text-foreground ml-1 rounded p-1 transition-colors"
+                className="hover:bg-muted text-muted-foreground hover:text-foreground ml-1 p-1 transition-colors"
                 title="Change selection"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -1679,7 +1679,7 @@ function WizardStep({
 // Product Preview Components
 function ChatPreview() {
   return (
-    <div className="flex h-full w-full flex-col rounded-md border bg-white text-[10px] shadow-sm">
+    <div className="flex h-full w-full flex-col border bg-white text-[10px] shadow-sm">
       {/* Header */}
       <div className="flex items-center gap-1.5 border-b px-2 py-1.5">
         <div className="h-2 w-2 rounded-full bg-blue-500" />
@@ -1691,27 +1691,27 @@ function ChatPreview() {
       <div className="flex-1 space-y-1.5 overflow-hidden p-2">
         <div className="flex gap-1.5">
           <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-blue-400 to-purple-500" />
-          <div className="max-w-[80%] rounded bg-slate-100 px-1.5 py-1">
-            <div className="h-1.5 w-16 rounded bg-slate-300" />
+          <div className="max-w-[80%] bg-slate-100 px-1.5 py-1">
+            <div className="h-1.5 w-16 bg-slate-300" />
           </div>
         </div>
         <div className="flex justify-end gap-1.5">
-          <div className="max-w-[80%] rounded bg-blue-500 px-1.5 py-1">
-            <div className="h-1.5 w-12 rounded bg-blue-300" />
+          <div className="max-w-[80%] bg-blue-500 px-1.5 py-1">
+            <div className="h-1.5 w-12 bg-blue-300" />
           </div>
         </div>
         <div className="flex gap-1.5">
           <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-blue-400 to-purple-500" />
-          <div className="max-w-[80%] rounded bg-slate-100 px-1.5 py-1">
-            <div className="mb-1 h-1.5 w-20 rounded bg-slate-300" />
-            <div className="h-1.5 w-14 rounded bg-slate-300" />
+          <div className="max-w-[80%] bg-slate-100 px-1.5 py-1">
+            <div className="mb-1 h-1.5 w-20 bg-slate-300" />
+            <div className="h-1.5 w-14 bg-slate-300" />
           </div>
         </div>
       </div>
       {/* Input */}
       <div className="border-t px-2 py-1.5">
         <div className="flex items-center rounded-full bg-slate-100 px-2 py-1">
-          <div className="h-1.5 w-10 rounded bg-slate-300" />
+          <div className="h-1.5 w-10 bg-slate-300" />
         </div>
       </div>
     </div>
@@ -1720,25 +1720,25 @@ function ChatPreview() {
 
 function SearchPreview() {
   return (
-    <div className="flex h-full w-full flex-col rounded-md border bg-white p-2 text-[10px] shadow-sm">
+    <div className="flex h-full w-full flex-col border bg-white p-2 text-[10px] shadow-sm">
       {/* Search bar */}
-      <div className="mb-2 flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1.5">
+      <div className="mb-2 flex items-center gap-1.5 bg-slate-100 px-2 py-1.5">
         <Search className="h-3 w-3 text-violet-500" />
-        <div className="h-1.5 w-16 rounded bg-slate-300" />
+        <div className="h-1.5 w-16 bg-slate-300" />
       </div>
       {/* Results */}
       <div className="flex-1 space-y-1.5">
-        <div className="rounded bg-violet-50 p-1.5 ring-1 ring-violet-300">
-          <div className="mb-1 h-1.5 w-full rounded bg-slate-400" />
-          <div className="h-1.5 w-3/4 rounded bg-slate-300" />
+        <div className="bg-violet-50 p-1.5 ring-1 ring-violet-300">
+          <div className="mb-1 h-1.5 w-full bg-slate-400" />
+          <div className="h-1.5 w-3/4 bg-slate-300" />
         </div>
-        <div className="rounded bg-slate-50 p-1.5">
-          <div className="mb-1 h-1.5 w-full rounded bg-slate-300" />
-          <div className="h-1.5 w-2/3 rounded bg-slate-200" />
+        <div className="bg-slate-50 p-1.5">
+          <div className="mb-1 h-1.5 w-full bg-slate-300" />
+          <div className="h-1.5 w-2/3 bg-slate-200" />
         </div>
-        <div className="rounded bg-slate-50 p-1.5">
-          <div className="mb-1 h-1.5 w-3/4 rounded bg-slate-300" />
-          <div className="h-1.5 w-1/2 rounded bg-slate-200" />
+        <div className="bg-slate-50 p-1.5">
+          <div className="mb-1 h-1.5 w-3/4 bg-slate-300" />
+          <div className="h-1.5 w-1/2 bg-slate-200" />
         </div>
       </div>
     </div>
@@ -1747,7 +1747,7 @@ function SearchPreview() {
 
 function NotificationsPreview() {
   return (
-    <div className="flex h-full w-full flex-col rounded-md border bg-white text-[10px] shadow-sm">
+    <div className="flex h-full w-full flex-col border bg-white text-[10px] shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-2 py-1.5">
         <span className="text-[9px] font-medium text-slate-600">
@@ -1757,26 +1757,26 @@ function NotificationsPreview() {
       </div>
       {/* Notifications */}
       <div className="flex-1 space-y-1 p-1.5">
-        <div className="flex gap-1.5 rounded bg-blue-50 p-1">
+        <div className="flex gap-1.5 bg-blue-50 p-1">
           <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-green-400 to-emerald-500" />
           <div className="flex-1">
-            <div className="mb-1 h-1.5 w-full rounded bg-slate-400" />
-            <div className="h-1.5 w-2/3 rounded bg-slate-300" />
+            <div className="mb-1 h-1.5 w-full bg-slate-400" />
+            <div className="h-1.5 w-2/3 bg-slate-300" />
           </div>
           <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
         </div>
-        <div className="flex gap-1.5 rounded p-1">
+        <div className="flex gap-1.5 p-1">
           <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-orange-400 to-red-500" />
           <div className="flex-1">
-            <div className="mb-1 h-1.5 w-3/4 rounded bg-slate-300" />
-            <div className="h-1.5 w-1/2 rounded bg-slate-200" />
+            <div className="mb-1 h-1.5 w-3/4 bg-slate-300" />
+            <div className="h-1.5 w-1/2 bg-slate-200" />
           </div>
         </div>
-        <div className="flex gap-1.5 rounded p-1">
+        <div className="flex gap-1.5 p-1">
           <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-sky-400 to-blue-500" />
           <div className="flex-1">
-            <div className="mb-1 h-1.5 w-full rounded bg-slate-300" />
-            <div className="h-1.5 w-3/4 rounded bg-slate-200" />
+            <div className="mb-1 h-1.5 w-full bg-slate-300" />
+            <div className="h-1.5 w-3/4 bg-slate-200" />
           </div>
         </div>
       </div>
@@ -1786,26 +1786,26 @@ function NotificationsPreview() {
 
 function DocsPreview() {
   return (
-    <div className="flex h-full w-full rounded-md border bg-white text-[10px] shadow-sm">
+    <div className="flex h-full w-full border bg-white text-[10px] shadow-sm">
       {/* Sidebar */}
       <div className="w-1/3 space-y-1 border-r bg-slate-50 p-1.5">
-        <div className="h-1.5 w-full rounded bg-blue-500" />
-        <div className="ml-1.5 h-1.5 w-3/4 rounded bg-blue-300" />
-        <div className="ml-1.5 h-1.5 w-2/3 rounded bg-slate-300" />
-        <div className="mt-2 h-1.5 w-full rounded bg-slate-400" />
-        <div className="ml-1.5 h-1.5 w-3/4 rounded bg-slate-300" />
+        <div className="h-1.5 w-full bg-blue-500" />
+        <div className="ml-1.5 h-1.5 w-3/4 bg-blue-300" />
+        <div className="ml-1.5 h-1.5 w-2/3 bg-slate-300" />
+        <div className="mt-2 h-1.5 w-full bg-slate-400" />
+        <div className="ml-1.5 h-1.5 w-3/4 bg-slate-300" />
       </div>
       {/* Content */}
       <div className="flex-1 space-y-2 p-2">
-        <div className="h-2 w-1/2 rounded bg-slate-700" />
+        <div className="h-2 w-1/2 bg-slate-700" />
         <div className="space-y-1">
-          <div className="h-1.5 w-full rounded bg-slate-300" />
-          <div className="h-1.5 w-full rounded bg-slate-300" />
-          <div className="h-1.5 w-3/4 rounded bg-slate-300" />
+          <div className="h-1.5 w-full bg-slate-300" />
+          <div className="h-1.5 w-full bg-slate-300" />
+          <div className="h-1.5 w-3/4 bg-slate-300" />
         </div>
-        <div className="mt-2 rounded bg-slate-800 p-1.5">
-          <div className="h-1.5 w-full rounded bg-emerald-400" />
-          <div className="mt-1 h-1.5 w-2/3 rounded bg-slate-500" />
+        <div className="mt-2 bg-slate-800 p-1.5">
+          <div className="h-1.5 w-full bg-emerald-400" />
+          <div className="mt-1 h-1.5 w-2/3 bg-slate-500" />
         </div>
       </div>
     </div>

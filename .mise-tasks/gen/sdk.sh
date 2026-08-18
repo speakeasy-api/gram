@@ -6,11 +6,18 @@
 
 set -e
 
+# The Speakeasy CLI version is baked into every generated artifact (gen.lock,
+# workflow.lock, the SDK_METADATA userAgent), so generating with anything other
+# than the pinned version produces churn CI rejects. `speakeasy run` re-execs
+# into the version named by speakeasyVersion in .speakeasy/workflow.yaml, so a
+# system-wide install (Homebrew, `go install`) ahead of the mise shim on PATH
+# still generates with the pinned version.
 generate() {
-  # Speakeasy's TypeScript target compiles the generated SDK by invoking pnpm
-  # directly in client/dashboard/src/sdk. Without CI=true, pnpm prompts to purge
-  # node_modules and aborts when there's no TTY. See
-  # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+  # CI=true keeps `speakeasy run` non-interactive. It used to also matter
+  # because the TypeScript target compiled the SDK by invoking pnpm, which
+  # prompts to purge node_modules and aborts without a TTY; since the SDK was
+  # inlined, gen.yaml sets compileCommand to `true` and no package manager is
+  # invoked at all.
   CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
 }
 

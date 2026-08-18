@@ -1,0 +1,223 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "litellm"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "1.94.0"
+            }
+          },
+          {
+            "key": "raw.provider.payload",
+            "value": {
+              "stringValue": "fixture-sensitive-resource"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "litellm.telemetry",
+            "version": "1.94.0"
+          },
+          "spans": [
+            {
+              "traceId": "0123456789ABCDEF0123456789ABCDEF",
+              "spanId": "0123456789abcdef",
+              "parentSpanId": "FEDCBA9876543210",
+              "name": "litellm.chat.completion",
+              "kind": 3,
+              "startTimeUnixNano": "1785542400000000000",
+              "endTimeUnixNano": "1785542400125000000",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "openai"
+                  }
+                },
+                {
+                  "key": "gen_ai.system",
+                  "value": {
+                    "stringValue": "openai"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "fixture-model"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "fixture-model-v2"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "fixture-response-id"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.finish_reasons",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "stop"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": "11"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": "7"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.total_tokens",
+                  "value": {
+                    "intValue": "18"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cost",
+                  "value": {
+                    "doubleValue": 0.00125
+                  }
+                },
+                {
+                  "key": "gen_ai.request.is_streaming",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "litellm.call_id",
+                  "value": {
+                    "stringValue": "fixture-call-id"
+                  }
+                },
+                {
+                  "key": "litellm.trace_id",
+                  "value": {
+                    "stringValue": "fixture-logical-trace"
+                  }
+                },
+                {
+                  "key": "user_api_key_user_id",
+                  "value": {
+                    "stringValue": "fixture-user-id"
+                  }
+                },
+                {
+                  "key": "user_api_key_team_id",
+                  "value": {
+                    "stringValue": "fixture-team-id"
+                  }
+                },
+                {
+                  "key": "user_api_key_team_alias",
+                  "value": {
+                    "stringValue": "fixture-team"
+                  }
+                },
+                {
+                  "key": "user_api_key_org_id",
+                  "value": {
+                    "stringValue": "fixture-provider-org"
+                  }
+                },
+                {
+                  "key": "gen_ai.input.messages",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "kvlistValue": {
+                            "values": [
+                              {
+                                "key": "content",
+                                "value": {
+                                  "stringValue": "fixture-sensitive-prompt"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.output.messages",
+                  "value": {
+                    "stringValue": "fixture-sensitive-output"
+                  }
+                },
+                {
+                  "key": "gen_ai.system_instructions",
+                  "value": {
+                    "stringValue": "fixture-sensitive-system"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.call.arguments",
+                  "value": {
+                    "stringValue": "fixture-sensitive-tool-args"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.call.result",
+                  "value": {
+                    "stringValue": "fixture-sensitive-tool-result"
+                  }
+                },
+                {
+                  "key": "http.request.header.authorization",
+                  "value": {
+                    "stringValue": "fixture-sensitive-header"
+                  }
+                },
+                {
+                  "key": "metadata.customer_payload",
+                  "value": {
+                    "stringValue": "fixture-sensitive-metadata"
+                  }
+                }
+              ],
+              "status": {
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

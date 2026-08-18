@@ -1,7 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
+import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
@@ -14,9 +17,10 @@ import {
   AdditionalAgentConfigStep,
   ConfirmTrafficStep,
   ConfigurePoliciesStep,
+  PlatformMCPSetupStep,
 } from "./steps";
 
-const STEPS: Step[] = [
+const CORE_STEPS: Step[] = [
   {
     id: "connect-idp",
     title: "Connect identity provider",
@@ -31,11 +35,6 @@ const STEPS: Step[] = [
     id: "create-marketplace",
     title: "Create plugin marketplace",
     description: "For distributing servers to your users",
-  },
-  {
-    id: "distribute-servers",
-    title: "Distribute MCP servers",
-    description: "Choose some MCP Servers to distribute to your organization",
   },
   {
     id: "instrument-agents",
@@ -53,40 +52,83 @@ const STEPS: Step[] = [
     description: "Verify connectivity and compliance",
   },
   {
-    id: "configure-policies",
-    title: "Configure policies",
-    description: "Pick the categories to flag in agent traffic",
+    id: "distribute-servers",
+    title: "Distribute MCP servers",
+    description: "Choose some MCP Servers to distribute to your organization",
   },
 ];
 
-export function SetupWizard(): JSX.Element | null {
+const CONFIGURE_POLICIES_STEP: Step = {
+  id: "configure-policies",
+  title: "Configure policies",
+  description: "Pick the categories to flag in agent traffic",
+};
+
+const PLATFORM_MCP_STEP: Step = {
+  id: "platform-mcp",
+  title: "Set up Platform MCP",
+  description: "Optional agent-assisted MCP setup",
+  badge: "Optional",
+};
+
+export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { markSetupStarted } = useOrgSetupStarted(orgSlug);
+
+  useEffect(() => {
+    markSetupStarted();
+  }, [markSetupStarted]);
+
+  const {
+    enabled: platformMcpDashboardEnabled,
+    isLoading: isPlatformMcpDashboardLoading,
+  } = usePlatformMcpDashboardVisibility();
+  const setupProjectSlug = searchParams.get("projectSlug") ?? undefined;
+  const setupPath = searchParams.get("setupPath");
+  const usesPlatformMcpPath =
+    platformMcpDashboardEnabled && setupPath === "platform-mcp";
+  const steps = useMemo(() => {
+    if (!platformMcpDashboardEnabled) {
+      return [...CORE_STEPS, CONFIGURE_POLICIES_STEP];
+    }
+
+    if (usesPlatformMcpPath) {
+      return [...CORE_STEPS, PLATFORM_MCP_STEP, CONFIGURE_POLICIES_STEP];
+    }
+
+    return [...CORE_STEPS, CONFIGURE_POLICIES_STEP, PLATFORM_MCP_STEP];
+  }, [platformMcpDashboardEnabled, usesPlatformMcpPath]);
 
   // All steps are accessible — SSO and DSYNC are both skippable.
-  const maxAllowedStep = STEPS.length - 1;
+  const maxAllowedStep = steps.length - 1;
 
   const stepSlug = searchParams.get("step");
 
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (distribute-servers,
-  // instrument-agents, additional-agent-config, confirm-traffic) have no server
-  // signal — once marketplace is published we land on distribute-servers and
-  // let the user click forward.
+  // marketplace step. Steps after marketplace (instrument-agents,
+  // additional-agent-config, confirm-traffic, distribute-servers) have no
+  // server signal — once marketplace is published we land on instrument-agents
+  // and let the user click forward.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
     usePublishStatus();
-  const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
+  const statusLoading =
+    isOnboardingStatusLoading ||
+    isPublishStatusLoading ||
+    isPlatformMcpDashboardLoading;
 
   useEffect(() => {
     if (stepSlug) return;
     if (statusLoading) return; // wait so we don't flash step 0 then jump
+    // If either query errored, its data is undefined and the checks below all
+    // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → distribute-servers
+      resumeStep = 3; // marketplace done → instrument-agents
     } else if (onboardingStatus?.dsyncConfigured) {
       resumeStep = 2; // dsync done → create-marketplace
     } else if (onboardingStatus?.ssoConfigured) {
@@ -95,7 +137,7 @@ export function SetupWizard(): JSX.Element | null {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", STEPS[resumeStep]!.id!);
+        next.set("step", steps[resumeStep]!.id!);
         return next;
       },
       { replace: true },
@@ -106,12 +148,13 @@ export function SetupWizard(): JSX.Element | null {
     onboardingStatus,
     publishStatus,
     setSearchParams,
+    steps,
   ]);
 
   const requestedStep = stepSlug
     ? Math.max(
         0,
-        STEPS.findIndex((s) => s.id === stepSlug),
+        steps.findIndex((s) => s.id === stepSlug),
       )
     : 0;
 
@@ -122,13 +165,13 @@ export function SetupWizard(): JSX.Element | null {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("step", STEPS[index]!.id!);
+          next.set("step", steps[index]!.id!);
           return next;
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, steps],
   );
 
   // Clicking a step in the stepper previews that step (forward or back) by
@@ -146,12 +189,20 @@ export function SetupWizard(): JSX.Element | null {
 
   const completeCurrentStep = useCallback(() => {
     const nextIndex = currentStep + 1;
-    if (nextIndex < STEPS.length) {
+    if (nextIndex < steps.length) {
       setCurrentStep(nextIndex);
     } else {
-      void navigate(`/${orgSlug}`);
+      const projectSlug = searchParams.get("projectSlug") ?? "default";
+      void navigate(`/${orgSlug}/projects/${projectSlug}`);
     }
-  }, [currentStep, navigate, orgSlug, setCurrentStep]);
+  }, [
+    currentStep,
+    navigate,
+    orgSlug,
+    searchParams,
+    setCurrentStep,
+    steps.length,
+  ]);
 
   const goBack = useCallback(() => {
     if (currentStep > 0) {
@@ -159,54 +210,69 @@ export function SetupWizard(): JSX.Element | null {
     }
   }, [currentStep, setCurrentStep]);
 
+  const leavePlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("setupPath");
+        next.set("step", "distribute-servers");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const handleLeave = () => {
     void navigate(`/${orgSlug}`);
   };
 
   // While we're still figuring out where to resume (no slug + queries in
-  // flight), render nothing rather than briefly mounting step 0. The
-  // resume-step useEffect above will set the slug as soon as the queries
-  // resolve.
-  if (!stepSlug && statusLoading) {
-    return null;
-  }
+  // flight), keep the page shell visible with skeletons rather than briefly
+  // mounting step 0. The resume-step useEffect above will set the slug as soon
+  // as the queries resolve (or error, which falls back to step 0).
+  const resolvingResume =
+    isPlatformMcpDashboardLoading || (!stepSlug && statusLoading);
+
+  const startPlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("setupPath", "platform-mcp");
+        next.set("step", PLATFORM_MCP_STEP.id);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    switch (steps[currentStep]?.id) {
+      case "connect-idp":
         return (
           <ConnectIdpStep
             onSkip={completeCurrentStep}
             onComplete={completeCurrentStep}
           />
         );
-      case 1:
+      case "directory-sync":
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />
         );
-      case 2:
+      case "create-marketplace":
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 3:
-        return (
-          <DistributeServersStep
-            onComplete={completeCurrentStep}
-            onSkip={completeCurrentStep}
-            onBack={goBack}
-          />
-        );
-      case 4:
+      case "instrument-agents":
         return (
           <InstrumentAgentsStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 5:
+      case "additional-agent-config":
         return (
           <AdditionalAgentConfigStep
             onComplete={completeCurrentStep}
@@ -214,21 +280,46 @@ export function SetupWizard(): JSX.Element | null {
             onBack={goBack}
           />
         );
-      case 6:
+      case "confirm-traffic":
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 7:
+      case "distribute-servers":
+        return (
+          <DistributeServersStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
+            onBack={goBack}
+            onSetupPlatformMCP={
+              platformMcpDashboardEnabled ? startPlatformMcpPath : undefined
+            }
+          />
+        );
+      case "configure-policies":
         return (
           <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      default:
+      case "platform-mcp":
+        return (
+          <PlatformMCPSetupStep
+            onComplete={completeCurrentStep}
+            onBack={usesPlatformMcpPath ? leavePlatformMcpPath : goBack}
+            onSkip={completeCurrentStep}
+            currentProjectSlug={setupProjectSlug}
+            continueLabel={
+              usesPlatformMcpPath
+                ? "Continue to Configure policies"
+                : "Finish setup"
+            }
+          />
+        );
+      case undefined:
         return null;
     }
   };
@@ -240,16 +331,34 @@ export function SetupWizard(): JSX.Element | null {
       <main className="flex flex-1 items-start justify-center px-8 py-16">
         <div className="flex w-full max-w-5xl gap-24">
           <div className="w-64 flex-shrink-0">
-            <OnboardingStepper
-              steps={STEPS}
-              currentStep={currentStep}
-              onStepClick={goToStep}
-              maxAllowedStep={maxAllowedStep}
-              allowJumpAhead
-            />
+            {resolvingResume ? (
+              <Skeleton>
+                {steps.map((step) => (
+                  <div key={step.id} className="h-8 w-full" />
+                ))}
+              </Skeleton>
+            ) : (
+              <OnboardingStepper
+                steps={steps}
+                currentStep={currentStep}
+                onStepClick={goToStep}
+                maxAllowedStep={maxAllowedStep}
+                allowJumpAhead
+              />
+            )}
           </div>
 
-          <div className="min-w-0 flex-1">{renderStep()}</div>
+          <div className="min-w-0 flex-1">
+            {resolvingResume ? (
+              <Skeleton>
+                <div className="h-12 w-2/3" />
+                <div className="h-5 w-full" />
+                <div className="h-64 w-full" />
+              </Skeleton>
+            ) : (
+              renderStep()
+            )}
+          </div>
         </div>
       </main>
 

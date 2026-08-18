@@ -50,7 +50,7 @@ export function PluginAssignmentRow({
 
   return (
     <div className="flex items-center gap-3 py-3">
-      <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
         <IconComponent className="h-4 w-4" />
       </div>
       <div className="min-w-0">

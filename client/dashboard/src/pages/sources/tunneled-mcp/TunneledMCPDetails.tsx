@@ -11,10 +11,10 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -184,7 +184,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+              <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
                 <PageTabsTrigger value="mcp-servers">
@@ -193,7 +193,7 @@ function TunneledMCPDetailsContent(): JSX.Element {
                     ` (${linkedMcpServers.length})`}
                 </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
-              </TabsList>
+              </PageTabsList>
             </div>
           </div>
 
@@ -272,8 +272,9 @@ function TunneledMcpHero({
   return (
     <DetailHero>
       <Stack gap={2}>
+        <Page.Eyebrow />
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/10 dark:bg-cyan-500/20">
             <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
@@ -422,7 +423,7 @@ function ConnectionsPanel({
     connectionResult?.activeConsumerSessionCount ?? 0;
 
   return (
-    <section className="rounded-lg border p-6">
+    <section className="border p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <Heading variant="h4">Connections</Heading>
@@ -443,12 +444,12 @@ function ConnectionsPanel({
       </div>
 
       {isLoading ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Loader2 className="text-muted-foreground mx-auto mb-2 size-4 animate-spin" />
           <Text muted>Loading live tunnel connections.</Text>
         </div>
       ) : connections.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
+        <div className="border border-dashed p-6 text-center">
           <Text muted>No live tunnel connections.</Text>
         </div>
       ) : (
@@ -475,7 +476,7 @@ function ConnectionCard({ connection }: { connection: TunneledMcpConnection }) {
   const metadataEntries = Object.entries(connection.metadata ?? {});
 
   return (
-    <div className="rounded-md border p-4">
+    <div className="border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Text className="truncate text-sm font-medium">Tunnel agent</Text>
@@ -628,12 +629,12 @@ function McpServersSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
+        <div key={i} className="bg-card animate-pulse border p-6">
           <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
+            <div className="bg-muted h-10 w-10" />
             <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
+              <div className="bg-muted mb-2 h-4 w-24" />
+              <div className="bg-muted h-3 w-32" />
             </div>
           </div>
         </div>
@@ -739,7 +740,7 @@ function PublicAccessSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-1 flex items-center gap-2">
         <Text variant="subheading">Public Access</Text>
         <ReleaseStageBadge stage="preview" />
@@ -899,7 +900,7 @@ function NameSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Text variant="subheading" className="mb-1">
         Display Name
       </Text>
@@ -971,7 +972,7 @@ function TunnelKeySection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Text variant="subheading" className="mb-1">
@@ -1012,7 +1013,7 @@ function TunnelKeySection({
               <Alert variant="warning" dismissible={false}>
                 Restart tunnel agents with the new key to reconnect this source.
               </Alert>
-              <div className="bg-muted flex items-center gap-2 rounded-md p-3">
+              <div className="bg-muted flex items-center gap-2 p-3">
                 <code className="min-w-0 flex-1 break-all text-sm">
                   {rotatedKey.tunnelKey}
                 </code>
@@ -1095,7 +1096,7 @@ function DangerZoneSection({
   const displayName = formatTunneledMcpDisplay(tunneledMcpServer);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Text variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Text>

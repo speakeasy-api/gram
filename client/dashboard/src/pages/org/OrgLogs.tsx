@@ -1,7 +1,6 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -15,18 +14,7 @@ import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 
 export default function OrgLogs(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgLogsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <OrgLogsInner />;
 }
 
 function OrgLogsInner() {
@@ -149,17 +137,13 @@ function OrgLogsInner() {
   };
 
   return (
-    <>
-      <Heading variant="h4" className="mb-2">
-        Logs
-      </Heading>
-      <Text muted small className="mb-6">
-        Configure logging and telemetry settings for all your tool capture. When
-        enabled, tool calls and traces are recorded for debugging and analytics.
-        These power the insights and logs page on the platform.
-      </Text>
+    <SettingsPage
+      scope={["org:read", "org:admin"]}
+      title="Logs"
+      description="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+    >
       <LogDataRetentionBanner />
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -190,12 +174,8 @@ function OrgLogsInner() {
 
           <div className="border-border border-t" />
 
-          {featuresData?.skillsEnabled && (
-            <>
-              <SkillContentUploadSetting />
-              <div className="border-border border-t" />
-            </>
-          )}
+          <SkillContentUploadSetting />
+          {featuresData && <div className="border-border border-t" />}
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -239,9 +219,8 @@ function OrgLogsInner() {
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Capture user prompts and assistant responses from agents like
-                Cursor, Claude Code, Codex, and more. Sessions appear in the
-                Agent Sessions tab.
+                Capture user prompts and assistant responses from supported
+                coding agents. Sessions appear in the Agent Sessions tab.
               </Text>
             </Stack>
             {featuresData && (
@@ -321,9 +300,7 @@ function OrgLogsInner() {
         </Stack>
       </div>
 
-      <div className="mt-8">
-        <OtelForwardingSection />
-      </div>
-    </>
+      <OtelForwardingSection />
+    </SettingsPage>
   );
 }

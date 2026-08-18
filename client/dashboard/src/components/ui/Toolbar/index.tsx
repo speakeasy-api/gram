@@ -70,9 +70,9 @@ import {
 // Shared height for every control in the toolbar (40px).
 const CONTROL_HEIGHT = "h-10";
 
-// The toolbar's shell (the grey rounded bar) — one definition whether the bar
+// The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.
-const TOOLBAR_SHELL = "border-border bg-muted/40 w-full rounded-lg border p-2";
+const TOOLBAR_SHELL = "border-border bg-muted/40 w-full border p-2";
 
 // One row of clusters: the left holds the controls that narrow the data
 // (search + filters + leading), spaced apart (justify-between) from the right,
@@ -215,7 +215,7 @@ function ToolbarSearch({
   return (
     <div
       className={cn(
-        "border-border bg-card focus-within:border-ring flex shrink-0 items-center gap-2 rounded-md border px-3",
+        "border-border bg-card focus-within:border-ring flex shrink-0 items-center gap-2 border px-3",
         CONTROL_HEIGHT,
         className ?? "w-64",
       )}
@@ -298,6 +298,16 @@ function ToolbarFilters({
       (d) => !d.pinned && !d.hideChip && isDimensionActive(d, values[d.id]!),
     ).length + customFilters.length;
 
+  // The sheet only earns its trigger when it holds something the chip row
+  // doesn't: unpinned dimensions, hideChip dimensions (which never render a
+  // chip even when pinned), a custom-attribute builder, or active custom
+  // filters. A schema of only pinned dimensions would make "More filters" a
+  // second door to the same controls.
+  const sheetHasMore =
+    schema.some((d) => !d.pinned || d.hideChip) ||
+    customBuilder !== undefined ||
+    customFilters.length > 0;
+
   const hasClearable =
     customFilters.length > 0 ||
     schema.some(
@@ -335,19 +345,21 @@ function ToolbarFilters({
 
       {extraChips}
 
-      <Button
-        variant="secondary"
-        onClick={() => setSheetOpen(true)}
-        className={cn(CONTROL_HEIGHT, "gap-2")}
-      >
-        <SlidersHorizontal className="size-4" />
-        More filters
-        {sheetCount > 0 && (
-          <Badge variant="neutral" className="ml-1 px-1.5">
-            {sheetCount}
-          </Badge>
-        )}
-      </Button>
+      {sheetHasMore && (
+        <Button
+          variant="secondary"
+          onClick={() => setSheetOpen(true)}
+          className={cn(CONTROL_HEIGHT, "gap-2")}
+        >
+          <SlidersHorizontal className="size-4" />
+          More filters
+          {sheetCount > 0 && (
+            <Badge variant="neutral" className="ml-1 px-1.5">
+              {sheetCount}
+            </Badge>
+          )}
+        </Button>
+      )}
 
       {hasClearable && (
         <Button
@@ -402,7 +414,7 @@ function ToolbarSortBy({
   return (
     <div
       className={cn(
-        "border-border bg-card flex shrink-0 items-center rounded-md border",
+        "border-border bg-card flex shrink-0 items-center border",
         CONTROL_HEIGHT,
         className,
       )}

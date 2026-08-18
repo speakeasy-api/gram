@@ -22,6 +22,17 @@ type UpsertWorkUnitsSettingsRequestBody struct {
 	WorkUnitsDailyCap int `form:"work_units_daily_cap" json:"work_units_daily_cap" xml:"work_units_daily_cap"`
 }
 
+// UpsertBusinessMemorySettingsRequestBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// request body.
+type UpsertBusinessMemorySettingsRequestBody struct {
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled bool `form:"business_memory_enabled" json:"business_memory_enabled" xml:"business_memory_enabled"`
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap int `form:"business_memory_daily_cap" json:"business_memory_daily_cap" xml:"business_memory_daily_cap"`
+}
+
 // GetSettingsResponseBody is the type of the "adminChatAnalysis" service
 // "getSettings" endpoint HTTP response body.
 type GetSettingsResponseBody struct {
@@ -32,6 +43,11 @@ type GetSettingsResponseBody struct {
 	// Maximum work-units evaluations reserved across the organization each UTC
 	// day. 0 disables scoring as surely as the switch.
 	WorkUnitsDailyCap *int `form:"work_units_daily_cap,omitempty" json:"work_units_daily_cap,omitempty" xml:"work_units_daily_cap,omitempty"`
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled *bool `form:"business_memory_enabled,omitempty" json:"business_memory_enabled,omitempty" xml:"business_memory_enabled,omitempty"`
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap *int `form:"business_memory_daily_cap,omitempty" json:"business_memory_daily_cap,omitempty" xml:"business_memory_daily_cap,omitempty"`
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
@@ -47,6 +63,32 @@ type UpsertWorkUnitsSettingsResponseBody struct {
 	// Maximum work-units evaluations reserved across the organization each UTC
 	// day. 0 disables scoring as surely as the switch.
 	WorkUnitsDailyCap *int `form:"work_units_daily_cap,omitempty" json:"work_units_daily_cap,omitempty" xml:"work_units_daily_cap,omitempty"`
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled *bool `form:"business_memory_enabled,omitempty" json:"business_memory_enabled,omitempty" xml:"business_memory_enabled,omitempty"`
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap *int `form:"business_memory_daily_cap,omitempty" json:"business_memory_daily_cap,omitempty" xml:"business_memory_daily_cap,omitempty"`
+	// Whether these values are platform defaults rather than stored organization
+	// settings.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body.
+type UpsertBusinessMemorySettingsResponseBody struct {
+	// Organization these settings apply to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether work-units chat analysis is enabled.
+	WorkUnitsEnabled *bool `form:"work_units_enabled,omitempty" json:"work_units_enabled,omitempty" xml:"work_units_enabled,omitempty"`
+	// Maximum work-units evaluations reserved across the organization each UTC
+	// day. 0 disables scoring as surely as the switch.
+	WorkUnitsDailyCap *int `form:"work_units_daily_cap,omitempty" json:"work_units_daily_cap,omitempty" xml:"work_units_daily_cap,omitempty"`
+	// Whether completed sessions are mined for business memories.
+	BusinessMemoryEnabled *bool `form:"business_memory_enabled,omitempty" json:"business_memory_enabled,omitempty" xml:"business_memory_enabled,omitempty"`
+	// Maximum business-memory extraction evaluations reserved across the
+	// organization each UTC day. 0 disables extraction.
+	BusinessMemoryDailyCap *int `form:"business_memory_daily_cap,omitempty" json:"business_memory_daily_cap,omitempty" xml:"business_memory_daily_cap,omitempty"`
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
@@ -434,6 +476,196 @@ type UpsertWorkUnitsSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpsertBusinessMemorySettingsUnauthorizedResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpsertBusinessMemorySettingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsForbiddenResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "forbidden" error.
+type UpsertBusinessMemorySettingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsBadRequestResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "bad_request" error.
+type UpsertBusinessMemorySettingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsNotFoundResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "not_found" error.
+type UpsertBusinessMemorySettingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsConflictResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "conflict" error.
+type UpsertBusinessMemorySettingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsUnsupportedMediaResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpsertBusinessMemorySettingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsInvalidResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "invalid" error.
+type UpsertBusinessMemorySettingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsInvariantViolationResponseBody is the type of
+// the "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpsertBusinessMemorySettingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsUnexpectedResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "unexpected" error.
+type UpsertBusinessMemorySettingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertBusinessMemorySettingsGatewayErrorResponseBody is the type of the
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpsertBusinessMemorySettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // TriggerAnalysisUnauthorizedResponseBody is the type of the
 // "adminChatAnalysis" service "triggerAnalysis" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -635,14 +867,27 @@ func NewUpsertWorkUnitsSettingsRequestBody(p *adminchatanalysis.UpsertWorkUnitsS
 	return body
 }
 
+// NewUpsertBusinessMemorySettingsRequestBody builds the HTTP request body from
+// the payload of the "upsertBusinessMemorySettings" endpoint of the
+// "adminChatAnalysis" service.
+func NewUpsertBusinessMemorySettingsRequestBody(p *adminchatanalysis.UpsertBusinessMemorySettingsPayload) *UpsertBusinessMemorySettingsRequestBody {
+	body := &UpsertBusinessMemorySettingsRequestBody{
+		BusinessMemoryEnabled:  p.BusinessMemoryEnabled,
+		BusinessMemoryDailyCap: p.BusinessMemoryDailyCap,
+	}
+	return body
+}
+
 // NewGetSettingsChatAnalysisSettingsOK builds a "adminChatAnalysis" service
 // "getSettings" endpoint result from a HTTP "OK" response.
 func NewGetSettingsChatAnalysisSettingsOK(body *GetSettingsResponseBody) *adminchatanalysis.ChatAnalysisSettings {
 	v := &adminchatanalysis.ChatAnalysisSettings{
-		OrganizationID:    *body.OrganizationID,
-		WorkUnitsEnabled:  *body.WorkUnitsEnabled,
-		WorkUnitsDailyCap: *body.WorkUnitsDailyCap,
-		IsDefault:         *body.IsDefault,
+		OrganizationID:         *body.OrganizationID,
+		WorkUnitsEnabled:       *body.WorkUnitsEnabled,
+		WorkUnitsDailyCap:      *body.WorkUnitsDailyCap,
+		BusinessMemoryEnabled:  *body.BusinessMemoryEnabled,
+		BusinessMemoryDailyCap: *body.BusinessMemoryDailyCap,
+		IsDefault:              *body.IsDefault,
 	}
 
 	return v
@@ -803,10 +1048,12 @@ func NewGetSettingsGatewayError(body *GetSettingsGatewayErrorResponseBody) *goa.
 // HTTP "OK" response.
 func NewUpsertWorkUnitsSettingsChatAnalysisSettingsOK(body *UpsertWorkUnitsSettingsResponseBody) *adminchatanalysis.ChatAnalysisSettings {
 	v := &adminchatanalysis.ChatAnalysisSettings{
-		OrganizationID:    *body.OrganizationID,
-		WorkUnitsEnabled:  *body.WorkUnitsEnabled,
-		WorkUnitsDailyCap: *body.WorkUnitsDailyCap,
-		IsDefault:         *body.IsDefault,
+		OrganizationID:         *body.OrganizationID,
+		WorkUnitsEnabled:       *body.WorkUnitsEnabled,
+		WorkUnitsDailyCap:      *body.WorkUnitsDailyCap,
+		BusinessMemoryEnabled:  *body.BusinessMemoryEnabled,
+		BusinessMemoryDailyCap: *body.BusinessMemoryDailyCap,
+		IsDefault:              *body.IsDefault,
 	}
 
 	return v
@@ -950,6 +1197,172 @@ func NewUpsertWorkUnitsSettingsUnexpected(body *UpsertWorkUnitsSettingsUnexpecte
 // NewUpsertWorkUnitsSettingsGatewayError builds a adminChatAnalysis service
 // upsertWorkUnitsSettings endpoint gateway_error error.
 func NewUpsertWorkUnitsSettingsGatewayError(body *UpsertWorkUnitsSettingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsChatAnalysisSettingsOK builds a
+// "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint result
+// from a HTTP "OK" response.
+func NewUpsertBusinessMemorySettingsChatAnalysisSettingsOK(body *UpsertBusinessMemorySettingsResponseBody) *adminchatanalysis.ChatAnalysisSettings {
+	v := &adminchatanalysis.ChatAnalysisSettings{
+		OrganizationID:         *body.OrganizationID,
+		WorkUnitsEnabled:       *body.WorkUnitsEnabled,
+		WorkUnitsDailyCap:      *body.WorkUnitsDailyCap,
+		BusinessMemoryEnabled:  *body.BusinessMemoryEnabled,
+		BusinessMemoryDailyCap: *body.BusinessMemoryDailyCap,
+		IsDefault:              *body.IsDefault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsUnauthorized builds a adminChatAnalysis
+// service upsertBusinessMemorySettings endpoint unauthorized error.
+func NewUpsertBusinessMemorySettingsUnauthorized(body *UpsertBusinessMemorySettingsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsForbidden builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint forbidden error.
+func NewUpsertBusinessMemorySettingsForbidden(body *UpsertBusinessMemorySettingsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsBadRequest builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint bad_request error.
+func NewUpsertBusinessMemorySettingsBadRequest(body *UpsertBusinessMemorySettingsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsNotFound builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint not_found error.
+func NewUpsertBusinessMemorySettingsNotFound(body *UpsertBusinessMemorySettingsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsConflict builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint conflict error.
+func NewUpsertBusinessMemorySettingsConflict(body *UpsertBusinessMemorySettingsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsUnsupportedMedia builds a adminChatAnalysis
+// service upsertBusinessMemorySettings endpoint unsupported_media error.
+func NewUpsertBusinessMemorySettingsUnsupportedMedia(body *UpsertBusinessMemorySettingsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsInvalid builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint invalid error.
+func NewUpsertBusinessMemorySettingsInvalid(body *UpsertBusinessMemorySettingsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsInvariantViolation builds a adminChatAnalysis
+// service upsertBusinessMemorySettings endpoint invariant_violation error.
+func NewUpsertBusinessMemorySettingsInvariantViolation(body *UpsertBusinessMemorySettingsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsUnexpected builds a adminChatAnalysis service
+// upsertBusinessMemorySettings endpoint unexpected error.
+func NewUpsertBusinessMemorySettingsUnexpected(body *UpsertBusinessMemorySettingsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertBusinessMemorySettingsGatewayError builds a adminChatAnalysis
+// service upsertBusinessMemorySettings endpoint gateway_error error.
+func NewUpsertBusinessMemorySettingsGatewayError(body *UpsertBusinessMemorySettingsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1134,6 +1547,12 @@ func ValidateGetSettingsResponseBody(body *GetSettingsResponseBody) (err error) 
 	if body.WorkUnitsDailyCap == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("work_units_daily_cap", "body"))
 	}
+	if body.BusinessMemoryEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_enabled", "body"))
+	}
+	if body.BusinessMemoryDailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_daily_cap", "body"))
+	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
@@ -1145,6 +1564,16 @@ func ValidateGetSettingsResponseBody(body *GetSettingsResponseBody) (err error) 
 	if body.WorkUnitsDailyCap != nil {
 		if *body.WorkUnitsDailyCap > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.work_units_daily_cap", *body.WorkUnitsDailyCap, 10000, false))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 0, true))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 10000, false))
 		}
 	}
 	return
@@ -1162,6 +1591,12 @@ func ValidateUpsertWorkUnitsSettingsResponseBody(body *UpsertWorkUnitsSettingsRe
 	if body.WorkUnitsDailyCap == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("work_units_daily_cap", "body"))
 	}
+	if body.BusinessMemoryEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_enabled", "body"))
+	}
+	if body.BusinessMemoryDailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_daily_cap", "body"))
+	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
@@ -1173,6 +1608,60 @@ func ValidateUpsertWorkUnitsSettingsResponseBody(body *UpsertWorkUnitsSettingsRe
 	if body.WorkUnitsDailyCap != nil {
 		if *body.WorkUnitsDailyCap > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.work_units_daily_cap", *body.WorkUnitsDailyCap, 10000, false))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 0, true))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 10000, false))
+		}
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsResponseBody runs the validations
+// defined on UpsertBusinessMemorySettingsResponseBody
+func ValidateUpsertBusinessMemorySettingsResponseBody(body *UpsertBusinessMemorySettingsResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkUnitsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("work_units_enabled", "body"))
+	}
+	if body.WorkUnitsDailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("work_units_daily_cap", "body"))
+	}
+	if body.BusinessMemoryEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_enabled", "body"))
+	}
+	if body.BusinessMemoryDailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_daily_cap", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.WorkUnitsDailyCap != nil {
+		if *body.WorkUnitsDailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.work_units_daily_cap", *body.WorkUnitsDailyCap, 0, true))
+		}
+	}
+	if body.WorkUnitsDailyCap != nil {
+		if *body.WorkUnitsDailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.work_units_daily_cap", *body.WorkUnitsDailyCap, 10000, false))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 0, true))
+		}
+	}
+	if body.BusinessMemoryDailyCap != nil {
+		if *body.BusinessMemoryDailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 10000, false))
 		}
 	}
 	return
@@ -1648,6 +2137,250 @@ func ValidateUpsertWorkUnitsSettingsUnexpectedResponseBody(body *UpsertWorkUnits
 // ValidateUpsertWorkUnitsSettingsGatewayErrorResponseBody runs the validations
 // defined on upsertWorkUnitsSettings_gateway_error_response_body
 func ValidateUpsertWorkUnitsSettingsGatewayErrorResponseBody(body *UpsertWorkUnitsSettingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsUnauthorizedResponseBody runs the
+// validations defined on
+// upsertBusinessMemorySettings_unauthorized_response_body
+func ValidateUpsertBusinessMemorySettingsUnauthorizedResponseBody(body *UpsertBusinessMemorySettingsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsForbiddenResponseBody runs the
+// validations defined on upsertBusinessMemorySettings_forbidden_response_body
+func ValidateUpsertBusinessMemorySettingsForbiddenResponseBody(body *UpsertBusinessMemorySettingsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsBadRequestResponseBody runs the
+// validations defined on upsertBusinessMemorySettings_bad_request_response_body
+func ValidateUpsertBusinessMemorySettingsBadRequestResponseBody(body *UpsertBusinessMemorySettingsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsNotFoundResponseBody runs the
+// validations defined on upsertBusinessMemorySettings_not_found_response_body
+func ValidateUpsertBusinessMemorySettingsNotFoundResponseBody(body *UpsertBusinessMemorySettingsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsConflictResponseBody runs the
+// validations defined on upsertBusinessMemorySettings_conflict_response_body
+func ValidateUpsertBusinessMemorySettingsConflictResponseBody(body *UpsertBusinessMemorySettingsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsUnsupportedMediaResponseBody runs the
+// validations defined on
+// upsertBusinessMemorySettings_unsupported_media_response_body
+func ValidateUpsertBusinessMemorySettingsUnsupportedMediaResponseBody(body *UpsertBusinessMemorySettingsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsInvalidResponseBody runs the validations
+// defined on upsertBusinessMemorySettings_invalid_response_body
+func ValidateUpsertBusinessMemorySettingsInvalidResponseBody(body *UpsertBusinessMemorySettingsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsInvariantViolationResponseBody runs the
+// validations defined on
+// upsertBusinessMemorySettings_invariant_violation_response_body
+func ValidateUpsertBusinessMemorySettingsInvariantViolationResponseBody(body *UpsertBusinessMemorySettingsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsUnexpectedResponseBody runs the
+// validations defined on upsertBusinessMemorySettings_unexpected_response_body
+func ValidateUpsertBusinessMemorySettingsUnexpectedResponseBody(body *UpsertBusinessMemorySettingsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertBusinessMemorySettingsGatewayErrorResponseBody runs the
+// validations defined on
+// upsertBusinessMemorySettings_gateway_error_response_body
+func ValidateUpsertBusinessMemorySettingsGatewayErrorResponseBody(body *UpsertBusinessMemorySettingsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

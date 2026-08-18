@@ -20,7 +20,7 @@ export function MembersTab(): JSX.Element {
         </Text>
       </div>
 
-      <div className="border-border bg-muted/20 flex flex-col items-center gap-4 rounded-lg border py-12">
+      <div className="border-border bg-muted/20 flex flex-col items-center gap-4 border py-12">
         <Users className="text-muted-foreground h-10 w-10" />
         <div className="text-center">
           <Text variant="body" className="font-medium">

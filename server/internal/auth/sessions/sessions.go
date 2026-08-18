@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -80,7 +81,7 @@ func NewManager(
 	return &Manager{
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		billingRepo:  billingRepo,
@@ -119,9 +120,14 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	if session.ActiveOrganizationID == "" {
-		// Populate IsAdmin from cached user info. A cache miss leaves it false
-		// (safe default). No org membership check needed for org-less sessions.
-		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+		// Organization-less sessions still need identity attributes for
+		// request handling and audit attribution.
+		userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID)
+		if err == nil {
+			email := userInfo.Email
+			authCtx.Email = &email
+			authCtx.IsAdmin = userInfo.Admin
+		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
@@ -133,11 +139,15 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
 
 	if !ok {
-		if !authCtx.IsAdmin {
+		// The shared demo org has no membership rows by design — any
+		// authenticated user may hold a session pointed at it.
+		isDemo := session.ActiveOrganizationID == constants.DemoOrganizationID
+		if !authCtx.IsAdmin && !isDemo {
 			return ctx, oops.C(oops.CodeForbidden)
 		}
-		// Admin visiting a customer org they don't belong to — fall back to
-		// cached user info for the email the auth context needs.
+		// Admin visiting a customer org they don't belong to (or any user in
+		// the demo org) — fall back to cached user info for the email the
+		// auth context needs.
 		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
 			email = userInfo.Email
 		}

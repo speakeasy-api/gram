@@ -7,6 +7,16 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
+var Trial = Type("Trial", func() {
+	Attribute("started_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("ends_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Required("started_at", "ends_at")
+})
+
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(security.Session)
@@ -55,6 +65,8 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
+			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
 		})
 
 		Result(func() {
@@ -65,6 +77,11 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
+			Param("org_name")
+			// A top-level browser navigation reaches this endpoint and carries
+			// no custom headers, so `email` has to be a query param. The
+			// request logging middleware redacts it from logged URLs.
+			Param("email")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
@@ -106,6 +123,33 @@ var _ = Service("auth", func() {
 		Meta("openapi:operationId", "switchAuthScopes")
 		Meta("openapi:extension:x-speakeasy-name-override", "switchScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
+	})
+
+	Method("enterDemo", func() {
+		Description("Switches the current session into the shared read-only demo organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("session_token", "session_cookie")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.enterDemo")
+			security.SessionHeader()
+			Response(StatusOK, func() {
+				security.WriteSessionCookie()
+				security.SessionHeader()
+			})
+		})
+
+		Meta("openapi:operationId", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-name-override", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnterDemo"}`)
 	})
 
 	Method("logout", func() {
@@ -172,6 +216,9 @@ var _ = Service("auth", func() {
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
+			Attribute("trial", Trial, func() {
+				Meta("struct:tag:json", "trial")
+			})
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")

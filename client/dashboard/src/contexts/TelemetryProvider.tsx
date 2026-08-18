@@ -3,7 +3,7 @@ import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
 import { datadogRum } from "@datadog/browser-rum";
 import {
-  TelemetryContext,
+  TelemetryStateProvider,
   nullTelemetry,
   testTelemetry,
   devTelemetry,
@@ -80,8 +80,11 @@ export const TelemetryProvider = (props: {
   }
 
   return (
-    <TelemetryContext.Provider value={value}>
+    <TelemetryStateProvider
+      telemetry={value}
+      featureFlagsInitiallyAvailable={value !== ph}
+    >
       {props.children}
-    </TelemetryContext.Provider>
+    </TelemetryStateProvider>
   );
 };

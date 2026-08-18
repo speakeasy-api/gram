@@ -1,9 +1,10 @@
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button as UiButton } from "@/components/ui/Button";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
@@ -24,6 +25,7 @@ import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/detail/settings-section";
 import {
   SkillPickerDialog,
   type SkillPickerResult,
@@ -37,13 +39,10 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
-  searchQuery,
   viewMode,
   onMutated,
 }: {
   pluginId: string;
-  /** Page-level search query; narrows the listed skill distributions. */
-  searchQuery: string;
   /** Page-level entry layout shared with the server section. */
   viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
@@ -52,6 +51,7 @@ export function PluginSkillsSection({
   const project = useProject();
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -73,7 +73,7 @@ export function PluginSkillsSection({
 
   // Case-insensitive match on the card's visible labels: the skill display
   // name and its mono slug-style name.
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
   const filteredDistributions = useMemo(() => {
     if (!normalizedSearch) return distributions;
     return distributions.filter(
@@ -140,7 +140,7 @@ export function PluginSkillsSection({
       />
     );
   } else if (!isMembershipLoaded) {
-    listContent = <Skeleton className="h-24 w-full rounded-xl" />;
+    listContent = <Skeleton className="h-24 w-full" />;
   } else if (distributions.length === 0) {
     listContent = (
       <SectionEmptyState
@@ -186,49 +186,53 @@ export function PluginSkillsSection({
   }
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-3">
-        <div className="border-border flex-1 border-t" />
-        <div className="flex shrink-0 items-center gap-2">
-          <Text
-            small
-            muted
-            className="font-mono text-xs tracking-wide uppercase"
-          >
-            Skills
-          </Text>
+    <SettingsSection>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SettingsSection.Header>
+          <div className="flex items-center gap-2">
+            <SettingsSection.Title>Skills</SettingsSection.Title>
+            {/* The query drains page by page, so a count shown mid-drain would
+                read as the total and then jump. Wait for the full membership. */}
+            {isMembershipLoaded && distributions.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                {distributions.length}
+              </span>
+            )}
+          </div>
+          <SettingsSection.Description>
+            Skills distributed to this plugin ship inside the plugin package and
+            reach everyone who installs it.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <div className="flex items-center gap-2">
           {distributions.length > 0 && (
-            <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-              {distributions.length}
-            </span>
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search skills"
+              className="h-9 w-56"
+            />
           )}
-        </div>
-        <div className="border-border flex-1 border-t" />
-      </div>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <Text small muted className="max-w-md">
-          Skills distributed to this plugin ship inside the plugin package and
-          reach everyone who installs it.
-        </Text>
-        <RequireScope
-          scope="skill:write"
-          resourceId={project.id}
-          level="component"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!isMembershipLoaded}
-            onClick={() => setIsAddSkillOpen(true)}
+          <RequireScope
+            scope="skill:write"
+            resourceId={project.id}
+            level="component"
           >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Skill</Button.Text>
-          </Button>
-        </RequireScope>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!isMembershipLoaded}
+              onClick={() => setIsAddSkillOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Skill</Button.Text>
+            </Button>
+          </RequireScope>
+        </div>
       </div>
-      <div className="mb-8">{listContent}</div>
+      {listContent}
 
       <SkillPickerDialog
         open={isAddSkillOpen}
@@ -241,7 +245,7 @@ export function PluginSkillsSection({
         emptyMessage="No skills available to add. Record a skill in this project first."
         onBatchComplete={handleAddSkillsComplete}
       />
-    </>
+    </SettingsSection>
   );
 }
 
@@ -259,7 +263,7 @@ function PluginSkillCard({
   const navigate = useNavigate();
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={() => {
         void navigate(routes.skills.detail.href(distribution.skillId));
@@ -309,7 +313,7 @@ function PluginSkillCard({
           </UiButton>
         </RequireScope>
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }
 

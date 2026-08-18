@@ -2,12 +2,16 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	authclient "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	authserver "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -15,10 +19,175 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
+
+func TestInfoTransport_TrialNull(t *testing.T) {
+	t.Parallel()
+
+	response := authserver.NewInfoResponseBody(&gen.InfoResult{
+		UserID:                "user-id",
+		UserEmail:             "user@example.com",
+		UserSignature:         nil,
+		UserDisplayName:       nil,
+		UserPhotoURL:          nil,
+		IsAdmin:               false,
+		ActiveOrganizationID:  "organization-id",
+		GramAccountType:       "test",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		Trial:                 nil,
+		Organizations:         nil,
+		SessionToken:          "session-token",
+		SessionCookie:         "session-cookie",
+	})
+
+	bodyJSON, err := json.Marshal(response)
+	require.NoError(t, err)
+	require.Contains(t, string(bodyJSON), `"trial":null`)
+
+	var body authclient.InfoResponseBody
+	require.NoError(t, json.Unmarshal(bodyJSON, &body))
+	require.NoError(t, authclient.ValidateInfoResponseBody(&body))
+
+	result := authclient.NewInfoResultOK(&body, "session-token", "session-cookie")
+	require.Nil(t, result.Trial)
+}
 
 func TestService_Info(t *testing.T) {
 	t.Parallel()
+
+	setupInfoRequest := func(t *testing.T) (context.Context, *testInstance, string) {
+		t.Helper()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+		session := sessions.Session{
+			SessionID:            t.Name(),
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		return ctx, instance, session.ActiveOrganizationID
+	}
+
+	insertTrial := func(t *testing.T, ctx context.Context, instance *testInstance, organizationID string, createdAt, endsAt time.Time, convertedAt, demotedAt *time.Time) {
+		t.Helper()
+
+		require.NoError(t, trialsRepo.New(instance.conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
+			OrganizationID: organizationID,
+			Tier:           "enterprise",
+			CreatedAt:      conv.ToPGTimestamptz(createdAt),
+			EndsAt:         conv.ToPGTimestamptz(endsAt),
+			ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),
+			DemotedAt:      conv.PtrToPGTimestamptz(demotedAt),
+		}))
+	}
+
+	timestampPtr := func(value time.Time) *time.Time {
+		return &value
+	}
+
+	t.Run("returns active trial", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, instance, organizationID := setupInfoRequest(t)
+		startedAt := time.Date(2100, time.August, 1, 12, 0, 0, 0, time.UTC)
+		endsAt := time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC)
+		insertTrial(t, ctx, instance, organizationID, startedAt, endsAt, nil, nil)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Equal(t, &gen.Trial{
+			StartedAt: "2100-08-01T12:00:00Z",
+			EndsAt:    "2100-08-15T12:00:00Z",
+		}, result.Trial)
+	})
+
+	t.Run("returns no trial when the organization has no trial row", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, instance, _ := setupInfoRequest(t)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Nil(t, result.Trial)
+	})
+
+	// An expired trial has to reach the dashboard so it can tell the user their
+	// trial ended instead of falling back to the generic never-trialed gate.
+	// Demotion is reported whether or not the clock ran out first: the query
+	// filters on conversion alone, so an organization demoted by hand mid-trial
+	// still resolves.
+	for _, test := range []struct {
+		name      string
+		endsAt    time.Time
+		demotedAt *time.Time
+	}{
+		{
+			name:      "expired",
+			endsAt:    time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC),
+			demotedAt: nil,
+		},
+		{
+			name:      "demoted",
+			endsAt:    time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC),
+			demotedAt: timestampPtr(time.Date(2026, time.August, 4, 13, 0, 0, 0, time.UTC)),
+		},
+		{
+			name:      "demoted before the trial ran out",
+			endsAt:    time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC),
+			demotedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+		},
+	} {
+		t.Run("returns "+test.name+" trial", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, instance, organizationID := setupInfoRequest(t)
+			insertTrial(t, ctx, instance, organizationID, time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC), test.endsAt, nil, test.demotedAt)
+
+			result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+			require.NoError(t, err)
+			require.Equal(t, &gen.Trial{
+				StartedAt: "2026-08-01T12:00:00Z",
+				EndsAt:    test.endsAt.Format(time.RFC3339),
+			}, result.Trial)
+		})
+	}
+
+	// A converted trial stays hidden so a paying customer never sees trial UI.
+	t.Run("does not return converted trial", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, instance, organizationID := setupInfoRequest(t)
+		insertTrial(
+			t,
+			ctx,
+			instance,
+			organizationID,
+			time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC),
+			time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC),
+			timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
+			nil,
+		)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Nil(t, result.Trial)
+	})
 
 	t.Run("successful info request for regular user", func(t *testing.T) {
 		t.Parallel()
@@ -421,6 +590,38 @@ func TestService_Info(t *testing.T) {
 		require.Equal(t, "Default", project.Name)
 		require.Equal(t, "default", string(project.Slug))
 	})
+}
+
+func TestService_Info_OrganizationlessSessionContinuesLogin(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.UserID = "organizationless-info-user"
+	userInfo.Email = "organizationless-info@example.com"
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	session := sessions.Session{
+		SessionID:            t.Name(),
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+		WorkOSSessionID:      "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	authedCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
+	require.NoError(t, err)
+	grants, ok := authz.GrantsFromContext(authedCtx)
+	require.True(t, ok)
+	require.Empty(t, grants)
+
+	result, err := instance.service.Info(authedCtx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.Equal(t, session.SessionID, result.SessionToken)
+	require.Empty(t, result.ActiveOrganizationID)
+	require.Equal(t, userInfo.UserID, result.UserID)
+	require.Empty(t, result.Organizations)
 }
 
 func TestService_Info_ProjectFiltering(t *testing.T) {

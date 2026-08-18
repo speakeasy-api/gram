@@ -272,6 +272,19 @@ func TestUpdateRiskPolicy_ShadowMCPPreservesAnotherPolicyGrant(t *testing.T) {
 		ShadowMcpAllowedUrls: []string{sharedURL},
 	})
 	require.NoError(t, err)
+
+	// Only one blocking shadow MCP policy may be enabled per project, so
+	// disable the first before creating the second. Its URL grants survive the
+	// disable (allowed urls were omitted, so no reconcile ran).
+	disabled := false
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      first.ID,
+		Name:    first.Name,
+		Enabled: &disabled,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{sharedURL}, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, first.ID))
+
 	second, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name:                 new("Shadow MCP Second"),
 		Sources:              []string{"shadow_mcp"},

@@ -36,10 +36,7 @@ export function MCPToolFilterScopesPanel({
   const hasExcluded = filters.excluded.length > 0;
 
   return (
-    <Stack
-      gap={3}
-      className="border-border bg-muted/20 mb-4 rounded-lg border p-4"
-    >
+    <Stack gap={3} className="border-border bg-muted/20 mb-4 border p-4">
       <Stack direction="horizontal" justify="space-between" align="center">
         <Text variant="small" className="font-medium">
           Tool filtering

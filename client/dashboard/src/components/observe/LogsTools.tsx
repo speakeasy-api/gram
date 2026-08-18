@@ -7,7 +7,6 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   FilterChip,
@@ -65,12 +64,14 @@ import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
-import { type BadgeProps } from "@/components/ui/Badge";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { Settings } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -672,6 +673,21 @@ function LogsToolsContent({
 }) {
   const orgRoutes = useOrgRoutes();
 
+  // Client-side roll-up of the loaded pages — there is no summary endpoint on
+  // this path, so the strip is labeled "loaded" to make the scope explicit.
+  const loadedStats = useMemo(() => {
+    let errors = 0;
+    let blocked = 0;
+    const servers = new Set<string>();
+    for (const trace of traces) {
+      const status = getStatusConfig(trace);
+      if (status?.label === "Error") errors += 1;
+      if (status?.label === "Blocked") blocked += 1;
+      servers.add(trace.targetId || trace.targetLabel);
+    }
+    return { errors, blocked, servers: servers.size };
+  }, [traces]);
+
   return (
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -743,6 +759,35 @@ function LogsToolsContent({
             </div>
           )}
 
+          {traces.length > 0 && (
+            <MetricCard.Group className="shrink-0">
+              <MetricCard
+                size="sm"
+                label="Traces · loaded"
+                value={traces.length}
+                tone="information"
+              />
+              <MetricCard
+                size="sm"
+                label="Errors · loaded"
+                value={loadedStats.errors}
+                tone={loadedStats.errors > 0 ? "destructive" : "neutral"}
+              />
+              <MetricCard
+                size="sm"
+                label="Blocked · loaded"
+                value={loadedStats.blocked}
+                tone={loadedStats.blocked > 0 ? "warning" : "neutral"}
+              />
+              <MetricCard
+                size="sm"
+                label="Servers · distinct"
+                value={loadedStats.servers}
+                tone="information"
+              />
+            </MetricCard.Group>
+          )}
+
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto border">
               <div className="bg-background relative flex h-full flex-col">
@@ -752,7 +797,7 @@ function LogsToolsContent({
                   </div>
                 )}
 
-                <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
+                <div className="text-eyebrow flex shrink-0 items-center gap-3 border-b px-5 py-2.5">
                   <div className="min-w-[150px] shrink-0">Timestamp</div>
                   <div className="w-5 shrink-0" />
                   <div className="min-w-0 flex-2">Source / Tool</div>
@@ -790,10 +835,10 @@ function LogsToolsContent({
                 </div>
 
                 {traces.length > 0 && (
-                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
-                    <span>
+                  <div className="flex shrink-0 items-center gap-4 border-t px-5 py-3">
+                    <span className="text-eyebrow">
                       {traces.length} {traces.length === 1 ? "trace" : "traces"}
-                      {hasNextPage && " • Scroll to load more"}
+                      {hasNextPage && " · Scroll to load more"}
                     </span>
                   </div>
                 )}
@@ -852,9 +897,31 @@ function LogsToolsTableContent({
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Spinner className="mr-0 size-5" />
-        <span>Loading tool logs...</span>
+      <div aria-label="Loading tool logs" role="status">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 border-b px-5 py-2.5 last:border-b-0"
+          >
+            <div className="min-w-[150px] shrink-0">
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <div className="w-5 shrink-0" />
+            <div className="flex min-w-0 flex-2 items-center gap-2">
+              <Skeleton className="h-5 w-20 shrink-0" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <div className="min-w-[200px] flex-1">
+              <Skeleton className="h-3 w-36" />
+            </div>
+            <div className="min-w-28 shrink-0">
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <div className="flex min-w-20 shrink-0 justify-center">
+              <Skeleton className="h-3 w-12" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -974,7 +1041,7 @@ function LogsToolsTraceRow({
   const userLabel = trace.userLabel || "—";
 
   return (
-    <div className="border-border/50 border-b last:border-b-0">
+    <div className="border-b last:border-b-0">
       <div
         role="button"
         tabIndex={0}
@@ -982,10 +1049,13 @@ function LogsToolsTraceRow({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") onToggle();
         }}
-        className="hover:bg-muted/50 flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors"
+        className="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left"
       >
-        <div className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-xs">
-          {timeAgo}
+        <div
+          className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-xs tabular-nums"
+          title={timeAgo}
+        >
+          {format(timestamp, "MMM d HH:mm:ss")}
         </div>
 
         <div className="flex w-5 shrink-0 items-center justify-center">
@@ -997,12 +1067,7 @@ function LogsToolsTraceRow({
 
         <div className="flex min-w-0 flex-2 items-center gap-2">
           <div className="group/server relative flex shrink-0 items-center">
-            <span
-              className={cn(
-                "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs",
-                targetConfig.className,
-              )}
-            >
+            <span className="border-border text-muted-foreground shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
               {targetConfig.label}
             </span>
             {editDialogProps && (
@@ -1012,7 +1077,7 @@ function LogsToolsTraceRow({
                   e.stopPropagation();
                   setEditDialogOpen(true);
                 }}
-                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 shadow-sm transition-colors group-hover/server:visible"
+                className="text-muted-foreground hover:text-foreground bg-card border-border invisible absolute -right-6 size-6 border p-1 transition-colors group-hover/server:visible"
                 aria-label="Edit display name"
               >
                 <Icon name="pencil" className="size-3" />
@@ -1026,7 +1091,7 @@ function LogsToolsTraceRow({
                 {" /"}
               </span>
             )}
-            <span className="truncate font-mono text-xs">
+            <span className="text-foreground truncate font-mono text-xs font-medium">
               {formatToolName(trace.toolName)}
             </span>
           </div>
@@ -1062,23 +1127,28 @@ function LogsToolsTraceRow({
 
         <div className="flex min-w-20 shrink-0 justify-center">
           {statusConfig && (
-            <Badge variant={statusConfig.variant}>
-              <Badge.Text>{statusConfig.label}</Badge.Text>
-            </Badge>
+            <span
+              className={cn(
+                "font-mono text-xs lowercase",
+                statusConfig.className,
+              )}
+            >
+              {statusConfig.label}
+            </span>
           )}
         </div>
       </div>
 
       {isExpanded && (
-        <>
+        <div className="border-border border-t border-l-2">
           {trace.hookStatus === "blocked" && (
-            <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3 text-xs">
+            <div className="flex items-start gap-3 border-b px-5 py-3 text-xs">
               <Icon
                 name="shield-alert"
-                className="text-warning mt-0.5 size-4 shrink-0"
+                className="mt-0.5 size-4 shrink-0 text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]"
               />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="text-warning font-semibold tracking-wide uppercase">
+                <div className="font-mono tracking-wide uppercase text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]">
                   Blocked
                 </div>
                 <div className="text-foreground wrap-break-words ">
@@ -1096,7 +1166,7 @@ function LogsToolsTraceRow({
             from={from}
             to={to}
           />
-        </>
+        </div>
       )}
 
       {editDialogProps && (
@@ -1116,63 +1186,51 @@ function LogsToolsTraceRow({
   );
 }
 
+// One neutral tag treatment for every target type — the type is metadata, not
+// a signal, so it no longer carries its own color.
 function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   switch (targetType) {
     case "hosted_mcp_server":
-      return {
-        label: "Hosted MCP",
-        className: "bg-primary/15 text-primary",
-      };
+      return { label: "Hosted MCP" };
     case "tunneled_mcp_server":
-      return {
-        label: "Tunneled MCP",
-        className: "bg-primary/15 text-primary",
-      };
+      return { label: "Tunneled MCP" };
     case "shadow_mcp_server":
-      return {
-        label: "Shadow MCP",
-        className:
-          "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-300",
-      };
+      return { label: "Shadow MCP" };
     case "skill":
-      return {
-        label: "Skill",
-        className:
-          "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300",
-      };
+      return { label: "Skill" };
     case "local_tool":
     default:
-      return {
-        label: "Local Tools",
-        className: "bg-muted/50 text-primary",
-      };
+      return { label: "Local Tools" };
   }
 }
 
+// Status renders as a plain mono word: color only where attention is due
+// (error red, blocked orange); success and pending stay muted ink.
 function getStatusConfig(trace: ToolUsageTraceSummary): {
-  variant: NonNullable<BadgeProps["variant"]>;
+  className: string;
   label: string;
 } | null {
   if (trace.hookStatus) {
     switch (trace.hookStatus) {
       case "blocked":
         return {
-          variant: "warning",
+          className:
+            "text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]",
           label: "Blocked",
         };
       case "failure":
         return {
-          variant: "destructive",
+          className: "text-destructive",
           label: "Error",
         };
       case "success":
         return {
-          variant: "success",
+          className: "text-muted-foreground",
           label: "Success",
         };
       case "pending":
         return {
-          variant: "neutral",
+          className: "text-muted-foreground",
           label: "Pending",
         };
       default:
@@ -1183,13 +1241,13 @@ function getStatusConfig(trace: ToolUsageTraceSummary): {
   if (trace.httpStatusCode !== undefined) {
     if (trace.httpStatusCode >= 400) {
       return {
-        variant: "destructive",
+        className: "text-destructive",
         label: "Error",
       };
     }
     if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) {
       return {
-        variant: "success",
+        className: "text-muted-foreground",
         label: "Success",
       };
     }

@@ -212,6 +212,7 @@ func newGitHubDefinition() Definition {
 			TimestampSkew:   0,
 		},
 		SupportedEventTypes: supportedGitHubEventTypes,
+		Authenticate:        nil,
 		PreVerify:           nil,
 		Ingest:              githubIngest,
 	}

@@ -19,11 +19,6 @@ import (
 // helper.
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-	for i := range grants {
-		if grants[i].Effect == "" {
-			grants[i].Effect = authz.PolicyEffectAllow
-		}
-	}
 	return authz.GrantsToContext(ctx, grants)
 }
 

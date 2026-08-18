@@ -1,5 +1,854 @@
 # server
 
+## 1.14.0
+
+### Minor Changes
+
+- 7a88cd7: Add session-portability endpoints to the agent service: `agent.getSessionMeta` resolves picker metadata (title, chat id, last activity) for captured sessions the calling user owns — per-user keys only, owner-matched, personal-account sessions included for their owner — and `agent.reportSessionMoved` records a content-free `chat_session:move` audit event when the device agent moves a session to another harness. Both are gated behind the new `session_portability` product feature.
+- 8cb9507: Session portability can now mint short-lived capability URLs for handoff documents. The device agent uploads the handoff it rendered locally via the new `agent.createSessionHandoff` endpoint (per-user key only) and receives a burn-after-read URL served at `/shared/handoffs/{token}` — letting a cloud agent or another machine continue the session. Links expire after a clamped TTL (default 15 minutes), die on first read, and every mint lands as a content-free `chat_session:handoff_export` audit event.
+
+### Patch Changes
+
+- d1e0a84: Activate pay-as-you-go billing atomically when Stripe confirms a completed checkout, including replay-safe webhook processing, subscription ownership validation, trial conversion, and entitlement setup for organizations without a prior trial.
+- 3a8f15f: Add pay-as-you-go as a first-class billing tier across server entitlements, management API tier data, and dashboard and admin tier controls. PAYG organizations receive enterprise feature access with capped PAYG billing behavior, and Stripe-authoritative tier state cannot be overwritten by stale Polar data.
+- 8cb9507: Persist the captured agent session's working directory (`session.cwd`) onto chats at hook ingest. The value was already on the wire for canonical (hook.ingest.v1), legacy Claude, and legacy Codex events but previously discarded; it is groundwork for session portability (materializing a moved session into the right project directory).
+- b938a56: Allow eligible organization admins to start a self-serve pay-as-you-go Stripe checkout from the billing page. The server reuses a stable Stripe customer, preserves active trials, and records the checkout request in the audit log.
+
+## 1.13.0
+
+### Minor Changes
+
+- 340f6f3: Add a client detail sheet for user-session clients with a CIMD metadata
+  refresh. The per-client view now exposes the metadata document's cache state
+  (source URL, last successful read, cache expiry, ETag), and a new
+  `userSessionClients.refreshCIMD` endpoint forces a re-read: it purges the
+  stored validators before fetching, so a host answering 304 Not Modified cannot
+  re-confirm the copy being discarded, and it carries a 30s per-client
+  server-side cooldown because purge-then-fetch deliberately bypasses the
+  document cache. The dashboard's Clients listing opens the sheet from each row;
+  DCR clients show the base detail without the CIMD panel.
+- 0e5a8f7: Add `externalKeys.verifyGcpKms`, which proves end to end that Gram can reach an
+  organization's GCP KMS key and use it to sign: it reads the key's public half,
+  confirms the algorithm matches the one recorded, signs a probe digest, and
+  verifies that signature locally. Nothing is persisted. The result reports a
+  machine-readable outcome alongside human-readable detail, so a missing
+  `roles/cloudkms.signerVerifier` grant, a DISABLED key version, an algorithm
+  mismatch, and a transient failure worth retrying are all distinguishable rather
+  than one opaque failure. It performs a real signing operation billed to the
+  key's owner, so it requires `org:admin` and is rate limited per organization.
+
+  Deleting an external credential is now refused while a live external key still
+  references it. Previously the delete succeeded and silently left every key
+  behind that credential unusable, with the breakage surfacing only at signing
+  time.
+
+- 92cef9b: MCP approval surfaces are now gated on `org:admin`, the same authorization as the Observe pages and the policies that do the blocking. The dedicated `mcp_approval:read`/`mcp_approval:decide` scope family is retired: it required per-organization grant provisioning that existing organizations never received, leaving every approval surface answering 403 in production. Org admins now work on deploy with nothing to provision. Delegable reviewer scopes can return additively if a customer ever needs non-admin reviewers.
+- 6d2507e: Add organization-tier and platform-tier asset upload endpoints. `organizationAssets.uploadImage` lets org admins upload images owned by the organization (for example remote identity provider logos), and `adminAssets.uploadImage` lets platform admins upload platform-wide images. Project-tier asset writes now also record the owning `organization_id` (dual-write), including repairing it on upsert conflicts, ahead of a manual backfill of existing rows.
+- bd8e8a2: The MCP approval workflow's rollout gate moves from the `mcp_approval` product feature to the `gram-mcp-approval` PostHog flag, targeted by organization group like other rollout gates. The product feature had no enablement surface and was never on anywhere, so every approval surface answered 403; the PostHog flag is toggled from the console with no deploy or database access. The gate fails closed, and blocked-server redemptions in orgs off the flag still fall back to legacy bypass requests.
+- 60f8609: The Watchdog findings KPI now follows the selected time range. The tile was
+  hardwired to the trailing 24 hours ending at the window's edge, so picking a
+  different range with the date picker left the number unchanged while every
+  other tile updated. The riskSignals result now reports window-scoped
+  `findings` / `previous_findings` (replacing `findings_24h` /
+  `previous_findings_24h`), computed from the same deduplicated window counts
+  the risk score already used, and the tile compares against the equal-length
+  previous period like its neighbors.
+
+### Patch Changes
+
+- 038c7eb: Opening a project from an organization record could hang forever. Every link
+  into a project now addresses it by id, and `project.get` resolves a slug to one
+  project before it reads that project's detail.
+
+  Project slugs are unique only within an organization, so a slug the whole
+  platform uses matches one project per organization. The detail read counts six
+  child tables for every row it matches, and two of those counts have no index on
+  `project_id` to use, so a common slug cost one full table scan per organization
+  and the read never returned. It now resolves the slug to a single id first and
+  counts once.
+
+  `project.get` also takes the organization now. Inside an organization record the
+  project is read scoped to it, so a slug names one project rather than an
+  arbitrary one, and a project outside that organization is reported as not found
+  whichever way it is addressed.
+
+- b2640a3: Classify AI integration poll failures caused by provider outages (persistent 429/5xx or transport errors) so they skip the in-run Temporal retries and defer to the schedule-level failure backoff, and surface the provider's final HTTP status and error body when the guardian retry client exhausts its budget instead of the opaque "giving up" message.
+- 18ab66a: Extending an enterprise trial now writes an entry to the organization's audit
+  feed, so it is no longer the one trial lifecycle event that leaves no trace
+  alongside a trial being armed, demoted and re-armed. The entry names the
+  Speakeasy team rather than the operator who acted, and carries the end date the
+  trial held before the extension, the end date it holds now, and the number of
+  days applied. The write and the entry commit together, so an extension can never
+  land silently.
+
+  The activity log reads the new entry as "extended enterprise trial", alongside
+  the "started", "ended" and "restarted" entries it already gives the rest of the
+  trial lifecycle.
+
+- 6002b21: Extend canonical identity folding to the hooks pages and unproxied MCP usage:
+  behind the same rollout flag, the user dimension, unique-user counts, and
+  email drill filters fold one employee's linked emails into one identity
+  across the hooks summary, skill breakdown, hooks breakdown, timeseries, and
+  unproxied MCP server user usage. Literal behavior is unchanged with the flag
+  off.
+- 472b0f2: Fold the employee list (searchUsers raw-logs path) through the canonical identity map behind the same rollout flag, with a dedicated list-divergence shadow mode.
+- 0e5a8f7: Make external credentials and external keys exercisable in local development.
+  The real GCP resolver screens customer-supplied service accounts against Gram's
+  own project, which requires Gram to be running as a user-managed service
+  account, so on a developer machine every credential and key write failed closed
+  and the feature could not be run at all. Local development now gets a stub
+  identity and an in-process KMS signer, selected the same way the billing and
+  WorkOS stubs already are.
+
+  The stand-in signs with RS256 by default, configurable through
+  `GRAM_LOCAL_KMS_SIGNING_ALGORITHM`. It is deliberately independent of what any
+  key records, so a key recorded with the other algorithm still reports a
+  mismatch: agreeing by construction is what the verify probe exists to disprove.
+
+- fd32c6f: Add a glint rule (no-raw-user-email-filter) forbidding raw user_email
+  matching or bucketing in squirrel-built ClickHouse queries: the email
+  dimension must go through the canonical identity fold so one employee's
+  linked emails read as one identity. Known legacy sites carry explicit
+  nolint annotations that double as the GA cleanup checklist.
+- cdc15c3: Persist the captured agent session's working directory (`session.cwd`) onto chats at hook ingest. The value was already on the wire for canonical (hook.ingest.v1), legacy Claude, and legacy Codex events but previously discarded; it is groundwork for session portability (materializing a moved session into the right project directory).
+- 1c1a561: Record `last_used_at` on user sessions and remote sessions when they carry traffic, so a connection that has not been used is distinguishable from one whose token merely keeps refreshing. Writes are coalesced to a five-minute window on both token paths and are best-effort, so they never fail a request that holds a valid credential.
+- a268d10: Withhold Polar `credits` and `included_credits` from non-platform-admin callers of `usage.getPeriodUsage`. The fields are now optional and omitted unless `authCtx.IsAdmin` is set, matching the existing admin-only billing meter in the dashboard.
+
+## 1.12.0
+
+### Minor Changes
+
+- ed97a31: The MCP evidence dossier gains three deterministic sources. The assembler now
+  consults the code host about a package's declared source repository (stars,
+  forks, contributors, commit recency, archived status), asks OSV.dev which
+  published vulnerability advisories name the package, and reads the domain
+  registry's registration record for a remote server's registrable domain.
+  Package registries also surface their declared repository and homepage URLs.
+  Each source follows the dossier's existing contract — found, not-found, and
+  could-not-look stay distinct, with failures recorded as gaps — and the
+  approval page renders the new facts in the evidence panel, including a
+  dedicated advisories group where checked-and-clean is shown as a finding
+  rather than an absence.
+- bbaf839: Adds the MCP approval management API. Admins can list servers awaiting a decision, open one to see the evidence gathered for it alongside any previous decisions, and record an approval or denial with a rationale and an explicit set of principals it covers. Gated by two new permissions so reviewing the queue and committing the organisation to a server can be granted separately. Also generates the TypeScript SDK bindings and React Query hooks for the new endpoints.
+- 798360b: A shadow-MCP block link now redeems into the MCP approval workflow: the blocked employee's ask attaches as a requester on the server's single review — deduplicated by canonical URL, evidence gathered — instead of minting a per-user bypass request. The redemption endpoint reports what the token turned into, keeps the legacy bypass request only for identity-only servers and organizations without the approval feature, and the standalone Approval Requests review page retires — the Shadow MCP servers table is the one review surface. The command palette surfaces pending access requests in its place.
+- 798360b: MCP approval decisions now enforce: an approval replaces the server's risk-policy bypass audience with the decision's blast radius (defaulting to everyone, stored explicitly), and a denial revokes it — in the same transaction that records the decision, through the same grant machinery the shadow-MCP allow/block controls use, so the policy evaluator is unchanged. Under allow-by-default policies the directions invert (deny writes the block rule, approve clears it), and an approval narrower than everyone is rejected when no block-by-default policy can express it rather than silently widening. Granted principal URNs are validated at intake now that they become enforcement state.
+- e6a470f: Assembles the evidence document at approval-request intake. Every admission now gathers the deterministic signals — resolved identity, package-registry metadata, and the org's own traffic exposure — into the versioned document the approval surface renders and decisions freeze. Found, not-published, and could-not-look are distinct outcomes, per-source failures are recorded as gaps inside the document rather than read as clean, and a flaky registry can delay evidence but never lose an admission. The optional research agent stays deliberately outside this document: web-sourced findings keep their own trust tier and lifecycle, and the deterministic document doubles as the agent's briefing when an admin later asks for a run.
+- bbaf839: Adds org-exposure signals to the MCP approval evidence set: whether the requesting project is already talking to a server, since when, how often, and how many distinct people have called it. This is the only observed signal in the approval workflow — everything else a server or registry declares about itself — and it is what tells a reviewer what denying a request would actually cost.
+- e6a470f: Adds approval-request intake to the MCP approval API. Members can ask for a server to be reviewed by URL or launch command — no permission grant needed, matching the block and bypass surfaces — and admins can promote a risk-policy bypass request into the review queue, carrying the blocked employee's identity and justification with it. Repeat asks for the same server attach to the existing review rather than opening a second one, identity resolution runs at intake so evidence has something to hang off by the time an admin looks, and a re-request reopens a denied review with its decision history intact.
+- 0c7f9fc: Evidence gathering for MCP approval requests now probes remote servers directly: their published OAuth metadata through the standard well-known endpoints (auth mode, scopes, dynamic client registration), and their tool declarations through an unauthenticated tools/list assessed for declared and schema-implied capability. Both are the server's own words about itself, gathered without credentials — a server that refuses to answer records a gap, never a clean empty section.
+
+  When the server refuses an unauthenticated tools/list, the gather now falls back to its MCP registry catalog entry, which carries the registry's copy of the tool declarations — labeled as registry-sourced, one step further from the server. A catalog match also fills a new provenance section (official flag, lifecycle status, publish/update recency, visitor estimates), and a new `mcpApproval.refreshEvidence` endpoint re-runs every source on demand, replacing the request's current evidence while leaving frozen decision snapshots untouched.
+
+- e6a470f: Server evidence decouples from asking: mcpApproval.ensureServerReview resolves the evidence dossier for any server URL, opening one in a new unreviewed status when none exists. Dossiers stay out of the decision queue and upgrade in place when someone actually requests the server, so evidence can be inspected before — or without — any review being decided.
+- 798360b: Retire the legacy Shadow MCP inventory enforcement endpoints — upsert/delete policy bypass and block/unblock server — now that every allow and deny travels through a recorded MCP approval decision. resolveShadowMCPInventoryRequest stays while pre-approval bypass requests drain.
+- bbaf839: Shadow MCP inventory servers now carry their MCP approval request state. Approval request summaries expose the inventory server slug for server_url targets, and inventory list/detail responses include the approval request (id, status, requester count) tracking each server, joining the two surfaces on the same canonical URL identity.
+- 798360b: The Shadow MCP page becomes one servers table: the inventory list now unions in review-only targets (requested-but-unobserved URLs and stdio commands, marked by a new target_kind field) on the first page, and the separate Access Requests tab is gone. Every row carries its review state with pending decisions sorted first and filterable; URL rows open the server page, stdio rows open the review sheet.
+
+### Patch Changes
+
+- 4304347: Platform admins can now set the account type on many organizations in one call.
+  The new admin endpoint takes a list of organization ids and one account type,
+  writes them in a single statement, and reports back the ids it wrote and the ids
+  from the request that matched no organization. A stale id therefore costs that
+  one row rather than the whole batch. One call carries at most 1000 ids.
+
+  Both admin write paths now accept only `free`, `pro` and `enterprise`, matched
+  exactly. The single-organization update endpoint used to take any string, so a
+  typo or a difference of capitalisation was written straight to the record. A
+  value outside the list is now refused before anything is written, and the refusal
+  names it. Existing records holding some other account type are left alone.
+
+  The admin dashboard's bulk selection and confirmation step follow.
+
+- c8b377a: Platform admins can now create an organization without leaving the admin app.
+  Until now the only way to open one was the WorkOS dashboard, followed by a wait
+  for the event sync to notice it, so setting up a customer meant working in two
+  tools and having no way to tell which step had actually landed. A new admin
+  endpoint creates the organization in WorkOS and in Gram in one call and reports
+  it back, ready for the existing list, detail and update endpoints.
+
+  The organization it creates is deliberately plain: no members, not whitelisted,
+  no trial, and on the free tier. Each of those is a separate decision with its
+  own endpoint, and creating an organization is not a way to make any of them.
+
+  The new organization is safe to create even while WorkOS is delivering the event
+  for it. Both writers derive the Gram organization id from the WorkOS one, so the
+  admin write and the event sync land on the same row whichever gets there first,
+  and an organization the sync already created keeps the slug it was given rather
+  than being renamed.
+
+  A deployment with no WorkOS configuration refuses the request and says so, rather
+  than minting an organization nobody could log into. If WorkOS refuses the create,
+  Gram stores nothing and the request fails as an upstream error, with the detail in
+  the server logs rather than in the response. If a later step fails, everything
+  Gram wrote is rolled back, but the WorkOS organization is already real and the
+  event sync creates a Gram row for it shortly afterwards.
+
+  Names are validated exactly as self-serve signup validates them, because both
+  paths now run the same validator: an organization created by an operator cannot
+  be named something a customer could not have named it.
+
+  The local development identity provider gained the two organization routes this
+  flow needs, so the whole thing can be exercised without a WorkOS account.
+
+  The admin dashboard button follows.
+
+- 1c02a8a: Platform admins can now disable an organization and undo it. Until now the only
+  thing that could disable an organization was the WorkOS `organization.deleted`
+  webhook, and nothing anywhere could re-enable one, so an operator had no way to
+  cut off access or to reverse a disable that turned out to be wrong. Two admin
+  endpoints cover both directions and report the organization back in its new
+  state, which the existing list and detail endpoints already surface.
+
+  Disabling is keyed on the Gram organization id rather than the WorkOS one, so an
+  organization that was never linked to WorkOS can be disabled like any other.
+  Disabling an organization that is already disabled keeps the original timestamp
+  instead of moving it, so the record of when access was cut stays true. Neither
+  direction touches the whitelist flag, which is the separate not-yet-approved
+  gate, nor the WorkOS webhook cursor, which only the webhook path may write.
+
+  All three organization writes now read the organization back by id alone, which
+  also corrects the existing update endpoint. An organization id and another
+  organization's slug can be the same string, and the read that produced the
+  response resolved either, so a write could return a different organization than
+  the one it changed. Addressing one of these writes by slug now returns a
+  not-found instead of a success describing an organization that was never
+  touched. Reading an organization by slug still works, and when the same string
+  is one organization's id and another's slug the exact id match now wins instead
+  of the database picking either row.
+
+  The admin dashboard row action and confirmation dialog follow.
+
+- dee31a5: Platform admins can now give a customer more time on a running enterprise trial.
+  Until now the trial end date was written once, when the trial was granted, and
+  nothing anywhere could move it, so an operator who wanted to buy a customer
+  another two weeks had no way to do it.
+
+  The extension is added to the trial's current end date rather than to today, so
+  "another two weeks" means two weeks on top of whatever the customer has left,
+  and extending a trial that still has three weeks to run cannot accidentally
+  shorten it. Extensions accumulate, and a single one is capped at a year.
+
+  Only a running trial can be extended. A trial that has already converted to a
+  contract, one that has been demoted, and one whose date has passed but that the
+  expiry sweeper has not reached yet are all rejected with an error that leaves the
+  date where it was, rather than quietly re-arming a trial that has already ended.
+  An organization id that matches nothing is reported as not found, the same answer
+  the disable and enable actions already give, so one mistyped id does not send an
+  operator off to inspect a trial that was never the problem.
+  Extending a trial changes the end date and nothing else: the organization's
+  account type, its whitelist flag and the record of when the trial began all stay
+  as they were.
+
+  The admin dashboard row action follows.
+
+- 8b6278d: The admin API can now report how big the platform is in one call. `GET /admin/organizations.stats` returns the number of organizations in total, the number created in the last 7 days, the number whose enterprise trial is ending soon, the number disabled, and the number disabled in the last 7 days. The total and both 7-day figures include disabled organizations, so the total reports the real platform size rather than the organizations list's default active-only view. None of the five figures narrows to the caller's list filters, so they stay put while an operator filters the list. The ending-soon figure is counted from the same trial state definition the organizations list filters on, so the figure agrees with the rows an operator lands on after clicking it.
+- 2d5e6bb: Platform admins can now put a demoted enterprise trial back on. Until now the
+  expiry sweeper's demotion was one-way: it dropped the organization to the free
+  tier, put it back behind the book-a-demo gate and switched off its model
+  provider keys. Only the keys could be undone, one at a time, through the
+  existing admin action for enabling a key; the tier and the gate had no undo at
+  all. An operator who wanted to give a customer a second run had no way to do it,
+  and extending the trial was not the same thing, because an extension moves an
+  end date and leaves the free tier exactly where the demotion left it.
+
+  Re-arming restores all of it at once: the account type the trial grants, the
+  whitelist flag, every model provider key the demotion switched off, and a fresh
+  run of the length the operator asks for, capped at a year and counted from now. The end date is
+  counted from now rather than added to the old one on purpose, because a demoted
+  trial's end date is already in the past and adding to it could land in the past
+  again, which would leave the sweeper free to demote the organization a second
+  time within the hour.
+
+  One caveat on the keys: this is the deployed behaviour. A local development
+  stack has no OpenRouter account behind it, and its stand-in client accepts the
+  refresh without doing anything, so a re-arm there reports success and restores
+  the tier while both key rows stay switched off. Enabling a key locally has the
+  same gap.
+
+  The keys come back up before any of the database changes are committed. That
+  ordering is the opposite of the demotion's, and it is deliberate: if the model
+  provider refuses, the organization stays demoted and on the free tier, and the
+  operator can retry. Any key that came back up before the refusal stays up, which
+  is what makes the retry cheap. The alternative would advertise a running trial
+  to a customer whose keys were still switched off.
+
+  Only a demoted trial can be re-armed. A trial that is already running is
+  rejected, so re-arm cannot be used as an extend that ignores the extension
+  rules. An organization id that matches nothing is reported as not found, the
+  same answer the disable, enable and extend actions already give, so a mistyped
+  id does not send an operator off to inspect a trial that was never the problem.
+
+  The activity log reads the new entry as "restarted enterprise trial", credited
+  to the Speakeasy team rather than to the operator who ran it, which is the same
+  label the log already gives a Speakeasy action inside a customer's
+  organization. The admin dashboard row action follows.
+
+- 112a408: Keep actively-running agent sessions listed under a date-range filter. The
+  chat list previously required a session's newest message to fall inside the
+  requested range, so a session that logged a message after the client's frozen
+  `to` bound vanished from the Agent Sessions page until the range was
+  re-selected. The range test is now interval overlap: last activity after the
+  range opens and created before it closes.
+- 0f21e6a: Stop a chronically failing AI integration sync from ringing failure monitors forever, and make its failure diagnostics actionable without exposing provider payloads to organization members. Poll failures now back off exponentially — each consecutive final failure doubles the delay before the next run, bounded by a 6h ceiling and anchored on recording time so long runs don't erase the early rounds — and a success, a config save, or re-enabling the schedule resets the streak and makes it due again immediately. Pollers retain normal diagnostic error chains for Temporal and worker logs, while the activity boundary separately derives the safe error persisted to `last_poll_error`. Codex JSON decode failures include the offending log record internally, but customer-visible status includes only the log id and decoder error.
+- 7da1436: The activity log can now record and render a restarted enterprise trial. The
+  entry reads "restarted enterprise trial" and is credited to the Speakeasy team
+  rather than to the individual operator, which is the label the log already gives
+  a Speakeasy action taken inside a customer's organization.
+
+  Nothing produces the entry yet. The admin action that restarts a trial follows
+  separately, and this change is the log's half of it: the action name, the writer
+  that records it, and the phrase the dashboard shows for it.
+
+  The collective "Speakeasy Team" label now has one definition instead of two.
+  The activity log applies it on read, by matching an actor against the members of
+  the Speakeasy organization. A writer that already knows it is acting as staff
+  has to apply the same label when it records the entry, because the read-time
+  mask can only recognise an actor that has a Gram user id, and an operator
+  authenticated through the admin app does not have one. Both paths now read the
+  label from the same constant, so one action cannot appear under two different
+  names depending on which path wrote it.
+
+- 2fc4c57: Cost analytics email filters and group-bys can fold one employee's directory,
+  personal, and case-variant emails into one canonical identity via the
+  ClickHouse identity map, gated by a PostHog rollout flag with a shadow-compare
+  mode that validates the fold on live traffic before serving it. Off by
+  default; literal matching is unchanged.
+- c62e192: Extend canonical identity folding to the employee detail pages, the
+  enrollment list, and the billing email breakdown: behind the same rollout
+  flag, per-user metrics scope through the identity map (email identifiers
+  resolve entirely in-query), the enrollment list shows one row per employee,
+  and billing email slices fold to canonical identities. Literal behavior is
+  unchanged with the flag off.
+- 6324cdb: Add the ClickHouse identity_map fold tables (live + staging twin). Inert in
+  this release: the sync worker and analytics readers land separately. The map
+  folds each unambiguous directory or linked-account email to its owning user so
+  analytics queries can resolve one employee to one identity via joinGet.
+- a3a5186: Trigger an immediate identity map sync when an account link gains attribution
+  during ingest or a WorkOS directory membership changes, instead of waiting out
+  the sync schedule. Triggers are throttled per process and go through the
+  schedule's overlap-skip policy, so chatty ingest coalesces and concurrent
+  requests are safe; a lost trigger degrades to the next scheduled tick.
+- 38da532: Add the identity map sync worker: a scheduled Temporal workflow rebuilds the
+  ClickHouse identity_map fold table from the Postgres directory every 15
+  minutes, mapping each unambiguous directory or linked-account email to its
+  owning user. Full refresh into a staging table with an atomic swap, so
+  deletions propagate and readers never observe a partial map. Nothing reads the
+  map yet; analytics folding lands separately.
+- aad88f0: Stop leftover trial reminder emails after a customer converts or a trial
+  expires. `trialActive` is now cleared in Loops on Polar conversion, an admin
+  account-type change, and demotion, so the 7-day and 1-day sequences no longer
+  keep sending to paying or expired orgs.
+
+## 1.11.0
+
+### Minor Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+
+### Patch Changes
+
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- eaa0649: Serve the hooks@0.3.22 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 97c1c32: Apply the phased hooks rollout gate to the publish freshness read. A hooks
+  generator version bump used to flip every rollout-gated org's publish status to
+  "needs syncing" permanently: publishing carries a gated org's hooks subtree
+  verbatim (by design), so the stored hooks version could never reach the current
+  constant that GetPublishStatus compared against. The status read now runs the
+  same eligibility check as the publish path and skips the hooks version/config
+  comparison for orgs the rollout hasn't cleared — their published hooks are
+  their target, so only MCP content changes count against freshness. Cleared
+  orgs still read a pending hooks bump (or a deferred hook-config change) as
+  stale, prompting the publish that applies it.
+
+## 1.10.0
+
+### Minor Changes
+
+- ae7f01b: The assistant detail panel is now fully configurable and observable. Overview settings (name, model, concurrency, warm TTL) are editable in place. The Sessions tab shows aggregate stats (sessions, messages, cost, tokens) over a selectable time range defaulting to the last 30 days, with per-session cost in the list. Triggers expand in place to show their recent traffic via the new `triggers.listEvents` endpoint, with each dispatched event linking to the conversation it was routed to.
+- c66958e: Agent sessions routed through LiteLLM keep their LiteLLM association even when the agent's own hook stream captures the transcript: they match the LiteLLM platform filter and display as "<Client> via LiteLLM" in the session list and detail views.
+- ca0f1c1: Encrypt platform OpenRouter API keys at rest. New keys are written with an
+  AES-256-GCM encrypted copy alongside the plaintext column (dual-write during
+  the expand phase), every read path prefers the encrypted copy and lazily
+  records ciphertext for legacy plaintext rows, and the credits monitoring
+  activity decrypts inside the activity boundary. A new platform-admin
+  `adminOpenRouterKeys` service and dashboard page list every organization's
+  keys with their credit limit, live usage, and encryption state, with actions
+  to encrypt (verify the ciphertext, then clear the plaintext), enable, and
+  disable a key. Enable and disable actions are audit logged against the owning
+  organization; the encrypt action is internal storage hygiene and is not
+  surfaced in customer-visible audit logs.
+
+### Patch Changes
+
+- 4dd8211: Expand user email filters in cost analytics and session lists to include the
+  employee's directory email and linked AI account emails. User drill-down pages
+  now report the same cost, token, tool-call, and session totals across work and
+  personal account identities.
+- a2bc9ed: Stop LiteLLM-proxied agent sessions from persisting each assistant turn twice,
+  and label Claude Code sessions as Claude Code. The proxy reports the completion
+  the moment the model returns it and the agent's own hook stream reports the same
+  text when the turn ends; prompts already collapsed onto one row through the
+  session's native marker, but assistant turns share no identity across the two
+  observers, so both rows survived. A proxied assistant turn is now dropped for
+  sessions a Claude hook stream already captured (cost and telemetry for the
+  proxied call are unaffected), so those sessions are attributed to the agent that
+  ran them rather than to the proxy. Separately, the bare `claude` adapter slug the
+  hooks binary sends now resolves to the `claude-code` surface even when a session
+  has no OpenTelemetry stream, instead of colliding with the `claude` the Anthropic
+  compliance import writes for Claude Chat Desktop and being displayed as that
+  surface.
+- cfc020f: Harden OpenAPI-from-URL (and in-process image-from-URL) fetches against SSRF. User-supplied URLs are rejected unless they are https with a host that passes the guardian blocklist (loopback, RFC 1918, link-local/metadata, and other reserved ranges), and redirects are capped and re-checked so a hostile target cannot chain into private address space or downgrade to plaintext HTTP.
+
+## 1.9.0
+
+### Minor Changes
+
+- 0e614ac: chat.list accepts a `user_id` filter so callers with project-wide chat visibility can narrow results to a specific Gram user. The Project Assistant dock uses it, together with the dashboard source-kind filter, so "Continue chat" only offers sessions the viewer started from the dashboard.
+- 2b6ebb0: Cache OAuth client ID metadata documents instead of refetching them on every
+  authorization request, honoring upstream `Cache-Control` and `Expires` headers
+  within a 5 minute to 24 hour bound and revalidating with `If-None-Match`. A
+  fetch or validation failure leaves the cached document untouched and fails the
+  request rather than serving a stale one.
+- 6f8d740: Add `userSessionIssuersCimdClients.verifyURL`, which probes a client ID metadata document URL and reports whether it is reachable and spec-compliant without saving anything. Every probe outcome is a successful response distinguishing a malformed URL, an unreachable endpoint, a non-JSON body, and a document that violates the spec, so an operator can fix a URL before adding it rather than discovering the problem when a client fails to authorize. Adding a URL does not fetch the document itself, so configuration never depends on a vendor's host being up; verification is an explicit step taken when it is wanted. The endpoint is rate limited per project, since it is the one place a caller can make Gram fetch a URL of their choosing. The OAuth authorization path is unchanged and still reports these outcomes as a single opaque error, so it cannot be used to probe external hosts.
+- 43107ac: Add compact tool-call rows with separately loaded, persisted two-sentence summaries and risk-first detail expansion.
+- 5ffabf3: Freeze external key identity: `externalKeys.updateAwsKms` and `externalKeys.updateGcpKms` no longer accept `key_arn` / `resource_name` or `algorithm` and cover only `name`, `external_credential_id` and `customer_grant_reference`, so changing what a key is now means deleting it and creating a new one (a breaking change to those two methods). Deleting a key is refused with a conflict while a JSON Web Key Set or published key still references it, and `createGcpKms` now requires a fully-qualified crypto key version path.
+- 3b8d9fc: Catalog entries from external MCP registries now carry the registry's linked source repository and published packages, which the registry client previously dropped. Both are registry declarations — nothing ties a linked repository or package to what a remote endpoint actually runs — and the API descriptions say so. These feed the MCP approval evidence surface and the upcoming artifact pin-and-fetch work.
+- 6f44265: Assistants no longer send every MCP tool schema to the model on every call. MCP tools are discovered on demand through a search tool, MCP servers connect on first use instead of during assistant startup, and dropped MCP connections reseat automatically instead of requiring a reconnect tool call. This keeps provider prompt caching effective for assistants with large toolsets and removes MCP handshakes from assistant cold-start latency.
+- 8f3fb58: Show the supported client that originated an Agent Session routed through LiteLLM while preserving LiteLLM filtering.
+- 6f44265: Assistant runtimes can now run locally: the new `local` runtime provider (the
+  local-development default) starts one Docker container per assistant on demand,
+  reuses it across turns, and automatically replaces idle containers when the
+  runtime image is rebuilt — no Fly.io credentials or registry pushes needed for
+  local image development.
+- fffe50d: Emit the MCP protocol version to OpenTelemetry on all five inbound MCP paths. Traces now carry `gram.mcp.requested_protocol_version` and `gram.mcp.negotiated_protocol_version`, and a new unsampled `mcp.initialize` counter breaks handshakes down by revision, so client version adoption can be measured and a version-specific failure can be diagnosed.
+- 7c02667: Organization names accept punctuation and every script. The old rule allowed
+  only letters, digits, spaces, hyphens and underscores, which turned away
+  "Acme, Inc.", "Bob's Bakery", "Café Zoë", and — more importantly — every
+  company whose name is not written in the Latin alphabet, since a name in
+  Japanese, Chinese, Korean, Cyrillic, Arabic or Hebrew could not clear the rule
+  at all. Names are now capped at 100 characters (counted in characters, so a
+  non-Latin name gets the same room a Latin one does), must carry at least two
+  letters or numbers, and may use anything that renders: control characters, bidi
+  overrides and other invisible formatting are still rejected, and whitespace is
+  normalized. The URL slug is unaffected in shape — it is still derived
+  separately, with a generated fallback for names that contain fewer than two
+  URL-safe characters.
+- c2c59c8: Let organization admins set an organization-wide automatic remote session refresh policy (Disabled, User controlled, or Required) from the MCP Connections page, and surface the effective policy to end users on the OAuth consent screen. Required keeps every eligible connection refreshed and shows the consent control locked; Disabled stops background refresh and states it read-only so users know idle connections will lapse.
+- 530feba: Attach files to the Project Assistant. The composer accepts files from the paperclip or by dropping them anywhere on the chat, and the assistant can read them: images and text-like files (including OpenAPI specs) travel with the turn, and anything it cannot read inline comes with a short-lived download link.
+- 8ae2c53: Revoke Remote Session credentials upstream via RFC 7009. Remote session issuers gain a `revocation_endpoint`, discovered from the issuer's RFC 8414 metadata document during issuer refresh. When a Remote Session is revoked, Gram now posts the stored token to the issuer's revocation endpoint so the upstream authorization server drops it, instead of leaving a live access/refresh pair that keeps working elsewhere until it expires on its own clock.
+
+  This covers every path that ends a session: revoking one session, revoking all of a client's sessions, deleting a client, which cascades a soft-delete to its sessions, and the consent screen's per-provider "Disconnect" — the one an end user drives rather than an admin. Batches run under bounded concurrency and a single budget for the whole batch, since every session on a client shares one upstream host.
+
+  The upstream call is best-effort by construction: it runs after the local revoke has committed, is bounded by a short timeout, and routes through the guardian egress policy. Failures are logged and metered, never surfaced to the caller — the local revoke is the security control the caller asked for and it has already succeeded. Issuers that advertise no revocation endpoint are recorded as a distinct `skipped` metric outcome rather than folded into success or failure, since that is the expected case for a large share of upstreams. A batch that exhausts its budget before reaching every session records the remainder as `dropped` rather than passing them off as done.
+
+- 82f8bbc: Propagate retroactive risk-exclusion changes into ClickHouse: creating, updating, disabling, or deleting an exclusion now rewrites the affected findings' effective state in the ClickHouse store as well as Postgres.
+- a2b272c: Warn when an identity provider duplicates an issuer URL that already exists, at all three tiers and on both create and edit. The warning is advisory and never blocks the write, since duplicating an issuer has legitimate use cases.
+- e8d3459: Score Watchdog signals from the matched risk policy's configured score, and simplify the signal drawer to a single Create-exclusion action.
+
+### Patch Changes
+
+- 37c036b: Stop the admin organizations list from returning a next-page cursor on the last full page. When the number of matching organizations was an exact multiple of the page size, the final page still carried a cursor, so the next page came back empty. The endpoint now reads one row past the page to decide whether a next page exists.
+- 341be47: Attribute Cursor usage events to sessions by decoding conversationId into the standard GenAI conversation attribute.
+- 8f8f280: Stop Codex hooks failing with exit code 127. The hook command Codex caches for
+  a session pointed at one versioned plugin cache directory, so a background
+  plugin refresh that swapped that directory out left the session invoking a
+  bootstrap script that no longer existed — the shell reported "command not
+  found" and Codex surfaced it as `SessionStart`/`UserPromptSubmit` failures. The
+  bootstrap now persists itself and its deployment config together in Codex's
+  version-independent plugin data directory. Once ready, hook commands execute
+  that stable bundle and use the installed payload only to refresh it; the newest
+  cache sibling remains a first-run migration fallback. Unix and Windows both
+  honour the configured install-failure policy with an explanatory diagnostic
+  instead of an opaque missing-command failure.
+
+  Also fixes the trusted-hash computation for Codex hooks: it was serialising the
+  command with Go's HTML escaping, so any command containing `>`, `<`, or `&`
+  hashed differently than Codex computes it and the hook was silently dropped as
+  untrusted.
+
+- 8589630: Fix employee usage pages under-reporting tokens and cost. Ingest attributes a
+  person's telemetry two different ways — hook events resolve the sender's email
+  to a Gram user id and carry both, while the rows that actually carry tokens and
+  cost (Claude/Codex OTEL and the Anthropic, Codex and Cursor usage imports) carry
+  only the provider account's email. The employee-scoped queries matched a single
+  collapsed identifier, so they saw one shape and silently dropped the other: an
+  employee page could show sessions and tool calls next to zero tokens and zero
+  cost.
+
+  The per-user metrics summary, observability overview, time series, tool
+  breakdown and data-flow graph now scope to the employee's whole identity set —
+  their Gram user id, their directory email, and the emails of their linked AI
+  accounts — resolved from the user directory rather than from telemetry row
+  identity, so a stray row cannot hand one person another's usage. Personal
+  accounts benefit most, since they usually sign in with an email that differs
+  from the directory one and previously joined to nothing. The per-user metrics
+  summary also selects cost and cache tokens, which its response has always
+  carried but the query never populated.
+
+- 4556bf0: Serve challenge-log buckets from the pre-aggregated ClickHouse summary and
+  paginate resolved and unresolved results in ClickHouse.
+- 0dd2a37: Serve the hooks@0.3.21 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- abcde04: Logging out now returns `Clear-Site-Data: "cookies", "storage"`, so the browser drops the session cookie across the origin's registrable domain and empties localStorage, sessionStorage, IndexedDB and Cache Storage. Previously teardown relied entirely on an expiring `Set-Cookie` plus a best-effort localStorage sweep, both of which leave data behind when a cookie attribute drifts or a page navigates away mid-logout. The theme preference and project favorites still survive a logout: the dashboard reads them before the request goes out and writes them back once the response lands.
+- f65e1ea: Internal groundwork for the MCP approval workflow: summarise what an MCP tool declares it can do, from its MCP annotations and the shape of its input schema. No user-facing behaviour yet.
+- 8b09caf: Internal groundwork for the MCP approval workflow: resolve an observed MCP server reference — a remote URL or a stdio launch command — into a stable artifact identity, and record whether that reference names an exact version. No user-facing behaviour yet.
+- 3650129: Record an actor display name on audit entries written from organization-less sessions. `sessions.Authenticate` now populates the actor email for sessions with no active organization, and enterprise-trial arming threads the actor email through provisioning so the self-signup callback — which has no auth context — still attributes the `organization:enterprise_trial_armed` entry instead of storing a bare actor id.
+- d553497: Route authorization challenge logging through Pub/Sub before persisting events
+  to ClickHouse. This decouples authorization request paths from ClickHouse
+  availability and makes message redelivery idempotent by challenge ID.
+- b05b32b: Slack tool calls that a caller has to fix are no longer reported as server
+  errors. The Slack Web API answers HTTP 200 with `ok: false` for essentially
+  every argument, permission, and state problem, so a thread timestamp that names
+  no thread, a channel the bot was never invited to, a token missing a scope, or
+  blocks that fail validation all arrived as untyped failures and were logged at
+  error level by the MCP tool layer. A single misconfigured client emitting a few
+  hundred of those an hour was enough to hold the component's error-log anomaly
+  monitor at its threshold for a whole alert window, masking any genuine
+  regression behind it.
+
+  Slack refusals now carry the envelope error code, and the MCP tool boundary
+  answers a caller-attributed failure with a 400 logged at warn — still recorded
+  with the upstream code and the tool name, and no longer marking the request span
+  as errored — while Slack's own failures (`internal_error`, `ratelimited`,
+  5xx responses) keep error severity. `platform_slack_add_reaction` also treats
+  `already_reacted` as the successful no-op it is, since the reaction the caller
+  asked for is already on the message.
+
+## 1.8.0
+
+### Minor Changes
+
+- 4c6fc7f: Widen the assistant runtime's message representation from plain strings to structured text|image content parts, end to end through the Go runtime and the Rust runner. Message content is now a string-or-parts union on both sides of the runner wire protocol (back-compat in both directions), history replay prefers the structured content captured at store time over the plain-text projection, turn requests gain an optional `input_parts` field, and chat persistence strips inline `data:` image bytes to text placeholders before anything is written at rest. Behavior-neutral groundwork: nothing produces image parts yet.
+- a85b554: Fetch Slack images server-side and inject them as vision content in assistant turns. Image attachments on a triggering Slack message (up to 4 files, 8 MiB total per turn) are downloaded concurrently through the authenticated Slack API, validated by magic-byte sniffing against an image allowlist (png/jpeg/gif/webp, 10 MiB per file), and attached to the turn as `image_url` input parts with `data:` URIs. For images referenced later in a thread, the assistant gains a generic `inspect_asset` runner tool that fetches any directly reachable image URL, validates it, and attaches it to the conversation as a user message; a new `platform_slack_get_file_url` tool bridges Slack's credentialed downloads by minting a short-lived, sealed download URL served by the Gram server's Slack file proxy. Image bytes live only in the live inference path — persistence continues to sanitize `data:` URIs to text placeholders at rest.
+- 91f8234: An organization whose enterprise trial has ended now lands on a page that says so and books an upgrade call, instead of the generic book-a-demo screen a company that had never heard of Gram sees. Anyone still inside a trial can reach the same page from the sidebar countdown to upgrade early.
+- c95b913: Add the `risk.getSignals` endpoint and finding attribution ingest backing the internal Watchdog page.
+- 3705830: Scan captured skill manifests for prompt injection at capture time and show current-version findings on skill details. Admins can configure the existing Prompt Injection policy from the Skills page. A completed judgement records either a finding or clean coverage; unavailable judgements are retried on a later activation and never become durable clean results. Scanning never fails the upload. Coverage is usage-based rather than catalog-based, so a version no agent ever loads is never judged.
+- ca5adf0: Carry Slack file attachment metadata through trigger ingestion into the assistant turn context. Message events that share files (e.g. the `file_share` subtype) now surface each attachment's id, name, mimetype, and size in the turn's message-context block, and the `files` list is addressable from Slack trigger CEL filters. Metadata only — file contents are not fetched.
+
+### Patch Changes
+
+- 85f9ddc: Assistant runtimes on the GKE backend now roll onto the configured runtime image automatically. Previously a claimed sandbox kept its admission-time image forever unless the assistant went idle long enough for the inactivity janitor, so regularly used assistants never picked up deployed runner changes — and even a fresh claim could adopt a warm-pool pod pre-warmed on an older image. The deploy-time image recycle sweep now covers GKE runtimes (idle-gated claim re-adoption), turn admission recycles a stale claim lazily and drains stale warm-pool pods with bounded retries, and persisted runtime metadata records the pod's actual image instead of the configured one.
+- 2e00c71: Custom domain ingresses now route /shared/skills to the Gram server, so public skill share pages resolve on custom domains instead of returning an edge 404. Existing domains pick up the new route on their next ingress re-apply (e.g. saving domain settings).
+- 6102452: Send lifecycle emails to organization admins when Enterprise trials start and approach expiration through the Loops workflow integration.
+
+## 1.7.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+- 374394a: The user-session OAuth authorization server now emits the RFC 9207 `iss` parameter on every authorization response, success and error alike, and advertises `authorization_response_iss_parameter_supported` in its metadata document. This satisfies the MCP 2026-07-28 Authorization Response Validation requirement and lets MCP clients holding concurrent flows against several authorization servers detect a mix-up attack.
+
+### Patch Changes
+
+- 19ca2a8: Keep shadow MCP risk finding descriptions generic instead of naming the tool that was called.
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
+## 1.6.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 44d50c3: Signing up for Gram now starts a 14-day enterprise trial. Your new organization opens on the enterprise tier with the full enterprise feature set enabled, and the trial window is recorded so the tier returns to free when it ends.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 76592ef: Remove the legacy OAuth proxy provider system now that toolsets are migrated to user session issuers: the `/oauth/*` proxy serving path (its token endpoint now answers `invalid_grant` so clients holding proxy refresh tokens re-authorize against their user session issuer instead of exchanging stale tokens indefinitely, outside issuer consent, session duration and revocation; authorize and register are gone), the `oauth/providers` package, the proxy management endpoints (`toolsets.addOAuthProxyServer` / `updateOAuthProxyServer`), the throwaway migration enablement (`remoteSessionClients.cloneClientFromOAuthProxyProvider`, `userSessionIssuers.migrateLegacyGramRegistrations`), the `AdditionalCacheKeys` cache fan-out mechanism, and the OAuth-proxy audit _emit_ path (historical audit entries still render). `external_oauth_server_metadata` is unaffected. The `oauth_proxy_*` tables and the `toolsets.oauth_proxy_server_id` column are left in place for a later data-drop migration.
+- 740746e: Publish compatible Cursor and Codex plugins from a shared Agent Plugins 1.0 package and expose compatibility on plugin responses.
+- 16e3bf7: An organization that starts a Gram trial now receives $50 of chat credits instead of the full enterprise amount. Gram applies the same $50 ceiling to the inference it runs on the organization's behalf, such as chat titles and risk analysis. A trial that is already in progress keeps the credits it has.
+
+  The billing page now shows the credit ceiling that is set for your organization. An organization whose ceiling was raised sees that amount instead of the standard amount for its plan.
+
+- 535b669: Enterprise trials now close themselves. An hourly job finds each trial organization whose trial window ended without converting to a contract, returns it to the free plan, drops it from the whitelist, and disables its platform model key so it can no longer spend. Every demotion is written to the audit log under `organization:enterprise_trial_demoted`. A trial that converts before it expires is never touched, and a trial is demoted at most once.
+
+### Patch Changes
+
+- 622942f: Remove legacy deny-effect RBAC grants from the server. Authorization exceptions
+  continue to use explicit exclusion scopes, preserving existing dashboard rule
+  behavior while simplifying grant storage and evaluation to allow-only rows.
+- 1d42bb6: Stop double counting Codex/ChatGPT compliance COSTS events. The feed repeats
+  the same `event_id` across log files, and `telemetry_logs` has no uniqueness
+  constraint, so each repeat was imported as its own row and inflated every
+  token and cost aggregate downstream. The importer now checks the
+  `codex.compliance.event_hash` fingerprint it already stamps against rows
+  already ingested for the project and drops the repeats, which also makes
+  re-polling a window idempotent instead of doubling it.
+- 6110071: Support compressed Git upload-pack requests through marketplace URLs.
+- ea9a0e4: Serve the hooks@0.3.19 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 8e56f5a: Prevent organization-less login sessions from failing RBAC grant preparation.
+- b5b9a6a: Keep Cursor and Codex marketplace entries on their native package formats while publishing Agent Plugins packages additively.
+- aa981b7: Reject organization names that contain fewer than two letters or numbers. A name made up entirely of punctuation, such as `-----` or `___`, previously passed validation and produced an organization whose URL slug was empty. The rule is enforced by the shared name check, so it covers both the sign-up parameter on login and the register endpoint, including requests that skip the sign-up form. Existing organizations are unaffected.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- 80227fa: Trigger delivery telemetry logs now record a proper `trigger-instance:<uuid>` URN and the active trace context instead of a generic `urn:uuid:` identifier with empty trace and span ids.
+
+## 1.5.0
+
+### Minor Changes
+
+- 546c449: Collect a work email on the sign-up page and hand it to the hosted AuthKit
+  screen. `auth.login` takes an optional `email`; when a login carries a company
+  name — the marker that it began on `/sign-up` — the server sets WorkOS's
+  `login_hint` so the email field arrives pre-filled, and `screen_hint=sign-up` so
+  the user lands on the sign-up screen rather than sign-in. The email is validated
+  before the login nonce is minted and is never stored. The call to action now
+  reads "Start Trial"; it previously named a single identity provider, which
+  misdescribed a hand-off that has always been generic.
+- 0afb752: Import ChatGPT conversations from the OpenAI Compliance Logs Platform. A new `chatgpt_compliance` AI-integration provider polls workspace-scoped `CONVERSATION_MESSAGE` log files (the supported successor to the deprecated stateful conversations endpoint) and persists them as external chats and messages — the same tables and Agent Sessions surface the Anthropic compliance import feeds. The provider is separate from `codex_compliance` because the scopes differ: COSTS files are per API organization while conversation logs are per ChatGPT workspace, so the new config takes a workspace UUID. Includes the workspace-scoped compliance client, Temporal schedule wiring, and a "ChatGPT Conversations" integration card in org settings.
+- 2a6e703: Gram Session OAuth issuers can now control which OAuth Client ID Metadata Document clients they accept, decided before any document is fetched. An issuer can admit Gram's curated catalog of verified MCP clients (Claude Code, Claude, VS Code, Zed, Goose, ChatGPT, Codex CLI, Notion, MCPJam, Factory Droid, ToolHive) plus any URLs configured on it, admit any spec-valid client, or admit none at all; the new `userSessionIssuersCimdClients` service lists the catalog and manages per-issuer URLs, and the admission mode is readable and writable on the existing `userSessionIssuers` endpoints. Issuers that have not chosen a mode currently record what the curated policy would have decided without enforcing it, so nothing changes for existing clients while the platform gathers evidence that enforcement is safe to make the default. Separately, a metadata document that omits `token_endpoint_auth_method` is now accepted as a public client rather than rejected, matching the spec and unblocking clients such as ChatGPT and Codex CLI whose documents omit it.
+- 7fd5e1a: Classify Codex account identity and billing mode (DNO-734). Codex sessions on
+  every capture path (legacy hooks, OTEL logs, ingest adapter) now stamp
+  account_type from email resolution — resolved work email is team, anything
+  else personal — and team sessions resolve the org-level billing mode declared
+  on the codex_compliance integration config (the session provider "openai" now
+  maps to that config, fixing the mapping bug that made the config's
+  billing_mode unreachable). Compliance COSTS import rows (codex and
+  ChatGPT/Work) carry account_type=team and the config's billing mode directly.
+  The estimated-cost tooltip copy mentions ChatGPT plans alongside Claude's.
+- b9590ce: Meter Codex cloud usage (GitHub code review, web tasks) from the compliance
+  COSTS feed — those surfaces have no OTEL stream, so their token counts now
+  promote to `gen_ai.usage.*` and count toward TUM. Device clients keep
+  metering via OTEL, and unrecognized clients stay un-metered so a new surface
+  cannot silently double count.
+- 49e00bb: Import Codex cloud task transcripts as agent sessions (DNO-752). A new
+  codex_cloud_sessions schedule on the chatgpt_compliance integration polls the
+  workspace-scoped CODEX_LOG compliance feed and persists cloud web-task
+  prompts and responses as external chats + messages under the new codex-web
+  chat source, with prompt-derived titles and idempotent replays. Only
+  CODEX_WEB client events are imported (desktop-app events are counted and
+  skipped pending the unified-app verification), and the feed's per-turn token
+  counts are deliberately not persisted — cloud tokens meter through the
+  compliance COSTS promotion, so carrying them here would double count.
+  Enforcement over cloud runs remains impossible (post-hoc batch feed); this
+  provides visibility and post-hoc review only. Also fixes a latent
+  multi-schedule reset gap: a key or external-scope change on an integration
+  now resets every synced sibling schedule's watermark (previously only the
+  provider-named schedule reset, so a workspace/org change could leave a
+  sibling feed silently skipping the new scope's history).
+- c44a461: Extend spend-gate enforcement to Codex and Cursor at parity with Claude. Over-budget actors are now denied on the legacy provider endpoints (`hooks.codex`: PreToolUse, PermissionRequest, UserPromptSubmit; `hooks.cursor`: preToolUse, beforeMCPExecution, beforeSubmitPrompt) and on the unified `hooks.ingest` path for the codex and cursor adapters (case-insensitive match) — previously the ingest spend gate was Claude-only even though risk scanning already ran adapter-agnostically there. Cursor MCP calls are spend-gated exactly once (at beforeMCPExecution, mirroring the risk-scan dedup), tool-call spend denies mint a durable block page whose link rides the deny reason, idempotent redeliveries keep the deny without minting duplicate block rows, and the block page headline falls back to spend-rule framing instead of rendering an empty policy name. The gate keeps running before any risk-policy evaluation and failing open on infrastructure errors; opencode still passes through pending a product decision on its enforcement surface.
+- 21f99b0: Add `GET /v1/install/device-agent-macos.pkg`, a stable redirect to the current signed macOS device-agent installer. Resolves the current version from the public device-agent releases manifest server-side and 302s to the versioned pkg, so docs and IT-admin instructions can link to one URL instead of hardcoding a version that goes stale every release.
+- 54755b5: Add organization-level device-agent remote configuration to the existing agent
+  policy response, with admin management endpoints, versioning, validation, and
+  audit logging.
+- 28150a9: Add authenticated OTLP trace ingestion for LiteLLM telemetry.
+- 13301b5: Add a self-serve path into the shared read-only demo organization. A new `auth.enterDemo` endpoint switches any authenticated session into the demo org (no membership required); request auth, grant resolution, and member/role listings gain demo carve-outs; the demo org always enforces a fixed read-only scope set with a verb-based write guard as backstop. The dashboard gains an `/explore-demo` entry route, an "explore a live demo org" link on the book-a-demo gate, and a demo banner whose exit switches back to the user's own organization without logging out.
+- 07b95b5: Expose health and attribution diagnostics for provisioned LiteLLM integrations.
+- f926dc1: Add project-scoped LiteLLM integration provisioning, key rotation, revocation, and lifecycle metadata APIs.
+- 544c23a: Accept opt-in LiteLLM OTLP operational metrics without adding them to usage billing or sessions.
+- 9081d00: Add Microsoft Teams as an assistant trigger source. Bot Framework activities (messages, reactions, membership and installation updates) posted to a trigger webhook are verified against Microsoft's signing keys and dispatched to assistants with the same filtering (event type allowlist + CEL) as other webhook triggers.
+- 1d0aafd: Add an OpenRouter platform key lockdown. A locked-down key fails at key resolution with a distinct `inference_disabled` error rather than an upstream rejection, and a limit refresh reinstates it.
+- 909b466: The External Services page is now organization-scoped: org admins register how Gram authenticates into their own cloud account, behind a new `customer_managed_encryption_keys` entitlement enforced on both `externalCredentials` and `externalKeys`. The platform-admin UI is removed, though its endpoints remain for HTTP-only management. Two new methods support verification: `externalCredentials.verifyGcpIam` probes that Gram can actually impersonate the named service account, and `externalCredentials.getGcpSetupInfo` reports the Gram service account a customer must grant `roles/iam.serviceAccountTokenCreator` to.
+- f95d50f: Platform admins can now curate the shared remote identity provider catalog from the dashboard, under a new Platform Admin section in the sidebar: list, create, edit, refresh discoverable metadata, and delete the providers that every organization inherits. The listing reports platform-owned and tenant-owned client counts separately, so a delete that will be refused says up front which blockers the admin can clear and which belong to an organization. `adminRemoteSessions.listGlobalIssuers` and `adminRemoteSessions.getGlobalIssuer` now return both counts alongside the issuer. Organizations can register a client against an inherited platform provider straight from their own provider list.
+- 869a89b: Substitute the OAuth callback URL into the setup guide content that `mcpRegistries.getSetupDocs` returns. Published guides ship with a `{{ gram.oauth.callback_url }}` template key wherever the reader has to register a redirect URI on an upstream provider's OAuth app. The endpoint now replaces that key with this deployment's remote-login callback URL, so `external_markdown` and `speakeasy_markdown` carry a value the reader can paste directly.
+- 546c449: Add a `/sign-up` page that collects the company name before handing off to the
+  identity provider. `auth.login` takes an optional `org_name` param; when set, the
+  server validates it and stashes a signup intent against the login nonce, then
+  creates the organization during the auth callback once the identity provider has
+  answered. The name never travels through a redirect param or the address bar, and
+  a failed signup returns to `/sign-up` rather than `/register`. Signup attempts and
+  the resulting org creation are captured as `onboarding_event` / `new_org_created`
+  with `created_via: "signup"` so the funnel can be measured end to end.
+
+### Patch Changes
+
+- 02da0b1: Apply shadow-MCP policy to Codex's built-in MCP resource tools. Codex reaches
+  MCP servers through three meta-tools — `list_mcp_resources`,
+  `list_mcp_resource_templates` and `read_mcp_resource` — that carry no `mcp__`
+  prefix and name their target in `tool_input.server`. The unified ingest
+  endpoint decides whether a call is an MCP call from resolved MCP data or an
+  MCP-shaped tool name, and neither recognizes these, so they were classified as
+  ordinary tool calls: the risk scan ran but the shadow-MCP policy never did. A
+  `block_all` policy therefore did not stop a Codex session from reading any MCP
+  server's resources, while the legacy Codex endpoint denied the same call.
+
+  The gate now recognizes them for the codex adapter, and the named server is
+  resolved against the session's MCP inventory so a Gram-hosted target is still
+  allowed and a denied one is named. A meta-tool whose server cannot be resolved
+  is denied rather than allowed — an unproven target is not an absent one.
+  Sessions now cache their MCP inventory on the ingest path under the same key
+  and TTL the legacy per-provider endpoints use.
+
+  Rolled out on client capability rather than deploy order: releases before this
+  one report no adapter version and no MCP inventory, so enforcing on them would
+  deny every meta-tool call — including reads of Gram-hosted servers that work
+  today. Those clients keep their current behavior and are counted in the logs
+  until they upgrade.
+
+  A capable client that reports no inventory is denied. That can mean no MCP
+  servers are configured, but collection is best-effort and also comes back empty
+  when the codex binary cannot be located, `codex mcp list` fails, or the
+  session's inventory never reached the cache — in which case a meta-tool call is
+  denied even though servers are configured. That is the intended fail-closed
+  posture rather than an accident: the guard cannot clear a target it cannot see.
+
+- 5fb7ccb: Classify Codex OTEL rows as provider OTel telemetry, matching Claude's. The
+  canonical event URN had cases for `claude-code:otel:logs` but none for
+  `codex:otel:logs` or `codex:otel:metrics`, so Codex's provider-native stream
+  fell through to the agent-hook default and was typed
+  `urn:telemetry:agent_hook:log:unknown` — with no event name, since those rows
+  carry a producer `event.name` rather than a Gram hook event. Any filter that
+  selects provider-OTel rows by URN prefix therefore excluded Codex while
+  including the equivalent Claude traffic. Codex OTEL logs now type on their
+  producer event name (`codex.sse_event`, ...) and metric points on their
+  metric name.
+- 5fb7ccb: Route Codex OTEL telemetry from every client mode to the Codex stream, not
+  just the interactive CLI. Codex reports a different OTEL `service.name` per
+  mode and does not use one separator convention — `codex_exec` for headless
+  `codex exec` (what CI and scripted runs use), `codex_tui`, `codex_mcp`, and
+  `codex-app-server` for Codex mode in the unified ChatGPT desktop app — but
+  the ingest matched only `codex_cli_rs`. Those payloads were not dropped: they fell through to the
+  Claude path and were persisted as `claude-code:otel:logs` rows carrying
+  Claude's hook source and account attribution, so Codex traffic silently
+  inflated Claude surfaces while never being metered as Codex usage. The
+  ingest now matches the whole Codex service-name family, both separators
+  included.
+
+  Routing is also now per OTEL resource rather than per payload: a collector
+  that fans several clients into one export previously had the whole batch
+  routed by whichever client matched first, mislabeling the other client's
+  records.
+
+- e062cd3: Probe the unified ChatGPT desktop app when installing the Codex plugin
+  (DNO-737). OpenAI merged the standalone Codex app into the ChatGPT desktop
+  app, which ships the codex CLI at
+  `/Applications/ChatGPT.app/Contents/Resources/codex`; the install script only
+  probed the legacy `/Applications/Codex.app` path, so on any machine with just
+  the post-merge app it failed to find the binary and degraded to printing
+  manual instructions. The unified bundle is now probed first, with the legacy
+  path kept for pre-merge installs.
+- a3735b7: Stop rejecting current Codex clients at the Figma MCP allowlist (DNO-765).
+  Codex renamed its MCP client User-Agent — 0.144 sent `codex_cli_rs/…`, the
+  0.146 unified-app build sends `codex-mcp-client/…` — and the allowlist only
+  carried the old token, so every Codex → Figma MCP call proxied through Gram
+  was rejected as an unapproved client. Both tokens are now listed so neither
+  older deployed clients nor current ones are blocked.
+- 5b97690: Serve the hooks@0.3.13 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 82a0689: Stop reading an unreadable MCP inventory as proof a session has no MCP servers.
+
+  The Codex meta-tool shadow-MCP guard denies a call it cannot clear against the
+  session's inventory, so an empty inventory decides whether legitimate traffic is
+  blocked. But "the agent has no MCP servers configured" and "we could not read
+  the list" both arrive as zero entries, and only the sender can tell them apart —
+  collection is best-effort and comes back empty when the agent binary cannot be
+  located or the probe fails. Hook events now carry `mcp_inventory_collected`, and
+  the guard enforces only on a list that was actually read. Senders predating the
+  field omit it and keep their current behavior until they upgrade.
+
+- 0ea5ffd: Classify idle-timeout terminations of proxied MCP SSE streams correctly. The standalone GET listen stream ending on the proxy's 60s idle bound is now a clean close (200, no error log) instead of a 500 "unexpected error" — clients reconnect per spec, so quiet upstreams no longer produce one spurious 5xx per minute per connected client. A POST response stream going idle mid-reply now returns a 502 gateway error naming the idle bound instead of a bare context cancellation. Access logs also no longer relabel an already-committed response's status when a late error-path WriteHeader fires.
+- 4491521: Scope the shared LLM judge rate limiter to the OpenRouter key a call spends: platform-key calls share one bucket per model (matching OpenRouter's account-wide shared-capacity limits), while BYOK calls bucket per customer key. This stops chat analysis and risk judges from exhausting OpenRouter's per-model capacity and failing with 429s.
+- 0eed8b8: Accept dedicated MCP inventory events and cache explicit empty snapshots.
+- 817174d: Make RBAC always on, provision built-in roles and grants for new organizations,
+  and assign the first organization user the Admin role.
+- 81ba8cf: Search agent sessions by resolved member and AI account email addresses.
+- 68f1afa: Internal changes to risk finding reveal.
+- 9c784b9: Keep an enforcement block even when its optional links cannot be resolved. The
+  block URL is handed to the agent before the row is written, so a rejected
+  insert leaves the user opening a page that does not exist. Enforcement runs
+  before the hook's chat and finding rows are persisted, so a block early in a
+  session races its own chat row and the foreign key rejects — silently, since
+  the insert is detached and only logged. The write now drops whichever link the
+  database names and retries, so the block always lands and only its enrichment
+  is lost. Applies to every provider: all block paths share this writer.
+- a2da454: Fix a live tool-listing probe for unproxied MCP servers taking up to a minute or more against an unreachable vendor server instead of the intended ~10 second bound. Two independent retry layers (HTTP-transport retries and the MCP SDK's own reconnect retries) compounded on top of each other, and the SDK's own cleanup after a context deadline could itself run well past that deadline. The probe now disables both retry layers for this one-shot check and time-boxes the response to the caller independently of how long the SDK's internal cleanup takes.
+- c61c3f2: Fix a credential leak in published plugin configs: an unproxied MCP server (one whose URL points directly at a vendor, never through the platform's own gateway) could have the org's API key attached as a static Authorization header, sending it straight to the third-party vendor's server instead of the platform. Unproxied servers now carry no Gram-managed credential in any generated client config (Claude, Cursor, Codex, OpenCode), and no longer trigger an unnecessary API-key prompt during install.
+- ba561ad: Webhooks are now available to every organization, marked Beta. The Webhooks page
+  no longer shows a preview gate, and delivery is controlled solely by the
+  organization's own webhooks toggle.
+
+## 1.4.0
+
+### Minor Changes
+
+- ca05169: Add an authenticated LiteLLM Generic Guardrail endpoint that enforces prompt policies before model calls and captures blocked prompts.
+- 7f4e1b8: Capture LiteLLM model responses with consistent per-call session and user attribution for asynchronous risk analysis.
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+
+### Patch Changes
+
+- 798db6b: The project assistant can now distribute the skills it creates. `platform_distribute_skill` and `platform_undistribute_skill` attach a skill to a plugin or assistant and revoke it again, and `platform_list_plugins` resolves a plugin by name to the ID they take. All three reuse the same permissions, feature gating, and audit logging as the dashboard.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 1.3.0
+
+### Minor Changes
+
+- 18bc769: Enforce allow-all shadow MCP policies in the hook path. Under an allow_all policy every non-Gram-hosted MCP server is permitted unless a risk_policy:block grant names its URL; bypass grants and the fail-closed inventory checks remain block_all concepts and are skipped. Projects are now limited to one enabled shadow MCP blocking policy so dispositions can never conflict at enforcement time.
+- becc03b: Add `shadow_mcp_blocked_urls` to risk policy create/update payloads. Allow-all shadow MCP policies carry a canonical blocked-URL list stored as `risk_policy:block` RBAC grants held by the all-users principal — the mirror of `shadow_mcp_allowed_urls`, which reconciles into `risk_policy:bypass` grants on block-all policies. The two lists are disposition-exclusive: blocked URLs are only valid on allow_all policies and allowed URLs only on block_all policies. Blocked URLs may name servers not yet observed in the project inventory (proactive blocking).
+
+### Patch Changes
+
+- 679d489: Let the project's managed assistant act on risk findings, not just read them.
+  Adds `platform_list_risk_exclusions` and `platform_create_risk_exclusion` for
+  suppressing a whole class of findings, plus
+  `platform_mark_risk_false_positive` and
+  `platform_unmark_risk_false_positive` for dismissing (and restoring)
+  specific findings. The writes go through the same risk service methods the
+  dashboard uses, so they stay gated on org admin and audited against the
+  invoking user. Exact and regex match values are fingerprinted before they reach
+  the model, so `platform_create_risk_exclusion` reuses an equivalent existing
+  exclusion rather than duplicating one the model had no way to recognise.
+
+  Also keeps the assistant's context from ballooning while it triages: the
+  agent-facing findings listing now defaults to 25 results and caps at 50
+  (a 200-row page was tens of thousands of tokens that stayed in context for the
+  rest of the turn), and the new `platform_get_risk_rule_breakdown` answers
+  "which rules fire most" in one small call instead of many large pages.
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- f8ff561: Codex-product compliance COSTS rows (`codex:usage:metrics`) now meter cost only. Their token counts previously rode on `gen_ai.usage.*` keys, which the ClickHouse agent-usage predicates sum on top of the Codex OTEL stream — the token source of truth — double counting token metering for orgs running both feeds. The raw counts are preserved under new `codex.compliance.*_tokens` attributes (summed by nothing) because the compliance feed also covers surfaces OTEL never sees (cloud-delegated tasks, GitHub code review); a future surface-partitioned metering pass can promote them. Parked non-Codex rows (`chatgpt:usage:metrics`) keep their `gen_ai.usage.*` token counts since the compliance feed is ChatGPT/Work's only usage source.
+- 62fce4c: Emit OpenTelemetry metrics for the device-integration sync pipeline: `gram.device_integration.sync.outcome` (sync runs by provider and outcome) and `gram.device_integration.sync.auto_pause` (schedules auto-paused after a streak of credential rejections). These back the sync-failure-rate and auto-pause monitors for the MDM integrations rollout.
+- 11b3586: Fix OAuth token exchanges failing with invalid_client against providers that strictly decode HTTP Basic credentials (e.g. Snowflake): client id and secret are now form-urlencoded before being placed in the Authorization header, per RFC 6749 §2.3.1.
+- d4d8de2: The project assistant can now create project skills from complete `SKILL.md` content. The new `platform_create_skill` tool uses the same validation, versioning, permissions, feature gating, and audit logging as manual skill creation.
+- 9161dc7: Internal data changes to the risk findings backfill tooling.
+- af439f5: Internal schema changes to the risk findings store.
+- 1dbad64: Internal data changes to risk finding ingestion.
+- ae3979c: Admit `chatgpt:usage` rows (ChatGPT/Work usage+spend from the OpenAI compliance COSTS import, previously retained but unread) into the agent-usage predicates of `attribute_metrics_summaries_mv` and `chat_session_summaries_mv`, via atomic MODIFY QUERY migrations. ChatGPT tokens now count toward tokens-under-management and appear in usage/cost analytics going forward, matching how Claude Chat (Anthropic Admin Analytics) and Cursor (Admin API) polled usage already bill. Applies to new rows only — previously parked rows are retained but not backfilled into the summaries. Also updates the stale MV comments that claimed no new `codex:usage` rows are written (the compliance import writes them, cost-only since the token double-count fix).
+- 3e1ad9e: Exclude unattributed authz challenges from the challenge buckets endpoint so the Challenges page pagination and totals match what is rendered
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+
+## 1.2.0
+
+### Minor Changes
+
+- c0395b5: Selectively extract high-value, reusable business memories from completed chats, omit semantic duplicates, and add an organization-admin corpus browser with semantic search, source-transcript navigation, and a complete content-scope tree with distinct-memory counts.
+- eed5e6a: Add a weekly usage summary email for customer billing contacts. Every Monday a Temporal sweep emails each organization's billing alert contact their tokens-under-management total for the active billing cycle, with a percent-change badge against the same elapsed point of the previous cycle. The TUM token components are now defined once in a `billing.TumComponents` registry that the ClickHouse billing measure and the email's total both derive from, so changes to the TUM definition propagate to billing and reporting in lockstep. Organizations with no usage in either compared window are skipped, and sends are deduplicated per organization and run date.
+- e9dc39b: Add `mcpRegistries.getSetupDocs`, which returns the published setup documentation for an upstream MCP server from the `github.com/speakeasy-api/mcp-setup-docs/go` catalog. A guide can be located by the upstream server's endpoint URL, by its registry specifier as returned by `listCatalog`, or by both at once. Matches from the two lookup keys are deduplicated by guide slug and returned in descending specificity, and each guide reports how it matched and which documented endpoint the lookup selected. Servers with no published guide return an empty list rather than an error.
+
+### Patch Changes
+
+- 59a371a: Saving an OpenAI app-submission verification token now reconciles the custom domain's ingress. Domains provisioned before the challenge feature shipped were missing the `/.well-known/openai-apps-challenge` route, so the token endpoint returned a 404 until an unrelated setting change rebuilt the ingress; setting or clearing the token now triggers that rebuild directly.
+- 1359212: Serve the hooks@0.3.12 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 9d0f259: The project assistant can now read the AI control plane product documentation. Two new managed-assistant tools, `platform_list_docs` and `platform_get_doc`, expose the ~110 pages under speakeasy.com/docs/ai-control-plane: the first returns the page index (built from the docs sitemap and cached hourly), the second returns one page's markdown along with its public permalink to cite. `platform_get_doc` only serves paths present in the index, so it reads documentation rather than acting as a general-purpose fetcher.
+- 92d743b: Serve the project-wide Risk Events listing from ClickHouse behind the new
+  `risk-list-from-clickhouse` per-org flag, keeping the same ordering, filters
+  and pagination behavior as before. Also fixes a pagination bug where the first
+  result after a page boundary was skipped.
+
+## 1.1.0
+
+### Minor Changes
+
+- 9373aea: Support OAuth Client ID Metadata Documents (CIMD) on the Gram Session OAuth authorization server, gated per organization behind the `gram-user-session-cimd` feature flag. MCP clients that identify themselves with a URL-shaped `client_id`, such as Claude Code and VS Code, can now complete the OAuth flow without Dynamic Client Registration, including loopback redirects on any port.
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- debaf8e: Shadow MCP inventory server names now resolve reliably after renames. Name updates written in quick succession could previously tie on their stored version and intermittently revert to an older observed name; versions are now stored at full nanosecond precision and each update is guaranteed to supersede the state it was based on.
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
 ## 1.0.0
 
 ### Major Changes

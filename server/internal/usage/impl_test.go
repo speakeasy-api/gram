@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -120,7 +123,8 @@ func (m *mockBillingRepo) ValidateAndParseWebhookEvent(ctx context.Context, payl
 }
 
 func (m *mockBillingRepo) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
-	return fmt.Errorf("not implemented")
+	args := m.Called(ctx, orgID)
+	return args.Error(0)
 }
 
 func (m *mockBillingRepo) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (string, error) {
@@ -134,8 +138,6 @@ func (m *mockBillingRepo) CancelSubscriptionAtPeriodEnd(ctx context.Context, sub
 var _ billing.Repository = (*mockBillingRepo)(nil)
 
 // --- test helpers ---
-
-func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil }
 
 func mustParseURL(t *testing.T, s string) *url.URL {
 	t.Helper()
@@ -152,18 +154,36 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return &Service{
-		tracer:      tp.Tracer("test"),
-		logger:      logger,
-		authz:       authzEngine,
-		repo:        repo.New(db),
-		billingRepo: billingRepo,
-		orgRepo:     orgRepo.New(db),
+		tracer:        tp.Tracer("test"),
+		logger:        logger,
+		authz:         authzEngine,
+		repo:          repo.New(db),
+		billingRepo:   billingRepo,
+		orgRepo:       orgRepo.New(db),
+		posthogClient: posthog.New(t.Context(), logger, "", "", ""),
+		stripeClient:  nil,
+		stripeHandler: nil,
+		trial:         trialemails.NoopNotifier{},
 	}
+}
+
+type fakeTrialNotifier struct {
+	inactive    []string
+	inactiveErr error
+}
+
+func (f *fakeTrialNotifier) TrialStarted(context.Context, string) error { return nil }
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	f.inactive = append(f.inactive, organizationID)
+	return f.inactiveErr
 }
 
 func seedEnabledToolsets(t *testing.T, db repo.DBTX, orgID string, serverCount int) {
@@ -195,13 +215,14 @@ func testAuthContext(orgID string) context.Context {
 }
 
 func sampleUsage(toolCalls, servers, credits int) *gen.PeriodUsage {
+	includedCredits := 25
 	return &gen.PeriodUsage{
 		ToolCalls:                toolCalls,
 		IncludedToolCalls:        10000,
 		Servers:                  servers,
 		IncludedServers:          3,
-		Credits:                  credits,
-		IncludedCredits:          25,
+		Credits:                  &credits,
+		IncludedCredits:          &includedCredits,
 		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0,
 	}
@@ -225,7 +246,8 @@ func TestGetPeriodUsage_CacheHit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 42, result.ToolCalls)
 	require.Equal(t, 2, result.Servers)
-	require.Equal(t, 10, result.Credits)
+	require.Nil(t, result.Credits)
+	require.Nil(t, result.IncludedCredits)
 	require.Equal(t, 5, result.ActualEnabledServerCount) // from DB, not cache
 	billingMock.AssertNotCalled(t, "GetPeriodUsage", mock.Anything, mock.Anything)
 }
@@ -246,7 +268,8 @@ func TestGetPeriodUsage_CacheMissFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 100, result.ToolCalls)
 	require.Equal(t, 5, result.Servers)
-	require.Equal(t, 20, result.Credits)
+	require.Nil(t, result.Credits)
+	require.Nil(t, result.IncludedCredits)
 	require.Equal(t, 3, result.ActualEnabledServerCount)
 	billingMock.AssertCalled(t, "GetPeriodUsage", mock.Anything, orgID)
 }
@@ -282,6 +305,31 @@ func TestGetPeriodUsage_NoAuthContext(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestGetPeriodUsage_CreditsPlatformAdminOnly(t *testing.T) {
+	t.Parallel()
+	orgID := "org-credits-admin-only"
+	cached := sampleUsage(42, 2, 10)
+
+	billingMock := &mockBillingRepo{}
+	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached)
+	svc := newTestService(t, billingMock, orgID, 1)
+
+	memberResult, err := svc.GetPeriodUsage(testAuthContext(orgID), &gen.GetPeriodUsagePayload{})
+	require.NoError(t, err)
+	require.Equal(t, 42, memberResult.ToolCalls)
+	require.Equal(t, 2, memberResult.Servers)
+	require.Nil(t, memberResult.Credits)
+	require.Nil(t, memberResult.IncludedCredits)
+
+	adminResult, err := svc.GetPeriodUsage(testAdminAuthContext(orgID), &gen.GetPeriodUsagePayload{})
+	require.NoError(t, err)
+	require.Equal(t, 42, adminResult.ToolCalls)
+	require.NotNil(t, adminResult.Credits)
+	require.Equal(t, 10, *adminResult.Credits)
+	require.NotNil(t, adminResult.IncludedCredits)
+	require.Equal(t, 25, *adminResult.IncludedCredits)
 }
 
 func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
@@ -325,6 +373,91 @@ func TestHandlePolarWebhook_OrgNotFound(t *testing.T) {
 		"a webhook for an unknown polar external id should map to CodeNotFound, not CodeUnexpected")
 	// We never get past the org lookup, so no cache invalidation should occur.
 	billingMock.AssertNotCalled(t, "InvalidateBillingCustomerCaches", mock.Anything, mock.Anything)
+}
+
+func seedWebhookOrg(t *testing.T, svc *Service, orgID string) {
+	t.Helper()
+
+	_, err := svc.orgRepo.UpsertOrganizationMetadata(t.Context(), orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Trial Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, svc.orgRepo.SetAccountType(t.Context(), orgRepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: "enterprise",
+	}))
+}
+
+func newSubscriptionWebhookService(t *testing.T, orgID, eventType string) (*Service, *fakeTrialNotifier, *mockBillingRepo) {
+	t.Helper()
+
+	payload := &billing.PolarWebhookPayload{Type: eventType}
+	payload.Data.Customer = &billing.WebhookCustomer{
+		ExternalID: orgID,
+		Name:       "Trial Org",
+		Email:      "person@example.com",
+	}
+
+	billingMock := &mockBillingRepo{}
+	billingMock.On("ValidateAndParseWebhookEvent", mock.Anything, mock.Anything, mock.Anything).
+		Return(payload, nil)
+	billingMock.On("InvalidateBillingCustomerCaches", mock.Anything, orgID).Return(nil)
+	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(sampleUsage(0, 0, 0), nil)
+
+	svc := newTestService(t, billingMock, orgID, 0)
+	seedWebhookOrg(t, svc, orgID)
+	notifier := &fakeTrialNotifier{}
+	svc.trial = notifier
+	return svc, notifier, billingMock
+}
+
+func TestHandlePolarWebhook_SubscriptionCreatedMarksTrialInactive(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-trial-converted"
+	svc, notifier, _ := newSubscriptionWebhookService(t, orgID, "subscription.created")
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	require.NoError(t, svc.HandlePolarWebhook(httptest.NewRecorder(), req))
+	require.Equal(t, []string{orgID}, notifier.inactive)
+}
+
+func TestHandlePolarWebhook_SubscriptionActiveMarksTrialInactive(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-trial-active"
+	svc, notifier, _ := newSubscriptionWebhookService(t, orgID, "subscription.active")
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	require.NoError(t, svc.HandlePolarWebhook(httptest.NewRecorder(), req))
+	require.Equal(t, []string{orgID}, notifier.inactive)
+}
+
+func TestHandlePolarWebhook_SubscriptionCanceledDoesNotMarkTrialInactive(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-trial-canceled"
+	svc, notifier, _ := newSubscriptionWebhookService(t, orgID, "subscription.canceled")
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	require.NoError(t, svc.HandlePolarWebhook(httptest.NewRecorder(), req))
+	require.Empty(t, notifier.inactive)
+}
+
+func TestHandlePolarWebhook_TrialInactiveFailureDoesNotFailWebhook(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-trial-notify-fail"
+	svc, notifier, _ := newSubscriptionWebhookService(t, orgID, "subscription.created")
+	notifier.inactiveErr = fmt.Errorf("loops unavailable")
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	require.NoError(t, svc.HandlePolarWebhook(httptest.NewRecorder(), req))
+	require.Equal(t, []string{orgID}, notifier.inactive)
 }
 
 func TestCreateTopUpCheckout_BillingErrorMapsToCodeUnexpected(t *testing.T) {

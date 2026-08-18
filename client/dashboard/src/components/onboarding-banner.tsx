@@ -6,6 +6,7 @@ import {
   useOnboardingCta,
 } from "@/hooks/useOnboardingCta";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { ArrowRight, Wrench } from "lucide-react";
@@ -14,11 +15,15 @@ export function OnboardingBanner(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   const { projectSlug } = useSlugs();
   const { eligible, dismissed, dismiss } = useOnboardingCta();
+  const { visible: welcomeBannerVisible } = useOrgWelcomeBanner();
 
   // Project-scoped routes (/:orgSlug/projects/:projectSlug/...) are too deep
   // in a specific workflow for an org-wide setup nudge — only show this on
   // org-level pages (home, org settings, etc).
   if (!eligible || dismissed || projectSlug) return null;
+
+  // The welcome banner's third card is this same wizard.
+  if (welcomeBannerVisible) return null;
 
   return (
     <div
@@ -33,7 +38,7 @@ export function OnboardingBanner(): JSX.Element | null {
           ONBOARDING_CTA_CONTENT_VT_CLASS,
         )}
       >
-        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border shadow-sm">
+        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center border">
           <Wrench className="text-foreground size-5" strokeWidth={1.75} />
         </div>
 

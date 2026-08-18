@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useProject } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
+import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -35,18 +36,18 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
-  const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
+  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
+  const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
-  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
-  const isDeploymentsPageEnabled =
-    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
-  const isSkillsEnabled = productFeatures?.skillsEnabled === true;
+  // Assistants is opt-in: unavailable flags remain hidden.
+  const isAssistantsEnabled = assistantsFlag.status === "enabled";
+  // Deployments is opt-out: it remains visible unless PostHog explicitly
+  // resolves the flag to disabled.
+  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
+  // Watchdog is opt-in like Assistants: unavailable flags remain hidden.
+  const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -75,8 +76,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       {
         route: routes.skills,
-        scope: isSkillsEnabled ? ["skill:read"] : read,
-        ...(isSkillsEnabled ? { resourceId: projectId } : {}),
+        scope: ["skill:read"],
+        resourceId: projectId,
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
@@ -88,9 +89,16 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
       { route: routes.logs, scope: observe },
-      { route: routes.riskOverview, scope: read },
+      // Watchdog supersedes the Risk Overview and Risk Events pages: with the
+      // flag on, it is the Secure section's landing surface and the two
+      // legacy nav items hide (their routes stay reachable by direct URL).
+      ...(isRiskWatchdogEnabled
+        ? [{ route: routes.watchdog, scope: read }]
+        : [{ route: routes.riskOverview, scope: read }]),
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.riskEvents, scope: ["org:admin"] },
+      ...(isRiskWatchdogEnabled
+        ? []
+        : [{ route: routes.riskEvents, scope: ["org:admin"] as Scope[] }]),
       { route: routes.shadowMCP, scope: readWrite },
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
@@ -101,6 +109,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
     isOrgMemoryEnabled,
-    isSkillsEnabled,
+    isRiskWatchdogEnabled,
   ]);
 }

@@ -26,7 +26,7 @@ export function LoginPanel({
         {AUTH_PILLARS.map((label) => (
           <span
             key={label}
-            className="auth-mono rounded-full border border-[var(--edge)] px-[11px] py-[5px] text-[11px]"
+            className="auth-mono border border-[var(--edge)] px-[11px] py-[5px] text-[11px]"
           >
             {label}
           </span>

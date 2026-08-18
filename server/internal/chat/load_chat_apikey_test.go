@@ -58,9 +58,11 @@ func TestLoadChat_Session_CannotReadOtherOrgChat(t *testing.T) {
 	// A chat that lives in org B.
 	chatID := seedChat(t, initSessionCtx(t, orgB), orgB, "owner-user", "", "org B chat")
 
-	// User A's dashboard session (org A) must not read it.
+	// User A's dashboard session (org A) must not read it. GetChat is
+	// project-scoped, so org B's chat is simply not there for org A's context —
+	// indistinguishable from an id that never existed.
 	_, err := orgB.service.LoadChat(initSessionCtx(t, orgA), loadPayload(chatID.String()))
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 // TestLoadChat_APIKey_CannotReadOtherOrgChat keeps the org boundary for API
@@ -76,7 +78,7 @@ func TestLoadChat_APIKey_CannotReadOtherOrgChat(t *testing.T) {
 
 	// API key A (scoped to org A's project) must not read it.
 	_, err := orgB.service.LoadChat(apiKeyCtx(t, orgA), loadPayload(chatID.String()))
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 // TestLoadChat_ExternalUserMismatchStillBlocked guards the ownership check for
@@ -226,5 +228,5 @@ func TestLoadChat_ProjectBoundAPIKey_ReadsOnlyItsProject(t *testing.T) {
 	require.NoError(t, err)
 	// ...but not a chat in the other project — its context can never point there.
 	_, err = ti.service.LoadChat(boundCtx, loadPayload(chatB.String()))
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

@@ -1,16 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { Terminal, ChevronRight, MonitorCog, Wrench } from "lucide-react";
+import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { cn } from "@/lib/utils";
+import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
-import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "../platform-logos";
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -27,6 +26,17 @@ export function InstrumentAgentsStep({
   >(() =>
     Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
   );
+  // Controlled so the Cowork note can jump to Manual Setup and open that drawer.
+  const [activeTab, setActiveTab] = useState("device-agent");
+
+  // The device agent enforces required plugins/MCP config on-device — it has
+  // no reach into Claude.ai's org-level Cowork plugin settings, so Cowork
+  // always needs its own manual step regardless of which tab the user picks.
+  // This jumps them straight to that step from the Device Agent tab.
+  const openCoworkManualSetup = () => {
+    setActiveTab("manual");
+    setDrawerPlatformId("claude-cowork");
+  };
 
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
@@ -41,35 +51,50 @@ export function InstrumentAgentsStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Terminal className="text-foreground h-6 w-6" />
         </div>
       }
-      title="Instrument agent platforms"
+      title="Instrument agents"
       description="Choose how your team's AI coding assistants get instrumented. Deploy the Speakeasy device agent to manage every platform centrally, or set up hooks per platform by hand."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack
       onBack={onBack}
     >
-      <Tabs defaultValue="manual" className="gap-8">
-        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 bg-transparent p-0 sm:grid-cols-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-8">
+        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 divide-x-0 border-0 bg-transparent p-0 sm:grid-cols-2">
+          <ChoiceTab
+            value="device-agent"
+            icon={<MonitorCog className="h-5 w-5" />}
+            title="Device Agent"
+            desc="Deploy one agent that enforces required plugins and MCP config across every coding assistant, centrally."
+          />
           <ChoiceTab
             value="manual"
             icon={<Wrench className="h-5 w-5" />}
             title="Manual Setup"
             desc="Set up Speakeasy hooks by hand for each AI coding assistant your team uses."
           />
-          <ChoiceTab
-            value="device-agent"
-            icon={<MonitorCog className="h-5 w-5" />}
-            title="Device Agent"
-            badge={<ReleaseStageBadge stage="preview" noTooltip />}
-            desc="Deploy one agent that enforces required plugins and MCP config across every coding assistant, centrally."
-          />
         </TabsList>
 
-        <TabsContent value="device-agent">
+        <TabsContent value="device-agent" className="space-y-4">
+          <Alert variant="info">
+            <AlertTitle>Claude Cowork still needs manual setup</AlertTitle>
+            <AlertDescription>
+              The device agent instruments coding assistants that run on a
+              developer's machine — Cowork runs in Claude.ai's own cloud
+              sandbox, so it isn't covered here.{" "}
+              <button
+                type="button"
+                onClick={openCoworkManualSetup}
+                className="text-foreground underline underline-offset-2"
+              >
+                Set it up manually
+              </button>{" "}
+              alongside your device agent rollout.
+            </AlertDescription>
+          </Alert>
           <DeviceAgentSetup />
         </TabsContent>
 
@@ -86,53 +111,15 @@ export function InstrumentAgentsStep({
               const status = platformStatus[platform.id] ?? "not_started";
 
               return (
-                <button
+                <AgentPlatformPickerItem
                   key={platform.id}
-                  type="button"
+                  platformId={platform.id}
+                  name={platform.name}
+                  description={platform.description}
+                  complete={status === "complete"}
+                  statusBadge={platformStatusBadge(status)}
                   onClick={() => setDrawerPlatformId(platform.id)}
-                  className={cn(
-                    "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all",
-                    status === "complete"
-                      ? "border-foreground/10 bg-secondary/20"
-                      : "border-border bg-card hover:border-foreground/20",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
-                      status === "complete"
-                        ? "bg-foreground/10"
-                        : "bg-secondary",
-                    )}
-                  >
-                    {PLATFORM_LOGOS[platform.id] ? (
-                      <img
-                        src={PLATFORM_LOGOS[platform.id]}
-                        alt={platform.name}
-                        className={cn(
-                          "h-5 w-5",
-                          INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
-                        )}
-                      />
-                    ) : (
-                      <span className="text-foreground text-sm font-semibold">
-                        {platform.name.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-foreground text-sm font-medium">
-                        {platform.name}
-                      </p>
-                      {platformStatusBadge(status)}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {platform.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                </button>
+                />
               );
             })}
 
@@ -146,9 +133,9 @@ export function InstrumentAgentsStep({
                     <div
                       key={platform.id}
                       aria-disabled
-                      className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+                      className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                     >
-                      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+                      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
                         <HookSourceIcon
                           source={platform.id}
                           className="h-4 w-4"
@@ -192,24 +179,25 @@ function ChoiceTab({
   value,
   icon,
   title,
-  badge,
   desc,
 }: {
   value: string;
   icon: ReactNode;
   title: string;
-  badge?: ReactNode;
   desc: ReactNode;
 }): JSX.Element {
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-2 rounded-md border p-5 text-left whitespace-normal"
+      // Neutralize the segmented TabsTrigger base (mono/uppercase/tracked) for
+      // the card body; the title span re-applies the mono eyebrow look itself.
+      // The active card reads as the "front sheet": white fill on the gray
+      // page, ink border + ring; inactive cards stay transparent and recede.
+      className="border-border data-[state=active]:border-primary data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-2 border bg-transparent p-5 text-left font-sans text-sm tracking-normal normal-case whitespace-normal"
     >
       <div className="flex w-full items-center gap-2">
         <span className="text-foreground">{icon}</span>
         <span className="text-foreground text-base font-medium">{title}</span>
-        {badge}
       </div>
       <span className="text-muted-foreground text-sm font-normal">{desc}</span>
     </TabsTrigger>

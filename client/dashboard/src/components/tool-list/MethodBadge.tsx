@@ -1,17 +1,9 @@
 import { Badge } from "@/components/ui/Badge";
 
-const methodVariants = {
-  GET: "information",
-  POST: "success",
-  PUT: "warning",
-  PATCH: "warning",
-  DELETE: "destructive",
-} as const;
-
 export function MethodBadge({ method }: { method: string }): JSX.Element {
   const upperMethod = method.toUpperCase();
-  const variant =
-    methodVariants[upperMethod as keyof typeof methodVariants] || "information";
+  // Editorial idiom: neutral ink for every verb; red is reserved for DELETE.
+  const variant = upperMethod === "DELETE" ? "destructive" : "neutral";
 
   return (
     <Badge variant={variant} className="font-mono text-xs" background={false}>

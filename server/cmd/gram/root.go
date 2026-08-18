@@ -43,6 +43,7 @@ func newApp() *cli.App {
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),
 			newStreamsCommand(),
+			newDemoSeedCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

@@ -18,14 +18,15 @@ import (
 
 // Server lists the domains service endpoint HTTP handlers.
 type Server struct {
-	Mounts           []*MountPoint
-	GetDomain        http.Handler
-	ListDomains      http.Handler
-	CreateDomain     http.Handler
-	UpdateDomain     http.Handler
-	CheckHealth      http.Handler
-	DeleteDomain     http.Handler
-	ListMcpEndpoints http.Handler
+	Mounts             []*MountPoint
+	GetDomain          http.Handler
+	ListDomains        http.Handler
+	CreateDomain       http.Handler
+	UpdateDomain       http.Handler
+	SetRootMcpEndpoint http.Handler
+	CheckHealth        http.Handler
+	DeleteDomain       http.Handler
+	ListMcpEndpoints   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,17 +60,19 @@ func New(
 			{"ListDomains", "GET", "/rpc/domain.list"},
 			{"CreateDomain", "POST", "/rpc/domain.register"},
 			{"UpdateDomain", "POST", "/rpc/domain.update"},
+			{"SetRootMcpEndpoint", "POST", "/rpc/domain.setRootMcpEndpoint"},
 			{"CheckHealth", "POST", "/rpc/domain.checkHealth"},
 			{"DeleteDomain", "DELETE", "/rpc/domain.delete"},
 			{"ListMcpEndpoints", "GET", "/rpc/domain.listMcpEndpoints"},
 		},
-		GetDomain:        NewGetDomainHandler(e.GetDomain, mux, decoder, encoder, errhandler, formatter),
-		ListDomains:      NewListDomainsHandler(e.ListDomains, mux, decoder, encoder, errhandler, formatter),
-		CreateDomain:     NewCreateDomainHandler(e.CreateDomain, mux, decoder, encoder, errhandler, formatter),
-		UpdateDomain:     NewUpdateDomainHandler(e.UpdateDomain, mux, decoder, encoder, errhandler, formatter),
-		CheckHealth:      NewCheckHealthHandler(e.CheckHealth, mux, decoder, encoder, errhandler, formatter),
-		DeleteDomain:     NewDeleteDomainHandler(e.DeleteDomain, mux, decoder, encoder, errhandler, formatter),
-		ListMcpEndpoints: NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
+		GetDomain:          NewGetDomainHandler(e.GetDomain, mux, decoder, encoder, errhandler, formatter),
+		ListDomains:        NewListDomainsHandler(e.ListDomains, mux, decoder, encoder, errhandler, formatter),
+		CreateDomain:       NewCreateDomainHandler(e.CreateDomain, mux, decoder, encoder, errhandler, formatter),
+		UpdateDomain:       NewUpdateDomainHandler(e.UpdateDomain, mux, decoder, encoder, errhandler, formatter),
+		SetRootMcpEndpoint: NewSetRootMcpEndpointHandler(e.SetRootMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
+		CheckHealth:        NewCheckHealthHandler(e.CheckHealth, mux, decoder, encoder, errhandler, formatter),
+		DeleteDomain:       NewDeleteDomainHandler(e.DeleteDomain, mux, decoder, encoder, errhandler, formatter),
+		ListMcpEndpoints:   NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -82,6 +85,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListDomains = m(s.ListDomains)
 	s.CreateDomain = m(s.CreateDomain)
 	s.UpdateDomain = m(s.UpdateDomain)
+	s.SetRootMcpEndpoint = m(s.SetRootMcpEndpoint)
 	s.CheckHealth = m(s.CheckHealth)
 	s.DeleteDomain = m(s.DeleteDomain)
 	s.ListMcpEndpoints = m(s.ListMcpEndpoints)
@@ -96,6 +100,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListDomainsHandler(mux, h.ListDomains)
 	MountCreateDomainHandler(mux, h.CreateDomain)
 	MountUpdateDomainHandler(mux, h.UpdateDomain)
+	MountSetRootMcpEndpointHandler(mux, h.SetRootMcpEndpoint)
 	MountCheckHealthHandler(mux, h.CheckHealth)
 	MountDeleteDomainHandler(mux, h.DeleteDomain)
 	MountListMcpEndpointsHandler(mux, h.ListMcpEndpoints)
@@ -295,6 +300,59 @@ func NewUpdateDomainHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateDomain")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetRootMcpEndpointHandler configures the mux to serve the "domains"
+// service "setRootMcpEndpoint" endpoint.
+func MountSetRootMcpEndpointHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/domain.setRootMcpEndpoint", f)
+}
+
+// NewSetRootMcpEndpointHandler creates a HTTP handler which loads the HTTP
+// request and calls the "domains" service "setRootMcpEndpoint" endpoint.
+func NewSetRootMcpEndpointHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetRootMcpEndpointRequest(mux, decoder)
+		encodeResponse = EncodeSetRootMcpEndpointResponse(encoder)
+		encodeError    = EncodeSetRootMcpEndpointError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setRootMcpEndpoint")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
 		payload, err := decodeRequest(r)
 		if err != nil {

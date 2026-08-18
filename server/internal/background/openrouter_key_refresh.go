@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -27,13 +29,73 @@ type OpenRouterKeyRefresher struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {
 	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
 		OrgID:   orgID,
-		Limit:   nil,
+		Limit:   limit,
 		KeyType: string(keyType),
 	})
 	return err
+}
+
+// SchedulePaygOpenRouterChatKeyReconciliation uses the durable outbox event ID
+// as the workflow identity, so Pub/Sub redelivery cannot start the same
+// reconciliation twice. The workflow reads current billing state instead of
+// trusting the event's historical transition.
+func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx context.Context, eventID, orgID string, desiredState openrouter.KeyDesiredState) error {
+	if eventID == "" {
+		return errors.New("PAYG billing event ID is required")
+	}
+	if orgID == "" {
+		return errors.New("organization ID is required")
+	}
+	if err := desiredState.Validate(); err != nil {
+		return fmt.Errorf("schedule PAYG OpenRouter chat key reconciliation: %w", err)
+	}
+
+	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    fmt.Sprintf("v1:openrouter-chat-key-reconcile:billing:%s", eventID),
+		TaskQueue:             string(w.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowRunTimeout:    3 * time.Minute,
+	}, PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{
+		OrganizationID: orgID,
+		DesiredState:   desiredState,
+	})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		return nil
+	case err != nil:
+		return fmt.Errorf("start PAYG OpenRouter chat key reconciliation workflow: %w", err)
+	default:
+		return nil
+	}
+}
+
+type ReconcilePaygOpenRouterChatKeyParams struct {
+	OrganizationID string
+	DesiredState   openrouter.KeyDesiredState
+}
+
+func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params ReconcilePaygOpenRouterChatKeyParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 5,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(
+		ctx,
+		a.ReconcilePaygOpenRouterChatKey,
+		activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: params.OrganizationID, DesiredState: params.DesiredState},
+	).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile PAYG OpenRouter chat key: %w", err)
+	}
+
+	return nil
 }
 
 // Called by your service to start (or restart) the workflow

@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ShadowMCPInventoryApprovalRequest,
+  ShadowMCPInventoryApprovalRequest$inboundSchema,
+} from "./shadowmcpinventoryapprovalrequest.js";
+import {
   ShadowMCPInventoryRequestSummary,
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
@@ -20,9 +24,29 @@ export const Access = {
 } as const;
 export type Access = ClosedEnum<typeof Access>;
 
+/**
+ * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ */
+export const TargetKind = {
+  ServerUrl: "server_url",
+  StdioCommand: "stdio_command",
+} as const;
+/**
+ * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ */
+export type TargetKind = ClosedEnum<typeof TargetKind>;
+
 export type ShadowMCPInventoryServer = {
   access: Access;
   allowedPolicyIds: Array<string>;
+  /**
+   * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
+   */
+  approvalRequest?: ShadowMCPInventoryApprovalRequest | undefined;
+  /**
+   * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
+   */
+  blockedPolicyIds: Array<string>;
   canonicalServerUrl: string;
   firstSeen: Date;
   lastCalled?: Date | undefined;
@@ -32,6 +56,10 @@ export type ShadowMCPInventoryServer = {
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
+  /**
+   * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+   */
+  targetKind?: TargetKind | undefined;
   topUsers: Array<string>;
   urlHost: string;
   userCount: number;
@@ -43,6 +71,10 @@ export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
 );
 
 /** @internal */
+export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
+  .enum(TargetKind);
+
+/** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   ShadowMCPInventoryServer,
   unknown
@@ -50,6 +82,10 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.object({
     access: Access$inboundSchema,
     allowed_policy_ids: z.array(z.string()),
+    approval_request: z.optional(
+      ShadowMCPInventoryApprovalRequest$inboundSchema,
+    ),
+    blocked_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -67,6 +103,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
+    target_kind: z.optional(TargetKind$inboundSchema),
     top_users: z.array(z.string()),
     url_host: z.string(),
     user_count: z.int(),
@@ -74,6 +111,8 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "allowed_policy_ids": "allowedPolicyIds",
+      "approval_request": "approvalRequest",
+      "blocked_policy_ids": "blockedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",
       "last_called": "lastCalled",
@@ -83,6 +122,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",
+      "target_kind": "targetKind",
       "top_users": "topUsers",
       "url_host": "urlHost",
       "user_count": "userCount",

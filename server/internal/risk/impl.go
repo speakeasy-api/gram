@@ -22,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -29,6 +31,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -105,6 +108,10 @@ type Service struct {
 	// back. Must be the same backing store the link generator uses.
 	cache     cache.Cache
 	jwtSecret string
+	// approvalIntake routes a redeemed shadow-MCP block link into the MCP
+	// approval workflow instead of a bypass request. Optional: nil keeps the
+	// legacy bypass flow.
+	approvalIntake ShadowMCPApprovalIntake
 	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
 	// when nil the feature is treated as disabled.
 	flags feature.Provider
@@ -128,6 +135,16 @@ type Service struct {
 	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
 	// Optional: when nil the overview always serves from Postgres.
 	findingsCH *chrepo.Queries
+	// findingsPub republishes an already-persisted finding onto the shared
+	// findings topic to append a ClickHouse state-change row when a result is
+	// manually marked/unmarked false positive (see mirrorFalsePositiveToClickHouse).
+	// Optional: when nil the ClickHouse mirror is skipped; Postgres remains the
+	// source of truth either way.
+	findingsPub gcp.Publisher[*riskv1.Finding]
+	// assetStorage reads chat content part assets for the ClickHouse reveal
+	// path, the same store the batch analysis activity hydrates parts from.
+	// Optional: when nil, content-part findings are not reconstructible.
+	assetStorage blobio.Reader
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -160,6 +177,7 @@ func NewObserver(
 		audit:                        auditLogger,
 		cache:                        nil,
 		jwtSecret:                    "",
+		approvalIntake:               nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -168,6 +186,8 @@ func NewObserver(
 		builtinPresets:               nil,
 		promptJudge:                  nil,
 		findingsCH:                   nil,
+		findingsPub:                  nil,
+		assetStorage:                 nil,
 	}
 }
 
@@ -185,6 +205,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	cacheImpl cache.Cache,
 	jwtSecret string,
+	approvalIntake ShadowMCPApprovalIntake,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
@@ -194,6 +215,8 @@ func NewService(
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 	findingsCH *chrepo.Queries,
+	findingsPub gcp.Publisher[*riskv1.Finding],
+	assetStorage blobio.Reader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -214,6 +237,7 @@ func NewService(
 		audit:                        auditLogger,
 		cache:                        cacheImpl,
 		jwtSecret:                    jwtSecret,
+		approvalIntake:               approvalIntake,
 		piiScanner:                   piiScanner,
 		piScanner:                    piScanner,
 		gitleaksScanner:              gitleaks.NewScanner(),
@@ -222,6 +246,8 @@ func NewService(
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
+		findingsPub:                  findingsPub,
+		assetStorage:                 assetStorage,
 	}
 }
 
@@ -356,17 +382,31 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
+	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+		return nil, err
+	}
+
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, uuid.Nil); err != nil {
+			return nil, err
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, shadowMCPDisposition, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
-	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
-		return nil, err
+	var shadowMCPBlockedURLs []string
+	if payload.ShadowMcpBlockedUrls != nil {
+		shadowMCPBlockedURLs, err = validateShadowMCPBlockedURLs(shadowMCPDisposition, payload.ShadowMcpBlockedUrls)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
@@ -475,10 +515,24 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
+	}
+	if payload.ShadowMcpBlockedUrls != nil {
+		// Block rules apply to everyone in the project: the grant audience is
+		// always the all-users principal, independent of the policy audience.
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBlock,
+			DesiredURLs:    shadowMCPBlockedURLs,
+			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
 	}
 
@@ -795,6 +849,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
 	}
+
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, current.ID); err != nil {
+			return nil, err
+		}
+	}
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
@@ -807,7 +867,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	var shadowMCPAllowedURLs []string
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, effectiveDisposition, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var shadowMCPBlockedURLs []string
+	if payload.ShadowMcpBlockedUrls != nil {
+		shadowMCPBlockedURLs, err = validateShadowMCPBlockedURLs(effectiveDisposition, payload.ShadowMcpBlockedUrls)
 		if err != nil {
 			return nil, err
 		}
@@ -921,10 +989,24 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
+	}
+	if payload.ShadowMcpBlockedUrls != nil {
+		// Block rules apply to everyone in the project: the grant audience is
+		// always the all-users principal, independent of the policy audience.
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBlock,
+			DesiredURLs:    shadowMCPBlockedURLs,
+			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
 	}
 
@@ -1138,6 +1220,12 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	for _, r := range raw.Results {
+		// ClickHouse-served rows are already store-redacted (Match nil,
+		// MatchRedacted stamped at ingest); re-deriving from a nil Match would
+		// clobber the real fingerprint with `<redacted len=0>`.
+		if r.Match == nil && r.MatchRedacted != nil {
+			continue
+		}
 		redactResultMatchInPlace(r, authCtx.ActiveOrganizationID)
 	}
 	return raw, nil
@@ -1236,6 +1324,17 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
 
+	if s.listFromClickHouse(ctx, authCtx) {
+		var from, to *time.Time
+		if fromTime.Valid {
+			from = &fromTime.Time
+		}
+		if toTime.Valid {
+			to = &toTime.Time
+		}
+		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to)
+	}
+
 	var totalCount int64
 	if policyID.Valid {
 		totalCount, err = s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
@@ -1331,6 +1430,14 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
+	// When the listing serves from ClickHouse, listed ids may only exist there
+	// (Postgres result writes are being retired), so the reveal must resolve
+	// against the same store — reconstructing the raw match from the original
+	// chat data per the finding's stored surface metadata.
+	if s.listFromClickHouse(ctx, authCtx) {
+		return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
+	}
+
 	row, err := s.repo.GetRiskResultByID(ctx, repo.GetRiskResultByIDParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
@@ -1374,6 +1481,12 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
 	ruleID := conv.PtrValOrEmpty(r.RuleID, "")
 	matchRedacted := redactMatch(r.Source, ruleID, r.Match, orgID)
+	// ClickHouse-served rows arrive with no raw match and the ingest-time
+	// redaction already stamped; pass it through instead of deriving
+	// `<redacted len=0>` from the nil match.
+	if r.Match == nil && r.MatchRedacted != nil {
+		matchRedacted = *r.MatchRedacted
+	}
 
 	var spansRedacted []*types.RiskSpanRedacted
 	if len(r.Spans) > 0 {
@@ -1744,7 +1857,11 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		cid := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+			// Cursor from the LAST RETURNED row (not this extra row): the
+			// next-page predicate is a strict (message_created_at, id) <, so a
+			// cursor pointing at the extra row would skip it entirely.
+			last := rows[pageSize-1]
+			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
@@ -1776,7 +1893,11 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+			// Cursor from the LAST RETURNED row (not this extra row): the
+			// next-page predicate is a strict (message_created_at, id) <, so a
+			// cursor pointing at the extra row would skip it entirely.
+			last := rows[pageSize-1]
+			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
@@ -2283,20 +2404,45 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 		return nil, err
 	}
 
-	prompt := strings.TrimSpace(payload.Prompt)
-	if prompt == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	prompt := strings.TrimSpace(conv.PtrValOr(payload.Prompt, ""))
+
+	// finding_ids are looked up server-side rather than trusting client-supplied
+	// match/rule_id/source content: the caller may be suggesting from a batch
+	// whose sensitive fields the dashboard hasn't unmasked, and this way the
+	// suggestion always sees authoritative data.
+	var findings []repo.RiskResult
+	if len(payload.FindingIds) > 0 {
+		ids := make([]uuid.UUID, 0, len(payload.FindingIds))
+		for _, raw := range payload.FindingIds {
+			id, err := uuid.Parse(raw)
+			if err != nil {
+				return nil, oops.E(oops.CodeInvalid, err, "invalid finding id %q", raw)
+			}
+			ids = append(ids, id)
+		}
+		rows, err := s.repo.GetRiskResultsByIDs(ctx, repo.GetRiskResultsByIDsParams{
+			ProjectID: *authCtx.ProjectID,
+			Ids:       ids,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get risk results by ids").LogError(ctx, s.logger)
+		}
+		findings = rows
+	}
+
+	if prompt == "" && len(findings) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt or finding_ids is required")
 	}
 
 	if s.completionClient == nil {
 		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
-		return heuristicExclusionSuggestion(prompt), nil
+		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
 
-	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.KnownRuleIds)
+	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, findings, payload.KnownRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
-		return heuristicExclusionSuggestion(prompt), nil
+		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
 	return suggestion, nil
 }
@@ -2313,11 +2459,49 @@ func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter
 }
 
 // heuristicExclusionSuggestion is the deterministic fallback when the LLM is
-// unavailable: treat the prompt as the literal value to suppress. Usually
-// wrong as-is, but it prefills an editable expression rather than dead-ending
-// the operator (mirrors heuristicCustomRuleSuggestion).
-func heuristicExclusionSuggestion(prompt string) *gen.SuggestExclusionResult {
-	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
+// unavailable. With a prompt, treats it as the literal value to suppress —
+// safe, since the operator typed and is knowingly disclosing that value
+// themselves. With only a findings batch, never surfaces a finding's raw
+// matched value (a detected secret/PII value the operator hasn't reviewed):
+// unlike the prompt case, nothing here gates the operator seeing it first,
+// and putting it straight into match_value would bypass the audited
+// risk.unmaskResult path every other raw-match disclosure goes through.
+// Falls back to a rule_id- or source-scoped exclusion — coarser, but built
+// only from data that's never sensitive on its own.
+func heuristicExclusionSuggestion(prompt string, findings []repo.RiskResult) *gen.SuggestExclusionResult {
+	if prompt != "" {
+		return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
+	}
+	if len(findings) > 0 {
+		return exclusionSuggestionResultFromFindingMetadata(findings)
+	}
+	return exclusionSuggestionResult("exact", "", "", "")
+}
+
+// exclusionSuggestionResultFromFindingMetadata derives a coarse exclusion
+// from a findings batch using only non-sensitive metadata (rule_id, source)
+// — never the matched value itself. Prefers rule_id when every finding
+// shares one (the more precise signal); falls back to source.
+func exclusionSuggestionResultFromFindingMetadata(findings []repo.RiskResult) *gen.SuggestExclusionResult {
+	firstRuleID := findings[0].RuleID.String
+	sameRuleID := firstRuleID != ""
+	firstSource := findings[0].Source
+	sameSource := true
+	for _, f := range findings[1:] {
+		if f.RuleID.String != firstRuleID {
+			sameRuleID = false
+		}
+		if f.Source != firstSource {
+			sameSource = false
+		}
+	}
+	if sameRuleID {
+		return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
+	}
+	if sameSource {
+		return exclusionSuggestionResult("source", firstSource, "", "")
+	}
+	return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2671,12 +2855,22 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
-func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
+// errExclusionSuggestionInvalid marks a completion that parsed but failed
+// semantic validation (bad match_type, regex that does not compile as RE2,
+// empty value) — the one failure class where feeding the error back gives
+// the model something it can act on, so it is worth one corrective retry.
+// Transport failures, empty completions, and unparseable JSON stay outside
+// it: the retry prompt carries only the error text, not the model's raw
+// output, so a parse-level failure cannot self-correct and the second call
+// would be wasted.
+var errExclusionSuggestionInvalid = errors.New("invalid exclusion suggestion")
+
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
-Given a single natural-language description of findings an operator wants to stop flagging, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
+Given a natural-language description of findings an operator wants to stop flagging, a batch of example findings they selected, or both, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
 
-Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom").
+A finding carries the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token") and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings, their actual matched text is deliberately withheld from you — it's sensitive (a detected secret or PII value) and the operator hasn't reviewed or disclosed it to this request. Reason only from what the findings share by rule_id and source and suggest a "rule_id" or "source" match_type that covers them, never "exact"/"regex"/"entity_type" from batch findings alone. If the operator's own natural-language request separately names a specific value, that value came from them directly and may be used for "exact"/"regex"/"entity_type".
 
 Fields:
 - "match_type": how match_value is compared, one of:
@@ -2697,7 +2891,24 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	if knownList == "" {
 		knownList = "(none)"
 	}
-	userMessage := fmt.Sprintf("Operator request: %s\n\nKnown rule ids: %s", userPrompt, knownList)
+
+	var messageParts []string
+	if userPrompt != "" {
+		messageParts = append(messageParts, fmt.Sprintf("Operator request: %s", userPrompt))
+	}
+	if len(findings) > 0 {
+		// Deliberately omits each finding's matched value (a detected
+		// secret/PII value) — see the system prompt's note on why. Only
+		// rule_id/source, neither sensitive on its own, cross this boundary.
+		var b strings.Builder
+		b.WriteString("Example findings the operator selected:\n")
+		for _, f := range findings {
+			fmt.Fprintf(&b, "- rule_id=%q source=%q\n", f.RuleID.String, f.Source)
+		}
+		messageParts = append(messageParts, strings.TrimRight(b.String(), "\n"))
+	}
+	messageParts = append(messageParts, fmt.Sprintf("Known rule ids: %s", knownList))
+	userMessage := strings.Join(messageParts, "\n\n")
 
 	strict := false
 	schema := map[string]any{
@@ -2719,6 +2930,30 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Strict:      optionalnullable.From(&strict),
 	}
 
+	result, err := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, userMessage, &jsonSchema)
+	if err == nil {
+		return result, nil
+	}
+	if !errors.Is(err, errExclusionSuggestionInvalid) {
+		return nil, err
+	}
+
+	// One corrective retry with the validation error fed back. Without it, a
+	// model slip (a lookahead in an otherwise fine regex, say) drops the
+	// caller onto the heuristic fallback — an exact match on the operator's
+	// entire prompt text — which reads as the AI failing outright.
+	retryMessage := fmt.Sprintf("%s\n\nYour previous suggestion was rejected: %v\nReturn a corrected JSON object that fixes this.", userMessage, err)
+	result, retryErr := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, retryMessage, &jsonSchema)
+	if retryErr != nil {
+		return nil, fmt.Errorf("retry exclusion suggestion: %w (first attempt: %w)", retryErr, err)
+	}
+	return result, nil
+}
+
+// requestExclusionSuggestion performs a single completion round trip and
+// validates the response with the same gate the create/update exclusion
+// handlers use. Validation failures wrap errExclusionSuggestionInvalid.
+func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, projectID, userID, userEmail, systemPrompt, userMessage string, jsonSchema *or.ChatJSONSchemaConfig) (*gen.SuggestExclusionResult, error) {
 	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -2739,7 +2974,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		ExternalUserID: "",
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
+		JSONSchema:     jsonSchema,
 		Reasoning:      nil,
 	})
 	if err != nil {
@@ -2770,12 +3005,12 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	parsed.SourceFilter = strings.TrimSpace(parsed.SourceFilter)
 
 	if !exclusionMatchTypeAllow[parsed.MatchType] {
-		return nil, fmt.Errorf("model returned invalid match_type %q", parsed.MatchType)
+		return nil, fmt.Errorf("%w: model returned invalid match_type %q", errExclusionSuggestionInvalid, parsed.MatchType)
 	}
 	// Same gate the create/update exclusion handlers apply: non-empty value,
 	// and a regex must compile (RE2) and fit the length cap.
 	if err := validateExclusionMatchValue(parsed.MatchType, parsed.MatchValue); err != nil {
-		return nil, fmt.Errorf("model returned invalid match_value: %w", err)
+		return nil, fmt.Errorf("%w: model returned invalid match_value: %w", errExclusionSuggestionInvalid, err)
 	}
 
 	return exclusionSuggestionResult(parsed.MatchType, parsed.MatchValue, parsed.RuleIDFilter, parsed.SourceFilter), nil
@@ -2874,16 +3109,15 @@ func (s *Service) evaluateGuardrailForChat(
 	includeCEL string,
 	exemptCEL string,
 ) (*gen.PromptGuardrailEvalResult, error) {
-	// GetChat filters soft-deleted chats.
+	// GetChat is project-scoped and filters soft-deleted chats, so a chat in
+	// another project is indistinguishable from one that does not exist.
 	chatRepo := chatrepo.New(s.db)
-	chatRow, err := chatRepo.GetChat(ctx, chatID)
+	_, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
-	case chatRow.ProjectID != projectID:
-		return nil, oops.C(oops.CodeNotFound)
 	}
 
 	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
@@ -3815,10 +4049,29 @@ func unmarshalModelConfig(raw []byte) *types.RiskPolicyModelConfig {
 	}
 }
 
-// fallbackPromptPolicyName derives a stable display name from the guardrail
-// prompt when the LLM namer is unavailable.
+// fallbackPromptPolicyName is used when the LLM naming call is unavailable
+// or fails. It must not just truncate the raw prompt to some length: the
+// dashboard's policy table renders the prompt itself (truncated to 60 runes)
+// right next to the name, so a name that's merely a differently-truncated
+// prefix of the same text reads as pointless duplication. Prefixing it and
+// excerpting much shorter (breaking on a word boundary, not mid-word) keeps
+// it visually distinct at a glance, even though it's still deterministic
+// and prompt-derived (unlike the LLM path, this can't produce a genuine
+// summary).
 func fallbackPromptPolicyName(prompt string, existing []string) string {
-	return promptPolicyNameFromBase(prompt, existing)
+	base := strings.TrimSpace(strings.Join(strings.Fields(prompt), " "))
+	const maxExcerptRunes = 30
+	if r := []rune(base); len(r) > maxExcerptRunes {
+		excerpt := string(r[:maxExcerptRunes])
+		if i := strings.LastIndex(excerpt, " "); i > 0 {
+			excerpt = excerpt[:i]
+		}
+		base = excerpt + "…"
+	}
+	if base == "" {
+		return promptPolicyNameFromBase("Prompt Policy", existing)
+	}
+	return promptPolicyNameFromBase("Prompt Policy: "+base, existing)
 }
 
 func promptPolicyNameFromBase(base string, existing []string) string {
@@ -3894,6 +4147,10 @@ func foundRowToResult(
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
+		// FalsePositiveAt is populated later by callers (ListDismissedRiskResults)
+		// that have a dismissal timestamp to attach; every other caller leaves it
+		// unset since listRiskResults never returns a dismissed result.
+		FalsePositiveAt: nil,
 	}
 }
 

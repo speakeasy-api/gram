@@ -46,12 +46,19 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
-	// Codex payloads persist as a raw log stream like Claude's; they carry no
-	// Claude session to seed, so they skip the attribution path below.
-	if isCodexLogsPayload(payload) {
-		s.writeCodexOTELLogsToClickHouse(ctx, payload, orgID, projectID)
+	// Codex resources persist as a raw log stream like Claude's; they carry no
+	// Claude session to seed, so they skip the attribution path below. Split
+	// per resource rather than routing the whole payload: a collector can
+	// re-batch both clients into one export, and sending the batch to a single
+	// writer would mislabel the other client's records.
+	codexPayload, claudePayload := splitCodexLogsPayload(payload)
+	if codexPayload != nil {
+		s.writeCodexOTELLogsToClickHouse(ctx, codexPayload, orgID, projectID)
+	}
+	if claudePayload == nil {
 		return nil
 	}
+	payload = claudePayload
 
 	sessions := extractSessionMetadata(payload)
 
@@ -92,8 +99,14 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// alone would freeze a session whose entity persistence transiently failed
 		// (classified but never persisted, linked, or billing-resolved) instead of
 		// retrying on the next batch.
+		// Only an entry this Claude path owns may be adopted: the codex OTEL
+		// writer seeds the same key space (session ids are client-reported)
+		// with provider=openai entries whose shape — AccountType set, no
+		// account UUID — would otherwise satisfy the company-credential arm
+		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
@@ -132,6 +145,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			// Claude OTEL records carry no hostname; adopt whatever the hooks
 			// path cached for the session (the Go hooks send it on every event).
 			Hostname:      cached.Hostname,
+			Cwd:           cached.Cwd,
 			AccountType:   "",
 			BillingMode:   "",
 			UserAccountID: "",
@@ -781,8 +795,11 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 
 	// Codex metrics (event counters, not token usage) must not run through the
 	// Claude usage extractor — it would find no claude_code.* metrics and can
-	// reject on temporality. Persist them verbatim instead.
-	if isCodexMetricsPayload(payload) {
+	// reject on temporality. Persist them verbatim instead, splitting per
+	// resource so a mixed collector batch routes each client's metrics to its
+	// own writer.
+	codexMetrics, claudeMetrics := splitCodexMetricsPayload(payload)
+	if codexMetrics != nil {
 		s.logger.InfoContext(ctx, "Received Codex OTEL metrics",
 			attr.SlogHookSource("codex"),
 			attr.SlogHookEvent("Metrics"),
@@ -790,9 +807,12 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 			attr.SlogOrganizationID(orgID),
 			attr.SlogProjectID(projectID),
 		)
-		s.writeCodexMetricsToClickHouse(ctx, payload, orgID, projectID)
+		s.writeCodexMetricsToClickHouse(ctx, codexMetrics, orgID, projectID)
+	}
+	if claudeMetrics == nil {
 		return nil
 	}
+	payload = claudeMetrics
 
 	logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),

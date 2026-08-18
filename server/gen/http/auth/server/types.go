@@ -34,6 +34,7 @@ type InfoResponseBody struct {
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	Trial         *TrialResponseBody               `json:"trial"`
 	Organizations []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
@@ -563,6 +564,186 @@ type SwitchScopesUnexpectedResponseBody struct {
 // SwitchScopesGatewayErrorResponseBody is the type of the "auth" service
 // "switchScopes" endpoint HTTP response body for the "gateway_error" error.
 type SwitchScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoUnauthorizedResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unauthorized" error.
+type EnterDemoUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoForbiddenResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "forbidden" error.
+type EnterDemoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoBadRequestResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "bad_request" error.
+type EnterDemoBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoNotFoundResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "not_found" error.
+type EnterDemoNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoConflictResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "conflict" error.
+type EnterDemoConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoUnsupportedMediaResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unsupported_media" error.
+type EnterDemoUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoInvalidResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "invalid" error.
+type EnterDemoInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoInvariantViolationResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "invariant_violation" error.
+type EnterDemoInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoUnexpectedResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unexpected" error.
+type EnterDemoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnterDemoGatewayErrorResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "gateway_error" error.
+type EnterDemoGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1118,6 +1299,12 @@ type InfoGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TrialResponseBody is used to define fields on response body types.
+type TrialResponseBody struct {
+	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
+	EndsAt    string `form:"ends_at" json:"ends_at" xml:"ends_at"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -1157,6 +1344,9 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		GramAccountType:       res.GramAccountType,
 		HasActiveSubscription: res.HasActiveSubscription,
 		Whitelisted:           res.Whitelisted,
+	}
+	if res.Trial != nil {
+		body.Trial = marshalAuthTrialToTrialResponseBody(res.Trial)
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))
@@ -1583,6 +1773,146 @@ func NewSwitchScopesUnexpectedResponseBody(res *goa.ServiceError) *SwitchScopesU
 // the result of the "switchScopes" endpoint of the "auth" service.
 func NewSwitchScopesGatewayErrorResponseBody(res *goa.ServiceError) *SwitchScopesGatewayErrorResponseBody {
 	body := &SwitchScopesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoUnauthorizedResponseBody(res *goa.ServiceError) *EnterDemoUnauthorizedResponseBody {
+	body := &EnterDemoUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoForbiddenResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoForbiddenResponseBody(res *goa.ServiceError) *EnterDemoForbiddenResponseBody {
+	body := &EnterDemoForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoBadRequestResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoBadRequestResponseBody(res *goa.ServiceError) *EnterDemoBadRequestResponseBody {
+	body := &EnterDemoBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoNotFoundResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoNotFoundResponseBody(res *goa.ServiceError) *EnterDemoNotFoundResponseBody {
+	body := &EnterDemoNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoConflictResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoConflictResponseBody(res *goa.ServiceError) *EnterDemoConflictResponseBody {
+	body := &EnterDemoConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoUnsupportedMediaResponseBody(res *goa.ServiceError) *EnterDemoUnsupportedMediaResponseBody {
+	body := &EnterDemoUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoInvalidResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoInvalidResponseBody(res *goa.ServiceError) *EnterDemoInvalidResponseBody {
+	body := &EnterDemoInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoInvariantViolationResponseBody(res *goa.ServiceError) *EnterDemoInvariantViolationResponseBody {
+	body := &EnterDemoInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoUnexpectedResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoUnexpectedResponseBody(res *goa.ServiceError) *EnterDemoUnexpectedResponseBody {
+	body := &EnterDemoUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnterDemoGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "enterDemo" endpoint of the "auth" service.
+func NewEnterDemoGatewayErrorResponseBody(res *goa.ServiceError) *EnterDemoGatewayErrorResponseBody {
+	body := &EnterDemoGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2023,9 +2353,11 @@ func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, orgName *string, email *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
+	v.OrgName = orgName
+	v.Email = email
 
 	return v
 }
@@ -2035,6 +2367,14 @@ func NewSwitchScopesPayload(organizationID *string, projectID *string, sessionTo
 	v := &auth.SwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewEnterDemoPayload builds a auth service enterDemo endpoint payload.
+func NewEnterDemoPayload(sessionToken *string) *auth.EnterDemoPayload {
+	v := &auth.EnterDemoPayload{}
 	v.SessionToken = sessionToken
 
 	return v

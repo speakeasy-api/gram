@@ -1226,6 +1226,47 @@ func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) 
 	return err
 }
 
+const setAccountTypeIfUnchanged = `-- name: SetAccountTypeIfUnchanged :one
+UPDATE organization_metadata
+SET gram_account_type = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND gram_account_type = $3
+  AND gram_account_type NOT IN ('payg', 'enterprise')
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+`
+
+type SetAccountTypeIfUnchangedParams struct {
+	GramAccountType     string
+	ID                  string
+	PreviousAccountType string
+}
+
+func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountTypeIfUnchangedParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, setAccountTypeIfUnchanged, arg.GramAccountType, arg.ID, arg.PreviousAccountType)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const setOrgWorkosID = `-- name: SetOrgWorkosID :one
 UPDATE organization_metadata
 SET workos_id = $1,
@@ -1263,6 +1304,32 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOrganizationRelationshipWorkOSCursor = `-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND user_id = $4
+`
+
+type SetOrganizationRelationshipWorkOSCursorParams struct {
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	UserID            pgtype.Text
+}
+
+func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, arg SetOrganizationRelationshipWorkOSCursorParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRelationshipWorkOSCursor,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	return err
 }
 
 const setSCIMEnabled = `-- name: SetSCIMEnabled :exec

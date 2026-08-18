@@ -10,10 +10,11 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { AUTH_BUTTON_CLASSES } from "./auth-constants";
 import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
-
-const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9\s-_]+$/;
-const INVALID_ORG_NAME_MESSAGE =
-  "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
+import {
+  MAX_ORG_NAME_LENGTH,
+  normalizeOrgName,
+  validateOrgName,
+} from "./org-name";
 
 export function RegisterPanel(): JSX.Element {
   const telemetry = useTelemetry();
@@ -57,33 +58,24 @@ export function RegisterPanel(): JSX.Element {
     const value = e.target.value;
     setCompanyName(value);
 
-    // Clear previous errors
-    setValidationError("");
-
-    // Validate using the regex on type
-    if (value.trim() && !VALID_ORG_NAME_REGEX.test(value)) {
-      setValidationError(INVALID_ORG_NAME_MESSAGE);
-    }
+    // An empty field is the pristine state, not an error: the CTA is disabled
+    // until something is typed, and submitting reports it as required.
+    setValidationError(value.trim() ? (validateOrgName(value) ?? "") : "");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!companyName.trim()) {
-      setValidationError("Company name is required");
+    const error = validateOrgName(companyName);
+    if (error) {
+      setValidationError(error);
       return;
     }
 
-    if (!VALID_ORG_NAME_REGEX.test(companyName)) {
-      setValidationError(INVALID_ORG_NAME_MESSAGE);
-      return;
-    }
-
-    // Call the register mutation
     registerMutation.mutate({
       request: {
         registerRequestBody: {
-          orgName: companyName.trim(),
+          orgName: normalizeOrgName(companyName),
         },
       },
     });
@@ -117,11 +109,11 @@ export function RegisterPanel(): JSX.Element {
             value={companyName}
             onChange={handleCompanyNameChange}
             placeholder="Acme Inc"
-            className="w-full rounded-md border border-[var(--input-edge)] bg-[var(--card)] px-3.5 py-[11px] text-[16px] text-black placeholder:text-[var(--muted)] placeholder:opacity-55 focus:border-[var(--focus)] focus:outline-none"
+            className="w-full border border-[var(--input-edge)] bg-[var(--card)] px-3.5 py-[11px] text-[16px] text-black placeholder:text-[var(--muted)] placeholder:opacity-55 focus:border-[var(--focus)] focus:outline-none"
             disabled={registerMutation.isPending}
           />
           <p className="text-[12px] text-[var(--muted)]">
-            Letters, numbers, spaces, hyphens, and underscores.
+            Any language, up to {MAX_ORG_NAME_LENGTH} characters.
           </p>
         </div>
 
@@ -140,7 +132,9 @@ export function RegisterPanel(): JSX.Element {
           }
           className={cn(
             AUTH_BUTTON_CLASSES,
-            "w-full disabled:cursor-not-allowed disabled:opacity-50",
+            // Deliberate disabled treatment: muted fill and text instead of
+            // dimming the solid-ink CTA with opacity.
+            "w-full disabled:cursor-not-allowed disabled:bg-[var(--edge)] disabled:text-[var(--muted)] disabled:hover:bg-[var(--edge)]",
           )}
         >
           Create organization

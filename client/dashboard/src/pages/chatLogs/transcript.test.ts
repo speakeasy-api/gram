@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   argsToString,
   buildDisplayItems,
+  displayItemContainsMessage,
   displayItemRows,
   type DisplayItem,
   type ToolRow,
@@ -119,5 +120,16 @@ describe("displayItemRows", () => {
     });
     const loadMore = items.find((i) => i.type === "loadMore")!;
     expect(displayItemRows(loadMore)).toEqual([]);
+  });
+});
+
+describe("displayItemContainsMessage", () => {
+  it("finds a raw tool-result message inside a grouped display item", () => {
+    const items = buildDisplayItems({
+      rows: [toolRow("a", 1), toolRow("b", 3)],
+    });
+
+    expect(displayItemContainsMessage(group(items), "b-result")).toBe(true);
+    expect(displayItemContainsMessage(group(items), "missing")).toBe(false);
   });
 });

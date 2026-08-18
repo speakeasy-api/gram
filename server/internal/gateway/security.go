@@ -232,10 +232,6 @@ func (c clientCredentialsTokenCache) CacheKey() string {
 	return clientCredentialsTokenCacheCacheKey(c.ProjectID, c.ClientID, c.TokenURL, c.Scopes)
 }
 
-func (c clientCredentialsTokenCache) AdditionalCacheKeys() []string {
-	return []string{}
-}
-
 func (c clientCredentialsTokenCache) TTL() time.Duration {
 	return c.ExpiresIn
 }
@@ -444,7 +440,10 @@ func retryTokenRequestWithBasicAuth(ctx context.Context, client *guardian.HTTPCl
 	}
 
 	retryReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	retryReq.SetBasicAuth(clientID, clientSecret)
+	// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
+	// going into the Basic authorization header. Upstreams that decode per
+	// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
+	retryReq.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
 
 	resp, err := client.Do(retryReq)
 	if err != nil {

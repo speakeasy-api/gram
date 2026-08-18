@@ -14,10 +14,12 @@ import (
 
 var Settings = Type("ChatAnalysisSettings", func() {
 	Description("Per-organization switches and budgets for chat session analysis judges.")
-	Required("organization_id", "work_units_enabled", "work_units_daily_cap", "is_default")
+	Required("organization_id", "work_units_enabled", "work_units_daily_cap", "business_memory_enabled", "business_memory_daily_cap", "is_default")
 	Attribute("organization_id", String, "Organization these settings apply to.")
 	Attribute("work_units_enabled", Boolean, "Whether work-units chat analysis is enabled.")
 	Attribute("work_units_daily_cap", Int, "Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.", func() { Minimum(0); Maximum(10000) })
+	Attribute("business_memory_enabled", Boolean, "Whether completed sessions are mined for business memories.")
+	Attribute("business_memory_daily_cap", Int, "Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.", func() { Minimum(0); Maximum(10000) })
 	Attribute("is_default", Boolean, "Whether these values are platform defaults rather than stored organization settings.")
 })
 
@@ -71,6 +73,29 @@ var _ = Service("adminChatAnalysis", func() {
 		Meta("openapi:operationId", "upsertChatAnalysisSettings")
 		Meta("openapi:extension:x-speakeasy-name-override", "upsertWorkUnitsSettings")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertChatAnalysisSettings"}`)
+	})
+
+	Method("upsertBusinessMemorySettings", func() {
+		Description("Create or replace the active organization's business-memory extraction settings. Requires platform admin.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("business_memory_enabled", Boolean, "Whether completed sessions are mined for business memories.")
+			Attribute("business_memory_daily_cap", Int, "Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.", func() { Minimum(0); Maximum(10000) })
+			Required("business_memory_enabled", "business_memory_daily_cap")
+		})
+
+		Result(Settings)
+
+		HTTP(func() {
+			POST("/rpc/adminChatAnalysis.upsertBusinessMemorySettings")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "upsertBusinessMemoryAnalysisSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertBusinessMemorySettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertBusinessMemoryAnalysisSettings"}`)
 	})
 
 	Method("triggerAnalysis", func() {

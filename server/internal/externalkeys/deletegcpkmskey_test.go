@@ -12,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestDeleteGcpKmsKey_Success(t *testing.T) {
@@ -101,6 +103,21 @@ func TestDeleteGcpKmsKey_ForbiddenForReadOnly(t *testing.T) {
 	key := createGcpKmsKey(t, ctx, ti, "key", credID)
 
 	err := ti.service.DeleteGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.DeleteGcpKmsKeyPayload{
+		ID:           key.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestDeleteGcpKmsKey_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credentialID := createGcpIamCredential(t, ctx, ti, "gcp-cred-entitlement-delete")
+	key := createGcpKmsKey(t, ctx, ti, "gcp-key-entitlement-delete", credentialID)
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	err := ti.service.DeleteGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.DeleteGcpKmsKeyPayload{
 		ID:           key.ID,
 		SessionToken: nil,
 	})

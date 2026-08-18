@@ -12,6 +12,58 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
+`
+
+// AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+// organization even when no row exists yet — FOR UPDATE cannot lock an absent
+// row, so two concurrent first-time saves would otherwise both audit a nil
+// before-snapshot. Transaction-scoped: released automatically at
+// commit/rollback.
+func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireDeviceAgentConfigurationLock, organizationID)
+	return err
+}
+
+const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
+UPDATE session_handoff_links s
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
+FROM (
+  SELECT l.id, l.blob_url
+  FROM session_handoff_links l
+  JOIN projects p ON p.id = l.project_id
+  WHERE l.token = $1
+    AND l.consumed_at IS NULL
+    AND l.expires_at > clock_timestamp()
+    AND p.deleted IS FALSE
+    AND p.organization_id = l.organization_id
+  FOR UPDATE OF l
+) claimed
+WHERE s.id = claimed.id
+RETURNING claimed.blob_url
+`
+
+// Atomically claim a link on read: exactly one caller can flip consumed_at,
+// so a raced second fetch loses and gets no rows — burn-after-read without a
+// separate lock. Expired, already-consumed, and links whose project has since
+// been soft-deleted all return no rows; callers must serve every case as an
+// indistinguishable 404.
+//
+// The claim returns the blob URL and blanks the stored pointer in the same
+// statement; the caller reads the document from object storage and deletes
+// the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
+// from the subquery because the outer UPDATE's own RETURNING would hand back
+// the blanked value. The join also pins l.organization_id to the project's
+// real owner as a fail-closed consistency guard.
+func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
+	var blob_url string
+	err := row.Scan(&blob_url)
+	return blob_url, err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -25,8 +77,9 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
-  -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
-  -- not just published ones) keeps the bare org-derived marketplace name; others
+  -- The org's default project (oldest by created_at, then id, over ALL
+  -- non-deleted projects, not just published ones) keeps the bare org-derived
+  -- marketplace name; others
   -- are project-scoped. Resolved the same way the publish path does so the names
   -- match. The subquery spans unpublished projects too, so an unpublished default
   -- doesn't hand the bare name to a different project.
@@ -38,7 +91,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = $1
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project,
   p.id AS plugin_id,
@@ -64,7 +117,7 @@ LEFT JOIN plugins p
 WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
   AND (
-    -- The org's default project (oldest, by id ASC) is the org-wide baseline:
+    -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
     -- always surface its marketplace + observability, even when the caller has no
     -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
@@ -73,7 +126,7 @@ WHERE pr.organization_id = $1
       FROM projects p2
       WHERE p2.organization_id = $1
         AND p2.deleted IS FALSE
-      ORDER BY p2.id ASC
+      ORDER BY p2.created_at ASC, p2.id ASC
       LIMIT 1
     )
     -- A non-default project surfaces only when the caller has a matching assigned
@@ -81,7 +134,7 @@ WHERE pr.organization_id = $1
     -- marketplace and observability plugin are just noise for this user.
     OR p.id IS NOT NULL
   )
-ORDER BY pr.id, p.slug
+ORDER BY is_default_project DESC, pr.created_at, pr.id, p.slug
 `
 
 type GetAgentPluginSetParams struct {
@@ -122,10 +175,10 @@ type GetAgentPluginSetRow struct {
 // distinct names surface as distinct marketplaces; projects that share a name
 // (e.g. several on the org default) still collapse to one in the view.
 //
-// Rows are ordered by pr.id so the org's default project (first by id ASC, the
-// one created at org setup) sorts first. When projects share a name and the view
-// collapses them, keeping the first row's token makes that collapse resolve to
-// the default project rather than the arbitrary alphabetically-first one.
+// Rows put the org's default project first, then use creation order and id for
+// deterministic grouping. When projects share a name and the view collapses
+// them, keeping the first row's token resolves to the default project rather
+// than whichever UUID happens to sort first.
 func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
 	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -157,6 +210,126 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const getChatTitleForMove = `-- name: GetChatTitleForMove :one
+SELECT c.title, c.user_id
+FROM chats c
+WHERE c.id = $1
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.deleted IS FALSE
+`
+
+type GetChatTitleForMoveParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetChatTitleForMoveRow struct {
+	Title  pgtype.Text
+	UserID pgtype.Text
+}
+
+// Best-effort display enrichment for the chat_session:move audit entry. The
+// move is recorded even when this returns no rows (the session may not have
+// been captured yet), so callers treat ErrNoRows as empty, not failure.
+func (q *Queries) GetChatTitleForMove(ctx context.Context, arg GetChatTitleForMoveParams) (GetChatTitleForMoveRow, error) {
+	row := q.db.QueryRow(ctx, getChatTitleForMove, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetChatTitleForMoveRow
+	err := row.Scan(&i.Title, &i.UserID)
+	return i, err
+}
+
+const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetDeviceAgentConfiguration(ctx context.Context, organizationID string) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentConfiguration, organizationID)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDeviceAgentConfigurationForUpdate = `-- name: GetDeviceAgentConfigurationForUpdate :one
+
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+// GetDeviceAgentConfigurationForUpdate locks the row for the update
+// transaction so the unknown-key merge and audit before-snapshot cannot read
+// a config replaced beneath them.
+func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, organizationID string) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentConfigurationForUpdate, organizationID)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
+)
+SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
+FROM projects p
+WHERE p.id = $6
+  AND p.organization_id = $7
+  AND p.deleted IS FALSE
+RETURNING id, expires_at
+`
+
+type InsertSessionHandoffLinkParams struct {
+	SessionID      string
+	Token          string
+	BlobUrl        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type InsertSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Mint a session-handoff capability link. The token is the capability; TTL
+// and burn-after-read (consumed_at) bound a leaked link's exposure window.
+// Minting goes through the tenant-qualified project so a caller whose project
+// and organization disagree, or whose project is soft-deleted, gets no row
+// rather than a live capability URL.
+func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
+	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
+		arg.SessionID,
+		arg.Token,
+		arg.BlobUrl,
+		arg.CreatedByEmail,
+		arg.ExpiresAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i InsertSessionHandoffLinkRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
+	return i, err
 }
 
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
@@ -198,6 +371,105 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const listOwnedChatSessionMeta = `-- name: ListOwnedChatSessionMeta :many
+SELECT c.id, c.title, c.updated_at
+FROM chats c
+WHERE c.id = ANY($1::uuid[])
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+`
+
+type ListOwnedChatSessionMetaParams struct {
+	ChatIds        []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type ListOwnedChatSessionMetaRow struct {
+	ID        uuid.UUID
+	Title     pgtype.Text
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Session-picker metadata for captured agent sessions, strictly owner-matched:
+// only chats whose user_id is the authenticated per-user-key owner, in the
+// key's enrolled project. Personal-account sessions are included (decision on
+// session-portability question Q2, 2026-08-10): the caller is the
+// authenticated owner reading their own metadata. Revisit before any endpoint
+// serves session CONTENT or admin-facing listings — personal-account
+// ownership attribution is partly device-bridge-inferred, which is acceptable
+// for titles but not for transcripts.
+func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedChatSessionMetaParams) ([]ListOwnedChatSessionMetaRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatSessionMeta,
+		arg.ChatIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatSessionMetaRow
+	for rows.Next() {
+		var i ListOwnedChatSessionMetaRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
+
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  $1,
+  $2,
+  $3::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at
+`
+
+type UpsertDeviceAgentConfigurationParams struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+}
+
+// UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+// @config is the already-merged result computed by UpdateConfiguration under
+// the org advisory lock, where stored keys outside the caller's replaceable
+// set (unknown keys, platform-admin-only keys for org admins) were carried
+// over. Do not call this with a raw client payload.
+func (q *Queries) UpsertDeviceAgentConfiguration(ctx context.Context, arg UpsertDeviceAgentConfigurationParams) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentConfiguration, arg.OrganizationID, arg.SchemaVersion, arg.Config)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertDeviceAgentDeviceSync = `-- name: UpsertDeviceAgentDeviceSync :exec

@@ -13,26 +13,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testinfra"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
-	cloneTestDatabase   testinfra.PostgresDBCloneFunc
-	newClickhouseClient testinfra.ClickhouseClientFunc
+	cloneTestDatabase   testenv.PostgresDBCloneFunc
+	newClickhouseClient testenv.ClickhouseClientFunc
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, cloneFunc, err := testinfra.NewTestPostgres(ctx)
+	pgContainer, cloneFunc, err := testenv.NewTestPostgres(ctx)
 	if err != nil {
 		log.Fatalf("launch test postgres: %v", err)
 	}
 	cloneTestDatabase = cloneFunc
 
-	chContainer, chFactory, err := testinfra.NewTestClickhouse(ctx)
+	chContainer, chFactory, err := testenv.NewTestClickhouse(ctx)
 	if err != nil {
 		log.Fatalf("launch test clickhouse: %v", err)
 	}

@@ -4,8 +4,10 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminExternalCredentials } from "./adminexternalcredentials.js";
+import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
@@ -14,6 +16,7 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
@@ -31,17 +34,21 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
+import { Litellm } from "./litellm.js";
+import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { ModelKeys } from "./modelkeys.js";
+import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
+import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -60,10 +67,12 @@ import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
 import { TunneledMcp } from "./tunneledmcp.js";
+import { UnproxiedMcp } from "./unproxiedmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
 import { UserSessionIssuers } from "./usersessionissuers.js";
+import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
@@ -71,6 +80,11 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _adminAssets?: AdminAssets;
+  get adminAssets(): AdminAssets {
+    return (this._adminAssets ??= new AdminAssets(this._options));
   }
 
   private _adminChatAnalysis?: AdminChatAnalysis;
@@ -81,6 +95,13 @@ export class Gram extends ClientSDK {
   private _adminExternalCredentials?: AdminExternalCredentials;
   get adminExternalCredentials(): AdminExternalCredentials {
     return (this._adminExternalCredentials ??= new AdminExternalCredentials(
+      this._options,
+    ));
+  }
+
+  private _adminOpenRouterKeys?: AdminOpenRouterKeys;
+  get adminOpenRouterKeys(): AdminOpenRouterKeys {
+    return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
       this._options,
     ));
   }
@@ -125,6 +146,11 @@ export class Gram extends ClientSDK {
   private _auth?: Auth;
   get auth(): Auth {
     return (this._auth ??= new Auth(this._options));
+  }
+
+  private _businessMemories?: BusinessMemories;
+  get businessMemories(): BusinessMemories {
+    return (this._businessMemories ??= new BusinessMemories(this._options));
   }
 
   private _chat?: Chat;
@@ -209,6 +235,16 @@ export class Gram extends ClientSDK {
     return (this._keys ??= new Keys(this._options));
   }
 
+  private _litellm?: Litellm;
+  get litellm(): Litellm {
+    return (this._litellm ??= new Litellm(this._options));
+  }
+
+  private _mcpApproval?: McpApproval;
+  get mcpApproval(): McpApproval {
+    return (this._mcpApproval ??= new McpApproval(this._options));
+  }
+
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
@@ -232,6 +268,11 @@ export class Gram extends ClientSDK {
   private _modelKeys?: ModelKeys;
   get modelKeys(): ModelKeys {
     return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
+  private _organizationAssets?: OrganizationAssets;
+  get organizationAssets(): OrganizationAssets {
+    return (this._organizationAssets ??= new OrganizationAssets(this._options));
   }
 
   private _organizationRemoteSessionClients?: OrganizationRemoteSessionClients;
@@ -266,6 +307,11 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformMcp?: PlatformMcp;
+  get platformMcp(): PlatformMcp {
+    return (this._platformMcp ??= new PlatformMcp(this._options));
   }
 
   private _plugins?: Plugins;
@@ -367,6 +413,11 @@ export class Gram extends ClientSDK {
     return (this._tunneledMcp ??= new TunneledMcp(this._options));
   }
 
+  private _unproxiedMcp?: UnproxiedMcp;
+  get unproxiedMcp(): UnproxiedMcp {
+    return (this._unproxiedMcp ??= new UnproxiedMcp(this._options));
+  }
+
   private _usage?: Usage;
   get usage(): Usage {
     return (this._usage ??= new Usage(this._options));
@@ -387,6 +438,12 @@ export class Gram extends ClientSDK {
   private _userSessionIssuers?: UserSessionIssuers;
   get userSessionIssuers(): UserSessionIssuers {
     return (this._userSessionIssuers ??= new UserSessionIssuers(this._options));
+  }
+
+  private _userSessionIssuersCimdClients?: UserSessionIssuersCimdClients;
+  get userSessionIssuersCimdClients(): UserSessionIssuersCimdClients {
+    return (this._userSessionIssuersCimdClients ??=
+      new UserSessionIssuersCimdClients(this._options));
   }
 
   private _userSessions?: UserSessions;

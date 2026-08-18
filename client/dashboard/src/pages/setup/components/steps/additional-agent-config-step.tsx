@@ -94,7 +94,7 @@ export function AdditionalAgentConfigStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <KeyRound className="text-foreground h-6 w-6" />
         </div>
       }
@@ -179,9 +179,9 @@ function ProviderComingSoonCard({
   return (
     <div
       aria-disabled
-      className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+      className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
     >
-      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
         <Icon className="text-foreground h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -220,7 +220,7 @@ function ProviderSetupRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all",
+        "flex w-full items-center gap-4 border p-4 text-left transition-all",
         isComplete
           ? "border-foreground/10 bg-secondary/20"
           : "border-border bg-card hover:border-foreground/20",
@@ -228,7 +228,7 @@ function ProviderSetupRow({
     >
       <div
         className={cn(
-          "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+          "flex h-10 w-10 flex-shrink-0 items-center justify-center",
           isComplete ? "bg-foreground/10" : "bg-secondary",
         )}
       >
@@ -367,7 +367,7 @@ function ProviderConfigDrawer({
                 : null}
 
               {step.screenshot ? (
-                <figure className="border-border !my-6 overflow-hidden rounded-md border">
+                <figure className="border-border !my-6 overflow-hidden border">
                   <img
                     src={step.screenshot.src}
                     alt={step.screenshot.alt}

@@ -550,8 +550,12 @@ WHERE s.id = @sync_id
 -- positive and the new streak reaches it, auto-pauses the schedule so
 -- candidate selection stops re-enqueueing it. Callers pass zero pause_after
 -- for failures that should never pause (e.g. transient network errors).
+-- Returns whether this call left the schedule auto-paused: the caller loads a
+-- runnable (never-paused) sync, so a non-null auto_paused_at can only mean
+-- THIS failure crossed the threshold — a clean auto-pause metric signal. Zero
+-- rows (a concurrent config save moved updated_at) returns no row.
 
--- name: RecordSyncFailure :exec
+-- name: RecordSyncFailure :one
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + make_interval(secs => @next_in_seconds::int),
     last_poll_error = @last_poll_error,
@@ -575,7 +579,8 @@ JOIN device_integration_configs c
   ON c.id = sch.device_integration_config_id
 WHERE s.id = @sync_id
   AND sch.id = s.device_integration_schedule_id
-  AND c.updated_at = @config_updated_at;
+  AND c.updated_at = @config_updated_at
+RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused;
 
 -- UpsertMdmDevice reconciles one inventory row. A reappearing device clears
 -- missing_since; last_seen_at stamps this observation for the mark-missing

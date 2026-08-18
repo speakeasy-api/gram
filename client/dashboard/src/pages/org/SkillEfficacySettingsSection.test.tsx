@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
   hasAdmin: true,
-  skillsEnabled: true,
   mutate: vi.fn(),
   mutationOptions: undefined as
     | {
@@ -22,13 +21,6 @@ const testState = vi.hoisted(() => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => testState.hasAdmin,
-    isLoading: false,
-  }),
-}));
-
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { skillsEnabled: testState.skillsEnabled },
     isLoading: false,
   }),
 }));
@@ -73,7 +65,6 @@ import { SkillEfficacySettingsSection } from "./SkillEfficacySettingsSection";
 
 beforeEach(() => {
   testState.hasAdmin = true;
-  testState.skillsEnabled = true;
   testState.mutate.mockReset();
   testState.mutationOptions = undefined;
 });
@@ -152,14 +143,9 @@ describe("SkillEfficacySettingsSection", () => {
     ).toBe("10");
   });
 
-  it("stays hidden without both the Skills feature and org admin scope", () => {
+  it("stays hidden without org admin scope", () => {
     testState.hasAdmin = false;
-    const { rerender } = render(<SkillEfficacySettingsSection />);
-    expect(screen.queryByText("Skill efficacy sampling")).toBeNull();
-
-    testState.hasAdmin = true;
-    testState.skillsEnabled = false;
-    rerender(<SkillEfficacySettingsSection />);
+    render(<SkillEfficacySettingsSection />);
     expect(screen.queryByText("Skill efficacy sampling")).toBeNull();
   });
 });

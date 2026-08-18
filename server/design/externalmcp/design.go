@@ -138,6 +138,42 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
 	})
 
+	Method("getSetupDocs", func() {
+		Description("Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier")
+
+		Payload(func() {
+			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
+				Example("https://mcp.box.com")
+			})
+			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')", func() {
+				Example("com.pulsemcp.mirror/box")
+			})
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("guides", ArrayOf(MCPSetupGuide), "Matching setup guides, most specific match first. Empty when no guide has been published for the server.")
+			Required("guides")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.getSetupDocs")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("server_url")
+			Param("registry_specifier")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMCPSetupDocs")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSetupDocs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMCPSetupDocs"}`)
+	})
+
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -214,6 +250,8 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
 	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
+	Attribute("repository", ExternalMCPRepository, "The source repository the registry links for this server, when it declares one")
+	Attribute("packages", ArrayOf(ExternalMCPPackage), "Published packages that run this server, when the registry declares any")
 
 	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
 	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
@@ -233,6 +271,55 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	Required("id", "name", "url")
 })
 
+var MCPSetupGuide = Type("MCPSetupGuide", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Published setup documentation for an upstream MCP server")
+
+	Attribute("slug", String, "Stable identifier of the guide", func() {
+		Example("box")
+	})
+	Attribute("title", String, "Display title of the guide", func() {
+		Example("Box")
+	})
+	Attribute("summary", String, "One-line summary of what the guide covers")
+	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
+	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
+	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
+	Attribute("matched_remote_id", String, "ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.", func() {
+		Example("hosted")
+	})
+	Attribute("match_kind", String, "How the lookup matched this guide. The most specific kind, when both lookup keys matched it.", func() {
+		Enum("endpoint", "alias")
+	})
+	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
+	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
+
+	Required("slug", "title", "summary", "aliases", "remotes", "match_kind", "external_markdown", "speakeasy_markdown")
+})
+
+var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP server endpoint documented by a setup guide")
+
+	Attribute("id", String, "Stable identifier of the endpoint within the guide", func() {
+		Example("hosted")
+	})
+	Attribute("url", String, "URL of the endpoint", func() {
+		Format(FormatURI)
+	})
+	// Left an open string rather than an enum: the value is passthrough data from
+	// the guides SDK that Gram does not control, so a closed enum would turn an
+	// upstream publish into a decode failure in every generated client.
+	Attribute("transport_type", String, "Transport type as published by the guide (e.g., 'streamable-http', 'sse')", func() {
+		Example("streamable-http")
+	})
+	Attribute("tenanted", Boolean, "Whether the endpoint URL is customer-specific and has to be filled in per tenant")
+
+	Required("id", "url", "transport_type", "tenanted")
+})
+
 var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -240,6 +327,56 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+// ExternalMCPRepository and ExternalMCPPackage carry the registry's linked
+// source repository and published packages. Both are registry declarations:
+// nothing ties the linked repository or a package to what a remote endpoint
+// actually runs, and consumers presenting them as evidence must say so.
+var ExternalMCPRepository = Type("ExternalMCPRepository", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.")
+
+	Attribute("url", String, "Repository URL", func() {
+		Format(FormatURI)
+	})
+	Attribute("source", String, "Hosting service the repository lives on, such as github")
+	Attribute("subfolder", String, "Path within the repository holding the server, for monorepos")
+
+	Required("url")
+})
+
+var ExternalMCPPackage = Type("ExternalMCPPackage", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A published package that runs this server, as declared by the registry")
+
+	Attribute("registry_type", String, "Package registry the artifact is published to, such as npm or pypi")
+	Attribute("registry_base_url", String, "Registry base URL when the package lives outside the default public registry", func() {
+		Format(FormatURI)
+	})
+	Attribute("identifier", String, "Package identifier, scope included")
+	Attribute("version", String, "Published version")
+	Attribute("runtime_hint", String, "Launcher the publisher suggests, such as npx or uvx")
+	Attribute("transport_type", String, "Execution transport the package declares, such as stdio")
+	Attribute("environment_variables", ArrayOf(ExternalMCPPackageEnvironmentVariable), "Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.")
+	Attribute("file_sha256", String, "SHA-256 of the packaged artifact, when the registry publishes one")
+
+	Required("registry_type", "identifier", "version")
+})
+
+var ExternalMCPPackageEnvironmentVariable = Type("ExternalMCPPackageEnvironmentVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An environment variable a package declares its install requires")
+
+	Attribute("name", String, "Variable name the install must populate")
+	Attribute("description", String, "The publisher's explanation of the variable. Untrusted text.")
+	Attribute("is_secret", Boolean, "Whether the publisher marked the value sensitive")
+	Attribute("is_required", Boolean, "Whether an install cannot proceed without it")
+
+	Required("name", "is_secret", "is_required")
 })
 
 var ExternalMCPRemote = Type("ExternalMCPRemote", func() {

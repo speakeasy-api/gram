@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { changeAnchor, type SkillDiffAnchor } from "./skill-diff-anchors";
@@ -129,7 +129,7 @@ export function SuggestedSkillEditSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          {review.isPending && <Skeleton className="h-48 w-full rounded-lg" />}
+          {review.isPending && <Skeleton className="h-48 w-full" />}
           {review.loadError != null && (
             <div className="space-y-2">
               <ErrorAlert
@@ -171,7 +171,7 @@ export function SuggestedSkillEditSection({
               level="component"
               reason="You need write access to review suggested edits."
             >
-              <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+              <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 border px-4 py-3">
                 <Text small muted>
                   {`${selectedIds.length} of ${anchors.length} changes selected`}
                 </Text>
@@ -200,9 +200,7 @@ export function SuggestedSkillEditSection({
             </RequireScope>
           )}
           {suggestion?.appliesCleanly && (
-            <Suspense
-              fallback={<Skeleton className="h-80 w-full rounded-lg" />}
-            >
+            <Suspense fallback={<Skeleton className="h-80 w-full" />}>
               <SkillTextDiff
                 oldContent={latestVersion.content}
                 newContent={suggestion.proposedContent}

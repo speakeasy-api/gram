@@ -28,10 +28,14 @@ package guardian
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"slices"
 	"syscall"
 	"time"
 
@@ -111,12 +115,15 @@ type RetryConfig struct {
 // only a few fields need to be overridden.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		WaitMin:      1 * time.Second,
-		WaitMax:      30 * time.Second,
-		MaxAttempts:  4,
-		CheckRetry:   retryablehttp.DefaultRetryPolicy,
-		Backoff:      retryablehttp.DefaultBackoff,
-		ErrorHandler: nil,
+		WaitMin:     1 * time.Second,
+		WaitMax:     30 * time.Second,
+		MaxAttempts: 4,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		Backoff:     retryablehttp.DefaultBackoff,
+		// Exhausted retries surface as *RetriesExhaustedError so callers
+		// keep the final attempt's status and body instead of the opaque
+		// "giving up" message that discards the response.
+		ErrorHandler: retriesExhaustedErrorHandler,
 		PrepareRetry: nil,
 	}
 }
@@ -185,6 +192,7 @@ type Policy struct {
 	resolver          dns.Resolver
 	limiter           Limiter
 	breaker           Breaker
+	tlsRootCAs        *x509.CertPool
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -193,6 +201,16 @@ type Policy struct {
 func WithResolver(resolver dns.Resolver) func(*Policy) {
 	return func(p *Policy) {
 		p.resolver = resolver
+	}
+}
+
+// WithTLSRootCAs is a functional option that replaces the root CA pool used
+// by clients built from this Policy. This is intended for tests that fetch
+// from httptest.NewTLSServer instances (whose certificates are self-signed);
+// production code should rely on the system pool by leaving this unset.
+func WithTLSRootCAs(pool *x509.CertPool) func(*Policy) {
+	return func(p *Policy) {
+		p.tlsRootCAs = pool
 	}
 }
 
@@ -238,6 +256,7 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 		resolver:          dns.NewNetResolver(),
 		limiter:           nil,
 		breaker:           nil,
+		tlsRootCAs:        nil,
 	}
 
 	for _, option := range options {
@@ -309,6 +328,17 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
 	transport.DialContext = p.Dialer(dialOpts...).DialContext
+
+	// Merge into any existing transport TLS config rather than replacing
+	// it, so a future option that sets client certificates or pinning is
+	// not silently discarded when a root pool is also configured.
+	if p.tlsRootCAs != nil {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{RootCAs: p.tlsRootCAs, MinVersion: tls.VersionTLS12}
+		} else {
+			transport.TLSClientConfig.RootCAs = p.tlsRootCAs
+		}
+	}
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
@@ -477,6 +507,47 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	}
 
 	return nil
+}
+
+// ValidateHTTPURL checks that rawURL is an absolute http or https URL whose
+// host is permitted by the policy's CIDR blocklist. It validates the URL
+// string and resolves the host; it does not connect. Runtime enforcement still
+// happens via [Policy.Dialer] on the subsequent request, including each
+// redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
+// should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
+// the clear.
+func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+}
+
+// ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
+// user-supplied fetch URLs so the request cannot be MITM'd in transit.
+func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+}
+
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse url: %w", err)
+	}
+
+	if !slices.Contains(schemes, u.Scheme) {
+		if len(schemes) == 1 {
+			return nil, fmt.Errorf("url scheme must be %s", schemes[0])
+		}
+		return nil, fmt.Errorf("url scheme must be http or https")
+	}
+
+	if u.Host == "" {
+		return nil, fmt.Errorf("url must include a host")
+	}
+
+	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+		return nil, fmt.Errorf("validate host: %w", err)
+	}
+
+	return u, nil
 }
 
 // checkIP returns [ErrBlockedIP] if ip falls within any of the policy's

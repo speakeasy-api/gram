@@ -1,16 +1,25 @@
-FROM rust:1.97-bookworm@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 AS runner-builder
+# CI builds the runner binary on the host (with cargo caching) and injects it
+# via --build-arg RUNNER_SOURCE=runner-binary --build-context runner-binary=<dir>.
+# Local builds keep the default in-image build. The prebuilt path requires
+# BuildKit (podman/buildah cannot FROM a directory context).
+ARG RUNNER_SOURCE=runner-builder
+
+FROM rust:1.97-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
 COPY agents/runner/src ./agents/runner/src
-RUN cargo build --manifest-path ./agents/runner/Cargo.toml --release --bin gram-assistant-runner
+RUN cargo build --locked --manifest-path ./agents/runner/Cargo.toml --release --bin gram-assistant-runner \
+ && cp /src/agents/runner/target/release/gram-assistant-runner /gram-assistant-runner
+
+FROM ${RUNNER_SOURCE} AS runner-artifact
 
 FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
 
 FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
 WORKDIR /sandbox
-COPY agents/runtime-image/sandbox/package.json ./
-RUN bun install --production
+COPY agents/runtime-image/sandbox/package.json agents/runtime-image/sandbox/bun.lock ./
+RUN bun install --production --frozen-lockfile
 
 # Workaround for oven-sh/bun#9911: playwright-core's bundled `ws` shim is
 # missing 'upgrade'/'unexpected-response' events on bun, which breaks
@@ -61,7 +70,7 @@ RUN apt-get update \
     util-linux \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=runner-builder /src/agents/runner/target/release/gram-assistant-runner /usr/local/bin/gram-assistant-runner
+COPY --from=runner-artifact /gram-assistant-runner /usr/local/bin/gram-assistant-runner
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=lightpanda /lightpanda /usr/local/bin/lightpanda
 COPY agents/runtime-image/lightpanda-supervise.sh /usr/local/bin/lightpanda-supervise

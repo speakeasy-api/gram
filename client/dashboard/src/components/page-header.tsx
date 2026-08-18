@@ -71,6 +71,7 @@ function PageHeaderTitle({
 //     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
+  "shadow-mcp": "Shadow MCP",
   sdks: "SDKs",
   elements: "Chat Elements",
   "add-openapi": "Add OpenAPI",
@@ -78,8 +79,17 @@ const breadcrumbSubstitutions = {
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
+  rbac: "RBAC Override",
   jamf: "Jamf Pro",
   slack: "Assistants",
+};
+
+// Segments that appear in crumb trails but are not routable pages themselves.
+// Their crumb links to the surface that owns them instead of a dead path —
+// the requests segment (present only in legacy request-detail URLs) points
+// at the unified Shadow MCP servers table rather than at a 404.
+const breadcrumbUrlSubstitutions: Record<string, string> = {
+  "/shadow-mcp/requests": "/shadow-mcp",
 };
 
 // One rendered crumb. Pending crumbs (substitution key present, value not yet
@@ -100,7 +110,7 @@ function BreadcrumbCrumb({
     return (
       <span
         aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
       />
     );
   }
@@ -202,7 +212,7 @@ function PageHeaderBreadcrumbs({
       }
 
       return {
-        url: baseUrl + relativeUrl,
+        url: baseUrl + (breadcrumbUrlSubstitutions[relativeUrl] ?? relativeUrl),
         display,
         pending,
         isCurrentPage: location.pathname.endsWith(relativeUrl),

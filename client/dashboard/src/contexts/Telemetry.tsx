@@ -1,6 +1,14 @@
 import type { PostHog } from "posthog-js";
-import { createContext, useContext, useEffect, useReducer } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+} from "react";
+import type { ReactNode } from "react";
 import type { User } from "./Auth";
+import type { TrialLifecycle } from "@/lib/trial-status";
 
 export type Telemetry = Pick<
   PostHog,
@@ -56,9 +64,82 @@ export const testTelemetry: Telemetry = {
   },
 };
 
-export const TelemetryContext = createContext<Telemetry>(
-  import.meta.env.DEV ? devTelemetry : nullTelemetry,
-);
+type FeatureFlagsStatus = "loading" | "ready" | "error";
+
+type FeatureFlagsSnapshot = {
+  status: FeatureFlagsStatus;
+  revision: number;
+};
+
+export type TelemetryContextValue = {
+  telemetry: Telemetry;
+  featureFlags: FeatureFlagsSnapshot;
+};
+
+const defaultTelemetry = import.meta.env.DEV ? devTelemetry : nullTelemetry;
+
+const TelemetryContext = createContext<TelemetryContextValue>({
+  telemetry: defaultTelemetry,
+  featureFlags: { status: "ready", revision: 0 },
+});
+
+function updateFeatureFlags(
+  current: FeatureFlagsSnapshot,
+  errorsLoading: boolean,
+): FeatureFlagsSnapshot {
+  return {
+    status: errorsLoading ? "error" : "ready",
+    revision: current.revision + 1,
+  };
+}
+
+/**
+ * Owns the single PostHog feature-flag subscription for the dashboard.
+ *
+ * Updating the context snapshot re-renders existing `useTelemetry` consumers
+ * as well as the typed feature-flag hook, without registering one PostHog
+ * listener per consumer.
+ */
+export function TelemetryStateProvider({
+  children,
+  telemetry,
+  featureFlagsInitiallyAvailable = false,
+}: {
+  children: ReactNode;
+  telemetry: Telemetry;
+  featureFlagsInitiallyAvailable?: boolean;
+}): JSX.Element {
+  const [featureFlags, onFlagsChanged] = useReducer(
+    updateFeatureFlags,
+    featureFlagsInitiallyAvailable
+      ? { status: "ready", revision: 0 }
+      : { status: "loading", revision: 0 },
+  );
+
+  useEffect(() => {
+    if (featureFlagsInitiallyAvailable) {
+      return undefined;
+    }
+
+    return telemetry.onFeatureFlags((_flags, _variants, context) => {
+      onFlagsChanged(context?.errorsLoading === true);
+    });
+  }, [featureFlagsInitiallyAvailable, telemetry]);
+
+  const value = useMemo<TelemetryContextValue>(
+    () => ({ telemetry, featureFlags }),
+    [featureFlags, telemetry],
+  );
+
+  return (
+    <TelemetryContext.Provider value={value}>
+      {children}
+    </TelemetryContext.Provider>
+  );
+}
+
+export const useTelemetryContext = (): TelemetryContextValue =>
+  useContext(TelemetryContext);
 
 /**
  * Access telemetry, re-rendering the consumer when PostHog feature flags
@@ -69,23 +150,10 @@ export const TelemetryContext = createContext<Telemetry>(
  * on `group()`/`identify()`), so a component that reads a flag during render
  * would otherwise be stuck on the pre-load value — most notably opt-in gates
  * (`?? false`) staying hidden forever even once the flag turns on. Subscribing
- * to `onFeatureFlags` here makes every `isFeatureEnabled` call site reactive,
- * so there's a single way to read a flag and it just works.
+ * at the context provider makes every `isFeatureEnabled` call site reactive,
+ * so there is one PostHog listener and a single way to read a flag.
  */
-export const useTelemetry = (): Telemetry => {
-  const telemetry = useContext(TelemetryContext);
-  const [, onFlagsChanged] = useReducer((version: number) => version + 1, 0);
-
-  useEffect(() => {
-    // onFeatureFlags fires once flags are loaded (immediately if already
-    // loaded when we subscribe) and again on any reload. Returns an
-    // unsubscribe fn. Bumping local state re-renders this consumer so its
-    // isFeatureEnabled reads re-evaluate against the latest flags.
-    return telemetry.onFeatureFlags(() => onFlagsChanged());
-  }, [telemetry]);
-
-  return telemetry;
-};
+export const useTelemetry = (): Telemetry => useTelemetryContext().telemetry;
 
 export function useIdentifyUserForTelemetry(user: User | undefined): void {
   const telemetry = useTelemetry();
@@ -156,6 +224,46 @@ export function useCaptureEnterpriseGateViewed({
   }, [email, organizationId, organizationName, organizationSlug, telemetry]);
 }
 
+// Kept separate from `enterprise_gate_viewed` so that event keeps meaning "cold
+// org that never trialed" and the two funnels stay separable. The upgrade page
+// serves both ended and running trials, so the lifecycle rides along as a
+// property rather than splitting the event again — a walled org and one
+// upgrading early are the same funnel at different stages.
+export function useCaptureUpgradeGateViewed({
+  email,
+  organizationId,
+  organizationName,
+  organizationSlug,
+  trialLifecycle,
+}: {
+  email: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  trialLifecycle: TrialLifecycle;
+}): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!email) return;
+    if (!organizationId) return;
+    telemetry.capture("upgrade_gate_viewed", {
+      email,
+      organization_id: organizationId,
+      organization_name: organizationName,
+      organization_slug: organizationSlug,
+      trial_lifecycle: trialLifecycle,
+    });
+  }, [
+    email,
+    organizationId,
+    organizationName,
+    organizationSlug,
+    trialLifecycle,
+    telemetry,
+  ]);
+}
+
 export function useRegisterChatTelemetry({
   chatId,
   chatUrl,
@@ -204,6 +312,27 @@ export function useRegisterToolsetTelemetry({
       toolset_slug: toolsetSlug,
     });
   }, [toolsetSlug, telemetry]);
+}
+
+/**
+ * Registers the active organization as PostHog's "organization" group.
+ *
+ * `useRegisterProjectForTelemetry` already does this, but only from
+ * `ProjectProvider`, which a walled-off organization never reaches —
+ * `AuthProvider` returns the lockout page first. Registering from the auth
+ * layer as well means organization-targeted flags resolve on exactly the
+ * surfaces that have no project. Both callers pass the same group type and key,
+ * so whichever runs first wins and the other is a no-op.
+ */
+export function useRegisterOrganizationForTelemetry(
+  organizationSlug: string,
+): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!organizationSlug) return;
+    telemetry.group("organization", organizationSlug, {});
+  }, [organizationSlug, telemetry]);
 }
 
 export function useRegisterProjectForTelemetry({

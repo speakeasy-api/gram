@@ -1,7 +1,13 @@
 -- name: GetLatestAuditLogByAction :one
 SELECT
   action,
+  organization_id,
   project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
   subject_type,
   subject_display_name,
   subject_slug,
@@ -23,10 +29,13 @@ FROM audit_logs
 WHERE action = @action;
 
 -- name: GetLatestOutboxPayloadByOrg :one
--- Returns the JSON payload of the most-recently inserted outbox entry for an org+event_type pair.
-SELECT payload
-FROM outbox
+-- Returns the marshaled webhook envelope of the most-recently enqueued outbox
+-- entry for an org+event_type pair. Callers decode it to reach the JSON payload.
+-- The event type is matched on the Pub/Sub message attribute because the outbox
+-- row no longer carries webhook-specific columns.
+SELECT message
+FROM publish_outbox
 WHERE organization_id = @organization_id
-  AND event_type = @event_type
+  AND attributes->>'event_type' = @event_type::text
 ORDER BY id DESC
 LIMIT 1;

@@ -24,7 +24,6 @@ import (
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -980,38 +979,6 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 // the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
 // OAuth handles identity auth at the HTTP layer, so the install command must not
 // instruct users to set those headers manually.
-func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.T) {
-	t.Parallel()
-	ctx, testInstance := newTestMCPMetadataService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	result := oauthtest.CreateProxyToolset(t, ctx, testInstance.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "private-gram-oauth",
-		IsPublic:     false,
-		ProviderType: "",
-	})
-	mcpSlug := result.Toolset.McpSlug.String
-
-	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	err := testInstance.service.ServeInstallPage(rr, req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rr.Code)
-
-	body := rr.Body.String()
-	assert.NotContains(t, body, "Authorization", "OAuth-protected install command must not reference an Authorization header")
-	assert.NotContains(t, body, "gram-key", "OAuth-protected install command must not reference the gram-key input")
-	assert.NotContains(t, body, "gram-environment", "OAuth-protected install command must not reference the gram-environment input")
-	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
-}
-
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
 // OAuth scheme: a private toolset gated by a user_session_issuer (rather than
 // the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so
@@ -1660,4 +1627,79 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	require.Equal(t, "directory", location.Query().Get("utm_source"))
 	require.Equal(t, []string{"spring", "summer"}, location.Query()["campaign"])
 	require.Equal(t, "https://directory.example.com/catalog?category=ai", location.Query().Get("referrer"))
+}
+
+// TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL verifies
+// that a domain-root mcp_endpoint's install page advertises the bare custom
+// domain as the MCP URL instead of the also-valid /mcp/<slug> path.
+func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-install.example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:              domain.ID,
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+	})
+	require.NoError(t, err)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, testInstance.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+
+	issuer := createUserSessionIssuer(t, ctx, testInstance, *authCtx.ProjectID)
+	endpointSlug := "root-ep-" + uuid.NewString()[:8]
+	_, endpoint := createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		name:                "Root Endpoint Install",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		customDomainID:      uuid.NullUUID{UUID: domain.ID, Valid: true},
+	})
+
+	require.NoError(t, domainsRepo.SetRootMcpEndpoint(ctx, customdomains_repo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+
+	domainCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(domainCtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	require.Contains(t, body, "https://root-install.example.com", "install page advertises the bare domain")
+	require.NotContains(t, body, "https://root-install.example.com/mcp/", "root endpoint installs do not use the /mcp path")
 }

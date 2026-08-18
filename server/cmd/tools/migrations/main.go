@@ -27,8 +27,9 @@
 //   - The read is a keyset scan over risk_results.id (uuidv7, time-ordered). The
 //     resume cursor is the sink's last committed id, printed in the final report;
 //     an interrupted run exits nonzero and logs that cursor for -cursor.
-//   - The raw match is never written to ClickHouse: only its length, a redacted
-//     display string, and one-way HMAC fingerprints.
+//   - The full raw match is never written to ClickHouse: only its length, the
+//     partial-mask display string (internal/risk/maskdisplay — boundary
+//     characters only), and one-way HMAC fingerprints.
 package main
 
 import (
@@ -249,6 +250,11 @@ func registerClickhouseFlags(fs *flag.FlagSet) *clickhouseConfig {
 	return cfg
 }
 
+// defaultFrom is the riskfindings default lower time bound: the start of the
+// reveal-metadata re-backfill window (see RISK_RESULTS_MIGRATION.md). Override
+// with -from, or pass -from "" to scan from the beginning of the table.
+const defaultFrom = "2026-05-01T00:00:00Z"
+
 func parseFlags(args []string) (config, error) {
 	fs := flag.NewFlagSet("riskfindings", flag.ContinueOnError)
 
@@ -261,7 +267,7 @@ func parseFlags(args []string) (config, error) {
 		orgID             = fs.String("org", "", "organization_id to scope the migration (optional; all orgs if empty)")
 		projectID         = fs.String("project", "", "project_id (uuid) to scope (optional)")
 		policyID          = fs.String("policy", "", "risk_policy_id (uuid) to scope (optional)")
-		fromStr           = fs.String("from", "", "lower time bound, RFC3339 (optional; from the beginning if empty)")
+		fromStr           = fs.String("from", defaultFrom, "lower time bound, RFC3339 (default is the reveal-metadata re-backfill start; pass an empty string to scan from the beginning)")
 		toStr             = fs.String("to", "", "upper time bound, RFC3339 (optional; to the end if empty)")
 		cursorStr         = fs.String("cursor", "", "resume after this risk_results id (exclusive); keyset resume position only — still pass the original -from/-to/-org/-project/-policy")
 		batchSize         = fs.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")

@@ -92,6 +92,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		Scope:           "",
 		State:           challengeID,
 		ScopesSupported: nil,
+		LoginHint:       "",
+		ScreenHint:      "",
 	})
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)

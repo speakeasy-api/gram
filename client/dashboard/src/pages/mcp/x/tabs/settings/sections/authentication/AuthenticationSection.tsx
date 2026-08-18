@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import {
   Field,
   FieldDescription,
@@ -12,14 +13,15 @@ import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionI
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
-import { SettingsSection } from "../../SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
 import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
-import { McpServerSessionsPanel } from "./McpServerSessionsPanel";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
+import { CimdAdmissionModeField } from "./CimdAdmissionModeField";
+import { CimdCustomClientsField } from "./CimdCustomClientsField";
 import { UserSessionDurationField } from "./UserSessionDurationField";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import {
@@ -39,6 +41,7 @@ export function AuthenticationSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
+  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
@@ -47,23 +50,44 @@ export function AuthenticationSection({
         <SettingsSection.Header>
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
-            Configure user sessions and, when required, upstream identity
-            providers for clients connecting to this server.
+            {isUnproxied
+              ? "Speakeasy doesn't manage authentication for unproxied servers."
+              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            <AuthenticationSectionBody target={target} />
+            {isUnproxied ? (
+              <UnproxiedAuthenticationNotice />
+            ) : (
+              <AuthenticationSectionBody target={target} />
+            )}
           </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Authentication changes apply to new client connections.
-            </SettingsSection.FooterHint>
-          </SettingsSection.Footer>
+          {isUnproxied ? null : (
+            <SettingsSection.Footer>
+              <SettingsSection.FooterHint>
+                Authentication changes apply to new client connections.
+              </SettingsSection.FooterHint>
+            </SettingsSection.Footer>
+          )}
         </SettingsSection.Panel>
       </SettingsSection>
-      <McpServerSessionsPanel mcpServer={mcpServer} />
     </>
+  );
+}
+
+function UnproxiedAuthenticationNotice(): JSX.Element {
+  return (
+    <Field>
+      <FieldLabel>Authentication</FieldLabel>
+      <div>
+        <Badge variant="success">Not applicable</Badge>
+      </div>
+      <FieldDescription>
+        The customer connects directly using the vendor&apos;s own credentials —
+        there&apos;s nothing for Speakeasy to configure here.
+      </FieldDescription>
+    </Field>
   );
 }
 
@@ -189,9 +213,20 @@ export function AuthenticationSectionBody({
   } else if (isUserSessionIssuerError || !userSessionIssuer) {
     authenticationFields = <AuthenticationLoadErrorField />;
   } else {
+    // The custom-URL list only means anything in the modes that consult it.
+    // Keyed on the SAVED effective mode, not an unsaved draft in the mode
+    // field, so the list never claims to apply before the policy does.
+    const admitsCustomUrls =
+      userSessionIssuer.clientIdMetadataAdmissionMode === "presets" ||
+      userSessionIssuer.clientIdMetadataAdmissionMode === "reporting";
+
     authenticationFields = (
       <>
         <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
+        <CimdAdmissionModeField userSessionIssuer={userSessionIssuer} />
+        {admitsCustomUrls && (
+          <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
+        )}
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           isLoading={

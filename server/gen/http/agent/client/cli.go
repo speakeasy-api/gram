@@ -8,7 +8,12 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+	"unicode/utf8"
+
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
@@ -56,6 +61,200 @@ func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agen
 	}
 	v := &agent.ListSyncedUsersPayload{}
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetConfigurationPayload builds the payload for the agent
+// getConfiguration endpoint from CLI flags.
+func BuildGetConfigurationPayload(agentGetConfigurationSessionToken string) (*agent.GetConfigurationPayload, error) {
+	var sessionToken *string
+	{
+		if agentGetConfigurationSessionToken != "" {
+			sessionToken = &agentGetConfigurationSessionToken
+		}
+	}
+	v := &agent.GetConfigurationPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateConfigurationPayload builds the payload for the agent
+// updateConfiguration endpoint from CLI flags.
+func BuildUpdateConfigurationPayload(agentUpdateConfigurationBody string, agentUpdateConfigurationSessionToken string) (*agent.UpdateConfigurationPayload, error) {
+	var err error
+	var body UpdateConfigurationRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUpdateConfigurationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Config == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentUpdateConfigurationSessionToken != "" {
+			sessionToken = &agentUpdateConfigurationSessionToken
+		}
+	}
+	v := &agent.UpdateConfigurationPayload{}
+	if body.Config != nil {
+		v.Config = make(map[string]any, len(body.Config))
+		for key, val := range body.Config {
+			tk := key
+			tv := val
+			v.Config[tk] = tv
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetSessionMetaPayload builds the payload for the agent getSessionMeta
+// endpoint from CLI flags.
+func BuildGetSessionMetaPayload(agentGetSessionMetaSessionIds string, agentGetSessionMetaApikeyToken string) (*agent.GetSessionMetaPayload, error) {
+	var err error
+	var sessionIds []string
+	{
+		err = json.Unmarshal([]byte(agentGetSessionMetaSessionIds), &sessionIds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for sessionIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(sessionIds) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("session_ids", sessionIds, len(sessionIds), 50, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentGetSessionMetaApikeyToken != "" {
+			apikeyToken = &agentGetSessionMetaApikeyToken
+		}
+	}
+	v := &agent.GetSessionMetaPayload{}
+	v.SessionIds = sessionIds
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildReportSessionMovedPayload builds the payload for the agent
+// reportSessionMoved endpoint from CLI flags.
+func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentReportSessionMovedApikeyToken string, agentReportSessionMovedSerialNumber string, agentReportSessionMovedHostname string) (*agent.ReportSessionMovedPayload, error) {
+	var err error
+	var body ReportSessionMovedRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportSessionMovedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
+		}
+		if utf8.RuneCountInString(body.TargetHarness) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_harness", body.TargetHarness, utf8.RuneCountInString(body.TargetHarness), 64, false))
+		}
+		if body.SourceSurface != nil {
+			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportSessionMovedApikeyToken != "" {
+			apikeyToken = &agentReportSessionMovedApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportSessionMovedSerialNumber != "" {
+			serialNumber = &agentReportSessionMovedSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportSessionMovedHostname != "" {
+			hostname = &agentReportSessionMovedHostname
+		}
+	}
+	v := &agent.ReportSessionMovedPayload{
+		SessionID:     body.SessionID,
+		TargetHarness: body.TargetHarness,
+		SourceSurface: body.SourceSurface,
+		Email:         body.Email,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildCreateSessionHandoffPayload builds the payload for the agent
+// createSessionHandoff endpoint from CLI flags.
+func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agentCreateSessionHandoffApikeyToken string, agentCreateSessionHandoffSerialNumber string, agentCreateSessionHandoffHostname string) (*agent.CreateSessionHandoffPayload, error) {
+	var err error
+	var body CreateSessionHandoffRequestBody
+	{
+		err = json.Unmarshal([]byte(agentCreateSessionHandoffBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }'")
+		}
+		if utf8.RuneCountInString(body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
+		}
+		if utf8.RuneCountInString(body.Content) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 262144, false))
+		}
+		if body.SourceSurface != nil {
+			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentCreateSessionHandoffApikeyToken != "" {
+			apikeyToken = &agentCreateSessionHandoffApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentCreateSessionHandoffSerialNumber != "" {
+			serialNumber = &agentCreateSessionHandoffSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentCreateSessionHandoffHostname != "" {
+			hostname = &agentCreateSessionHandoffHostname
+		}
+	}
+	v := &agent.CreateSessionHandoffPayload{
+		SessionID:     body.SessionID,
+		Content:       body.Content,
+		SourceSurface: body.SourceSurface,
+		TTLSeconds:    body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
 
 	return v, nil
 }

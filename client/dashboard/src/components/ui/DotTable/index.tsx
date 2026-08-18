@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Table wrapper that matches the DotCard aesthetic — rounded border,
+ * Table wrapper that matches the DotCard aesthetic — square hairline border,
  * subtle background, and consistent spacing with the card grid.
  */
 export function DotTable({
@@ -23,7 +23,7 @@ export function DotTable({
   return (
     <div
       className={cn(
-        "!border-foreground/10 w-full overflow-hidden rounded-xl border",
+        "!border-foreground/10 w-full overflow-hidden border",
         className,
       )}
     >

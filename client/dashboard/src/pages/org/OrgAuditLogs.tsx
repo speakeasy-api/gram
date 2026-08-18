@@ -1,11 +1,9 @@
 import { useQueryState } from "nuqs";
 import type { MCPServerEntry } from "@/elements";
 import { recommended } from "@/elements/plugins";
-import { RequireScope } from "@/components/require-scope";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/Heading";
+import { ResourceListPage } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -33,15 +31,17 @@ import React, {
   type ReactNode,
 } from "react";
 import { Link } from "react-router";
+import { Link as TextLink } from "@/components/ui/Link";
 import {
   formatAuditAction,
+  formatAuditActionLabel,
+  formatSubjectLabel,
   getActorLabel,
   renderVerb,
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
-  ActionBadge,
-  ActionDot,
+  ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
@@ -62,60 +62,11 @@ function getSubjectLabel(log: AuditLog) {
   return log.subjectDisplayName || log.subjectSlug || log.subjectId;
 }
 
-function recordString(value: unknown, key: string): string | undefined {
-  if (value == null || typeof value !== "object") return undefined;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field !== "" ? field : undefined;
-}
-
-function formatRoleSlug(roleSlug: string) {
-  return roleSlug.replace(/[-_]/g, " ");
-}
-
-function inviteCreatedRole(log: AuditLog): string | undefined {
-  return recordString(log.metadata, "role_slug");
-}
-
-function inviteRoleBefore(log: AuditLog): string | undefined {
-  return (
-    recordString(log.beforeSnapshot, "RoleSlug") ??
-    recordString(log.beforeSnapshot, "role_slug")
-  );
-}
-
-function inviteRoleAfter(log: AuditLog): string | undefined {
-  return (
-    recordString(log.afterSnapshot, "RoleSlug") ??
-    recordString(log.afterSnapshot, "role_slug")
-  );
-}
-
+// renderVerb already names the role ("sent org admin invite to", "changed invite
+// role from x to y for"), so the subject is just the invitee. Repeating it here
+// rendered as "... invite to someone@example.com as org admin".
 function inviteSubjectText(log: AuditLog) {
-  const subject = getSubjectLabel(log);
-
-  if (log.action === "organization_invitation:create") {
-    const role = inviteCreatedRole(log);
-    return role ? `${subject} as ${formatRoleSlug(role)}` : subject;
-  }
-
-  if (log.action === "organization_invitation:update_role") {
-    const before = inviteRoleBefore(log);
-    const after = inviteRoleAfter(log);
-    let roleText = "";
-    if (before && after && before !== after) {
-      roleText = ` from ${formatRoleSlug(before)} to ${formatRoleSlug(after)}`;
-    } else if (after) {
-      roleText = ` to ${formatRoleSlug(after)}`;
-    }
-
-    return `${subject}${roleText}`;
-  }
-
-  return subject;
-}
-
-function renderInviteSubject(log: AuditLog, monoClass: string) {
-  return <span className={monoClass}>{inviteSubjectText(log)}</span>;
+  return getSubjectLabel(log);
 }
 
 function truncateMiddle(value: string, start = 18, end = 16) {
@@ -126,14 +77,31 @@ function truncateMiddle(value: string, start = 18, end = 16) {
 }
 
 const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+// Same mono treatment minus the colour, so the design-system link palette wins.
+const SUBJECT_LINK_CLASS = "font-mono text-xs";
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
-function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+function SubjectLink({
+  to,
+  title,
+  children,
+}: {
+  to: string;
+  title?: string;
+  children: ReactNode;
+}) {
   return (
-    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
-      {children}
-    </Link>
+    <TextLink
+      asChild
+      size="xs"
+      underline={false}
+      className={SUBJECT_LINK_CLASS}
+    >
+      <Link to={to} title={title}>
+        {children}
+      </Link>
+    </TextLink>
   );
 }
 
@@ -158,13 +126,16 @@ function subjectLinkText(log: AuditLog): string {
 function renderSubject(log: AuditLog, orgSlug: string) {
   const monoClass = SUBJECT_MONO_CLASS;
 
-  if (log.subjectType === "organization_invitation") {
-    return renderInviteSubject(log, monoClass);
-  }
-
   const href = subjectHref(log, orgSlug);
   if (href) {
-    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
+    // The humanized label drops most of the identifier, so keep the raw value
+    // reachable on hover the way the asset subject below does.
+    const raw = subjectLinkText(log);
+    return (
+      <SubjectLink to={href} title={raw}>
+        {formatSubjectLabel(raw, log.subjectType)}
+      </SubjectLink>
+    );
   }
 
   if (log.subjectType === "asset") {
@@ -177,7 +148,7 @@ function renderSubject(log: AuditLog, orgSlug: string) {
             "inline-block max-w-[34ch] truncate align-bottom",
           )}
         >
-          {truncateMiddle(subjectLabel)}
+          {truncateMiddle(formatSubjectLabel(subjectLabel, log.subjectType))}
         </span>
       </SimpleTooltip>
     );
@@ -197,7 +168,11 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     return null;
   }
 
-  return <span className={monoClass}>{getSubjectLabel(log)}</span>;
+  return (
+    <span className={monoClass}>
+      {formatSubjectLabel(getSubjectLabel(log), log.subjectType)}
+    </span>
+  );
 }
 
 function hasDiff(log: AuditLog): boolean {
@@ -214,7 +189,6 @@ function AuditLogRow({
   log,
   orgSlug,
   timestampMode,
-  isOdd,
   isHighlighted,
   rowRef,
   highlightMatch,
@@ -222,7 +196,6 @@ function AuditLogRow({
   log: AuditLog;
   orgSlug: string;
   timestampMode: "utc" | "local";
-  isOdd: boolean;
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
@@ -232,12 +205,10 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
-  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
-    <div className="group flex items-start gap-3.5 px-4 py-2.5">
-      <ActionDot action={log.action} />
-      <ActionBadge action={log.action} />
+    <div className="group flex items-center gap-3 px-4 py-2.5">
+      <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <StrongName>
@@ -252,24 +223,15 @@ function AuditLogRow({
           <button
             type="button"
             onClick={() => setDiffExpanded((v) => !v)}
-            className="ml-2 text-xs text-blue-500 hover:underline"
+            className="text-link-primary ml-2 text-xs hover:underline"
           >
             {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
           </button>
         )}
       </div>
-      <span className="text-muted-foreground shrink-0 font-mono text-xs">
+      <span className="text-muted-foreground w-[5.5rem] shrink-0 text-right font-mono text-xs tabular-nums">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
-      {subjectLink && (
-        <Link
-          to={subjectLink}
-          aria-label={`Open ${getSubjectLabel(log)}`}
-          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <Icon name="arrow-right" className="size-4" />
-        </Link>
-      )}
     </div>
   );
 
@@ -277,14 +239,11 @@ function AuditLogRow({
     return (
       <div ref={rowRef} className={cn(isHighlighted && HIGHLIGHTED_ROW_CLASS)}>
         <div
-          className={cn(
-            "rounded-t-lg border border-b-0",
-            isOdd ? "bg-muted/30" : "bg-background",
-          )}
+          className={cn("border border-b-0", "border-border bg-card border-b")}
         >
           {rowContent}
         </div>
-        <div className="bg-background rounded-b-lg border border-t-0 px-4 pt-2 pb-3">
+        <div className="bg-card border border-t-0 px-4 pt-2 pb-3">
           <StructuredDiff log={log} />
         </div>
       </div>
@@ -295,8 +254,8 @@ function AuditLogRow({
     <div
       ref={rowRef}
       className={cn(
-        "rounded-none transition-colors",
-        isOdd ? "bg-muted/30" : "bg-background",
+        "transition-colors",
+        "border-border bg-card border-b",
         isHighlighted && HIGHLIGHTED_ROW_CLASS,
       )}
     >
@@ -348,11 +307,17 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: projectSlug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl({ slug: projectSlug }, toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
   }, [toolsetsData?.toolsets, projectSlug, isLoadingToolsets]);
 
   const auditToolsFilter = useCallback(
@@ -408,18 +373,7 @@ export default function OrgAuditLogs(): React.JSX.Element {
   const showInsights =
     hasAnyScope(["org:read", "org:admin"]) && organization.projects.length > 0;
 
-  const page = (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:read" level="page">
-          <OrgAuditLogsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  const page = <OrgAuditLogsInner />;
 
   if (!showInsights) return page;
 
@@ -462,7 +416,7 @@ function OrgAuditLogsInner() {
     () =>
       (facetsData?.actions ?? []).map((option) => ({
         ...option,
-        displayName: formatAuditAction(option.value),
+        displayName: formatAuditActionLabel(option.value),
       })),
     [facetsData?.actions],
   );
@@ -779,281 +733,283 @@ function OrgAuditLogsInner() {
   ]);
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <InsightsConfig contextInfo={insightsContext} />
-      <div>
-        <Heading variant="h4" className="mb-2">
-          Recent activity across your organization
-        </Heading>
-        <Text muted small className="mt-1">
-          Review organization-wide and project-level actions in chronological
-          order. Search by project, actions, or actor.
-        </Text>
-      </div>
+    <ResourceListPage
+      scope="org:read"
+      title="Audit Logs"
+      description="Review organization-wide and project-level actions in chronological order. Search by project, actions, or actor."
+    >
+      <div className="flex w-full flex-col gap-4">
+        <InsightsConfig contextInfo={insightsContext} />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <FacetSelect
-          label="Project"
-          value={selectedProjectSlug}
-          onValueChange={(value) => {
-            void setSelectedProjectSlug(value);
-          }}
-          placeholder="All projects"
-          allLabel="All projects"
-          options={projects.map((project) => ({
-            value: project.slug,
-            displayName: project.slug,
-          }))}
-        />
-        <FacetSelect
-          label="Action"
-          value={selectedAction}
-          onValueChange={(value) => {
-            void setSelectedAction(value);
-          }}
-          placeholder="All actions"
-          allLabel="All actions"
-          options={actionOptions}
-        />
-        <FacetSelect
-          label="Actor"
-          value={selectedActor}
-          onValueChange={(value) => {
-            void setSelectedActor(value);
-          }}
-          placeholder="All actors"
-          allLabel="All actors"
-          options={actorOptions}
-        />
-        <div className="flex flex-col gap-1.5">
-          <Text small muted>
-            Filters
-          </Text>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!hasActiveFilters}
-            onClick={() => {
-              void Promise.allSettled([
-                setSelectedProjectSlug("all"),
-                setSelectedAction("all"),
-                setSelectedActor("all"),
-              ]);
+        <div className="flex flex-wrap items-end gap-3">
+          <FacetSelect
+            label="Project"
+            value={selectedProjectSlug}
+            onValueChange={(value) => {
+              void setSelectedProjectSlug(value);
             }}
-          >
-            Clear filters
-          </Button>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Text small muted>
-            Timestamp
-          </Text>
-          <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
-            <Text
-              small
-              className={
-                tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
-              }
-            >
-              UTC
+            placeholder="All projects"
+            allLabel="All projects"
+            options={projects.map((project) => ({
+              value: project.slug,
+              displayName: project.slug,
+            }))}
+          />
+          <FacetSelect
+            label="Action"
+            value={selectedAction}
+            onValueChange={(value) => {
+              void setSelectedAction(value);
+            }}
+            placeholder="All actions"
+            allLabel="All actions"
+            options={actionOptions}
+          />
+          <FacetSelect
+            label="Actor"
+            value={selectedActor}
+            onValueChange={(value) => {
+              void setSelectedActor(value);
+            }}
+            placeholder="All actors"
+            allLabel="All actors"
+            options={actorOptions}
+          />
+          <div className="flex flex-col gap-1.5">
+            <Text small muted>
+              Filters
             </Text>
-            <Switch
-              checked={tsMode === "local"}
-              onCheckedChange={(checked) => {
-                void setTimestampMode(checked ? "local" : "utc");
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!hasActiveFilters}
+              onClick={() => {
+                void Promise.allSettled([
+                  setSelectedProjectSlug("all"),
+                  setSelectedAction("all"),
+                  setSelectedActor("all"),
+                ]);
               }}
-              aria-label="Toggle timestamp timezone"
-            />
-            <Text
-              small
-              className={
-                tsMode === "local" ? "text-foreground" : "text-muted-foreground"
-              }
             >
-              Local
+              Clear filters
+            </Button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Text small muted>
+              Timestamp
             </Text>
+            <div className="bg-background flex h-8 items-center gap-2 border px-3">
+              <Text
+                small
+                className={
+                  tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
+                }
+              >
+                UTC
+              </Text>
+              <Switch
+                checked={tsMode === "local"}
+                onCheckedChange={(checked) => {
+                  void setTimestampMode(checked ? "local" : "utc");
+                }}
+                aria-label="Toggle timestamp timezone"
+              />
+              <Text
+                small
+                className={
+                  tsMode === "local"
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+                }
+              >
+                Local
+              </Text>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="bg-background overflow-hidden rounded-lg border">
-        {/* Search toolbar */}
-        {!isLoading && !error && logs.length > 0 && (
-          <div className="bg-surface/50 flex items-center gap-2 border-b p-2">
-            <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
-              {searchQuery ? (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      N
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧N
-                    </kbd>
-                    <span className="ml-0.5">results</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ESC
-                    </kbd>
-                    <span>clear</span>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      J
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      K
-                    </kbd>
-                    <span className="ml-0.5">navigate</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      G
-                    </kbd>
-                    <span>first</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧G
-                    </kbd>
-                    <span>last</span>
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="relative ml-auto">
-              <Icon
-                name="search"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-              />
-              <Input
-                data-audit-search-input
-                type="text"
-                placeholder="Search audit logs"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onFocus={() => setSearchInputFocused(true)}
-                onBlur={() => setSearchInputFocused(false)}
-                className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
-              />
-              {searchQuery || searchInputFocused ? (
-                searchMatchIndices.length > 0 ? (
-                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                      ESC
+        <div className="bg-card overflow-hidden border">
+          {/* Search toolbar */}
+          {!isLoading && !error && logs.length > 0 && (
+            <div className="bg-card flex items-center gap-2 border-b p-2">
+              <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
+                {searchQuery ? (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        N
+                      </kbd>
+                      <span>/</span>
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        ⇧N
+                      </kbd>
+                      <span className="ml-0.5">results</span>
                     </span>
-                    <span className="text-muted-foreground mx-0.5 text-[10px]">
-                      {effectiveSearchIndex + 1}/{searchMatchIndices.length}
+                    <span className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        ESC
+                      </kbd>
+                      <span>clear</span>
                     </span>
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => navigateToResult("prev")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                        title="Previous (Shift+N)"
-                      >
-                        <Icon name="chevron-up" className="size-2.5" />
-                      </button>
-                      <button
-                        onClick={() => navigateToResult("next")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                        title="Next (N)"
-                      >
-                        <Icon name="chevron-down" className="size-2.5" />
-                      </button>
-                    </div>
-                  </div>
+                  </>
                 ) : (
-                  <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
-                      ESC
+                  <>
+                    <span className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        J
+                      </kbd>
+                      <span>/</span>
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        K
+                      </kbd>
+                      <span className="ml-0.5">navigate</span>
                     </span>
-                    <span className="text-muted-foreground ml-0.5 text-[10px]">
-                      0/0
+                    <span className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        G
+                      </kbd>
+                      <span>first</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
+                        ⇧G
+                      </kbd>
+                      <span>last</span>
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="relative ml-auto">
+                <Icon
+                  name="search"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
+                />
+                <Input
+                  data-audit-search-input
+                  type="text"
+                  placeholder="Search audit logs"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() => setSearchInputFocused(true)}
+                  onBlur={() => setSearchInputFocused(false)}
+                  className="w-56 py-1 pr-16 pl-7 text-xs"
+                />
+                {searchQuery || searchInputFocused ? (
+                  searchMatchIndices.length > 0 ? (
+                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
+                        ESC
+                      </span>
+                      <span className="text-muted-foreground mx-0.5 text-[10px]">
+                        {effectiveSearchIndex + 1}/{searchMatchIndices.length}
+                      </span>
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => navigateToResult("prev")}
+                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                          title="Previous (Shift+N)"
+                        >
+                          <Icon name="chevron-up" className="size-2.5" />
+                        </button>
+                        <button
+                          onClick={() => navigateToResult("next")}
+                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                          title="Next (N)"
+                        >
+                          <Icon name="chevron-down" className="size-2.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
+                        ESC
+                      </span>
+                      <span className="text-muted-foreground ml-0.5 text-[10px]">
+                        0/0
+                      </span>
+                    </div>
+                  )
+                ) : (
+                  <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+                    <span className="text-muted-foreground bg-muted px-1 py-0.5 font-mono text-[10px]">
+                      /
                     </span>
                   </div>
-                )
-              ) : (
-                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    /
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div ref={logsContainerRef} tabIndex={0} className="focus:outline-none">
-          {isLoading ? (
-            <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-              <Icon name="loader-circle" className="size-4 animate-spin" />
-              <span>Loading audit logs...</span>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Text className="font-medium">Error loading audit logs</Text>
-              <Text muted small>
-                {error.message}
-              </Text>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Text className="font-medium">No audit logs found</Text>
-              <Text muted small>
-                {selectedProjectSlug === "all" &&
-                selectedAction === "all" &&
-                selectedActor === "all"
-                  ? "Activity will appear here as changes are made across your organization."
-                  : "No audit logs match the selected filters."}
-              </Text>
-            </div>
-          ) : (
-            <div>
-              {dateGroups.map((group) => (
-                <React.Fragment key={group.key}>
-                  <DateGroupHeader date={group.date} mode={tsMode} />
-                  {group.logs.map((log, rowIndex) => {
-                    const idx = logFlatIndices.get(log.id) ?? 0;
-                    return (
-                      <AuditLogRow
-                        key={log.id}
-                        log={log}
-                        orgSlug={orgSlug ?? ""}
-                        timestampMode={tsMode}
-                        isOdd={rowIndex % 2 === 1}
-                        isHighlighted={idx === currentLogIndex}
-                        rowRef={(el) => {
-                          if (el) logRefs.current.set(idx, el);
-                          else logRefs.current.delete(idx);
-                        }}
-                        highlightMatch={
-                          searchQuery ? highlightMatch : undefined
-                        }
-                      />
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                )}
+              </div>
             </div>
           )}
-        </div>
 
-        <AuditFeedFooter
-          count={logs.length}
-          hasNextPage={hasNextPage ?? false}
-          isFetching={isFetching}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={() => {
-            void fetchNextPage();
-          }}
-        />
+          <div
+            ref={logsContainerRef}
+            tabIndex={0}
+            className="focus:outline-none"
+          >
+            {isLoading ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                <Icon name="loader-circle" className="size-4 animate-spin" />
+                <span>Loading audit logs...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-center">
+                <Text className="font-medium">Error loading audit logs</Text>
+                <Text muted small>
+                  {error.message}
+                </Text>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-center">
+                <Text className="font-medium">No audit logs found</Text>
+                <Text muted small>
+                  {selectedProjectSlug === "all" &&
+                  selectedAction === "all" &&
+                  selectedActor === "all"
+                    ? "Activity will appear here as changes are made across your organization."
+                    : "No audit logs match the selected filters."}
+                </Text>
+              </div>
+            ) : (
+              <div>
+                {dateGroups.map((group) => (
+                  <React.Fragment key={group.key}>
+                    <DateGroupHeader date={group.date} mode={tsMode} />
+                    {group.logs.map((log) => {
+                      const idx = logFlatIndices.get(log.id) ?? 0;
+                      return (
+                        <AuditLogRow
+                          key={log.id}
+                          log={log}
+                          orgSlug={orgSlug ?? ""}
+                          timestampMode={tsMode}
+                          isHighlighted={idx === currentLogIndex}
+                          rowRef={(el) => {
+                            if (el) logRefs.current.set(idx, el);
+                            else logRefs.current.delete(idx);
+                          }}
+                          highlightMatch={
+                            searchQuery ? highlightMatch : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <AuditFeedFooter
+            count={logs.length}
+            hasNextPage={hasNextPage ?? false}
+            isFetching={isFetching}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={() => {
+              void fetchNextPage();
+            }}
+          />
+        </div>
       </div>
-    </div>
+    </ResourceListPage>
   );
 }

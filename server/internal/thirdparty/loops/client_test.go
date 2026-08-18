@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -235,6 +237,175 @@ func TestHTTPClient_SendTransactional_OmitsEmptyVariables(t *testing.T) {
 	require.NoError(t, readErr)
 	require.NotContains(t, string(rawBody), "dataVariables")
 	require.NotContains(t, string(rawBody), "addToAudience")
+}
+
+func TestNewWorkflowClient_NoopWhenAPIKeyIsNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	for _, apiKey := range []string{"", "unset"} {
+		client := NewWorkflowClient(t.Context(), testenv.NewLogger(t), newTestPolicy(t), apiKey)
+		require.IsType(t, &noopClient{}, client)
+		require.NoError(t, client.UpdateContact(t.Context(), UpdateContactInput{Email: "<EMAIL>"}))
+		require.NoError(t, client.SendEvent(t.Context(), SendEventInput{Email: "<EMAIL>", EventName: "trial_started"}))
+		contact, err := client.FindContact(t.Context(), FindContactInput{Email: "<EMAIL>"})
+		require.NoError(t, err)
+		require.Nil(t, contact)
+	}
+}
+
+func TestHTTPClient_FindContact_SendsEncodedQueryAndDecodesContact(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "<EMAIL>@example.com", r.URL.Query().Get("email"))
+		assert.Empty(t, r.URL.Query().Get("userId"))
+		assert.Equal(t, "Bearer workflow-key", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`[{"email":"<EMAIL>@example.com","firstName":"Ada","userId":"<USER_ID>","subscribed":true}]`))
+	}))
+	t.Cleanup(server.Close)
+
+	c := newTestHTTPClient(t, server.URL, "workflow-key")
+	contact, err := c.FindContact(t.Context(), FindContactInput{Email: "<EMAIL>@example.com"})
+	require.NoError(t, err)
+	require.NotNil(t, contact)
+	require.Equal(t, "<EMAIL>@example.com", contact.Email)
+	require.Equal(t, "Ada", *contact.FirstName)
+	require.Equal(t, "<USER_ID>", *contact.UserID)
+	require.True(t, contact.Subscribed)
+}
+
+func TestHTTPClient_FindContact_ReturnsNilWhenNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(server.Close)
+
+	contact, err := newTestHTTPClient(t, server.URL, "workflow-key").FindContact(t.Context(), FindContactInput{UserID: "<USER_ID>"})
+	require.NoError(t, err)
+	require.Nil(t, contact)
+}
+
+func TestHTTPClient_WorkflowResponseRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", maxWorkflowResponseBytes+1)))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := newTestHTTPClient(t, server.URL, "workflow-key").FindContact(t.Context(), FindContactInput{Email: "<EMAIL>@example.com"})
+	require.ErrorContains(t, err, "workflow response body exceeded")
+}
+
+func TestHTTPClient_FindContact_RejectsAmbiguousIdentity(t *testing.T) {
+	t.Parallel()
+
+	client := newTestHTTPClient(t, "http://invalid", "workflow-key")
+	for _, input := range []FindContactInput{
+		{},
+		{Email: "<EMAIL>@example.com", UserID: "<USER_ID>"},
+	} {
+		_, err := client.FindContact(t.Context(), input)
+		require.ErrorContains(t, err, "find contact requires exactly one of email or user ID")
+	}
+}
+
+func TestHTTPClient_UpdateContact_SendsTypedCamelCaseProperties(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/contacts/update", r.URL.Path)
+		assert.Equal(t, "Bearer workflow-key", r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		var body map[string]any
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "<EMAIL>@example.com", body["email"])
+		assert.Equal(t, "<USER_ID>", body["userId"])
+		assert.Equal(t, "Ada", body["firstName"])
+		assert.Equal(t, "<ORG_NAME>", body["organizationName"])
+		assert.Equal(t, true, body["trialActive"])
+		assert.InDelta(t, float64(14), body["trialDays"], 0)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	t.Cleanup(server.Close)
+
+	firstName := "Ada"
+	err := newTestHTTPClient(t, server.URL, "workflow-key").UpdateContact(t.Context(), UpdateContactInput{
+		Email:     "<EMAIL>@example.com",
+		FirstName: &firstName,
+		UserID:    "<USER_ID>",
+		CustomProperties: map[string]any{
+			"organizationName": "<ORG_NAME>",
+			"trialActive":      true,
+			"trialDays":        14,
+		},
+	})
+	require.NoError(t, err)
+}
+
+func TestHTTPClient_SendEvent_SendsPropertiesAuthAndIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/events/send", r.URL.Path)
+		assert.Equal(t, "Bearer workflow-key", r.Header.Get("Authorization"))
+		assert.Equal(t, "event-key", r.Header.Get("Idempotency-Key"))
+		var body eventRequest
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "<EMAIL>@example.com", body.Email)
+		assert.Equal(t, "<USER_ID>", body.UserID)
+		assert.Equal(t, "trial_started", body.EventName)
+		assert.Equal(t, map[string]any{"trialEndsAt": "<TRIAL_ENDS_AT>"}, body.EventProperties)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestHTTPClient(t, server.URL, "workflow-key").SendEvent(t.Context(), SendEventInput{
+		Email:           "<EMAIL>@example.com",
+		UserID:          "<USER_ID>",
+		EventName:       "trial_started",
+		EventProperties: map[string]any{"trialEndsAt": "<TRIAL_ENDS_AT>"},
+		IdempotencyKey:  "event-key",
+	})
+	require.NoError(t, err)
+}
+
+func TestHTTPClient_SendEvent_TreatsDuplicateAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"success":false,"message":"duplicate"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestHTTPClient(t, server.URL, "workflow-key").SendEvent(t.Context(), SendEventInput{
+		Email:          "<EMAIL>@example.com",
+		EventName:      "trial_started",
+		IdempotencyKey: "event-key",
+	})
+	require.NoError(t, err)
+}
+
+func TestHTTPClient_WorkflowMethodsReturnAPIErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"success":false,"message":"invalid property"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	c := newTestHTTPClient(t, server.URL, "workflow-key")
+	err := c.UpdateContact(t.Context(), UpdateContactInput{Email: "<EMAIL>@example.com"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "HTTP 400")
+	require.Contains(t, err.Error(), "invalid property")
 }
 
 func newTestPolicy(t *testing.T) *guardian.Policy {

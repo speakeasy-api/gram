@@ -165,8 +165,8 @@ const TableContainer = forwardRef<HTMLTableElement, TableContainerProps>(
           ref={ref}
           className={cn(
             styles.table,
-            "relative grid w-full caption-bottom [border-collapse:separate] [border-spacing:0] [grid-template-columns:var(--grid-template-columns)] overflow-x-auto overflow-y-hidden rounded-lg border text-sm",
-            tableDepth > 1 && "rounded-none border-none",
+            "relative grid w-full caption-bottom [border-collapse:separate] [border-spacing:0] [grid-template-columns:var(--grid-template-columns)] overflow-x-auto overflow-y-hidden border text-sm",
+            tableDepth > 1 && "border-none",
             className,
           )}
           data-cell-padding={cellPadding}
@@ -401,11 +401,15 @@ function SortableHeaderCell<T extends object>({
     >
       <button
         type="button"
-        className="group flex h-full w-full min-w-0 items-center gap-1 text-left font-medium"
+        className="group flex h-full w-full min-w-0 items-center gap-1 text-left"
         aria-label={getSortButtonLabel(column, sort)}
         onClick={() => onSortChange(getNextSort(column, sort))}
       >
-        <span className="min-w-0 truncate">{column.header}</span>
+        {/* The header cell's eyebrow styling reaches the button through
+            inheritance except for text-transform, which the browser's form-
+            control styling drops -- so a sortable header would read in
+            sentence case beside its uppercase unsortable neighbours. */}
+        <span className="min-w-0 truncate uppercase">{column.header}</span>
         <Icon
           aria-hidden="true"
           className={cn(
@@ -450,6 +454,7 @@ type BodyProps<T extends object> = {
   data: T[] | Group<T>[];
   rowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
   noResultsMessage?: ReactNode;
   renderGroupHeader?: (group: Group<T>) => ReactNode;
@@ -495,6 +500,7 @@ const Body = React.forwardRef(function Body<T extends object>(
     rowKey,
     hasMore,
     onRowClick,
+    isRowClickable,
     renderRow,
     noResultsMessage,
     renderGroupHeader,
@@ -514,6 +520,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           renderGroupHeader={renderGroupHeader}
           key={row.key}
           onRowClick={onRowClick}
+          isRowClickable={isRowClickable}
           renderRow={renderRow}
         />
       );
@@ -525,7 +532,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           rowKey={rowKey}
           renderExpandedContent={renderExpandedContent}
           key={rowKey(row)}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -535,7 +542,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -581,17 +588,42 @@ type RowContainerProps = {
   >;
 
 const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
-  function RowContainer({ className, children, onClick, ...rest }, ref) {
+  function RowContainer(
+    { className, children, onClick, onKeyDown, tabIndex, ...rest },
+    ref,
+  ) {
+    const isClickable = Boolean(onClick);
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented || !onClick) {
+        return;
+      }
+      // Only the row itself activates on Enter/Space. Key events from a focused
+      // nested control (button, link, input, …) must reach that control instead.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      onClick();
+    };
+
     return (
       <tr
         ref={ref}
+        {...rest}
         className={cn(
           "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-muted/50 data-[state=selected]:bg-muted",
-          onClick && "cursor-pointer",
+          isClickable &&
+            "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
         onClick={onClick}
-        {...rest}
+        onKeyDown={isClickable ? handleKeyDown : onKeyDown}
+        tabIndex={isClickable ? 0 : tabIndex}
       >
         {children}
       </tr>
@@ -722,6 +754,7 @@ function RowGroup<T extends object>({
   renderGroupHeader,
   className,
   onRowClick,
+  isRowClickable,
   renderRow,
 }: {
   group: Group<T>;
@@ -730,6 +763,7 @@ function RowGroup<T extends object>({
   renderGroupHeader?: (group: Group<T>) => ReactNode;
   className?: string;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
 }) {
   return (
@@ -745,7 +779,7 @@ function RowGroup<T extends object>({
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       ))}
@@ -861,13 +895,13 @@ function LoadMore<T extends object>({
       >
         {columns.map((column) => (
           <Cell key={column.key.toString()}>
-            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-full bg-muted" />
           </Cell>
         ))}
       </RowWrapper>
       <ButtonWrapper>
         <button
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium whitespace-nowrap normal-case transition-colors select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
+          className="inline-flex h-9 items-center justify-center gap-2 border border-input bg-background px-4 py-2 text-sm font-medium whitespace-nowrap normal-case transition-colors select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
           onClick={() => {
             void handleLoadMore();
           }}
@@ -897,7 +931,7 @@ function HeaderCell({ className, children, ...props }: HeaderCellProps) {
       {...props}
       className={cn(
         styles.tableHeader,
-        "flex items-center align-middle font-medium whitespace-nowrap text-body select-none",
+        "text-eyebrow flex items-center align-middle whitespace-nowrap select-none",
         className,
       )}
     >

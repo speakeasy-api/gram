@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	organizationsgen "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -21,6 +22,17 @@ const (
 
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
+
+	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
+
+	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
+
+	ActionOrganizationEnterpriseTrialDemoted  Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationEnterpriseTrialRearmed  Action = "organization:enterprise_trial_rearmed"
+	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
+
+	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -259,4 +271,367 @@ func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx r
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
+}
+
+type DeviceAgentConfigurationSnapshot struct {
+	SchemaVersion int32          `json:"schema_version"`
+	Config        map[string]any `json:"config"`
+}
+
+type LogOrganizationDeviceAgentConfigurationUpdatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationSlug string
+
+	DeviceAgentConfigurationSnapshotBefore *DeviceAgentConfigurationSnapshot
+	DeviceAgentConfigurationSnapshotAfter  *DeviceAgentConfigurationSnapshot
+}
+
+func (l *Logger) LogOrganizationDeviceAgentConfigurationUpdated(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	event LogOrganizationDeviceAgentConfigurationUpdatedEvent,
+) error {
+	beforeSnapshot, err := marshalAuditPayload(event.DeviceAgentConfigurationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationDeviceAgentConfigurationUpdated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.DeviceAgentConfigurationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationDeviceAgentConfigurationUpdated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationDeviceAgentConfigurationUpdated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{
+		Params:      entry,
+		OutboxEvent: events.OrganizationDeviceAgentConfigurationV1,
+	})
+}
+
+type LogOrganizationEnterpriseTrialArmedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	TrialEndsAt time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialArmedEvent) error {
+	action := ActionOrganizationEnterpriseTrialArmed
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+// LogOrganizationEnterpriseTrialRearmedEvent records an operator putting a
+// demoted trial back on. AccountType carries the restored tier so a reader can
+// compare it with the demotion entry, which is the only record of the old one.
+type LogOrganizationEnterpriseTrialRearmedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	AccountType string
+	TrialEndsAt time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialRearmedEvent) error {
+	action := ActionOrganizationEnterpriseTrialRearmed
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"account_type":  event.AccountType,
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+// LogOrganizationEnterpriseTrialExtendedEvent records an operator moving a
+// running trial's end date forward. Both dates are carried so the entry never
+// depends on inverting the calendar-day arithmetic, which is exact only while
+// every session runs in UTC.
+type LogOrganizationEnterpriseTrialExtendedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	ExtendedByDays      int
+	PreviousTrialEndsAt time.Time
+	TrialEndsAt         time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialExtendedEvent) error {
+	action := ActionOrganizationEnterpriseTrialExtended
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"extended_by_days":       event.ExtendedByDays,
+		"previous_trial_ends_at": event.PreviousTrialEndsAt,
+		"trial_ends_at":          event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+type LogOrganizationEnterpriseTrialDemotedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	PreviousAccountType string
+	TrialEndsAt         time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialDemotedEvent) error {
+	action := ActionOrganizationEnterpriseTrialDemoted
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"previous_account_type": event.PreviousAccountType,
+		"trial_ends_at":         event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+type OrganizationPaygActivationSnapshot struct {
+	AccountType string `json:"account_type"`
+	Whitelisted bool   `json:"whitelisted"`
+}
+
+type LogOrganizationPaygActivatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
+	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+func (l *Logger) LogOrganizationPaygActivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygActivatedEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationPaygActivated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationPaygActivated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationPaygActivated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
+}
+
+type LogOrganizationPaygDeactivatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
+	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygDeactivatedEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationPaygDeactivated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationPaygDeactivated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationPaygDeactivated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
 }

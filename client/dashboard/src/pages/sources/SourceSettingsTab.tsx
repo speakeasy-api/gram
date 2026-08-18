@@ -122,7 +122,7 @@ export function SourceSettingsTab({
           </Stack>
         </div>
 
-        <div className="border-destructive/30 rounded-lg border p-6">
+        <div className="border-destructive/30 border p-6">
           <Text variant="subheading" className="text-destructive mb-1">
             Danger Zone
           </Text>

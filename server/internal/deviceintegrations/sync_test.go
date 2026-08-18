@@ -6,13 +6,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -20,8 +26,53 @@ import (
 func newSyncTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store, *Syncer, string) {
 	t.Helper()
 	ctx, conn, store, orgID := newStoreTestDB(t)
-	syncer := NewSyncer(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	syncer := NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
 	return ctx, conn, store, syncer, orgID
+}
+
+// newSyncMetricTestEnv is newSyncTestEnv wired to a manual-reader meter
+// provider, so a test can assert on the counters RunSync emits.
+func newSyncMetricTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store, *Syncer, string, *sdkmetric.ManualReader) {
+	t.Helper()
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	syncer := NewSyncer(testenv.NewLogger(t), meterProvider, conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	return ctx, conn, store, syncer, orgID, reader
+}
+
+// counterValue sums the int64 counter named `name` over the data points whose
+// attributes match every key/value in `want`.
+func counterValue(t *testing.T, ctx context.Context, reader *sdkmetric.ManualReader, name string, want map[attribute.Key]string) int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rm))
+	var total int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "metric %s is an int64 sum", name)
+			for _, dp := range sum.DataPoints {
+				if attributesMatch(dp.Attributes, want) {
+					total += dp.Value
+				}
+			}
+		}
+	}
+	return total
+}
+
+func attributesMatch(set attribute.Set, want map[attribute.Key]string) bool {
+	for k, v := range want {
+		got, ok := set.Value(k)
+		if !ok || got.AsString() != v {
+			return false
+		}
+	}
+	return true
 }
 
 // findSyncID locates the org+provider's sync row through the same candidates
@@ -187,6 +238,76 @@ func TestRunSyncAuthFailuresAutoPause(t *testing.T) {
 	require.Equal(t, int32(authPauseThreshold), state.ConsecutiveFailures)
 }
 
+func TestRunSyncEmitsSuccessMetric(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID, reader := newSyncMetricTestEnv(t)
+
+	mustUpsert(t, ctx, conn, store, orgID, validCreds(), providers.Settings{
+		"instance_url": "https://example.test",
+		"devices":      "dev-1",
+	}, true)
+	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
+	require.NoError(t, syncer.RunSync(ctx, syncID))
+
+	require.Equal(t, int64(1), counterValue(t, ctx, reader, meterSyncOutcome, map[attribute.Key]string{
+		attr.ProviderKey: testProviderID,
+		attr.OutcomeKey:  string(o11y.OutcomeSuccess),
+	}), "a successful sync records one success outcome")
+	require.Equal(t, int64(0), counterValue(t, ctx, reader, meterSyncOutcome, map[attribute.Key]string{
+		attr.OutcomeKey: string(o11y.OutcomeFailure),
+	}), "a successful sync records no failure")
+	require.Equal(t, int64(0), counterValue(t, ctx, reader, meterSyncAutoPause, nil), "a successful sync never auto-pauses")
+}
+
+func TestRunSyncEmitsFailureAndAutoPauseMetrics(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID, reader := newSyncMetricTestEnv(t)
+
+	mustUpsert(t, ctx, conn, store, orgID, validCreds(), providers.Settings{
+		"instance_url": "https://example.test",
+		"fail":         "auth",
+	}, true)
+	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
+
+	// A pure auth-rejection streak: each run records a failure, and the run
+	// that crosses the threshold records exactly one auto-pause. Once paused,
+	// the schedule is no longer runnable, so a further run would record
+	// nothing — bounding the loop at the threshold keeps the counts exact.
+	for range authPauseThreshold {
+		require.NoError(t, syncer.RunSync(ctx, syncID))
+	}
+
+	require.Equal(t, int64(authPauseThreshold), counterValue(t, ctx, reader, meterSyncOutcome, map[attribute.Key]string{
+		attr.ProviderKey: testProviderID,
+		attr.OutcomeKey:  string(o11y.OutcomeFailure),
+	}), "each failed run records one failure outcome")
+	require.Equal(t, int64(1), counterValue(t, ctx, reader, meterSyncAutoPause, map[attribute.Key]string{
+		attr.ProviderKey: testProviderID,
+	}), "only the threshold-crossing run records an auto-pause")
+}
+
+func TestRunSyncEvidencePushEmitsSuccessMetric(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID, reader := newSyncMetricTestEnv(t)
+
+	// A sink that accepts the push: the success outcome must be recorded for
+	// the evidence-push capability too, tagged with the sink provider — not
+	// only the inventory path.
+	_, err := upsertProviderTx(t, ctx, conn, store, orgID, testSinkProviderID,
+		providers.Credentials{"api_key": "sink-key"}, providers.Settings{}, true)
+	require.NoError(t, err)
+	syncID := findSyncID(t, ctx, store, orgID, testSinkProviderID)
+	require.NoError(t, syncer.RunSync(ctx, syncID))
+
+	require.Equal(t, int64(1), counterValue(t, ctx, reader, meterSyncOutcome, map[attribute.Key]string{
+		attr.ProviderKey: testSinkProviderID,
+		attr.OutcomeKey:  string(o11y.OutcomeSuccess),
+	}), "a successful evidence push records one success outcome for the sink provider")
+}
+
 func TestRunSyncSuccessClearsFailureState(t *testing.T) {
 	t.Parallel()
 
@@ -279,13 +400,16 @@ func TestStaleSyncOutcomeDiscardedAfterConfigSave(t *testing.T) {
 	require.NoError(t, err)
 	mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"note": "changed"}, true)
 
-	require.NoError(t, store.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
+	// The stale config_updated_at matches no row, so the guarded update books
+	// nothing and the :one query surfaces that as ErrNoRows.
+	_, err = store.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
 		SyncID:          target.SyncID,
 		NextInSeconds:   60,
 		LastPollError:   conv.ToPGText("stale outcome"),
 		PauseAfter:      0,
 		ConfigUpdatedAt: target.ConfigUpdatedAt,
-	}))
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a config save moved updated_at, so the outcome matches no row")
 
 	state := scheduleStateFor(t, ctx, store, created.Config.ID, "testmdm_inventory")
 	require.False(t, state.LastPollFailedAt.Valid, "an outcome observed before a config save must not land after it")
@@ -369,14 +493,15 @@ func TestAutoPauseRequiresPureAuthRejectionStreak(t *testing.T) {
 		t.Helper()
 		fresh, err := store.repo.GetSyncTarget(ctx, syncID)
 		require.NoError(t, err)
-		require.NoError(t, store.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
+		_, err = store.repo.RecordSyncFailure(ctx, repo.RecordSyncFailureParams{
 			SyncID:          target.SyncID,
 			NextInSeconds:   60,
 			LastPollError:   conv.ToPGText("failure"),
 			AuthRejection:   auth,
 			PauseAfter:      authPauseThreshold,
 			ConfigUpdatedAt: fresh.ConfigUpdatedAt,
-		}))
+		})
+		require.NoError(t, err)
 	}
 
 	// Two transient failures then one auth rejection: the mixed streak is 3

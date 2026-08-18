@@ -1,8 +1,8 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { Badge } from "@/components/ui/Badge";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import {
   Sheet,
@@ -16,15 +16,20 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
 import {
   customDomainMcpEndpointUrl,
   useCustomDomain,
 } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
@@ -43,22 +48,24 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 
 export default function OrgDomains(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgDomainsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <OrgDomainsInner />
+    </RequireScope>
   );
 }
 
@@ -271,9 +278,307 @@ function IPAllowlistEditor({
   );
 }
 
+const NO_ROOT_MCP_ENDPOINT = "__none__";
+
+function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
+  return (
+    endpoint.mcpServerName ?? endpoint.mcpServerSlug ?? endpoint.mcpServerId
+  );
+}
+
+function DefaultMcpServerControl({
+  domain,
+  endpoints,
+  isLoading,
+  canManage,
+}: {
+  domain: CustomDomain;
+  endpoints: CustomDomainMcpEndpoint[];
+  isLoading: boolean;
+  canManage: boolean;
+}) {
+  const rootMutation = useRootMcpEndpointMutation();
+  const endpointGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { projectName: string; endpoints: CustomDomainMcpEndpoint[] }
+    >();
+
+    for (const endpoint of endpoints) {
+      const group = groups.get(endpoint.projectId);
+      if (group) {
+        group.endpoints.push(endpoint);
+      } else {
+        groups.set(endpoint.projectId, {
+          projectName: endpoint.projectName,
+          endpoints: [endpoint],
+        });
+      }
+    }
+
+    return Array.from(groups.entries())
+      .map(([projectId, group]) => ({
+        projectId,
+        projectName: group.projectName,
+        endpoints: [...group.endpoints].sort((a, b) =>
+          mcpServerLabel(a).localeCompare(mcpServerLabel(b)),
+        ),
+      }))
+      .sort((a, b) => a.projectName.localeCompare(b.projectName));
+  }, [endpoints]);
+  const currentEndpoint = endpoints.find(
+    (endpoint) => endpoint.id === domain.rootMcpEndpointId,
+  );
+  const selectedValue = currentEndpoint?.id ?? NO_ROOT_MCP_ENDPOINT;
+
+  let content: React.ReactNode;
+  if (isLoading) {
+    content = (
+      <Text variant="body" className="text-muted-foreground text-sm">
+        Loading MCP servers…
+      </Text>
+    );
+  } else if (endpoints.length === 0) {
+    content = (
+      <div className="border-border border border-dashed p-4">
+        <Text variant="body" className="font-medium">
+          No MCP endpoints on this domain
+        </Text>
+        <Text
+          variant="body"
+          className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+        >
+          Attach an MCP endpoint to this custom domain before choosing a default
+          MCP server.
+        </Text>
+      </div>
+    );
+  } else {
+    const selectedLabel = currentEndpoint
+      ? `${mcpServerLabel(currentEndpoint)} · /mcp/${currentEndpoint.slug}`
+      : "No root mapping";
+
+    content = (
+      <div className="space-y-3">
+        <Select
+          value={selectedValue}
+          disabled={!canManage || rootMutation.isPending}
+          onValueChange={(value) =>
+            rootMutation.setRootMcpEndpoint(
+              domain.id,
+              value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
+            )
+          }
+        >
+          <SelectTrigger className="w-full max-w-xl">
+            <SelectValue>{selectedLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              value={NO_ROOT_MCP_ENDPOINT}
+              description="Do not route the custom-domain root to an MCP server."
+            >
+              No root mapping
+            </SelectItem>
+            {endpointGroups.map((group) => (
+              <SelectGroup key={group.projectId}>
+                <SelectLabel>{group.projectName}</SelectLabel>
+                {group.endpoints.map((endpoint) => (
+                  <SelectItem
+                    key={endpoint.id}
+                    value={endpoint.id}
+                    description={`/mcp/${endpoint.slug}`}
+                  >
+                    {mcpServerLabel(endpoint)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        {currentEndpoint ? (
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            <code>{`https://${domain.domain}/`}</code>
+            <span aria-hidden="true">→</span>
+            <code>{`/mcp/${currentEndpoint.slug}`}</code>
+          </div>
+        ) : (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Requests to the custom-domain root are not mapped.
+          </Text>
+        )}
+        {!canManage && (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this mapping.
+          </Text>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Text variant="body" className="font-medium">
+        Default MCP server
+      </Text>
+      <Text
+        variant="body"
+        className="text-muted-foreground mt-1 mb-3 max-w-[65ch] text-sm"
+      >
+        Route requests to the custom-domain root to one MCP server.
+      </Text>
+      {content}
+    </div>
+  );
+}
+
+function ChatGPTAppVerificationControl({
+  domain,
+  canManage,
+}: {
+  domain: CustomDomain;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const savedToken = domain.openaiAppsChallengeToken ?? "";
+  const [token, setToken] = useState(savedToken);
+  const [error, setError] = useState("");
+  const verificationURL = `https://${domain.domain}/.well-known/openai-apps-challenge`;
+
+  useEffect(() => {
+    setToken(savedToken);
+  }, [savedToken]);
+
+  const updateTokenMutation = useUpdateDomainMutation({
+    onSuccess: async (updatedDomain) => {
+      const updatedToken = updatedDomain.openaiAppsChallengeToken ?? "";
+      setToken(updatedToken);
+      setError("");
+      await Promise.all([
+        invalidateAllGetDomain(queryClient),
+        invalidateAllListDomains(queryClient),
+      ]);
+      toast.success(
+        updatedToken
+          ? "ChatGPT app verification token saved"
+          : "ChatGPT app verification token cleared",
+      );
+    },
+    onError: (mutationError) => {
+      setError(
+        mutationError.message || "Failed to save the verification token",
+      );
+    },
+  });
+
+  function updateToken(nextToken: string) {
+    updateTokenMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updateDomainRequestBody: {
+          openaiAppsChallengeToken: nextToken,
+        },
+      },
+    });
+  }
+
+  const hasChanges = token !== savedToken;
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Text variant="body" className="font-medium">
+        ChatGPT app verification
+      </Text>
+      <Text
+        variant="body"
+        className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+      >
+        OpenAI&apos;s app-submission flow fetches this token to verify ownership
+        of your custom domain.
+      </Text>
+      <div className="mt-3 max-w-xl space-y-3">
+        <div className="bg-muted flex items-center gap-2 px-3 py-2">
+          <code className="min-w-0 flex-1 text-xs break-all">
+            {verificationURL}
+          </code>
+          <CopyButton
+            text={verificationURL}
+            size="xs"
+            tooltip="Copy verification URL"
+            className="shrink-0"
+          />
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <Input
+              aria-label="ChatGPT app verification token"
+              placeholder="Paste verification token"
+              value={token}
+              onChange={(value) => {
+                setToken(value);
+                setError("");
+              }}
+              onEnter={() => {
+                if (canManage && hasChanges && !updateTokenMutation.isPending) {
+                  updateToken(token);
+                }
+              }}
+              maxLength={256}
+              disabled={!canManage || updateTokenMutation.isPending}
+              className="font-mono"
+            />
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={() => updateToken(token)}
+              disabled={
+                !canManage || !hasChanges || updateTokenMutation.isPending
+              }
+            >
+              {updateTokenMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            {savedToken && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => updateToken("")}
+                disabled={!canManage || updateTokenMutation.isPending}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+        {error && (
+          <Text variant="body" className="text-destructive text-sm">
+            {error}
+          </Text>
+        )}
+        {domain.ipAllowlist.length > 0 && (
+          <div className="text-muted-foreground flex items-start gap-2 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Your IP allowlist also applies to this URL and may block
+              OpenAI&apos;s verifier.
+            </span>
+          </div>
+        )}
+        {!canManage && (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this token.
+          </Text>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OrgDomainsInner() {
   const organization = useOrganization();
   const productTier = useProductTier();
+  const { hasScope } = useRBAC();
+  const canManageDomains = hasScope("org:admin");
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
@@ -383,12 +688,16 @@ function OrgDomainsInner() {
     },
   });
 
-  // Preview which MCP endpoints will be cascaded by the delete. Only fetched
-  // while the confirmation dialog is open and a domain is configured.
-  const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
-    enabled: isDeleteDomainDialogOpen && Boolean(domain?.domain),
-  });
-  const impactedEndpoints = impactQuery.data?.mcpEndpoints ?? [];
+  // The same domain-wide list backs both root selection and the delete impact
+  // preview, avoiding duplicate queries for identical organization state.
+  const domainEndpointsQuery = useCustomDomainMcpEndpoints(
+    undefined,
+    undefined,
+    {
+      enabled: Boolean(domain?.domain),
+    },
+  );
+  const impactedEndpoints = domainEndpointsQuery.data?.mcpEndpoints ?? [];
 
   const handleDomainInputChange = (value: string) => {
     setDomainInput(value);
@@ -433,16 +742,12 @@ function OrgDomainsInner() {
   }, [domain?.isUpdating, domainRefetch]);
 
   return (
-    <>
-      <Heading variant="h4" className="mb-2">
-        Custom Domain
-      </Heading>
-      <Text muted small className="mb-6">
-        Connect a custom domain to serve your MCP servers from your own branded
-        URL instead of the default platform domain.
-      </Text>
+    <SettingsPage
+      title="Custom Domain"
+      description="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+    >
       {domain?.domain ? (
-        <div className="border-border bg-card rounded-lg border p-4">
+        <div className="border-border bg-card border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
@@ -614,10 +919,20 @@ function OrgDomainsInner() {
               </div>
             </Alert>
           )}
+          <DefaultMcpServerControl
+            domain={domain}
+            endpoints={impactedEndpoints}
+            isLoading={domainEndpointsQuery.isLoading}
+            canManage={canManageDomains}
+          />
+          <ChatGPTAppVerificationControl
+            domain={domain}
+            canManage={canManageDomains}
+          />
         </div>
       ) : (
         !domainIsLoading && (
-          <div className="border-border rounded-lg border border-dashed p-6">
+          <div className="border-border border border-dashed p-6">
             <Stack gap={2} align="center" justify="center">
               <Text variant="body" className="text-muted-foreground">
                 No custom domain configured
@@ -664,7 +979,7 @@ function OrgDomainsInner() {
               <span className="font-bold italic">{domain?.domain}</span>? This
               will delete the associated ingress and TLS certificate.
             </Text>
-            {impactQuery.isLoading ? (
+            {domainEndpointsQuery.isLoading ? (
               <Text variant="small" muted>
                 Checking for MCP endpoints under this domain&hellip;
               </Text>
@@ -675,7 +990,7 @@ function OrgDomainsInner() {
                     ? "1 MCP endpoint will be deactivated:"
                     : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
                 </Text>
-                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
+                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto border px-6 py-2">
                   {impactedEndpoints.map((endpoint) => (
                     <li key={endpoint.id}>
                       <Text variant="small">
@@ -781,7 +1096,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{subdomain}</span>{" "}
                 pointing to the following:
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
                   aria-label={
@@ -814,7 +1129,7 @@ function OrgDomainsInner() {
                 <span className="font-mono break-all">{txtName}</span> with the
                 following value:
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
                   aria-label={
@@ -943,6 +1258,6 @@ function OrgDomainsInner() {
         icon={Globe}
         accountUpgrade
       />
-    </>
+    </SettingsPage>
   );
 }

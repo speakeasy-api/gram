@@ -30,10 +30,7 @@ export function GettingStartedInstructions(): JSX.Element {
             </div>
             <Text className="font-medium">{item.label}</Text>
           </Stack>
-          <CodeBlock
-            language="bash"
-            className="!bg-muted/50 !rounded-lg !border-0"
-          >
+          <CodeBlock language="bash" className="!bg-muted/50 !border-0">
             {item.command}
           </CodeBlock>
         </Stack>

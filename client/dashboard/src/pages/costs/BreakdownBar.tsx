@@ -12,18 +12,17 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
 
-// The costs page's single control strip: the search box, the axes to re-cut
-// the page by (the track), the table actions (CSV export), and the page-scope
-// controls (dataset + date range). It sits at the top of the page because the
-// breakdown axis re-cuts every visualization below it — the chart and the
-// table — and the dataset/range scope every number on the page.
+// The breakdown section's control strip: the axes to re-cut the chart and
+// table by (the track), and the free-text search that narrows the table's
+// rows. It sits directly above the chart/table — not in the page-scope bar
+// under the headline stats — so the controls that reshape this section read
+// as belonging to it.
 //
 // The axis track replaced a bare "Breakdown by <select>": users didn't find
 // the dropdown, and the word "breakdown" reads as jargon until you've watched
 // it re-cut the same spend. So the axes are promoted to visible segments, and
-// the section title below states the current cut ("Cost by Model") rather than
+// the section title above states the current cut ("Cost by Model") rather than
 // naming the mechanism — pairing a lit segment with a title that echoes it
 // teaches the idea on the first click.
 
@@ -60,8 +59,6 @@ export function BreakdownBar({
   searchValue,
   onSearchChange,
   searchPlaceholder,
-  actions,
-  scopeControls,
 }: {
   axisValue: string;
   axisOptions: AxisOption[];
@@ -71,12 +68,6 @@ export function BreakdownBar({
   searchValue: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
-  // Controls that belong to the table below (e.g. CSV export), anchored to
-  // the right of the bar's top row.
-  actions?: ReactNode;
-  // Page-scope controls (dataset selector + date-range picker), leading the
-  // bar's top row.
-  scopeControls?: ReactNode;
 }): JSX.Element {
   const { segments, overflow } = partitionAxes(axisOptions, axisValue);
 
@@ -90,7 +81,7 @@ export function BreakdownBar({
         className={cn(
           SEGMENT_BASE,
           SEGMENT_INACTIVE,
-          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 bg-transparent shadow-none focus-visible:ring-0",
+          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 border-0 bg-transparent shadow-none focus-visible:ring-0",
         )}
       >
         <SelectValue placeholder="More" />
@@ -106,42 +97,31 @@ export function BreakdownBar({
   );
 
   return (
-    // A deliberate two-row control bar on the shared Page.Toolbar shell. The
-    // data options read as one left-stacked block: dataset + range lead the
-    // top row with the breakdown axis track directly beneath them; table
-    // actions (export/reset) anchor top-right and the row search anchors
-    // bottom-right. Every row spans the full bar at every width, so nothing
-    // clips and nothing rags.
+    // Axis track on the left, row search on the right — one Page.Toolbar row
+    // that spans the breakdown section. A lone axis is no choice at all (at a
+    // session leaf "Sessions" is the only option), and a track you can't move
+    // reads as a broken toggle; the section title already names the cut, so
+    // the track is omitted in that case and search keeps the full row.
     <Page.Toolbar>
-      <Page.Toolbar.Row>
-        <Page.Toolbar.Leading>{scopeControls}</Page.Toolbar.Leading>
-        <Page.Toolbar.Actions>{actions}</Page.Toolbar.Actions>
-      </Page.Toolbar.Row>
-      <Page.Toolbar.Row>
+      {axisOptions.length > 1 && (
         <Page.Toolbar.Leading>
-          {/* A lone axis is no choice at all — at a session leaf (Agent,
-              Model) "Sessions" is the only option, and a track you can't move
-              reads as a broken toggle. The section title already names the
-              cut. */}
-          {axisOptions.length > 1 && (
-            <SegmentedControl
-              value={axisValue}
-              onChange={onAxisChange}
-              options={segments}
-              trailing={more}
-            />
-          )}
-        </Page.Toolbar.Leading>
-        {/* Wrapped in Actions so the search anchors right — the left column
-            below the dataset/range belongs to the axis track. */}
-        <Page.Toolbar.Actions>
-          <Page.Toolbar.Search
-            value={searchValue}
-            onChange={onSearchChange}
-            placeholder={searchPlaceholder}
+          <SegmentedControl
+            value={axisValue}
+            onChange={onAxisChange}
+            options={segments}
+            trailing={more}
           />
-        </Page.Toolbar.Actions>
-      </Page.Toolbar.Row>
+        </Page.Toolbar.Leading>
+      )}
+      {/* Wrapped in Actions so the search anchors right — the left column
+          belongs to the axis track. */}
+      <Page.Toolbar.Actions>
+        <Page.Toolbar.Search
+          value={searchValue}
+          onChange={onSearchChange}
+          placeholder={searchPlaceholder}
+        />
+      </Page.Toolbar.Actions>
     </Page.Toolbar>
   );
 }

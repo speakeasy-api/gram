@@ -52,6 +52,15 @@ type RiskFindingRow struct {
 	MessageCreatedAt time.Time `ch:"message_created_at"`
 	AssistantID      string    `ch:"assistant_id"`
 
+	// ChatSource is the canonical product surface (codex, cursor, claude-code,
+	// ...) of the scanned message; Team is the resolved user's WorkOS directory
+	// department; UserEmail is the resolved internal user's email. All resolved
+	// from Postgres at ingest alongside the ids above (so Watchdog reads never
+	// need a Postgres lookup) and empty when unresolved.
+	ChatSource string `ch:"chat_source"`
+	Team       string `ch:"team"`
+	UserEmail  string `ch:"user_email"`
+
 	// Category is the canonical risk category for (source, rule_id), computed
 	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
 	Category string `ch:"category"`
@@ -67,6 +76,20 @@ type RiskFindingRow struct {
 	// ClickHouse columns).
 	ExcludedAt  *time.Time `ch:"excluded_at"`
 	ExclusionID *uuid.UUID `ch:"exclusion_id"`
+
+	// FalsePositiveAt is set when a reviewer manually dismissed this finding
+	// (risk.markResultsFalsePositive), independent of ExcludedAt. Nil for a
+	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
+	FalsePositiveAt *time.Time `ch:"false_positive_at"`
+
+	// Reveal metadata: which text StartPos/EndPos index (Surface), the scanner
+	// field and gjson path the span matched, and the recorded tool call id
+	// anchoring the finding. All empty when unknown; see the risk_findings
+	// column comments for the value sets.
+	Surface    string `ch:"surface"`
+	Field      string `ch:"field"`
+	Path       string `ch:"path"`
+	ToolCallID string `ch:"tool_call_id"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -79,6 +102,56 @@ func chNullable[T any](p *T) any {
 		return nil
 	}
 	return *p
+}
+
+// riskFindingColumns is the full risk_findings column list, in the exact
+// order InsertRiskFindings binds values. The retroactive exclusion queries
+// (retro_exclusion.go) render their INSERT ... SELECT copy projection from
+// this same list so a new column cannot land in one write path and silently
+// default in the other. TestCopyProjection_LockstepWithInsertColumns pins the
+// projection's replacement set against this list; the positional Values()
+// binding in InsertRiskFindings is the one thing no test pins — when editing
+// this list, keep that argument order in lockstep by hand.
+var riskFindingColumns = []string{
+	"id",
+	"created_at",
+	"inserted_at",
+	"organization_id",
+	"project_id",
+	"request_id",
+	"chat_message_id",
+	"content_part_id",
+	"risk_policy_id",
+	"risk_policy_version",
+	"rule_id",
+	"description",
+	"source",
+	"confidence",
+	"tags",
+	"start_pos",
+	"end_pos",
+	"dead_letter_reason",
+	"chat_id",
+	"user_id",
+	"external_user_id",
+	"category",
+	"match_len",
+	"match_redacted",
+	"fingerprint_pepper_version",
+	"fingerprint_global_hs256",
+	"fingerprint_tenant_hs256",
+	"excluded_at",
+	"exclusion_id",
+	"false_positive_at",
+	"message_created_at",
+	"assistant_id",
+	"chat_source",
+	"team",
+	"user_email",
+	"surface",
+	"field",
+	"path",
+	"tool_call_id",
 }
 
 // InsertRiskFindings writes findings using a server-side async insert
@@ -95,44 +168,34 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		"wait_for_async_insert": 0,
 	}))
 
-	builder := sq.Insert("risk_findings").
-		Columns(
-			"id",
-			"created_at",
-			"organization_id",
-			"project_id",
-			"request_id",
-			"chat_message_id",
-			"content_part_id",
-			"risk_policy_id",
-			"risk_policy_version",
-			"rule_id",
-			"description",
-			"source",
-			"confidence",
-			"tags",
-			"start_pos",
-			"end_pos",
-			"dead_letter_reason",
-			"chat_id",
-			"user_id",
-			"external_user_id",
-			"category",
-			"match_len",
-			"match_redacted",
-			"fingerprint_pepper_version",
-			"fingerprint_global_hs256",
-			"fingerprint_tenant_hs256",
-			"excluded_at",
-			"exclusion_id",
-			"message_created_at",
-			"assistant_id",
-		)
+	builder := sq.Insert("risk_findings").Columns(riskFindingColumns...)
 
-	for _, row := range rows {
+	// inserted_at must be strictly increasing within this batch, not just
+	// "now" — the read-side dedup (ROW_NUMBER() OVER (PARTITION BY id ORDER BY
+	// inserted_at DESC), see overview.go) relies on it to pick the latest
+	// state for an id. Two things independently break that if inserted_at is
+	// left off this column list and allowed to fall back to the table's
+	// DEFAULT now64(9): (1) ClickHouse evaluates a DEFAULT once per INSERT
+	// statement, so every row in one multi-row batch gets the identical
+	// timestamp, and (2) under async_insert, the server can coalesce several
+	// distinct client Exec calls that arrive close together into one physical
+	// flush, evaluating DEFAULT once for the whole coalesced write — so even
+	// splitting a batch into separate statements doesn't guarantee distinct
+	// timestamps. A finding can appear twice within that flush window (a
+	// rapid mark/unmark, or a redelivered Pub/Sub backlog), so an identical
+	// inserted_at would make the dedup's choice between them
+	// non-deterministic. The fix is to bind an explicit, strictly-increasing
+	// value per row — but bind it as a formatted string, not a native
+	// time.Time: the clickhouse-go driver truncates a time.Time bound through
+	// this Exec(ctx, query, args...) path to whole-second precision (verified
+	// empirically), silently discarding the very sub-second ordering this
+	// exists to provide.
+	insertedAt := time.Now().UTC()
+	for i, row := range rows {
 		builder = builder.Values(
 			row.ID,
 			row.CreatedAt,
+			insertedAt.Add(time.Duration(i)*time.Nanosecond).Format("2006-01-02 15:04:05.999999999"),
 			row.OrganizationID,
 			row.ProjectID,
 			row.RequestID,
@@ -164,8 +227,16 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			chNullable(row.FalsePositiveAt),
 			row.MessageCreatedAt,
 			row.AssistantID,
+			row.ChatSource,
+			row.Team,
+			row.UserEmail,
+			row.Surface,
+			row.Field,
+			row.Path,
+			row.ToolCallID,
 		)
 	}
 

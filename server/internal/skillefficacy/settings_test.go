@@ -39,20 +39,6 @@ func TestGetSettingsReturnsPlatformDefaults(t *testing.T) {
 	}, result)
 }
 
-func TestSettingsRequireProductFeature(t *testing.T) {
-	ctx, ti := newTestService(t)
-	setSkillsFeature(t, ctx, ti, false)
-
-	_, err := ti.service.GetSettings(withGrant(t, ctx, authz.ScopeOrgRead), &gen.GetSettingsPayload{ApikeyToken: nil, SessionToken: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	_, err = ti.service.UpsertSettings(withGrant(t, ctx, authz.ScopeOrgAdmin), &gen.UpsertSettingsPayload{
-		ApikeyToken: nil, SessionToken: nil, Enabled: true,
-		PerSkillDailyCap: 1, OrgDailyCap: 2, NewVersionBurst: 3,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
 func TestSettingsEnforceOrganizationScopes(t *testing.T) {
 	ctx, ti := newTestService(t)
 	setSkillsFeature(t, ctx, ti, true)

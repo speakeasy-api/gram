@@ -2,8 +2,10 @@ import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
+import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
   PulseMCPServer,
@@ -16,6 +18,7 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -29,7 +32,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
 // Map of server specifiers to their website URLs
@@ -44,6 +47,17 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
 
 export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
+}
+
+// The endpoint a setup guide is looked up by. Gram installs the streamable-HTTP
+// remote, so that is the URL a guide is most likely keyed on, but guides are
+// published per server rather than per transport: an entry that only lists an
+// SSE endpoint still has one, and would find it under no other key when the
+// guide publishes no registry alias.
+function setupGuideLookupUrl(server: PulseMCPServer): string | undefined {
+  return (
+    filterToHttpRemotes(server).remotes?.[0]?.url ?? server.remotes?.[0]?.url
+  );
 }
 
 export default function CatalogDetail(): JSX.Element {
@@ -172,12 +186,14 @@ export default function CatalogDetail(): JSX.Element {
           />
         </Page.Header>
         <Page.Body>
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <Skeleton className="h-[400px] rounded-xl" />
-            </div>
-            <div>
-              <Skeleton className="h-[200px] rounded-xl" />
+          <div className="@container">
+            <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-3">
+              <div className="@3xl:col-span-2">
+                <Skeleton className="h-[400px]" />
+              </div>
+              <div>
+                <Skeleton className="h-[200px]" />
+              </div>
             </div>
           </div>
         </Page.Body>
@@ -228,249 +244,231 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* Left Column - Server Details */}
-          <div className="space-y-6 lg:col-span-2">
-            {/* Header */}
-            <div className="flex items-start gap-6">
-              <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
-                {server.iconUrl ? (
-                  <img
-                    src={server.iconUrl}
-                    alt={displayName}
-                    className="h-16 w-16 rounded-lg object-contain"
-                  />
-                ) : (
-                  <ServerIcon className="text-muted-foreground h-12 w-12" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <Stack
-                  direction="horizontal"
-                  gap={3}
-                  align="center"
-                  className="mb-2"
-                >
-                  <h1 className="text-2xl font-bold">{displayName}</h1>
-                  {isOfficial && <Badge>Official</Badge>}
-                  {versionMeta?.isLatest && (
-                    <Badge variant="neutral">Latest</Badge>
+        <SetupGuideCallout
+          registrySpecifier={server.registrySpecifier}
+          serverUrl={setupGuideLookupUrl(server)}
+          iconUrl={server.iconUrl}
+        />
+        {/* Container query, not a viewport one: the side panel narrows this
+            column without narrowing the window, and `lg:` would not notice. */}
+        <div className="@container">
+          <div className="grid grid-cols-1 items-start gap-8 @3xl:grid-cols-3">
+            {/* Left Column - Server Details */}
+            <div className="space-y-6 @3xl:col-span-2">
+              {/* Header */}
+              <div className="flex items-start gap-6">
+                <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center dark:bg-neutral-800">
+                  {server.iconUrl ? (
+                    <img
+                      src={server.iconUrl}
+                      alt={displayName}
+                      className="h-16 w-16 object-contain"
+                    />
+                  ) : (
+                    <ServerIcon className="text-muted-foreground h-12 w-12" />
                   )}
-                  <ManualSetupBadge server={server} />
-                </Stack>
-                {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
-                  <a
-                    href={`https://${SERVER_WEBSITE_MAP[server.registrySpecifier]}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Page.Eyebrow className="mb-2" />
+                  <Stack
+                    direction="horizontal"
+                    gap={3}
+                    align="center"
+                    className="mb-2"
                   >
-                    {SERVER_WEBSITE_MAP[server.registrySpecifier]}
-                  </a>
-                ) : (
-                  <Text muted className="font-mono text-sm">
-                    {server.registrySpecifier}
-                  </Text>
-                )}
-                <div className="mt-4">
-                  {isInstalled ? (
-                    <Stack direction="horizontal" gap={2} align="center">
-                      {existingExternalMcp && (
+                    <h1 className="text-display-sm font-thin">{displayName}</h1>
+                    {isOfficial && <Badge>Official</Badge>}
+                    {versionMeta?.isLatest && (
+                      <Badge variant="neutral">Latest</Badge>
+                    )}
+                    <ManualSetupBadge server={server} />
+                  </Stack>
+                  {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
+                    <a
+                      href={`https://${SERVER_WEBSITE_MAP[server.registrySpecifier]}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                    >
+                      {SERVER_WEBSITE_MAP[server.registrySpecifier]}
+                    </a>
+                  ) : (
+                    <Text muted className="font-mono text-sm">
+                      {server.registrySpecifier}
+                    </Text>
+                  )}
+                  <div className="mt-4">
+                    {isInstalled ? (
+                      <Stack direction="horizontal" gap={2} align="center">
+                        {existingExternalMcp && (
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            onClick={() =>
+                              removeServerMutation.mutate(
+                                existingExternalMcp.slug,
+                              )
+                            }
+                            disabled={removeServerMutation.isPending}
+                          >
+                            <Button.LeftIcon>
+                              {removeServerMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Minus className="h-4 w-4" />
+                              )}
+                            </Button.LeftIcon>
+                            <Button.Text>
+                              {removeServerMutation.isPending
+                                ? "Removing..."
+                                : "Remove"}
+                            </Button.Text>
+                          </Button>
+                        )}
                         <Button
-                          variant="secondary"
                           size="md"
-                          onClick={() =>
-                            removeServerMutation.mutate(
-                              existingExternalMcp.slug,
-                            )
-                          }
-                          disabled={removeServerMutation.isPending}
+                          onClick={() => setShowAddDialog(true)}
                         >
                           <Button.LeftIcon>
-                            {removeServerMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Minus className="h-4 w-4" />
-                            )}
+                            <Plus className="h-4 w-4" />
                           </Button.LeftIcon>
-                          <Button.Text>
-                            {removeServerMutation.isPending
-                              ? "Removing..."
-                              : "Remove"}
-                          </Button.Text>
+                          <Button.Text>Add another</Button.Text>
                         </Button>
-                      )}
+                      </Stack>
+                    ) : (
                       <Button size="md" onClick={() => setShowAddDialog(true)}>
                         <Button.LeftIcon>
                           <Plus className="h-4 w-4" />
                         </Button.LeftIcon>
-                        <Button.Text>Add another</Button.Text>
+                        <Button.Text>Add</Button.Text>
                       </Button>
-                    </Stack>
-                  ) : (
-                    <Button size="md" onClick={() => setShowAddDialog(true)}>
-                      <Button.LeftIcon>
-                        <Plus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Add</Button.Text>
-                    </Button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* About */}
-            <Card>
-              <Card.Header>
-                <Card.Title>About</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <Text className="leading-relaxed whitespace-pre-wrap">
-                  {server.description || "No description available."}
-                </Text>
-              </Card.Content>
-            </Card>
-
-            {/* Available Tools */}
-            {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
-          </div>
-
-          {/* Right Column - Info */}
-          <div className="space-y-4">
-            {/* Usage Stats */}
-            {(weeklyUsage || visitorsTotal || totalUsage) && (
+              {/* About */}
               <Card>
                 <Card.Header>
-                  <Card.Title>Usage</Card.Title>
+                  <Card.Title>About</Card.Title>
                 </Card.Header>
                 <Card.Content>
-                  <div className="space-y-3">
-                    {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          This Week
-                        </Text>
-                        <Text className="font-medium">
-                          {weeklyUsage.toLocaleString()}
-                        </Text>
-                      </div>
+                  <Text className="leading-relaxed whitespace-pre-wrap">
+                    {server.description || "No description available."}
+                  </Text>
+                </Card.Content>
+              </Card>
+
+              {/* Available Tools */}
+              {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
+            </div>
+
+            {/* Right Column - Info */}
+            <div>
+              <Card>
+                <Card.Content>
+                  <div className="divide-y">
+                    {(weeklyUsage || visitorsTotal || totalUsage) && (
+                      <DetailGroup label="Usage">
+                        {weeklyUsage !== undefined && weeklyUsage > 0 && (
+                          <DetailRow label="This Week">
+                            <Text className="font-medium">
+                              {weeklyUsage.toLocaleString()}
+                            </Text>
+                          </DetailRow>
+                        )}
+                        {visitorsTotal !== undefined && visitorsTotal > 0 && (
+                          <DetailRow label="Monthly">
+                            <Text className="font-medium">
+                              {visitorsTotal.toLocaleString()}
+                            </Text>
+                          </DetailRow>
+                        )}
+                        {totalUsage !== undefined && totalUsage > 0 && (
+                          <DetailRow label="All Time">
+                            <Text className="font-medium">
+                              {totalUsage.toLocaleString()}
+                            </Text>
+                          </DetailRow>
+                        )}
+                      </DetailGroup>
                     )}
-                    {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          Monthly
+
+                    <DetailGroup label="Version & Release">
+                      <DetailRow label="Version">
+                        <Text className="font-mono">{server.version}</Text>
+                      </DetailRow>
+                      {versionMeta?.status && (
+                        <DetailRow label="Status">
+                          <Text className="capitalize">
+                            {versionMeta.status}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {versionMeta?.publishedAt && (
+                        <DetailRow label="Published">
+                          <Text>
+                            {new Date(
+                              versionMeta.publishedAt,
+                            ).toLocaleDateString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {versionMeta?.updatedAt && (
+                        <DetailRow label="Last Updated">
+                          <Text>
+                            {new Date(
+                              versionMeta.updatedAt,
+                            ).toLocaleDateString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {versionMeta?.source && (
+                        <DetailRow label="Source">
+                          <a
+                            href={
+                              versionMeta.source.startsWith("http")
+                                ? versionMeta.source
+                                : `https://${versionMeta.source}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary flex items-center gap-1 hover:underline"
+                          >
+                            <Text className="max-w-[150px] truncate text-right">
+                              {versionMeta.source}
+                            </Text>
+                            <ExternalLink className="h-3 w-3 shrink-0" />
+                          </a>
+                        </DetailRow>
+                      )}
+                    </DetailGroup>
+
+                    <DetailGroup label="Registry">
+                      <DetailRow label="Registry">
+                        <div className="flex min-w-0 items-center gap-1">
+                          <Text className="truncate font-mono text-xs">
+                            {server.registryId}
+                          </Text>
+                          {server.registryId && (
+                            <CopyButton
+                              text={server.registryId}
+                              size="xs"
+                              tooltip="Copy registry ID"
+                            />
+                          )}
+                        </div>
+                      </DetailRow>
+                      <DetailRow label="Specifier">
+                        <Text className="text-right font-mono text-xs break-all">
+                          {server.registrySpecifier}
                         </Text>
-                        <Text className="font-medium">
-                          {visitorsTotal.toLocaleString()}
-                        </Text>
-                      </div>
-                    )}
-                    {totalUsage !== undefined && totalUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          All Time
-                        </Text>
-                        <Text className="font-medium">
-                          {totalUsage.toLocaleString()}
-                        </Text>
-                      </div>
-                    )}
+                      </DetailRow>
+                    </DetailGroup>
                   </div>
                 </Card.Content>
               </Card>
-            )}
-
-            {/* Version & Release Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Version & Release</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Text small muted>
-                      Version
-                    </Text>
-                    <Text className="font-mono">{server.version}</Text>
-                  </div>
-                  {versionMeta?.status && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Status
-                      </Text>
-                      <Text className="capitalize">{versionMeta.status}</Text>
-                    </div>
-                  )}
-                  {versionMeta?.publishedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Published
-                      </Text>
-                      <Text>
-                        {new Date(versionMeta.publishedAt).toLocaleDateString()}
-                      </Text>
-                    </div>
-                  )}
-                  {versionMeta?.updatedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Last Updated
-                      </Text>
-                      <Text>
-                        {new Date(versionMeta.updatedAt).toLocaleDateString()}
-                      </Text>
-                    </div>
-                  )}
-                  {versionMeta?.source && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Source
-                      </Text>
-                      <a
-                        href={
-                          versionMeta.source.startsWith("http")
-                            ? versionMeta.source
-                            : `https://${versionMeta.source}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary flex items-center gap-1 hover:underline"
-                      >
-                        <Text className="max-w-[150px] truncate text-right">
-                          {versionMeta.source}
-                        </Text>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* Registry Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Registry</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Text small muted>
-                      Registry
-                    </Text>
-                    <Text className="text-right">{server.registryId}</Text>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Text small muted>
-                      Specifier
-                    </Text>
-                    <Text className="text-right font-mono text-xs break-all">
-                      {server.registrySpecifier}
-                    </Text>
-                  </div>
-                </div>
-              </Card.Content>
-            </Card>
+            </div>
           </div>
         </div>
         <AddServerDialog
@@ -483,6 +481,38 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+function DetailGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 py-4 first:pt-0 last:pb-0">
+      <div className="text-eyebrow">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Text small muted>
+        {label}
+      </Text>
+      {children}
+    </div>
   );
 }
 
@@ -500,6 +530,17 @@ type Tool = {
   };
 };
 
+// Registry descriptions are often markdown; strip the common inline syntax
+// (heading #s, bold markers, backticks) so the collapsed one-line summary
+// reads as plain text.
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 function getFirstSentence(text: string): string {
   // Find the first period followed by a space or end of string
   const match = text.match(/^[^.]*\./);
@@ -513,14 +554,17 @@ function getFirstSentence(text: string): string {
 function ToolCard({ tool }: { tool: Tool }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDescription = !!tool.description;
-  const firstSentence = tool.description
-    ? getFirstSentence(tool.description)
+  const plainDescription = tool.description
+    ? stripMarkdown(tool.description)
+    : "";
+  const firstSentence = plainDescription
+    ? getFirstSentence(plainDescription)
     : "";
   const hasMoreContent =
-    tool.description && tool.description.length > firstSentence.length;
+    !!plainDescription && plainDescription.length > firstSentence.length;
 
   return (
-    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden rounded-lg p-3">
+    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden p-3">
       <button
         onClick={() => {
           void (hasMoreContent && setIsExpanded(!isExpanded));

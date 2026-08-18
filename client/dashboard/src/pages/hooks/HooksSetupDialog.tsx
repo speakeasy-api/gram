@@ -72,7 +72,7 @@ function ClaudeInstallContent({
           instance:
         </p>
         {addCommand && installCommand ? (
-          <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
+          <div className="bg-muted/50 space-y-2 p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
               <CopyButton size="xs" text={addCommand} tooltip="Copy command" />
@@ -107,7 +107,7 @@ function ClaudeInstallContent({
               1. Register the marketplace
             </h4>
             {requireMarketplaceJson ? (
-              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="bg-muted/50 p-4 font-mono text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <pre className="overflow-x-auto whitespace-pre-wrap">
                     {requireMarketplaceJson}
@@ -132,7 +132,7 @@ function ClaudeInstallContent({
               2. Require the plugin
             </h4>
             {requirePluginJson ? (
-              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="bg-muted/50 p-4 font-mono text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <pre className="overflow-x-auto whitespace-pre-wrap">
                     {requirePluginJson}
@@ -178,7 +178,7 @@ function CursorInstallContent() {
           Add the hooks plugin to your Cursor team marketplace and mark it as
           required so it auto-installs for all team members:
         </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        <div className="bg-muted/50 p-4 font-mono text-sm">
           <a
             href="https://cursor.com/dashboard/team-content"
             target="_blank"
@@ -194,9 +194,7 @@ function CursorInstallContent() {
         <h3 className="mb-2 text-sm font-semibold">2. Configure Credentials</h3>
         <p className="text-muted-foreground mb-4 text-sm">
           In the Cursor team dashboard, add a{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Session Start
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">Session Start</code>{" "}
           hook that injects your platform credentials. These are automatically
           passed to all subsequent hooks in the session.
         </p>
@@ -212,7 +210,7 @@ function CursorInstallContent() {
           </a>{" "}
           and create a new hook with:
         </p>
-        <div className="bg-muted/50 space-y-3 rounded-lg p-4 text-sm">
+        <div className="bg-muted/50 space-y-3 p-4 text-sm">
           <div className="flex items-baseline gap-2">
             <span className="text-muted-foreground shrink-0 font-medium">
               Hook Name:
@@ -235,7 +233,7 @@ function CursorInstallContent() {
             <span className="text-muted-foreground font-medium">
               Script Content:
             </span>
-            <div className="bg-background/50 mt-1 overflow-x-auto rounded p-3 font-mono text-xs break-all whitespace-pre-wrap">
+            <div className="bg-background/50 mt-1 overflow-x-auto p-3 font-mono text-xs break-all whitespace-pre-wrap">
               {`#!/bin/bash\necho '{"env":{"GRAM_HOOKS_API_KEY":"`}
               <span className="text-primary font-semibold">{`<YOUR_API_KEY>`}</span>
               {`","GRAM_HOOKS_PROJECT_SLUG":"`}
@@ -320,7 +318,7 @@ function CodexInstallContent({
           Register your org's published marketplace with Codex:
         </p>
         {addCommand ? (
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+          <div className="bg-muted/50 p-4 font-mono text-sm">
             <div className="flex items-center justify-between gap-2">
               <code className="break-all">{addCommand}</code>
               <CopyButton size="xs" text={addCommand} tooltip="Copy command" />
@@ -341,12 +339,12 @@ function CodexInstallContent({
         <p className="text-muted-foreground mb-3 text-sm">
           Hooks are behind a feature flag and the plugin must be explicitly
           enabled. Add all of the following to{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
           :
         </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+        <div className="bg-muted/50 p-4 font-mono text-sm">
           <div className="flex items-start justify-between gap-2">
             <pre className="whitespace-pre-wrap">
               {[
@@ -371,11 +369,9 @@ function CodexInstallContent({
         </h3>
         <p className="text-muted-foreground text-sm">
           After restarting Codex, open{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Settings → Hooks
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">Settings → Hooks</code>{" "}
           and enable each hook listed under the{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             {pluginName ?? "observability"}
           </code>{" "}
           plugin. Codex requires manual approval for each hook event before it
@@ -388,16 +384,14 @@ function CodexInstallContent({
         <p className="text-muted-foreground mb-4 text-sm">
           Download a self-contained Codex plugin ZIP from the{" "}
           <strong>Plugins</strong> page (
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             Download Observability Plugin → Codex
           </code>
           ). The ZIP includes an{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            install.sh
-          </code>{" "}
-          that handles all three steps automatically:
+          <code className="bg-muted px-1 py-0.5 text-xs">install.sh</code> that
+          handles all three steps automatically:
         </p>
-        <div className="bg-muted/50 space-y-1 rounded-lg p-4 font-mono text-sm">
+        <div className="bg-muted/50 space-y-1 p-4 font-mono text-sm">
           <code>unzip observability-codex.zip -d ~/gram-observability</code>
           <div className="mt-1">
             <code>bash ~/gram-observability/install.sh</code>
@@ -408,7 +402,7 @@ function CodexInstallContent({
       <div className="flex items-center gap-3">
         <Button variant="secondary" size="sm" asChild>
           <a
-            href="https://developers.openai.com/codex/hooks"
+            href="https://learn.chatgpt.com/docs/hooks"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
@@ -419,7 +413,7 @@ function CodexInstallContent({
         </Button>
         <Button variant="secondary" size="sm" asChild>
           <a
-            href="https://developers.openai.com/codex/plugins/build"
+            href="https://developers.openai.com/plugins/build/plugins"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
@@ -479,7 +473,7 @@ const providers: {
 function PublishedRepoPanel() {
   const routes = useRoutes();
   return (
-    <div className="border-primary/30 bg-primary/5 mb-6 rounded-lg border p-4">
+    <div className="border-primary/30 bg-primary/5 mb-6 border p-4">
       <div className="mb-2 flex items-center gap-2">
         <Sparkles className="text-primary size-4" />
         <h3 className="text-sm font-semibold">
@@ -538,7 +532,7 @@ export function HooksSetupDialog({
                 }}
                 disabled={!p.available}
                 className={cn(
-                  "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-2 border px-3 py-2 text-sm font-medium transition-colors",
                   selected === p.id
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50 hover:bg-muted/50",

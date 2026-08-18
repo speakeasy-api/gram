@@ -721,11 +721,11 @@ export interface ComponentOverrides {
   ReasoningGroup?: ReasoningGroupComponent;
 
   /**
-   * The component to use for the tool group (a group of tool calls returned by the LLM in a single message).
+   * The component to use for the tool group (a run of tool calls, including
+   * the terse annotation text parts preceding each batch). `indices` are the
+   * positions of the run's parts within the assistant message.
    */
-  ToolGroup?: ComponentType<
-    PropsWithChildren<{ startIndex: number; endIndex: number }>
-  >;
+  ToolGroup?: ComponentType<PropsWithChildren<{ indices: number[] }>>;
 }
 
 export type ToolsFilter =
@@ -1058,12 +1058,28 @@ export interface ComposerConfig {
    * Selected skill IDs are supplied to the caller's transport for the next turn.
    */
   skillContext?: SkillContextConfig;
+
+  /**
+   * Canned prompts offered when the draft starts with `/`. Picking one replaces
+   * the draft and sends it, so these are shortcuts rather than editable text.
+   */
+  slashCommands?: ComposerSlashCommand[];
+}
+
+export interface ComposerSlashCommand {
+  /** Command name shown first in the row (also matched against the query). */
+  title: string;
+  /** Short description shown beside the title. */
+  label?: string;
+  /** The prompt actually sent when the command is picked. */
+  prompt: string;
 }
 
 /**
  * AttachmentsConfig provides fine-grained control over file attachments.
  *
- * Note: not yet implemented. Attachments are not supported yet.
+ * Files upload to Gram as soon as they are attached; the transport sends the
+ * resulting asset ids with the turn. `maxCount` is not enforced yet.
  */
 export interface AttachmentsConfig {
   /**

@@ -8,6 +8,10 @@ issues:
 
 run:
   relative-path-mode: wd
+  # The demo seed safety test is build-tagged out of the sharded test suite
+  # (it has its own CI job); the tag here keeps its files linted.
+  build-tags:
+    - demoseed_safety
 
 linters:
   enable:
@@ -84,6 +88,13 @@ linters:
         linters:
           - exhaustruct
           - gosec
+      # gosec stays on for testenv; exempt only G306 (the Temporal dev server
+      # shim has to carry the exec bit, and it is written 0700 into a 0700
+      # MkdirTemp directory).
+      - path: internal/testenv/temporal\.go
+        linters:
+          - gosec
+        text: G306
       # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:
@@ -96,6 +107,12 @@ linters:
         text: G101
       # False positives that audit subject/action constants containing "credential" are somehow hardcoded credentials.
       - path: internal/audit/(events|awsiamcredentials|gcpiamcredentials)\.go
+        linters:
+          - gosec
+        text: G101
+      # False positives that audit action constants and the URN prefix naming
+      # the OpenRouter key subject are somehow hardcoded credentials.
+      - path: (internal/audit/openrouterkeys|internal/urn/openrouter_api_key)\.go
         linters:
           - gosec
         text: G101
@@ -453,11 +470,14 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
+        - "github.com/speakeasy-api/gram/server/internal/access.RequireStaffForUnproxiedMcp("
+        - "github.com/speakeasy-api/gram/server/internal/auth.RequirePlatformAdmin("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
+        - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("

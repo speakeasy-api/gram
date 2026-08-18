@@ -251,6 +251,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/litellm/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/litellm/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/environments/queries.sql
     engine: postgresql
     gen:
@@ -311,6 +321,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/openrouterkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/openrouterkeys/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/chat/queries.sql
     engine: postgresql
     gen:
@@ -327,6 +347,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/chat/analysis/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/businessmemory/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/businessmemory/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -557,6 +587,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/unproxiedmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/unproxiedmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/remotemcp/queries.sql
     engine: postgresql
     gen:
@@ -583,6 +623,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/thirdparty/workos/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpapproval/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpapproval/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -650,6 +700,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/webhooks/svixrelay/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/webhooks/svixrelay/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/otelforwarding/queries.sql
     engine: postgresql
     gen:
@@ -696,5 +756,25 @@ sql:
       go:
         package: "repo"
         out: "../internal/admin/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/platformmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/platformmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/trials/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/trials/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

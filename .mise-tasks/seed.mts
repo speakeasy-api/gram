@@ -12,7 +12,6 @@ import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
-import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
@@ -307,6 +306,7 @@ async function seedShadowMCPInventoryData(init: {
 
   const inventoryRows: string[] = [];
   const telemetryRows: string[] = [];
+  const hookSources = ["claude-code", "cursor", "codex"];
   const clickhouseDateTime64 = (date: Date) =>
     date.toISOString().replace("T", " ").replace("Z", "");
   for (const [serverIndex, [serverName, serverURL]] of servers.entries()) {
@@ -320,7 +320,18 @@ async function seedShadowMCPInventoryData(init: {
     const userCount = 3 + (serverIndex % 6);
     const callCount = 8 + serverIndex * 3;
     for (let callIndex = 0; callIndex < callCount; callIndex++) {
-      const userEmail = users[(serverIndex * 2 + callIndex) % userCount];
+      const userCallIndex = serverIndex * 2 + callIndex;
+      const userSlot = userCallIndex % userCount;
+      const userEmail = users[userSlot];
+      const primaryHookSource =
+        hookSources[(serverIndex + userSlot) % hookSources.length];
+      const isMultiSourceUser = userSlot === serverIndex % userCount;
+      const hookSource = isMultiSourceUser
+        ? hookSources[
+            (serverIndex + userSlot + Math.floor(userCallIndex / userCount)) %
+              hookSources.length
+          ]
+        : primaryHookSource;
       const calledAt = new Date(
         lastSeen.getTime() - callIndex * (35 + serverIndex * 4) * 60 * 1000,
       );
@@ -335,7 +346,7 @@ async function seedShadowMCPInventoryData(init: {
         "gen_ai.tool.call.result": "ok",
         "gram.event.source": "hook",
         "gram.hook.event": "PostToolUse",
-        "gram.hook.source": "claude-code",
+        "gram.hook.source": hookSource,
         "gram.mcp.server_url": serverURL,
         "gram.project.id": projectId,
         "gram.tool.name": toolName,
@@ -367,6 +378,437 @@ async function seedShadowMCPInventoryData(init: {
     const err = e as { stderr?: string; stdout?: string; message?: string };
     log.stepFailed(
       `Failed to seed Shadow MCP inventory: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
+/**
+ * MCP approval queue: requests in every state the approval page renders —
+ * an in-use server, a pinned package, a gathering gap, an unresolvable
+ * reference, a denial with its frozen evidence, and an approval citing a
+ * research report. Evidence documents match the assembler's version-1 shape
+ * (server/internal/mcpapproval/evidence); timestamps reuse the shadow-MCP
+ * inventory formulas so "are we already exposed?" agrees with the inventory
+ * page for the same server.
+ */
+async function seedMCPApprovalData(init: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { projectId, organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const now = Date.now();
+  const msPerHour = 60 * 60 * 1000;
+  const iso = (date: Date) => date.toISOString();
+
+  // Linear is inventory serverIndex 2, Sentry is 4 — mirror their formulas.
+  const linearEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.linear.app/mcp",
+      version_pinned: false,
+      host: "mcp.linear.app",
+      registrable_domain: "linear.app",
+    },
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.linear.app/mcp",
+      url_host: "mcp.linear.app",
+      server_name: "Linear",
+      first_seen: iso(new Date(now - (720 - 2 * 31) * msPerHour)),
+      last_seen: iso(new Date(now - 6 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 2 * 31 - 4) * msPerHour)),
+      last_called: iso(new Date(now - 6 * msPerHour)),
+      call_count: 14,
+      user_count: 5,
+      in_use: true,
+    },
+  });
+  const filesystemEvidence = JSON.stringify({
+    identity: {
+      kind: "package",
+      artifact_ref: "npm:@modelcontextprotocol/server-filesystem@2025.7.1",
+      version_pinned: true,
+      registry: "npm",
+      package_name: "@modelcontextprotocol/server-filesystem",
+      package_version: "2025.7.1",
+    },
+    package: {
+      registry: "npm",
+      name: "@modelcontextprotocol/server-filesystem",
+      license: "MIT",
+      latest_version: "2025.7.1",
+      first_published: "2024-11-19T00:00:00Z",
+      last_published: iso(new Date(now - 21 * 24 * msPerHour)),
+      version_count: 34,
+      maintainer_count: 3,
+    },
+  });
+  const internalToolsEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.internal-tools.dev/sse",
+      version_pinned: false,
+      host: "mcp.internal-tools.dev",
+      registrable_domain: "internal-tools.dev",
+    },
+    gaps: ["exposure_lookup_failed"],
+  });
+  const unresolvedEvidence = JSON.stringify({
+    identity: { kind: "unresolved", version_pinned: false },
+  });
+  const pastebinEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.pastebin-tools.example/mcp",
+      version_pinned: false,
+      host: "mcp.pastebin-tools.example",
+    },
+    exposure: { status: "unseen", in_use: false },
+  });
+  const sentryEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.sentry.dev/mcp",
+      version_pinned: false,
+      host: "mcp.sentry.dev",
+      registrable_domain: "sentry.dev",
+    },
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.sentry.dev/mcp",
+      url_host: "mcp.sentry.dev",
+      server_name: "Sentry",
+      first_seen: iso(new Date(now - (720 - 4 * 31) * msPerHour)),
+      last_seen: iso(new Date(now - 10 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 4 * 31 - 4) * msPerHour)),
+      last_called: iso(new Date(now - 10 * msPerHour)),
+      call_count: 20,
+      user_count: 7,
+      in_use: true,
+    },
+  });
+  // The showcase request: every panel section carries content. A catalogued
+  // remote server whose registry entry also names its npm package, with
+  // declared authority and per-tool capability — the shape a registry-backed
+  // gather produces once those inputs are wired.
+  const notionEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.notion.com/mcp",
+      version_pinned: false,
+      host: "mcp.notion.com",
+      registrable_domain: "notion.com",
+    },
+    package: {
+      registry: "npm",
+      name: "@notionhq/notion-mcp-server",
+      license: "MIT",
+      latest_version: "1.9.0",
+      first_published: "2025-03-03T00:00:00Z",
+      last_published: iso(new Date(now - 9 * 24 * msPerHour)),
+      version_count: 21,
+      maintainer_count: 4,
+    },
+    authority: {
+      mode: "oauth",
+      transport: "streamable-http",
+      scopes: ["read_content", "update_content", "insert_content"],
+      dynamic_registration: true,
+      demanded_secrets: [
+        {
+          name: "NOTION_API_KEY",
+          required: true,
+          description:
+            "Internal integration token, used when OAuth is not configured",
+        },
+      ],
+      unauthenticated_tools: ["ping"],
+    },
+    capabilities: [
+      { tool: "search_pages", declared: ["open_world"], schema_implied: [] },
+      {
+        tool: "create_page",
+        declared: [],
+        schema_implied: ["arbitrary_url"],
+        acts_on_behalf: true,
+      },
+      {
+        tool: "delete_block",
+        declared: ["destructive"],
+        schema_implied: [],
+        acts_on_behalf: true,
+      },
+      { tool: "get_self", unannotated: true },
+    ],
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.notion.com/mcp",
+      url_host: "mcp.notion.com",
+      server_name: "Notion",
+      first_seen: iso(new Date(now - (720 - 31) * msPerHour)),
+      last_seen: iso(new Date(now - 4 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 35) * msPerHour)),
+      last_called: iso(new Date(now - 4 * msPerHour)),
+      call_count: 11,
+      user_count: 4,
+      in_use: true,
+    },
+  });
+  const notionReport = JSON.stringify({
+    claims: [
+      {
+        text: "The server is published by the vendor from its primary domain and the npm package is referenced from the official developer docs.",
+        tier: "independently_reported",
+        citations: ["https://developers.notion.com/docs/mcp"],
+      },
+      {
+        text: "Vendor states OAuth scopes are granted per workspace and revocable by a workspace admin.",
+        tier: "vendor_claim",
+        citations: ["https://developers.notion.com/docs/authorization"],
+      },
+      {
+        text: "Community reports describe rate limits, not security incidents, over the last year.",
+        tier: "independently_reported",
+        citations: ["https://github.com/makenotion/notion-mcp-server/issues"],
+      },
+    ],
+  });
+
+  const sentryReport = JSON.stringify({
+    claims: [
+      {
+        text: "Sentry publishes this MCP server from its primary domain and documents it in the official product docs.",
+        tier: "independently_reported",
+        citations: ["https://docs.sentry.io/product/sentry-mcp/"],
+      },
+      {
+        text: "The vendor states the server requests read scopes plus issue-write for triage actions.",
+        tier: "vendor_claim",
+        citations: ["https://docs.sentry.io/product/sentry-mcp/#permissions"],
+      },
+    ],
+  });
+
+  const pgSQL = `
+    BEGIN;
+    -- Idempotent reset for this project's seeded approval data.
+    DELETE FROM mcp_approval_decisions WHERE project_id = '${projectId}';
+    DELETE FROM mcp_research_reports WHERE project_id = '${projectId}';
+    DELETE FROM mcp_approval_request_requesters WHERE project_id = '${projectId}';
+    DELETE FROM mcp_approval_requests WHERE project_id = '${projectId}';
+
+    WITH linear_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.linear.app/mcp', 'https://mcp.linear.app/mcp',
+        'url:https://mcp.linear.app/mcp', FALSE, 'requested',
+        '${linearEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', linear_req.id, v.user_id, v.user_email, v.note
+    FROM linear_req, (VALUES
+      ('seed-user-maya', 'maya.chen@example.com', 'Half the team already tracks sprints in Linear and keeps pasting issue links into chats by hand.'),
+      ('seed-user-liam', 'liam.oconnor@example.com', 'Need it for triage rotation.'),
+      ('seed-user-priya', 'priya.shah@example.com', 'Same as Maya - this is our system of record.')
+    ) AS v(user_id, user_email, note);
+
+    WITH fs_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'stdio_command',
+        'npx -y @modelcontextprotocol/server-filesystem@2025.7.1',
+        'npx -y @modelcontextprotocol/server-filesystem@2025.7.1',
+        'npm:@modelcontextprotocol/server-filesystem@2025.7.1', TRUE, 'requested',
+        '${filesystemEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', fs_req.id,
+      'seed-user-noah', 'noah.williams@example.com',
+      'Want the reference filesystem server for local docs indexing. Pinned the exact version.'
+    FROM fs_req;
+
+    WITH internal_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.internal-tools.dev/sse', 'https://mcp.internal-tools.dev/sse',
+        'url:https://mcp.internal-tools.dev/sse', FALSE, 'requested',
+        '${internalToolsEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', internal_req.id,
+      'seed-user-sofia', 'sofia.martinez@example.com',
+      'A contractor recommended this one. Not sure who runs it.'
+    FROM internal_req;
+
+    WITH local_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'stdio_command',
+        './run-local-mcp --stdio', './run-local-mcp --stdio',
+        NULL, FALSE, 'requested',
+        '${unresolvedEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', local_req.id,
+      'seed-user-ethan', 'ethan.kim@example.com',
+      'Found this in a gist, it automates our deploy checklist.'
+    FROM local_req;
+
+    WITH denied_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.pastebin-tools.example/mcp', 'https://mcp.pastebin-tools.example/mcp',
+        'url:https://mcp.pastebin-tools.example/mcp', FALSE, 'denied',
+        '${pastebinEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), denied_requester AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', denied_req.id,
+        'seed-user-ava', 'ava.johnson@example.com', 'Quick way to share query results.'
+      FROM denied_req
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', denied_req.id, 'denied', '${userId}',
+      'Unknown operator, no registrable publisher, and it exists to move data off our systems. Use the sanctioned export tooling instead.',
+      '${pastebinEvidence}'::jsonb, 1, ARRAY[]::TEXT[],
+      clock_timestamp() - interval '9 days'
+    FROM denied_req;
+
+    WITH sentry_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.sentry.dev/mcp', 'https://mcp.sentry.dev/mcp',
+        'url:https://mcp.sentry.dev/mcp', FALSE, 'approved',
+        '${sentryEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), sentry_requesters AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', sentry_req.id, v.user_id, v.user_email, v.note
+      FROM sentry_req, (VALUES
+        ('seed-user-lucas', 'lucas.brown@example.com', 'On call needs stack traces without leaving the editor.'),
+        ('seed-user-isabella', 'isabella.rossi@example.com', 'Sentry is already our error tracker of record.')
+      ) AS v(user_id, user_email, note)
+    ), sentry_report AS (
+      INSERT INTO mcp_research_reports (
+        organization_id, project_id, mcp_approval_request_id, status, report,
+        report_version, model, requested_by, started_at, completed_at
+      )
+      SELECT '${organizationId}', '${projectId}', sentry_req.id, 'completed',
+        '${sentryReport}'::jsonb, 1, 'seed', '${userId}',
+        clock_timestamp() - interval '12 days', clock_timestamp() - interval '12 days' + interval '4 minutes'
+      FROM sentry_req
+      RETURNING id, mcp_approval_request_id
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns,
+      mcp_research_report_id, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', sentry_report.mcp_approval_request_id,
+      'approved', '${userId}',
+      'Official vendor server on the vendor primary domain, already in active use by seven people here, and the research run corroborates the documented scopes.',
+      '${sentryEvidence}'::jsonb, 1, ARRAY[]::TEXT[], sentry_report.id,
+      clock_timestamp() - interval '11 days'
+    FROM sentry_report;
+
+    WITH notion_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.notion.com/mcp', 'https://mcp.notion.com/mcp',
+        'url:https://mcp.notion.com/mcp', FALSE, 'requested',
+        '${notionEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), notion_requesters AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', notion_req.id, v.user_id, v.user_email, v.note
+      FROM notion_req, (VALUES
+        ('seed-user-oliver', 'oliver.smith@example.com', 'Docs team lives in Notion. We want meeting notes searchable from the editor.'),
+        ('seed-user-maya', 'maya.chen@example.com', 'Asked for this last quarter too - it would replace two manual steps in our release notes flow.'),
+        ('seed-user-isabella', 'isabella.rossi@example.com', 'Same use case as Oliver.')
+      ) AS v(user_id, user_email, note)
+    ), notion_report AS (
+      INSERT INTO mcp_research_reports (
+        organization_id, project_id, mcp_approval_request_id, status, report,
+        report_version, model, requested_by, started_at, completed_at
+      )
+      SELECT '${organizationId}', '${projectId}', notion_req.id, 'completed',
+        '${notionReport}'::jsonb, 1, 'seed', '${userId}',
+        clock_timestamp() - interval '2 days', clock_timestamp() - interval '2 days' + interval '6 minutes'
+      FROM notion_req
+      RETURNING id, mcp_approval_request_id
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', notion_report.mcp_approval_request_id,
+      'denied', '${userId}',
+      'Denied in the spring: at the time the server demanded a static integration token with workspace-wide reach. Re-review now that OAuth with scoped grants is available.',
+      '${notionEvidence}'::jsonb, 1, ARRAY[]::TEXT[],
+      clock_timestamp() - interval '96 days'
+    FROM notion_report;
+
+    COMMIT;`;
+
+  try {
+    await $({
+      input: pgSQL,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+    log.info("Seeded MCP approval requests, decisions, and research report");
+  } catch (e) {
+    const err = e as { message?: string; stderr?: string };
+    log.stepFailed(
+      `Failed to seed MCP approval data: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 }
@@ -442,6 +884,103 @@ SELECT COUNT(*) FROM upserted;
     });
   }
   log.info("Assigned current user to seeded Admin role");
+}
+
+// Mirrors authz.SeedSystemRoleGrants for local databases that predate RBAC.
+// Keep these scope lists in sync with authz.SystemRoleGrants. As in the Go
+// seeder, an existing role with any grants is left unchanged.
+async function seedSystemRoleGrants(organizationId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+BEGIN;
+
+INSERT INTO global_roles (
+  workos_slug,
+  workos_name,
+  workos_description,
+  workos_created_at,
+  workos_updated_at,
+  workos_last_event_id
+)
+VALUES
+  ('admin', 'Admin', 'Administrator role', clock_timestamp(), clock_timestamp(), NULL),
+  ('member', 'Member', 'Member role', clock_timestamp(), clock_timestamp(), NULL)
+ON CONFLICT (workos_slug) DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+  deleted_at = NULL,
+  workos_deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE global_roles.deleted IS TRUE
+   OR global_roles.workos_deleted IS TRUE;
+
+WITH system_role_scopes (role_slug, scope, resource_kind) AS (
+  VALUES
+    ('admin', 'org:read', 'org'),
+    ('admin', 'org:admin', 'org'),
+    ('admin', 'project:read', 'project'),
+    ('admin', 'project:write', 'project'),
+    ('admin', 'mcp:read', 'mcp'),
+    ('admin', 'mcp:write', 'mcp'),
+    ('admin', 'mcp:connect', 'mcp'),
+    ('admin', 'environment:read', 'environment'),
+    ('admin', 'environment:write', 'environment'),
+    ('admin', 'skill:read', 'skill'),
+    ('admin', 'skill:write', 'skill'),
+    ('member', 'org:read', 'org'),
+    ('member', 'project:read', 'project'),
+    ('member', 'mcp:read', 'mcp'),
+    ('member', 'mcp:connect', 'mcp'),
+    ('member', 'skill:read', 'skill')
+),
+-- Additive on purpose: a role that already has grants still picks up scopes
+-- added to the list above on re-seed, and the ON CONFLICT below keeps the
+-- whole thing idempotent.
+system_roles AS (
+  SELECT global_roles.id, global_roles.workos_slug
+  FROM global_roles
+  WHERE global_roles.workos_slug IN ('admin', 'member')
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+)
+INSERT INTO principal_grants (
+  organization_id,
+  principal_urn,
+  scope,
+  effect,
+  selectors
+)
+SELECT
+  :'organization_id',
+  'role:global:' || system_roles.id::text,
+  system_role_scopes.scope,
+  NULL,
+  jsonb_build_object(
+    'resource_kind', system_role_scopes.resource_kind,
+    'resource_id', '*'
+  )
+FROM system_roles
+JOIN system_role_scopes
+  ON system_role_scopes.role_slug = system_roles.workos_slug
+ON CONFLICT (
+  organization_id,
+  principal_urn,
+  scope,
+  COALESCE(effect, 'allow'),
+  selectors
+)
+DO NOTHING;
+
+COMMIT;
+`;
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -f -`.quiet();
+
+  log.info("Seeded built-in roles and grants");
 }
 
 async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
@@ -1720,37 +2259,39 @@ const seededHistoryRiskChatIds: string[] = [];
 // assistant groups by, while `rule_id` drives the customer-facing category
 // label (secret.* -> Secrets, pii.* -> PII/Financial/Government IDs, ...). The
 // bare ids ("generic-api-key", "email") deliberately omit a category prefix so
-// they exercise the source-based classification fallback. match values mimic
-// the redacted form the scanner stores. Tuple: [source, ruleId, description,
-// match, confidence].
+// they exercise the source-based classification fallback. match values are
+// canonical, publicly documented fake secrets (AWS/Stripe docs examples,
+// TEST-NET IPs, 555-01xx phone numbers) stored as the Postgres "plaintext" so
+// the audited reveal path shows a realistic value instead of a placeholder.
+// Tuple: [source, ruleId, description, match, confidence].
 const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   // Secrets (gitleaks)
   [
     "gitleaks",
     "secret.aws_access_key",
     "AWS access key",
-    "<redacted len=20 sha=8f3a2c1d>",
+    "AKIAIOSFODNN7EXAMPLE",
     0.99,
   ],
   [
     "gitleaks",
     "secret.github_pat",
     "GitHub personal access token",
-    "<redacted len=40 sha=3b9e7a02>",
+    "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
     0.98,
   ],
   [
     "gitleaks",
     "secret.stripe_api_key",
     "Stripe secret key",
-    "<redacted len=32 sha=c41d77ee>",
+    "sk_test_4eC39HqLyjWDarjtT1zdp7dc",
     0.97,
   ],
   [
     "gitleaks",
     "generic-api-key",
     "Generic API key",
-    "<redacted len=36 sha=a0f2bb19>",
+    "9f8e7d6c-5b4a-4321-a1b2-c3d4e5f60718",
     0.85,
   ],
   // PII (presidio)
@@ -1758,60 +2299,30 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
     "presidio",
     "pii.email_address",
     "Email address",
-    "<redacted len=22 sha=5d2c9f81>",
+    "jane.doe@example.com",
     0.95,
   ],
-  [
-    "presidio",
-    "pii.phone_number",
-    "Phone number",
-    "<redacted len=12 sha=77ab10cc>",
-    0.9,
-  ],
-  [
-    "presidio",
-    "pii.ip_address",
-    "IP address",
-    "<redacted len=13 sha=12e4dd56>",
-    0.88,
-  ],
-  ["presidio", "email", "Email address", "<redacted len=24 sha=9c3a4b22>", 0.8],
+  ["presidio", "pii.phone_number", "Phone number", "+1 415 555 0132", 0.9],
+  ["presidio", "pii.ip_address", "IP address", "203.0.113.42", 0.88],
+  ["presidio", "email", "Email address", "sam.lee@example.org", 0.8],
   // Financial (presidio)
   [
     "presidio",
     "pii.credit_card",
     "Credit card number",
-    "<redacted len=16 sha=ee0918fa>",
+    "4242424242424242",
     0.96,
   ],
-  [
-    "presidio",
-    "pii.iban_code",
-    "IBAN code",
-    "<redacted len=22 sha=4471bc9d>",
-    0.93,
-  ],
+  ["presidio", "pii.iban_code", "IBAN code", "DE89370400440532013000", 0.93],
   // Government IDs (presidio)
-  [
-    "presidio",
-    "pii.us_ssn",
-    "US social security number",
-    "<redacted len=11 sha=2a6f0c34>",
-    0.94,
-  ],
-  [
-    "presidio",
-    "pii.us_passport",
-    "US passport number",
-    "<redacted len=9 sha=b8d3e012>",
-    0.9,
-  ],
+  ["presidio", "pii.us_ssn", "US social security number", "078-05-1120", 0.94],
+  ["presidio", "pii.us_passport", "US passport number", "912803456", 0.9],
   // Healthcare (presidio)
   [
     "presidio",
     "pii.medical_license",
     "Medical license number",
-    "<redacted len=10 sha=6f1c8aa7>",
+    "MD-1234567",
     0.89,
   ],
   // Prompt injection — match carries the full flagged event (the shape
@@ -1944,7 +2455,7 @@ async function seedRiskFindings(init: {
     SELECT
       '${projectId}', '${organizationId}', pol.id, 1,
       m.id, 'gitleaks', TRUE, 'secret.aws_access_key', 'AWS access key',
-      '<redacted len=20 sha=8f3a2c1d>', 0.99,
+      'AKIAIOSFODNN7EXAMPLE', 0.99,
       now() - ((g.i % 6) || ' days')::interval
     FROM (
       SELECT id FROM risk_policies
@@ -1978,7 +2489,7 @@ async function seedRiskFindings(init: {
       cm.id,
       (ARRAY['gitleaks','prompt_injection','presidio'])[1 + (abs(hashtext(cm.chat_id::text)) % 3)],
       TRUE, 'seed.history_risk', 'Seeded historical risk finding',
-      '<redacted len=20 sha=9c41d2ab>', 0.95, cm.created_at
+      'AKIAI44QH8DHBEXAMPLE', 0.95, cm.created_at
     FROM chat_messages cm
     CROSS JOIN (
       SELECT id FROM risk_policies
@@ -2062,20 +2573,114 @@ async function seedRiskFindings(init: {
   }
 }
 
+// Embeds each plain-text finding match into its anchor chat message's content
+// and stamps byte spans on risk_results — making seeded data honor the same
+// contract scanner-produced findings do, where the sensitive value really
+// exists in the original content. The ClickHouse reveal path reconstructs
+// plaintext by slicing the ORIGINAL Postgres content at surface/start_pos/
+// end_pos and verifying the length, so without this pass reveal 404s on all
+// seeded findings whenever risk-list-from-clickhouse is on. JSON event
+// matches (llm_judge / prompt_injection) are skipped: their match is the
+// whole flagged event, not a substring of content, and they have nothing to
+// reveal on this surface. Idempotent: a match already present in the content
+// is located rather than appended again, and spans are recomputed from the
+// current content on every run.
+async function embedRiskFindingMatches(init: {
+  projectId: string;
+}): Promise<void> {
+  const { projectId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+
+  const sql = `
+  DO $embed$
+  DECLARE
+    r RECORD;
+    pos INT;
+    base INT;
+  BEGIN
+    FOR r IN
+      SELECT rr.id, rr.chat_message_id, rr.match
+      FROM risk_results rr
+      WHERE rr.project_id = '${projectId}'
+        AND rr.found IS TRUE
+        AND rr.chat_message_id IS NOT NULL
+        AND COALESCE(rr.match, '') <> ''
+        AND rr.match NOT LIKE '{%'
+        AND rr.match NOT LIKE '<redacted%'
+      ORDER BY rr.id
+    LOOP
+      SELECT strpos(content, r.match) INTO pos
+      FROM chat_messages WHERE id = r.chat_message_id;
+      IF pos IS NULL THEN
+        CONTINUE;
+      END IF;
+      IF pos > 0 THEN
+        -- Already embedded (idempotent re-run): byte offset of the existing
+        -- occurrence.
+        SELECT octet_length(substring(content, 1, pos - 1)) INTO base
+        FROM chat_messages WHERE id = r.chat_message_id;
+      ELSE
+        -- Append after a separating space; the match then starts one byte
+        -- past the old content's end.
+        SELECT octet_length(content) + 1 INTO base
+        FROM chat_messages WHERE id = r.chat_message_id;
+        UPDATE chat_messages
+        SET content = content || ' ' || r.match
+        WHERE id = r.chat_message_id;
+      END IF;
+      UPDATE risk_results
+      SET start_pos = base, end_pos = base + octet_length(r.match)
+      WHERE id = r.id;
+    END LOOP;
+  END
+  $embed$;`;
+
+  try {
+    await $({
+      input: sql,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f -`.quiet();
+    log.info(
+      "Embedded finding matches into chat message content and stamped reveal spans",
+    );
+  } catch (e) {
+    const err = e as { message?: string; stderr?: string; stdout?: string };
+    log.stepFailed(
+      `Failed to embed risk finding matches: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
 // Mirrors the project's Postgres risk_results into the ClickHouse
 // risk_findings table the way the enriched FindingCHWriter would have written
 // them: denormalized chat/user attribution, category from the shared
-// classifier's rules, and the already-redacted match display string. This is
-// what the ClickHouse-backed Risk Overview read path (the
-// risk-overview-from-clickhouse flag) reads locally. Must run AFTER every
-// risk_results writer (seedRiskFindings, seedNonCorporateAccountFindings) so
-// the copy sees the final Postgres state.
+// classifier's rules, the already-redacted match display string, and the
+// reveal metadata (surface + spans + match length) stamped by
+// embedRiskFindingMatches so the ClickHouse reveal path can reconstruct the
+// plaintext from the original Postgres content. This is what the
+// ClickHouse-backed Risk Overview read path (the risk-overview-from-clickhouse
+// flag) reads locally. Must run AFTER every risk_results writer
+// (seedRiskFindings, seedNonCorporateAccountFindings) and after
+// embedRiskFindingMatches so the copy sees the final Postgres state.
 async function seedRiskFindingsClickHouse(init: {
   projectId: string;
 }): Promise<void> {
   const { projectId } = init;
   const dbUser = process.env.DB_USER || "gram";
   const dbName = process.env.DB_NAME || "gram";
+
+  // Seeded chats carry no product surface, which would leave the mirrored
+  // chat_source empty and the Watchdog's App grouping without data. Stamp a
+  // deterministic canonical surface per chat (hash of the chat id, so a chat
+  // never flip-flops between reruns) for messages that have none; messages
+  // seeded with a real source keep it.
+  const stampSourcesSQL = `
+    UPDATE chat_messages cm
+    SET source = (ARRAY['codex','cursor','claude-code','cowork'])[1 + abs(hashtext(cm.chat_id::text)) % 4]
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = '${projectId}'
+      AND COALESCE(cm.source, '') = '';`;
 
   // The CASE mirrors internal/risk/categories Classify (the single source of
   // truth the CH writer stamps categories with): source-owned categories
@@ -2122,14 +2727,55 @@ async function seedRiskFindingsClickHouse(init: {
           WHEN rr.source = 'presidio' THEN 'pii'
           ELSE 'custom'
         END,
-        -- ClickHouse must never hold a plaintext match. Catalog matches are
-        -- already redacted display strings and pass through; anything else
-        -- (e.g. account_identity emails, stored verbatim in Postgres only)
-        -- collapses to a length-only placeholder, mirroring the writer.
+        -- ClickHouse must never hold a plaintext match, so derive the same
+        -- partial-mask display the FindingCHWriter (maskdisplay) produces:
+        -- judge/destructive sources carry no display, shadow MCP shows the
+        -- server identifier verbatim, emails show ***@domain, financial rules
+        -- show the last 4, and everything else gets the tiered general mask.
+        -- Legacy '<redacted ...>' placeholders pass through untouched.
         CASE
           WHEN COALESCE(rr.match, '') = '' THEN ''
           WHEN rr.match LIKE '<redacted%' THEN rr.match
-          ELSE '<redacted len=' || length(rr.match) || '>'
+          WHEN rr.source IN ('prompt_injection', 'llm_judge', 'destructive_tool', 'cli_destructive') THEN ''
+          WHEN rr.source = 'shadow_mcp' THEN rr.match
+          WHEN (rr.rule_id = 'pii.email_address' OR rr.source = 'account_identity')
+            AND rr.match LIKE '%@%' THEN '***@' || split_part(rr.match, '@', -1)
+          WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto')
+            THEN repeat('*', greatest(length(rr.match) - 4, 0)) || right(rr.match, 4)
+          WHEN length(rr.match) >= 8
+            THEN left(rr.match, 4) || repeat('*', length(rr.match) - 6) || right(rr.match, 2)
+          WHEN length(rr.match) >= 5
+            THEN left(rr.match, 2) || repeat('*', length(rr.match) - 3) || right(rr.match, 1)
+          ELSE left(rr.match, 1) || repeat('*', greatest(length(rr.match) - 2, 0)) || right(rr.match, 1)
+        END,
+        -- Reveal metadata: spans stamped by embedRiskFindingMatches index the
+        -- anchor message's content, so surface is 'content' exactly when a
+        -- span exists. Rows without spans (JSON judge events, unembeddable
+        -- matches) keep match_len 0 and are refused by reveal, matching the
+        -- writer's behavior for judge sources.
+        COALESCE(rr.start_pos, 0),
+        COALESCE(rr.end_pos, 0),
+        CASE WHEN COALESCE(rr.end_pos, 0) > COALESCE(rr.start_pos, 0) THEN rr.end_pos - rr.start_pos ELSE 0 END,
+        CASE WHEN COALESCE(rr.end_pos, 0) > COALESCE(rr.start_pos, 0) THEN 'content' ELSE '' END,
+        -- Source app of the anchor message (stamped deterministically above
+        -- when the seed left it empty), so Watchdog app grouping has data.
+        COALESCE(cm.source, ''),
+        -- Synthetic but deterministic team per user (hash of the resolved
+        -- external id): no WorkOS directory exists locally, and hashing keeps
+        -- each user in one stable team so distinct-team counts make sense.
+        CASE
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) IS NULL THEN ''
+          ELSE (ARRAY['Platform','Payments','Engineering','Sales','Support'])[
+            1 + abs(hashtext(COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')))) % 5
+          ]
+        END,
+        -- Displayable email per user: @-shaped external ids pass through,
+        -- opaque ids (ext-user-N) get an example.com address.
+        CASE
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) IS NULL THEN ''
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) LIKE '%@%'
+            THEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''))
+          ELSE COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) || '@example.com'
         END,
         rr.excluded_at,
         rr.false_positive_at
@@ -2148,7 +2794,8 @@ async function seedRiskFindingsClickHouse(init: {
       id, created_at, organization_id, project_id, chat_message_id,
       risk_policy_id, risk_policy_version, rule_id, description, source,
       confidence, chat_id, user_id, external_user_id, category,
-      match_redacted, excluded_at, false_positive_at
+      match_redacted, start_pos, end_pos, match_len, surface, chat_source,
+      team, user_email, excluded_at, false_positive_at
     ) FORMAT CSV`;
 
   try {
@@ -2157,6 +2804,10 @@ async function seedRiskFindingsClickHouse(init: {
     await runClickHouseSQL(
       `DELETE FROM risk_findings WHERE project_id = '${projectId}';`,
     );
+
+    await $({
+      input: stampSourcesSQL,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f -`.quiet();
 
     const copied = await $({
       input: copySQL,
@@ -2302,43 +2953,16 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC, reconciles the built-in system-role grants,
-// and gives the local dev user unrestricted chat:read. The Admin role assigned
-// during early seed setup supplies the normal admin scopes; chat:read is a direct
-// grant because it is intentionally not part of any system role. Idempotent:
-// enableRBAC no-ops if already enabled and the grant insert uses ON CONFLICT.
-async function enableRBACForDevUser(init: {
-  sessionId: string;
+// grantDevUserFullSessionVisibility gives the local dev user unrestricted
+// chat:read. Organization provisioning supplies the built-in roles and grants,
+// while chat:read remains a direct grant because it is intentionally not part
+// of any system role. The insert is idempotent.
+async function grantDevUserFullSessionVisibility(init: {
   organizationId: string;
   userId: string;
-  gram: GramCore;
 }): Promise<void> {
-  const { sessionId, organizationId, userId, gram } = init;
-  log.info("Enabling RBAC + granting dev user full session visibility...");
-
-  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
-  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
-  // Locally the dev user's email is neither (e.g. a personal gmail address) and
-  // admin defaults to false, so the call 403s. Promote the dev user to admin in
-  // the DB first so the platform-admin check passes. Idempotent.
-  try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
-  } catch (e: unknown) {
-    const err = e as { stderr?: string; stdout?: string; message?: string };
-    abort(
-      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
-    );
-  }
-
-  // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  const res = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!res.ok) {
-    abort("Failed to enable RBAC", res.error);
-  }
+  const { organizationId, userId } = init;
+  log.info("Granting dev user full session visibility...");
 
   // The Admin system role intentionally omits chat:read, so grant it directly to
   // the user principal. The selector mirrors authz.NewSelector and effect NULL
@@ -2372,7 +2996,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      "Enabled RBAC and granted the dev user chat:read; Agent Sessions now shows all org sessions.",
+      "Granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -3821,6 +4445,35 @@ async function seedObservabilityData(init: {
   const todayUtcStart = Math.floor(now / msPerDay) * msPerDay;
   const rawTtlBoundaryMs = todayUtcStart - RAW_TTL_SAFETY_DAYS * msPerDay;
   const rawTtlBoundaryNano = BigInt(rawTtlBoundaryMs) * BigInt(1_000_000);
+
+  // Days inside the ACTIVE billing cycle (anchor day 1 → the current UTC
+  // month) run heavier so the cycle lands clearly past the 50M contracted
+  // allowance and the billing page renders a real overage segment. The boost
+  // targets ~100M BILLED tokens for the cycle's elapsed days regardless of
+  // when the seed runs. The billed TUM population is much narrower than the
+  // raw telemetry inserted here (registry exclusions, cache reads dropped,
+  // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
+  const nowUtc = new Date(now);
+  const currentCycleStartMs = Date.UTC(
+    nowUtc.getUTCFullYear(),
+    nowUtc.getUTCMonth(),
+    1,
+  );
+  const elapsedCycleDays = Math.max(
+    1,
+    Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
+  );
+  const currentCycleBoost = Math.min(
+    300,
+    Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
+  );
   const chBackfillInserts: string[] = [];
   // Risky history sessions also get a Postgres chat + one message so
   // seedRiskFindings can attach findings (risk_results FKs to chat_messages).
@@ -3885,14 +4538,28 @@ async function seedObservabilityData(init: {
           : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
-      // ~15% are light API-style calls with little cache traffic.
+      // ~15% are light API-style calls with little cache traffic. Sessions
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
+      const cycleBoost =
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
-      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
-      const cacheReadTokens =
-        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
-      const cacheCreationTokens =
-        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
+      const inputTokens = Math.round(
+        (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,
+      );
+      const outputTokens = Math.round(
+        (300 + Math.floor(r() * 3_500)) * anonBoost * cycleBoost,
+      );
+      const cacheReadTokens = Math.round(
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
+      const cacheCreationTokens = Math.round(
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost * cycleBoost,
+      );
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(
@@ -4650,12 +5317,29 @@ function chatSessionBackfillSQL(
             is_claude_otel_row
             AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
         ) AS is_claude_tool_result,
-        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+        (
+            is_codex_otel_row
+            AND toString(attributes.event.name) = 'codex.sse_event'
+            AND toString(attributes.event.kind) = 'response.completed'
+            AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+        ) AS is_codex_api_request,
+        least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+        (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
         (
             hook_source = 'opencode'
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
             AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
         ) AS is_opencode_usage_row,
+        (
+            gram_urn = 'litellm:otel:traces'
+            AND event_urn IN (
+                'urn:telemetry:provider_otel:span:chat',
+                'urn:telemetry:provider_otel:span:embeddings',
+                'urn:telemetry:provider_otel:span:text_completion'
+            )
+        ) AS is_litellm_usage_row,
         (
             hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
@@ -4663,7 +5347,7 @@ function chatSessionBackfillSQL(
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4673,10 +5357,18 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request, toString(attributes.prompt.id),
+            is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
+            is_codex_api_request OR is_opencode_usage_row OR is_litellm_usage_row, toString(id),
+            toString(attributes.gen_ai.response.id)
+        ) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            is_litellm_usage_row AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model),
+            is_litellm_usage_row, toString(attributes.gen_ai.request.model),
             toString(attributes.gen_ai.response.model)
         ) AS effective_model
     SELECT
@@ -4691,10 +5383,10 @@ function chatSessionBackfillSQL(
         uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
         uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
         countIf(is_failed_tool_call) AS failed_tool_call_count,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
-        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
         sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
         sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
         groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
@@ -4716,7 +5408,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
@@ -5038,10 +5730,12 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills:`.quiet();
+    // platform_mcp is the default-on organization entitlement; PostHog rollout
+    // flags separately control whether its runtime and dashboard are exposed.
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'platform_mcp') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:platform_mcp:`.quiet();
     log.info(
-      "Enabled local logs, tool_io_logs, session_capture, and skills features",
+      "Enabled local logs, tool_io_logs, session_capture, skills, and platform_mcp features",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
@@ -5050,20 +5744,18 @@ async function seed() {
     );
   }
 
-  // RBAC may already be enabled from an earlier seed. Establish the user's
-  // organization-level authorization before the first protected API call:
-  // platform super-admin status does not bypass ordinary org RBAC. Assigning
-  // Admin first lets enableRBAC reconcile system grants safely, and both steps
-  // are idempotent for clean and previously seeded databases.
+  // Establish the user's organization-level authorization before the first
+  // protected API call. Platform super-admin status does not bypass ordinary
+  // org RBAC. Seed the system roles first so databases created before RBAC was
+  // enabled can still assign the user to Admin. All writes are idempotent.
+  await seedSystemRoleGrants(activeOrgID);
   await seedCurrentUserAdminRole({
     organizationId: activeOrgID,
     userId: activeUserID,
   });
-  await enableRBACForDevUser({
-    sessionId,
+  await grantDevUserFullSessionVisibility({
     organizationId: activeOrgID,
     userId: activeUserID,
-    gram,
   });
 
   // oxlint-disable-next-line no-unused-vars
@@ -5190,6 +5882,13 @@ async function seed() {
       toolUrns,
     });
     await seedShadowMCPInventoryData({ projectId: firstProject.id });
+    // The approval queue references the inventory's servers, so it seeds
+    // after the inventory to stay coherent with it.
+    await seedMCPApprovalData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+      userId: activeUserID,
+    });
     // Risk findings depend on the chats/messages seeded above (FK +
     // attachment), so seed them after observability data.
     await seedRiskFindings({
@@ -5210,6 +5909,11 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Embed each finding's match into its anchor message and stamp reveal
+    // spans, so the ClickHouse reveal path can reconstruct plaintext from
+    // Postgres content. Must run after every risk_results writer and before
+    // the ClickHouse mirror below.
+    await embedRiskFindingMatches({ projectId: firstProject.id });
     // Mirror the final risk_results state into ClickHouse risk_findings so
     // the ClickHouse-backed Risk Overview read path has matching data. Must
     // stay last among the risk seeders.

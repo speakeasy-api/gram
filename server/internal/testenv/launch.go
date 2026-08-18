@@ -49,6 +49,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	var clickhousecontainer terminateable
 	var presidioserver *presidiotest.MockServer
 	var temporalserver *testsuite.DevServer
+	var temporalserverCleanup func() error
 	var temporalserverErr error
 	var temporalserverOnce sync.Once
 
@@ -125,7 +126,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 			t.Helper()
 
 			temporalserverOnce.Do(func() {
-				temporalserver, temporalserverErr = NewTemporalDevServer(ctx)
+				temporalserver, temporalserverCleanup, temporalserverErr = NewTemporalDevServer(ctx)
 			})
 			require.NoError(t, temporalserverErr, "start temporal dev server")
 
@@ -171,11 +172,18 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		if presidioserver != nil {
 			presidioserver.Close()
 		}
-		if temporalserver != nil {
+		if temporalserver != nil || temporalserverCleanup != nil {
 			eg.Go(func() error {
-				temporalserver.Client().Close()
-				if err := temporalserver.Stop(); err != nil {
-					log.Printf("terminate temporal dev server: %v", err)
+				if temporalserver != nil {
+					temporalserver.Client().Close()
+					if err := temporalserver.Stop(); err != nil {
+						log.Printf("terminate temporal dev server: %v", err)
+					}
+				}
+				if temporalserverCleanup != nil {
+					if err := temporalserverCleanup(); err != nil {
+						log.Printf("clean up temporal dev server: %v", err)
+					}
 				}
 				return nil
 			})

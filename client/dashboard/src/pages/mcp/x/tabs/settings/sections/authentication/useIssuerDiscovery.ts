@@ -18,12 +18,13 @@ export type UseIssuerDiscoveryInitial = {
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   clientIdMetadataDocumentSupported: boolean;
+  revocationEndpoint: string;
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
 } | null;
 
-// Which tier's fetchMetadata endpoint the hook calls. Both return the same
+// Which tier's fetchMetadata endpoint the hook calls. All three return the same
 // draft; they differ in what they authorize against.
 //
 // "project" requires an active project and is right for the per-MCP-server
@@ -31,8 +32,11 @@ export type UseIssuerDiscoveryInitial = {
 // requires org:admin and no project at all, which is what the org-admin Remote
 // Identity Providers surfaces need: an organization-level issuer has no project
 // to authorize against, so calling the project endpoint there authorized
-// against whichever project happened to be active in the session.
-type UseIssuerDiscoveryScope = "project" | "organization";
+// against whichever project happened to be active in the session. "platform"
+// requires the platform-admin flag and no tenant at all, for the platform
+// catalog — a global issuer belongs to no organization, so the org endpoint
+// would authorize against whichever org the admin happened to be viewing.
+type UseIssuerDiscoveryScope = "project" | "organization" | "platform";
 
 // Options controlling how `initial` seeds the hook.
 export type UseIssuerDiscoveryOptions = {
@@ -92,6 +96,7 @@ function useIssuerDiscoveryImpl(
               initial.tokenEndpointAuthMethodsSupported,
             clientIdMetadataDocumentSupported:
               initial.clientIdMetadataDocumentSupported,
+            revocationEndpoint: initial.revocationEndpoint,
             serviceDocumentation: initial.serviceDocumentation,
             opPolicyUri: initial.opPolicyUri,
             opTosUri: initial.opTosUri,
@@ -102,14 +107,26 @@ function useIssuerDiscoveryImpl(
 
   const discoverMutation = useMutation({
     mutationFn: async (url: string): Promise<DiscoveredEndpoints> => {
-      const draft =
-        scope === "organization"
-          ? await client.organizationRemoteSessionIssuers.fetchMetadata({
-              fetchIssuerMetadataRequestBody: { issuer: url },
-            })
-          : await client.remoteSessionIssuers.fetchMetadata({
+      // Returned from the switch rather than assigned in it so the union stays
+      // exhaustive: a fourth scope becomes a compile error here instead of
+      // silently falling through to the project endpoint.
+      const fetchDraft = () => {
+        switch (scope) {
+          case "platform":
+            return client.adminRemoteSessions.fetchGlobalIssuerMetadata({
               fetchIssuerMetadataRequestBody: { issuer: url },
             });
+          case "organization":
+            return client.organizationRemoteSessionIssuers.fetchMetadata({
+              fetchIssuerMetadataRequestBody: { issuer: url },
+            });
+          case "project":
+            return client.remoteSessionIssuers.fetchMetadata({
+              fetchIssuerMetadataRequestBody: { issuer: url },
+            });
+        }
+      };
+      const draft = await fetchDraft();
       return {
         url,
         authorizationEndpoint: draft.authorizationEndpoint ?? "",
@@ -123,6 +140,7 @@ function useIssuerDiscoveryImpl(
           draft.tokenEndpointAuthMethodsSupported ?? [],
         clientIdMetadataDocumentSupported:
           draft.clientIdMetadataDocumentSupported,
+        revocationEndpoint: draft.revocationEndpoint ?? "",
         serviceDocumentation: draft.serviceDocumentation ?? "",
         opPolicyUri: draft.opPolicyUri ?? "",
         opTosUri: draft.opTosUri ?? "",

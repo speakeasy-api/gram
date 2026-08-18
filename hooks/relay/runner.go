@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 // authState classifies the machine's credential posture for the ratchet.
@@ -62,10 +63,10 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 }
 
 // NewRunner constructs the agenthooks Runner: gating events (prompt.submitted,
-// tool.requested) POST synchronously and honor deny; every other event is
-// relayed as fire-and-forget telemetry. Handler failures fail open — a broken
-// hook must never wedge the agent — and the credential ratchet governs the
-// unauthenticated case.
+// tool.requested) POST synchronously and honor deny; MCP inventory also waits
+// for delivery so agenthooks can order it before the first related tool call.
+// Handler failures fail open — a broken hook must never wedge the agent — and
+// the credential ratchet governs the unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
 	r := NewRelay(cfg)
 	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
@@ -84,6 +85,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
 	runner.OnSessionStart(r.onSessionStart)
+	runner.OnMCPInventory(r.onMCPInventory)
 	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
 		return r.onObserve(ctx, e)
 	})
@@ -110,6 +112,9 @@ type verdict struct {
 	// nudge marks a never-authenticated Claude prompt that should offer the
 	// user an interactive sign-in.
 	nudge bool
+	// blockEffect carries the server's structured requestable-block metadata
+	// for a denied gating event; nil otherwise.
+	blockEffect *wire.BlockEffect
 }
 
 const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but this machine's credentials are missing or invalid. Run the Speakeasy hooks login command to reconnect."
@@ -130,9 +135,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
@@ -142,44 +147,34 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
 	resolvedSkill := resolveActivatedSkill(typed, &payload)
 	if resolvedSkill != nil {
-		if resolvedSkill.sourceLevel != "" {
-			payload.Data.Skill.SourceLevel = new(resolvedSkill.sourceLevel)
-		}
-		if resolvedSkill.sourcePath != "" {
-			payload.Data.Skill.SourcePath = new(resolvedSkill.sourcePath)
-		}
 		if resolvedSkill.rawSHA256 != "" {
 			payload.Data.Skill.RawSha256 = new(resolvedSkill.rawSHA256)
 		}
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base)
-	if base.Provider == agenthooks.ProviderClaudeCode &&
-		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
-		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
-	}
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
 		attachPromptAttachments(&payload, entries)
@@ -238,11 +233,11 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res, resolvedSkill)
+	r.finishExchange(idemKey, payload, res)
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
-	if err := startSkillContentUpload(finalCreds, res, resolvedSkill); err != nil {
+	if err := uploadSkillContent(ctx, finalCreds, res, resolvedSkill); err != nil {
 		r.debugf("skill upload: %v", err)
 	}
 	return res, state
@@ -268,13 +263,13 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	case stateNeverAuthed:
 		// A broken config suppresses the nudge: sign-in cannot recover an
 		// unknown deployment identity, only a reinstall can.
-		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == ""}
+		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == "", blockEffect: nil}
 	case stateBroken:
 		msg := res.decision.Message
 		if msg == "" {
 			msg = brokenAuthMessage
 		}
-		return verdict{block: true, message: msg, nudge: false}
+		return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
 	case stateReauthNeeded:
 		// Tool events fail closed on the rejection (or its memory); prompt
 		// handlers honor nudge and fail open instead.
@@ -282,15 +277,15 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		if res.statusCode != 0 {
 			msg = httpMessage(res)
 		}
-		return verdict{block: true, message: msg, nudge: true}
+		return verdict{block: true, message: msg, nudge: true, blockEffect: nil}
 	}
 
 	if res.accepted() {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
-			return verdict{block: false, message: "", nudge: false}
+			return verdict{block: false, message: "", nudge: false, blockEffect: nil}
 		case res.decision.denied():
-			return verdict{block: true, message: res.decision.Message, nudge: false}
+			return verdict{block: true, message: res.decision.Message, nudge: false, blockEffect: res.blockEffect}
 		default:
 			// A 2xx whose body carries no explicit verdict (an intermediary's
 			// JSON, a skewed server) is not an allow.
@@ -298,7 +293,7 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 			if msg == "" {
 				msg = "Speakeasy hooks could not read the server's verdict."
 			}
-			return verdict{block: true, message: msg, nudge: false}
+			return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
 		}
 	}
 	// Non-2xx or unreachable: the server could not confirm the action is
@@ -313,9 +308,9 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	// a broken credential into an enforcement bypass.
 	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
 		r.debugf("event=%s fail-open engaged status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
-		return verdict{block: false, message: "", nudge: false}
+		return verdict{block: false, message: "", nudge: false, blockEffect: nil}
 	}
-	return verdict{block: true, message: httpMessage(res), nudge: false}
+	return verdict{block: true, message: httpMessage(res), nudge: false, blockEffect: nil}
 }
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
@@ -361,6 +356,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 	}
 	v := r.evaluate(ctx, e)
 	if v.block {
+		r.notifyAgentBlock(ctx, v.blockEffect, e)
 		// The system message mirrors the deny reason so the block text (and
 		// any access-request URL in it) reaches the user verbatim, not only
 		// the model.
@@ -377,6 +373,7 @@ func (r *Relay) onPermission(ctx context.Context, e *agenthooks.PermissionEvent)
 	}
 	v := r.evaluate(ctx, e)
 	if v.block {
+		r.notifyAgentBlock(ctx, v.blockEffect, e)
 		return agenthooks.Deny(v.message).WithSystemMessage(v.message), nil
 	}
 	return agenthooks.NoDecision(), nil
@@ -423,6 +420,14 @@ func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEv
 	}
 	r.deliver(ctx, e)
 	return agenthooks.ContinueSession(), nil
+}
+
+func (r *Relay) onMCPInventory(ctx context.Context, e *agenthooks.MCPInventoryEvent) error {
+	res, state := r.deliver(ctx, e)
+	if state != stateReady || res.statusCode < 200 || res.statusCode >= 300 {
+		return fmt.Errorf("report MCP inventory: %s", httpMessage(res))
+	}
+	return nil
 }
 
 func (r *Relay) onObserve(ctx context.Context, typed any) error {

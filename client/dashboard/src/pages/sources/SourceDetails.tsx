@@ -4,12 +4,7 @@ import { Page } from "@/components/page-layout";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
 import { SkeletonCode } from "@/components/ui/Skeleton";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/Tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
@@ -35,6 +30,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+import UnproxiedMCPDetails from "./unproxied-mcp/UnproxiedMCPDetails";
 import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
 import TunneledMCPDetails from "./tunneled-mcp/TunneledMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
@@ -112,7 +108,7 @@ export default function SourceDetails(): JSX.Element {
     return assetsData.assets.find((a) => a.id === source.assetId) ?? null;
   }, [source, assetsData]);
 
-  const { data: toolsData } = useListTools(
+  const { data: toolsData, isPending: isToolsPending } = useListTools(
     { deploymentId: deployment?.deployment?.id },
     undefined,
     { enabled: !!deployment?.deployment?.id },
@@ -243,6 +239,10 @@ export default function SourceDetails(): JSX.Element {
     return <TunneledMCPDetails />;
   }
 
+  if (sourceKind === "unproxiedmcp") {
+    return <UnproxiedMCPDetails />;
+  }
+
   if (!isLoadingDeployment && !source) {
     return <Navigate to={routes.sources.href()} replace />;
   }
@@ -265,6 +265,7 @@ export default function SourceDetails(): JSX.Element {
       >
         <DetailHero>
           <div className="flex flex-col gap-2">
+            <Page.Eyebrow className="ml-1" />
             <div className="ml-1 flex items-center gap-3">
               <Heading variant="h1">{source?.name || sourceSlug}</Heading>
               <Badge variant="neutral">
@@ -287,25 +288,21 @@ export default function SourceDetails(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
-                <PageTabsTrigger value="tools">
+              <TabsList className="my-3">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="tools">
                   Tools {relatedTools.length > 0 && `(${relatedTools.length})`}
-                </PageTabsTrigger>
-                <PageTabsTrigger value="mcp-servers">
+                </TabsTrigger>
+                <TabsTrigger value="mcp-servers">
                   MCP Servers
                   {associatedToolsets.length > 0 &&
                     ` (${associatedToolsets.length})`}
-                </PageTabsTrigger>
+                </TabsTrigger>
                 {isOpenAPI && (
-                  <PageTabsTrigger value="spec">
-                    OpenAPI Specification
-                  </PageTabsTrigger>
+                  <TabsTrigger value="spec">OpenAPI Specification</TabsTrigger>
                 )}
-                <PageTabsTrigger value="deployments">
-                  Deployments
-                </PageTabsTrigger>
-                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
+                <TabsTrigger value="deployments">Deployments</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -327,6 +324,7 @@ export default function SourceDetails(): JSX.Element {
             className="mt-0 flex min-h-0 flex-1 flex-col"
           >
             <SourceToolsTab
+              isLoading={isToolsPending}
               relatedTools={relatedTools}
               isOpenAPI={isOpenAPI}
               uniqueRuntimes={uniqueRuntimes}

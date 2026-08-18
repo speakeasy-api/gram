@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -62,7 +64,7 @@ type UpdateAssistantRequestBody struct {
 type SendMessageRequestBody struct {
 	// The assistant to send the message to.
 	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
-	// The user's message text.
+	// The user's message text. May be empty when the turn carries attachments.
 	Message string `form:"message" json:"message" xml:"message"`
 	// The conversation to continue (from listChats or a prior sendMessage). Omit
 	// to start a new conversation; the server mints and returns a fresh chat id.
@@ -72,6 +74,8 @@ type SendMessageRequestBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// Project skills to make available for this turn.
 	SkillIds []string `form:"skill_ids,omitempty" json:"skill_ids,omitempty" xml:"skill_ids,omitempty"`
+	// Files uploaded through assets.uploadChatAttachment that this turn carries.
+	Attachments []*SendMessageAttachmentRequestBody `form:"attachments,omitempty" json:"attachments,omitempty" xml:"attachments,omitempty"`
 }
 
 // ListAssistantsResponseBody is the type of the "assistants" service
@@ -1833,6 +1837,15 @@ type AssistantMCPServerRefRequestBody struct {
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
+// SendMessageAttachmentRequestBody is used to define fields on request body
+// types.
+type SendMessageAttachmentRequestBody struct {
+	// The chat attachment asset returned by assets.uploadChatAttachment.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The file name to show the assistant. Falls back to the stored asset name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // NewCreateAssistantRequestBody builds the HTTP request body from the payload
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *CreateAssistantRequestBody {
@@ -1917,6 +1930,16 @@ func NewSendMessageRequestBody(p *assistants.SendMessagePayload) *SendMessageReq
 		body.SkillIds = make([]string, len(p.SkillIds))
 		for i, val := range p.SkillIds {
 			body.SkillIds[i] = val
+		}
+	}
+	if p.Attachments != nil {
+		body.Attachments = make([]*SendMessageAttachmentRequestBody, len(p.Attachments))
+		for i, val := range p.Attachments {
+			if val == nil {
+				body.Attachments[i] = nil
+				continue
+			}
+			body.Attachments[i] = marshalAssistantsSendMessageAttachmentToSendMessageAttachmentRequestBody(val)
 		}
 	}
 	return body
@@ -5858,6 +5881,18 @@ func ValidateAssistantSkillRefResponseBody(body *AssistantSkillRefResponseBody) 
 	}
 	if body.ResolvedVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_version_id", *body.ResolvedVersionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSendMessageAttachmentRequestBody runs the validations defined on
+// SendMessageAttachmentRequestBody
+func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.asset_id", body.AssetID, goa.FormatUUID))
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
 	}
 	return
 }

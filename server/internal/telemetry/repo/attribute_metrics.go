@@ -192,6 +192,11 @@ type AttributeMetricsQueryParams struct {
 	SortBy     string   // measure key used for ORDER BY (table only)
 	Filters    []AttributeMetricsFilter
 
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map: filters compare and group-bys bucket canonical employee
+	// identities instead of literal emails. Empty disables folding.
+	CanonicalIdentityOrg string
+
 	// IntervalSeconds is the timeseries bucket width. The source is bucketed
 	// hourly so this is expected to be a multiple of 3600.
 	IntervalSeconds int64
@@ -199,7 +204,7 @@ type AttributeMetricsQueryParams struct {
 
 // attributeGroupValueExpr returns the SQL expression to select/group by for the
 // requested dimension, and whether a GROUP BY on it is needed.
-func attributeGroupValueExpr(groupBy string) (expr string, grouped bool, err error) {
+func attributeGroupValueExpr(groupBy, canonicalOrgLit string) (expr string, grouped bool, err error) {
 	if groupBy == "" {
 		return "''", false, nil
 	}
@@ -217,6 +222,9 @@ func attributeGroupValueExpr(groupBy string) (expr string, grouped bool, err err
 	case attributeDimProject:
 		return "toString(" + dim.column + ")", true, nil
 	case attributeDimScalar:
+		if groupBy == "email" && canonicalOrgLit != "" {
+			return canonicalEmailExpr(canonicalOrgLit, "("+dim.column+")"), true, nil
+		}
 		return dim.column, true, nil
 	default:
 		return "", false, fmt.Errorf("unhandled dimension kind for %q", groupBy)
@@ -230,7 +238,7 @@ func attributeGroupValueExpr(groupBy string) (expr string, grouped bool, err err
 // AttributeMetricsRow.DimensionValues. Keys are sorted for deterministic SQL.
 // Dimension keys come from the allowlist (never client input) so inlining the
 // string literals is safe.
-func attributeDimensionValuesExpr(groupBy string) string {
+func attributeDimensionValuesExpr(groupBy, canonicalOrgLit string) string {
 	keys := make([]string, 0, len(attributeDimensionRegistry))
 	for k := range attributeDimensionRegistry {
 		if k == groupBy {
@@ -245,6 +253,13 @@ func attributeDimensionValuesExpr(groupBy string) string {
 	for _, k := range keys {
 		dim := attributeDimensionRegistry[k]
 		var collected string
+		if k == "email" && canonicalOrgLit != "" {
+			// Fold the collected email values so pivot previews and axis
+			// pruning agree with the folded breakdowns they gate: one
+			// employee lists once, under the canonical email.
+			parts = append(parts, "'"+k+"', groupUniqArray("+capStr+")("+canonicalEmailExpr(canonicalOrgLit, "("+dim.column+")")+")")
+			continue
+		}
 		switch dim.kind {
 		case attributeDimArray:
 			// Flatten the per-row arrays and dedup across the group. An empty
@@ -308,7 +323,7 @@ func arrayDimFilter(column string, values []string) squirrel.Sqlizer {
 }
 
 // applyAttributeFilters adds the WHERE predicates for the supplied filters.
-func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter, canonicalOrgLit string) (squirrel.SelectBuilder, error) {
 	for _, f := range filters {
 		if len(f.Values) == 0 {
 			continue
@@ -321,7 +336,14 @@ func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetrics
 		case attributeDimArray:
 			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
 		case attributeDimScalar, attributeDimProject:
-			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+			switch {
+			case f.Dimension == "email" && canonicalOrgLit != "":
+				sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "("+dim.column+")", f.Values))
+			case f.Dimension == "email":
+				sb = sb.Where(squirrel.Eq{"lower(" + dim.column + ")": normalizedEmailDimensionValues(f.Values)})
+			default:
+				sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+			}
 		default:
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
@@ -341,7 +363,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		return nil, nil
 	}
 
-	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy)
+	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +373,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
+		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)))).
 		From("attribute_metrics_summaries").
 		// Exclude tombstoned rows (soft-deleted backfill data; see the
 		// is_active column comment in server/clickhouse/schema.sql).
@@ -360,7 +382,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 
-	sb, err = applyAttributeFilters(sb, arg.Filters)
+	sb, err = applyAttributeFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +394,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	// column of the same base name.
 	sb = sb.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
 
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building attribute metrics table query: %w", err)
@@ -407,7 +430,7 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 		return nil, nil
 	}
 
-	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy)
+	groupExpr, grouped, err := attributeGroupValueExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +450,7 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 
-	sb, err = applyAttributeFilters(sb, arg.Filters)
+	sb, err = applyAttributeFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return nil, err
 	}
@@ -438,6 +461,7 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 	}
 	sb = sb.GroupBy(groupCols...)
 
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building attribute metrics timeseries query: %w", err)

@@ -4,6 +4,7 @@
 
 import { adminChatAnalysisGetSettings } from "../funcs/adminChatAnalysisGetSettings.js";
 import { adminChatAnalysisTriggerAnalysis } from "../funcs/adminChatAnalysisTriggerAnalysis.js";
+import { adminChatAnalysisUpsertBusinessMemorySettings } from "../funcs/adminChatAnalysisUpsertBusinessMemorySettings.js";
 import { adminChatAnalysisUpsertWorkUnitsSettings } from "../funcs/adminChatAnalysisUpsertWorkUnitsSettings.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ChatAnalysisSettings } from "../models/components/chatanalysissettings.js";
@@ -16,6 +17,10 @@ import {
   TriggerChatAnalysisRequest,
   TriggerChatAnalysisSecurity,
 } from "../models/operations/triggerchatanalysis.js";
+import {
+  UpsertBusinessMemoryAnalysisSettingsRequest,
+  UpsertBusinessMemoryAnalysisSettingsSecurity,
+} from "../models/operations/upsertbusinessmemoryanalysissettings.js";
 import {
   UpsertChatAnalysisSettingsRequest,
   UpsertChatAnalysisSettingsSecurity,
@@ -54,6 +59,25 @@ export class AdminChatAnalysis extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TriggerAnalysisResponseBody> {
     return unwrapAsync(adminChatAnalysisTriggerAnalysis(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertBusinessMemorySettings adminChatAnalysis
+   *
+   * @remarks
+   * Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+   */
+  async upsertBusinessMemorySettings(
+    request: UpsertBusinessMemoryAnalysisSettingsRequest,
+    security?: UpsertBusinessMemoryAnalysisSettingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ChatAnalysisSettings> {
+    return unwrapAsync(adminChatAnalysisUpsertBusinessMemorySettings(
       this,
       request,
       security,

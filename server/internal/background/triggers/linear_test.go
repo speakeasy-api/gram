@@ -66,7 +66,7 @@ func TestLinearSignatureVerification(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("Linear-Signature", hex.EncodeToString(mac.Sum(nil)))
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"LINEAR_SIGNING_SECRET": "shh",
 	}, config))
 }
@@ -86,7 +86,7 @@ func TestLinearSignatureRejectsBadSecret(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("Linear-Signature", hex.EncodeToString(mac.Sum(nil)))
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"LINEAR_SIGNING_SECRET": "wrong",
 	}, config)
 	require.Error(t, err)

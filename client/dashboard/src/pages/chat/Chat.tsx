@@ -3,13 +3,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
-import { Link, Outlet, useNavigate, useParams } from "react-router";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useAssistantRuntime, useAuiState } from "@assistant-ui/react";
-import { ActiveChatTitle, Chat } from "@/elements";
+import { useAui, useAuiState } from "@assistant-ui/react";
+import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
 import {
   ChevronLeft,
   Home,
@@ -35,6 +42,11 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
@@ -49,17 +61,15 @@ import {
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
 import { useChatLaunch } from "@/lib/chat-launch";
-import {
-  CHAT_LANDING_GRADIENT,
-  CHAT_LANDING_GRADIENT_CLASS,
-} from "@/lib/chat-gradient";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 
-// Shared pill-style icon button used by the page chrome (back affordances).
+// Shared square icon button used by the page chrome (back affordances).
 const ICON_BUTTON_CLASS =
-  "border-border text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 rounded-full border px-2.5 py-1.5 transition-colors";
+  "border-border text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 border px-2.5 py-1.5 transition-colors";
 
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
@@ -75,8 +85,13 @@ export function ChatRoot(): ReactElement {
 export function ChatHome(): ReactElement {
   const routes = useRoutes();
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
-      <ChatLandingBackdrop />
+    // Same brand-mesh surface as the project home assistant card, scaled to
+    // the page: neutral theme-following gradient with the rainbow edge and
+    // grain. Scrolling lives on an inner wrapper so the mesh (and the back
+    // affordance) stay pinned to the viewport instead of scrolling away with
+    // the content.
+    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
+      <BrandMeshLayers />
       <div className="absolute top-4 left-4 z-10">
         <Link
           to={routes.home.href()}
@@ -87,32 +102,11 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </div>
-      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
-        <ChatLanding autoFocusInput />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+          <ChatLanding autoFocusInput />
+        </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * Decorative rainbow "powder burst" header for the full-page chat landing —
- * the Speakeasy brand rainbow, heavily blurred and masked so it fades out well
- * above the content. Purely ambient: aria-hidden + pointer-events-none, sat
- * behind everything, so it never gets in the way of the composer or list.
- */
-function ChatLandingBackdrop(): ReactElement {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[460px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_30%,transparent_92%)]"
-    >
-      <div
-        className={cn(
-          "absolute top-[-160px] left-1/2 -translate-x-1/2",
-          CHAT_LANDING_GRADIENT_CLASS,
-        )}
-        style={{ background: CHAT_LANDING_GRADIENT }}
-      />
     </div>
   );
 }
@@ -161,16 +155,22 @@ function useCyclingPlaceholder(): { text: string; visible: boolean } {
  * the `/chat` landing and embedded on the project home page. Submitting opens
  * a fresh conversation on the shared runtime and navigates to the full-page
  * chat; the server mints the chat id on the first send.
+ *
+ * `compact` drops the pinned/recents history so the widget can sit inside the
+ * project home page without competing with the dashboard below it.
  */
 export function ChatLanding({
   autoFocusInput = false,
+  compact = false,
 }: {
   autoFocusInput?: boolean;
+  compact?: boolean;
 }): ReactElement {
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt } = useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
+    useInsightsState();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -204,6 +204,11 @@ export function ChatLanding({
   const greeting = firstName
     ? `Hi ${firstName}, ask your Project Assistant about your AI usage`
     : "Ask your Project Assistant about your AI usage";
+  // Split off the last word so the BETA badge can be glued to it with
+  // whitespace-nowrap — the badge then never wraps onto a line of its own.
+  const greetingWords = greeting.split(" ");
+  const greetingLead = greetingWords.slice(0, -1).join(" ");
+  const greetingLast = greetingWords[greetingWords.length - 1];
 
   const startChat = (prompt: string) => {
     const trimmed = prompt.trim();
@@ -247,71 +252,202 @@ export function ChatLanding({
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
-            {greeting}
-          </h1>
-          <ReleaseStageBadge stage="beta" />
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-          className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
+        <h1
+          className={cn(
+            "font-display font-thin",
+            compact ? "text-2xl" : "text-4xl",
+            "text-foreground",
+          )}
         >
-          <input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            aria-label="Ask your Project Assistant about your AI usage"
-            role="combobox"
-            aria-expanded={slashOpen}
-            aria-controls="ask-slash-menu"
-            aria-activedescendant={
-              slashOpen ? `ask-slash-${activeCommand}` : undefined
+          {greetingLead}{" "}
+          <span className="whitespace-nowrap">
+            {greetingLast}
+            <ReleaseStageBadge stage="beta" className="ml-3 align-middle" />
+          </span>
+        </h1>
+        {assistantNeedsAdmin ? (
+          <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
+            Ask an admin to enable the Project Assistant for this project.
+          </p>
+        ) : assistantReady ? (
+          // The real AUI composer, bound to the shared runtime: sending happens
+          // in the runtime itself, so this entry point has dictation,
+          // attachments, tool mentions and skill context like every other one.
+          // Navigation to the conversation view is driven by the first message
+          // landing in the thread, not by this component sending.
+          // `gram-chat-landing` is read from inside the Elements shadow root
+          // via :host-context, so it must sit on an ancestor of the host — not
+          // on anything ChatComposer renders inside it.
+          <div
+            className="gram-chat-landing border-border bg-card border"
+            // Cycling example prompts ride in as custom properties: they
+            // inherit into the Elements shadow root, so the placeholder can
+            // crossfade without re-rendering the composer (see
+            // CHAT_LANDING_COMPOSER_CSS).
+            style={
+              {
+                "--gram-composer-placeholder": JSON.stringify(placeholder),
+                "--gram-composer-placeholder-opacity": placeholderVisible
+                  ? 1
+                  : 0,
+              } as CSSProperties
             }
-            autoFocus={autoFocusInput}
-            className="w-full bg-transparent text-base outline-none"
-          />
-          {/* Overlay placeholder so it can crossfade (native ::placeholder
+          >
+            <ChatComposer />
+            <StartFreshThread />
+            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
+            <NavigateOnFirstMessage />
+          </div>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+            className="border-border bg-card focus-within:border-foreground relative border px-4 py-3 transition-colors"
+          >
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              aria-label="Ask your Project Assistant about your AI usage"
+              role="combobox"
+              aria-expanded={slashOpen}
+              aria-controls="ask-slash-menu"
+              aria-activedescendant={
+                slashOpen ? `ask-slash-${activeCommand}` : undefined
+              }
+              autoFocus={autoFocusInput}
+              className="w-full bg-transparent text-base outline-none"
+            />
+            {/* Overlay placeholder so it can crossfade (native ::placeholder
               can't transition between values). Shown only while empty; the
               kbd hint advertises the slash menu. */}
-          {value === "" && (
-            <>
-              <span
-                aria-hidden="true"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 right-36 left-4 -translate-y-1/2 truncate text-base transition-opacity duration-300"
-                style={{ opacity: placeholderVisible ? 1 : 0 }}
-              >
-                {placeholder}
-              </span>
-              <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
-                <kbd className="border-border rounded border px-1.5 py-0.5 font-mono">
-                  /
-                </kbd>
-                for suggestions
-              </div>
-            </>
-          )}
-          {slashOpen && (
-            <SlashCommandMenu
-              commands={slashCommands}
-              activeIndex={activeCommand}
-              onHover={setActiveCommand}
-              onSelect={(command) => startChat(command.prompt)}
-            />
-          )}
-        </form>
+            {value === "" && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 right-36 left-4 -translate-y-1/2 truncate text-base transition-opacity duration-300"
+                  style={{ opacity: placeholderVisible ? 1 : 0 }}
+                >
+                  {placeholder}
+                </span>
+                <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
+                  <kbd className="border-border border px-1.5 py-0.5 font-mono">
+                    /
+                  </kbd>
+                  for suggestions
+                </div>
+              </>
+            )}
+            {slashOpen && (
+              <SlashCommandMenu
+                commands={slashCommands}
+                activeIndex={activeCommand}
+                onHover={setActiveCommand}
+                onSelect={(command) => startChat(command.prompt)}
+              />
+            )}
+          </form>
+        )}
       </div>
 
-      <ChatHomePinned />
-      <ChatHomeRecents />
-      <ChatHomeSuggestions />
+      {compact ? (
+        // Side-by-side columns so the card stays short: starters on the left,
+        // a peek at recent threads on the right.
+        <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+          {!assistantNeedsAdmin && (
+            <div className="flex min-w-0 flex-1 flex-col">
+              <ChatHomeSuggestions compact />
+            </div>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ChatHomeCompactRecents />
+          </div>
+        </div>
+      ) : (
+        <>
+          <ChatHomePinned />
+          <ChatHomeRecents />
+          {!assistantNeedsAdmin && <ChatHomeSuggestions />}
+        </>
+      )}
     </div>
   );
+}
+
+/**
+ * Carries a draft typed into the fallback input over to the shared composer.
+ *
+ * The fallback renders only until the assistant runtime is ready; the two
+ * controls keep their drafts in different places, so without this a message
+ * typed during that window vanishes when the composer swaps in. Runs after
+ * StartFreshThread so the text lands on the new thread, not the old one.
+ */
+function SeedComposerDraft({
+  value,
+  onSeeded,
+}: {
+  value: string;
+  onSeeded: () => void;
+}): null {
+  const aui = useAui();
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !value.trim()) return;
+    seededRef.current = true;
+    aui.composer().setText(value);
+    onSeeded();
+  }, [aui, value, onSeeded]);
+  return null;
+}
+
+/**
+ * The landing widgets always start a NEW conversation: they share one runtime
+ * with the dock, and the dock is the only surface that deliberately continues
+ * an existing chat. Without this, opening /chat (or project home) after a dock
+ * conversation would drop the next message into that thread.
+ */
+function StartFreshThread(): null {
+  const aui = useAui();
+  // Switch unconditionally, exactly once, as soon as the thread list has
+  // loaded. Reacting to "the thread has messages" instead would fire on the
+  // user's OWN send — switching the just-sent message out from under them and
+  // leaving an empty /chat/new. Thread ids are minted lazily
+  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
+  const switchedRef = useRef(false);
+  useEffect(() => {
+    if (switchedRef.current || listLoading) return;
+    switchedRef.current = true;
+    aui.threads().switchToNewThread();
+  }, [aui, listLoading]);
+  return null;
+}
+
+/**
+ * Drops into the full-page conversation when the landing composer sends. The
+ * composer submits through the runtime directly, so there is no submit handler
+ * to navigate from — the turn starting is the signal. `/chat/new` then syncs
+ * to `/chat/:id` once the server mints the id.
+ */
+function NavigateOnFirstMessage(): null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  // A run starting is the signal. Watching the message count instead would
+  // also fire when an existing conversation hydrates into the shared runtime
+  // (history loading grows the count), bouncing the user into a chat they
+  // never opened; `isRunning` only goes true for an actual stream.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
+  useEffect(() => {
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted) void navigate(routes.chat.conversation.href("new"));
+  }, [isRunning, navigate, routes]);
+  return null;
 }
 
 /**
@@ -344,7 +480,7 @@ function SlashCommandMenu({
       id="ask-slash-menu"
       role="listbox"
       aria-label="Suggested prompts"
-      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
+      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto border p-1 shadow-lg"
     >
       {commands.map((command, index) => {
         const Icon = INSIGHTS_SUGGESTION_ICONS[command.icon ?? "sparkles"];
@@ -363,8 +499,10 @@ function SlashCommandMenu({
             onMouseEnter={() => onHover(index)}
             onClick={() => onSelect(command)}
             className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left",
-              active ? "bg-muted" : "hover:bg-muted/60",
+              // `bg-accent`, not `bg-muted` — on the home page the menu sits
+              // inside a muted card, where a muted highlight is invisible.
+              "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors",
+              active ? "bg-accent" : "hover:bg-accent/60",
             )}
           >
             <Icon className="text-muted-foreground size-4 shrink-0" />
@@ -489,18 +627,25 @@ function useProjectAssistantChats(pinned: Pinned): {
     projectSlug ?? "",
     true,
   );
-  const { data } = useListChats(
+  const enabled = Boolean(ready && assistantId);
+  const { data, isPending } = useListChats(
     {
       assistantId: assistantId || undefined,
+      // Mirror the Elements runtime request: hide onboarding/warmup threads
+      // from the recents lists.
+      excludeSourceKind: "setup",
       pinned,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 50,
     },
     undefined,
-    { enabled: Boolean(ready && assistantId), throwOnError: false },
+    { enabled, throwOnError: false },
   );
-  return { chats: data?.chats ?? [], loading: !data };
+  // A disabled query (no resolvable assistant) is never "loading" — report it
+  // as settled-empty so the UI shows the empty state instead of spinning
+  // forever.
+  return { chats: data?.chats ?? [], loading: enabled && isPending };
 }
 
 // Pinned conversations, shown above recents. Hidden entirely when none exist.
@@ -511,7 +656,7 @@ function ChatHomePinned(): ReactElement | null {
   }
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">Pinned</h2>
+      <h2 className="text-eyebrow px-3">Pinned</h2>
       <div className="flex flex-col">
         {chats.map((chat) => (
           <RecentRow key={chat.id} chat={chat} pinned />
@@ -529,9 +674,7 @@ function ChatHomeRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">
-          Recent Chats
-        </h2>
+        <h2 className="text-eyebrow">Recent Chats</h2>
         {chats.length > RECENTS_COLLAPSED_COUNT && (
           <button
             type="button"
@@ -548,6 +691,54 @@ function ChatHomeRecents(): ReactElement {
         )}
       </div>
       <RecentsBody chats={chats} loading={loading} showAll={showAll} />
+    </section>
+  );
+}
+
+// Recent threads shown by the compact (project home) variant. Deliberately a
+// peek, not a list — "View more" hands off to the full `/chat` landing.
+const COMPACT_RECENTS_COUNT = 3;
+
+function ChatHomeCompactRecents(): ReactElement {
+  const routes = useRoutes();
+  // Pinned chats take the slots first; recents fill whatever is left.
+  const { chats: pinnedChats, loading: pinnedLoading } =
+    useProjectAssistantChats(Pinned.True);
+  const { chats: recentChats, loading: recentLoading } =
+    useProjectAssistantChats(Pinned.False);
+  const loading = pinnedLoading || recentLoading;
+  const chats = [
+    ...pinnedChats.map((chat) => ({ chat, pinned: true })),
+    ...recentChats.map((chat) => ({ chat, pinned: false })),
+  ];
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center justify-between px-3">
+        <h2 className="text-eyebrow">Recent Chats</h2>
+        {chats.length > COMPACT_RECENTS_COUNT && (
+          <Link
+            to={routes.chat.href()}
+            className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+          >
+            View more
+          </Link>
+        )}
+      </div>
+      {loading ? (
+        <p className="text-muted-foreground px-3 text-sm">
+          Loading conversations…
+        </p>
+      ) : chats.length === 0 ? (
+        <p className="text-muted-foreground px-3 text-sm">
+          Your recent conversations will appear here.
+        </p>
+      ) : (
+        <div className="flex flex-col">
+          {chats.slice(0, COMPACT_RECENTS_COUNT).map(({ chat, pinned }) => (
+            <RecentRow key={chat.id} chat={chat} pinned={pinned} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -598,11 +789,7 @@ function RecentsBody({
 
 function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   if (entry.type === "header") {
-    return (
-      <h3 className="text-muted-foreground px-3 pt-4 pb-1 text-sm font-medium">
-        {entry.label}
-      </h3>
-    );
+    return <h3 className="text-eyebrow px-3 pt-4 pb-1">{entry.label}</h3>;
   }
   return <RecentRow chat={entry.chat} pinned={false} />;
 }
@@ -652,7 +839,10 @@ function RecentRowIcon({
         {member.photoUrl ? (
           <AvatarImage src={member.photoUrl} alt={display} />
         ) : null}
-        <AvatarFallback className="border-border bg-card text-muted-foreground border text-xs font-medium">
+        <AvatarFallback
+          className="text-xs font-medium"
+          style={getIdentityTint(display)}
+        >
           {initialsOf(display)}
         </AvatarFallback>
       </Avatar>
@@ -660,7 +850,7 @@ function RecentRowIcon({
   }
 
   return (
-    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
+    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center border">
       <MessageCircle className="size-4" />
     </span>
   );
@@ -678,7 +868,7 @@ function RecentRow({
   // container (not a Link) so the pin button isn't nested inside an anchor; the
   // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <div className="group/row hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors">
+    <div className="group/row hover:border-foreground flex items-center gap-3 border border-transparent px-3 py-1.5 transition-colors">
       <Link
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
@@ -729,7 +919,7 @@ function PinButton({
       aria-label={pinned ? "Unpin chat" : "Pin chat"}
       title={pinned ? "Unpin chat" : "Pin chat"}
       className={cn(
-        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded p-1 transition-opacity",
+        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 p-1 transition-opacity",
         pinned
           ? "text-foreground"
           : // Visible by default (touch has no hover to reveal it); only fade-until-hover
@@ -747,15 +937,29 @@ function PinButton({
  * which flies it to the centre of the screen and then morphs it into the user
  * bubble of the conversation it just started.
  */
-function ChatHomeSuggestions(): ReactElement {
+// Chips shown by the compact (project home) variant — two rows in the
+// half-width column it sits in.
+const COMPACT_SUGGESTION_COUNT = 4;
+
+function ChatHomeSuggestions({
+  compact = false,
+}: {
+  compact?: boolean;
+}): ReactElement {
   const launchChat = useChatLaunch();
+  // The full landing indents chips to line up with the recents rows; the
+  // compact card has no rows, so chips align flush with the composer.
+  const inset = compact ? "" : "px-3";
+  // Compact shows a trimmed set so the chips stay within two rows at the
+  // widths the project home page renders at.
+  const suggestions = compact
+    ? CHAT_LANDING_SUGGESTIONS.slice(0, COMPACT_SUGGESTION_COUNT)
+    : CHAT_LANDING_SUGGESTIONS;
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">
-        Suggestions
-      </h2>
-      <div className="flex flex-wrap gap-x-2 gap-y-2.5 px-3">
-        {CHAT_LANDING_SUGGESTIONS.map((suggestion) => {
+      <h2 className={cn("text-eyebrow", inset)}>Suggestions</h2>
+      <div className={cn("flex flex-wrap gap-x-2 gap-y-2.5", inset)}>
+        {suggestions.map((suggestion) => {
           const SuggestionIcon =
             INSIGHTS_SUGGESTION_ICONS[suggestion.icon ?? "sparkles"];
           return (
@@ -763,7 +967,7 @@ function ChatHomeSuggestions(): ReactElement {
               key={suggestion.title}
               type="button"
               onClick={(event) => launchChat(suggestion, event.currentTarget)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="border-border bg-card text-foreground hover:border-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}
@@ -862,6 +1066,14 @@ function ConversationSurface({
 }: {
   chatId: string | undefined;
 }): ReactElement {
+  const { pathname } = useLocation();
+  const threadTitle = useAuiState((s) => s.threadListItem.title);
+  // Recents would otherwise keep the section title ("Project Assistant") because
+  // the conversation is keyed by an opaque chat id.
+  useRecentLabelOverride(
+    pathname,
+    threadTitle?.trim() || (chatId === "new" ? FALLBACK_TITLE : undefined),
+  );
   const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
@@ -911,7 +1123,10 @@ function ChatSurface(): ReactElement {
   // roomier height on the full page (via :host-context) without affecting the
   // compact docked panel — see CHAT_FULLPAGE_COMPOSER_CSS in insights-dock.
   return (
-    <div className="gram-chat-fullpage h-full overflow-hidden">
+    <div
+      data-radius="sharp"
+      className="gram-chat-fullpage h-full overflow-hidden"
+    >
       <Chat />
     </div>
   );
@@ -927,7 +1142,7 @@ function ChatSurface(): ReactElement {
  * the conversation binds.
  */
 function SavedConversation({ chatId }: { chatId: string }): ReactElement {
-  const runtime = useAssistantRuntime();
+  const aui = useAui();
   const isListLoading = useAuiState(({ threads }) => threads.isLoading);
   const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
@@ -939,11 +1154,8 @@ function SavedConversation({ chatId }: { chatId: string }): ReactElement {
   useEffect(() => {
     if (isListLoading || switchedForRef.current === chatId) return;
     switchedForRef.current = chatId;
-    runtime.threads.switchToThread(chatId).catch(() => {
-      // Allow a retry if the switch failed (e.g. list refetch in flight).
-      switchedForRef.current = null;
-    });
-  }, [runtime, chatId, isListLoading]);
+    aui.threads().switchToThread(chatId);
+  }, [aui, chatId, isListLoading]);
 
   if (activeRemoteId !== chatId) {
     return (

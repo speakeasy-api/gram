@@ -8,6 +8,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestListExternalCredentials_ReturnsAllProviders(t *testing.T) {
@@ -72,4 +75,17 @@ func TestListExternalCredentials_ExcludesDeleted(t *testing.T) {
 	ids := credentialIDs(result)
 	require.Contains(t, ids, kept.ID)
 	require.NotContains(t, ids, removed.ID)
+}
+
+func TestListExternalCredentials_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.ListExternalCredentials(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.ListExternalCredentialsPayload{
+		Provider:     nil,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

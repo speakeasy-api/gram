@@ -64,6 +64,10 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		ExclusionID:              nil,
 		MessageCreatedAt:         createdAt.Add(-time.Minute),
 		AssistantID:              "assistant-1",
+		Surface:                  "json_path",
+		Field:                    "tool.args",
+		Path:                     "command.0",
+		ToolCallID:               "call_abc123",
 	}
 
 	// An excluded row: excluded_at / exclusion_id are populated.
@@ -81,7 +85,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	// flushes, so poll until both are visible.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, message_created_at, assistant_id
+			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, message_created_at, assistant_id, surface, field, path, tool_call_id
 			FROM risk_findings
 			WHERE organization_id = ?
 			ORDER BY created_at
@@ -102,6 +106,10 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 			exclusionID      *uuid.UUID
 			messageCreatedAt time.Time
 			assistantID      string
+			surface          string
+			field            string
+			path             string
+			toolCallID       string
 		}
 		got := map[uuid.UUID]foundRow{}
 		for rows.Next() {
@@ -109,7 +117,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 				id  uuid.UUID
 				row foundRow
 			)
-			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.messageCreatedAt, &row.assistantID)) {
+			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID)) {
 				return
 			}
 			got[id] = row
@@ -130,6 +138,10 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		assert.Nil(c, p.exclusionID, "non-excluded row stores NULL exclusion_id")
 		assert.True(c, plain.MessageCreatedAt.Equal(p.messageCreatedAt), "message_created_at round-trips")
 		assert.Equal(c, plain.AssistantID, p.assistantID, "assistant_id round-trips")
+		assert.Equal(c, plain.Surface, p.surface, "surface round-trips")
+		assert.Equal(c, plain.Field, p.field, "field round-trips")
+		assert.Equal(c, plain.Path, p.path, "path round-trips")
+		assert.Equal(c, plain.ToolCallID, p.toolCallID, "tool_call_id round-trips")
 
 		e := got[excluded.ID]
 		if assert.NotNil(c, e.excludedAt, "excluded row stores excluded_at") {

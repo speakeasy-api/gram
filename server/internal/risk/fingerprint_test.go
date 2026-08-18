@@ -245,3 +245,18 @@ func TestFingerprinter_TenantedHS256_PanicsWithoutCurrentVersion(t *testing.T) {
 		_, _, _ = fp.TenantedHS256("tenant-a", []byte("msg"))
 	})
 }
+
+func TestFingerprinter_Versions(t *testing.T) {
+	t.Parallel()
+
+	// Zero value: no keyring -> nil, the "fingerprinting unavailable" signal.
+	var zero risk.Fingerprinter
+	require.Nil(t, zero.Versions())
+
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, "v2", map[string][]byte{
+		"v2": []byte("current-pepper-key-material-0002"),
+		"v1": []byte("retired-pepper-key-material-0001"),
+	}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"v1", "v2"}, fp.Versions())
+}

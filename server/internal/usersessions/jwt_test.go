@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -85,4 +86,94 @@ func TestSigner_MintWithoutClientIDOmitsClaim(t *testing.T) {
 	session, err := signer.ValidateBearer(t.Context(), token, "aud", neverRevoked{})
 	require.NoError(t, err)
 	require.Empty(t, session.ClientID)
+}
+
+// forgeHSToken hand-mints a token with the given signing method, key, and jti,
+// bypassing Signer.Mint so tests can produce tokens an attacker would try
+// (wrong key, alg confusion, alg=none).
+func forgeHSToken(t *testing.T, method jwt.SigningMethod, key []byte, jti string) string {
+	t.Helper()
+	tok := jwt.NewWithClaims(method, jwt.RegisteredClaims{ID: jti})
+	signed, err := tok.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+// TestSigner_VerifiedJTI is the security contract behind token revocation:
+// only a token bearing our valid HS256 signature yields its jti. A forged or
+// wrong-key token must be rejected, so a public client (which presents no
+// client_secret) cannot revoke another session using a guessed/leaked jti.
+func TestSigner_VerifiedJTI(t *testing.T) {
+	t.Parallel()
+
+	const secret = "test-jwt-secret"
+	signer := usersessions.NewSigner(secret)
+
+	mint := func(lifetime time.Duration) (token, jti string) {
+		token, jti, err := signer.Mint(usersessions.MintParams{
+			Subject:  urn.NewUserSubject("user-1"),
+			Audience: "aud",
+			Issuer:   "https://example.test/mcp/slug",
+			Lifetime: lifetime,
+			ClientID: "client-abc",
+		})
+		require.NoError(t, err)
+		return token, jti
+	}
+
+	t.Run("valid token yields jti", func(t *testing.T) {
+		t.Parallel()
+		token, jti := mint(time.Hour)
+		got, err := signer.VerifiedJTI(token)
+		require.NoError(t, err)
+		require.Equal(t, jti, got)
+	})
+
+	t.Run("expired token still yields jti", func(t *testing.T) {
+		t.Parallel()
+		// Revocation must work on stale tokens — that is the whole point of
+		// skipping claims validation while keeping signature verification.
+		token, jti := mint(-time.Hour)
+		got, err := signer.VerifiedJTI(token)
+		require.NoError(t, err)
+		require.Equal(t, jti, got)
+	})
+
+	t.Run("wrong signing key is rejected", func(t *testing.T) {
+		t.Parallel()
+		forged := forgeHSToken(t, jwt.SigningMethodHS256, []byte("attacker-secret"), "victim-jti")
+		_, err := signer.VerifiedJTI(forged)
+		require.Error(t, err)
+	})
+
+	t.Run("alg=none is rejected", func(t *testing.T) {
+		t.Parallel()
+		tok := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.RegisteredClaims{ID: "victim-jti"})
+		unsigned, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+		require.NoError(t, err)
+		_, err = signer.VerifiedJTI(unsigned)
+		require.Error(t, err)
+	})
+
+	t.Run("HS384 with the signing key is rejected (exact alg pinning)", func(t *testing.T) {
+		t.Parallel()
+		// Even signed with our real secret, a non-HS256 algorithm must not pass:
+		// method pinning is what stops an attacker steering the verifier.
+		forged := forgeHSToken(t, jwt.SigningMethodHS384, []byte(secret), "victim-jti")
+		_, err := signer.VerifiedJTI(forged)
+		require.Error(t, err)
+	})
+
+	t.Run("token missing jti is rejected", func(t *testing.T) {
+		t.Parallel()
+		forged := forgeHSToken(t, jwt.SigningMethodHS256, []byte(secret), "")
+		_, err := signer.VerifiedJTI(forged)
+		require.Error(t, err)
+	})
+
+	t.Run("garbage is rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := signer.VerifiedJTI("not-a-jwt")
+		require.Error(t, err)
+	})
 }

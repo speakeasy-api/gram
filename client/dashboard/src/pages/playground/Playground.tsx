@@ -115,6 +115,9 @@ function usePlaygroundServers(): {
 
     // Tunneled servers serve at the same /mcp/<slug> path and are the same
     // McpServer view as remote; they only reach the picker when the flag is on.
+    // Public tunneled servers serve anonymously: the backend 404s every issuer
+    // surface even though the issuer column is populated, so drop the issuer id
+    // here to keep the playground off the mint/connect path.
     const tunneledServers: PlaygroundServerRef[] = tunneledEnabled
       ? (mcpServersData?.mcpServers ?? [])
           .filter((server) => !!server.tunneledMcpServerId)
@@ -123,7 +126,10 @@ function usePlaygroundServers(): {
             key: mcpServerKey(server.id),
             name: server.name ?? server.slug ?? "Tunneled MCP server",
             mcpServerId: server.id,
-            userSessionIssuerId: server.userSessionIssuerId,
+            userSessionIssuerId:
+              server.visibility === "public"
+                ? undefined
+                : server.userSessionIssuerId,
           }))
       : [];
 
@@ -137,7 +143,7 @@ function usePlaygroundServers(): {
 
 function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <MessageCircle className="text-muted-foreground h-6 w-6" />
       </div>

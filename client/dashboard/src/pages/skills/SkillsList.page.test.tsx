@@ -1,11 +1,9 @@
 import {
-  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +21,8 @@ const testState = vi.hoisted(() => ({
     | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
   metricTotalCount: undefined as number | undefined,
+  metricPageSize: 200,
+  loadedMetricPageCount: 1,
   skillRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
@@ -35,7 +35,6 @@ const testState = vi.hoisted(() => ({
   suggestions: [] as Array<Record<string, unknown>>,
   suggestionTotal: 0,
   suggestionRequests: [] as unknown[],
-  approveAll: { mutateAsync: vi.fn(), isPending: false },
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateDistributions: vi.fn().mockResolvedValue(undefined),
@@ -44,12 +43,18 @@ const testState = vi.hoisted(() => ({
   invalidateFeedback: vi.fn().mockResolvedValue(undefined),
   invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
   toastInfo: vi.fn(),
+  adminAllowed: true,
+  policyHookCalls: 0,
+  policyError: null as Error | null,
+  policyRefetch: vi.fn().mockResolvedValue(undefined),
+  invalidatePolicies: vi.fn().mockResolvedValue(undefined),
+  policies: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("@/components/filters", () => ({
   defineFilters: <T,>(value: T) => value,
   useFilterState: () => ({
-    values: { sourceKind: [], classification: [] },
+    values: { sourceKind: [], classification: [], tags: [] },
     setValue: vi.fn(),
     clearValue: vi.fn(),
     clearAll: vi.fn(),
@@ -74,7 +79,44 @@ vi.mock("@/routes", () => ({
       href: () => "/skills",
       detail: { href: (id: string) => `/skills/${id}` },
     },
+    policyCenter: {
+      new: {
+        Link: ({
+          children,
+          queryParams,
+        }: {
+          children: ReactNode;
+          queryParams: Record<string, string>;
+        }) => (
+          <a href={`/risk-policies/new?${new URLSearchParams(queryParams)}`}>
+            {children}
+          </a>
+        ),
+      },
+      detail: {
+        Link: ({
+          children,
+          params,
+        }: {
+          children: ReactNode;
+          params: string[];
+        }) => <a href={`/risk-policies/${params[0]}`}>{children}</a>,
+      },
+    },
   }),
+}));
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: testState.invalidatePolicies,
+  useRiskListPolicies: () => {
+    testState.policyHookCalls += 1;
+    return {
+      data: testState.policyError
+        ? undefined
+        : { policies: testState.policies },
+      error: testState.policyError,
+      refetch: testState.policyRefetch,
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkills: (request: {
@@ -105,31 +147,44 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
       refetch: vi.fn(),
     };
   },
-  useSkillsInfinite: (request: { search?: string }) => {
-    testState.metricSkillRequests.push(request);
+  useSkillsInfinite: (
+    request: { search?: string },
+    _client: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    if (options?.enabled) {
+      testState.metricSkillRequests.push(request);
+    }
     const matchingSkills = request.search
       ? testState.skills.filter((skill) =>
           String(skill.displayName).toLowerCase().includes(request.search!),
         )
       : testState.skills;
+    const pages = Array.from(
+      { length: testState.loadedMetricPageCount },
+      (_, page) => ({
+        result: {
+          skills: matchingSkills.slice(
+            page * testState.metricPageSize,
+            (page + 1) * testState.metricPageSize,
+          ),
+          totalCount: testState.metricTotalCount ?? matchingSkills.length,
+        },
+      }),
+    );
     return {
-      data: {
-        pages: [
-          {
-            result: {
-              skills: matchingSkills,
-              totalCount: testState.metricTotalCount ?? matchingSkills.length,
-            },
-          },
-        ],
-      },
+      data: { pages },
       isPending: false,
       isFetching: false,
       isFetchingNextPage: false,
       isFetchNextPageError: testState.isFetchNextPageError,
       hasNextPage: testState.hasNextPage,
       error: testState.error,
-      fetchNextPage: testState.fetchNextPage,
+      fetchNextPage: async () => {
+        testState.loadedMetricPageCount += 1;
+        testState.hasNextPage = false;
+        return testState.fetchNextPage();
+      },
       refetch: vi.fn(),
     };
   },
@@ -160,9 +215,6 @@ vi.mock("@gram/client/react-query/skillSuggestions.js", () => ({
   },
   invalidateAllSkillSuggestions: testState.invalidateSuggestions,
 }));
-vi.mock("@gram/client/react-query/approveAllSkillSuggestions.js", () => ({
-  useApproveAllSkillSuggestionsMutation: () => testState.approveAll,
-}));
 vi.mock("@gram/client/react-query/skill.js", () => ({
   invalidateAllSkill: testState.invalidateSkill,
 }));
@@ -184,6 +236,21 @@ vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   }),
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  useSkillTags: () => ({
+    data: { tags: [] },
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  invalidateAllSkillTags: vi.fn(),
+}));
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  useCustomDomain: () => ({
+    domain: undefined,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   useUnknownSkillActivationsInfinite: () => ({
     data: {
@@ -199,7 +266,14 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({
+    children,
+    scope,
+  }: {
+    children: ReactNode;
+    scope: string;
+  }) =>
+    scope === "org:admin" && !testState.adminAllowed ? null : <>{children}</>,
 }));
 vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -219,16 +293,23 @@ vi.mock("@/components/page-layout", () => {
       Apply search
     </button>
   );
-  const SortBy = ({ onChange }: { onChange: (value: string) => void }) => (
-    <button onClick={() => onChange("activations")}>Apply metric sort</button>
+  const Filters = ({
+    onChange,
+  }: {
+    onChange: (id: string, value: string[]) => void;
+  }) => (
+    <button onClick={() => onChange("sourceKind", ["manual"])}>
+      Apply filters
+    </button>
   );
   const Toolbar = Object.assign(Wrapper, {
     Search,
-    Filters: () => null,
-    SortBy,
+    Filters,
     Count: Wrapper,
     Actions: Wrapper,
-    Refresh: () => null,
+    Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
+      <button onClick={onRefresh}>Refresh</button>
+    ),
   });
   return {
     Page: Object.assign(Wrapper, {
@@ -257,26 +338,79 @@ vi.mock("@/components/ui/Table", () => ({
     columns,
     data,
     noResultsMessage,
+    sort,
+    onSortChange,
   }: {
     columns: Array<{
       key: string;
+      header: ReactNode;
+      width?: string;
+      sortable?: boolean;
+      sortLabel?: string;
       render?: (row: Record<string, unknown>) => ReactNode;
     }>;
     data: Array<Record<string, unknown> & { id: string }>;
     noResultsMessage: ReactNode;
-  }) => (
-    <div>
-      {data.length === 0
-        ? noResultsMessage
-        : data.map((skill) => (
-            <div data-testid="skill-row" key={skill.id}>
-              {columns.slice(0, 1).map((column) => (
-                <div key={column.key}>{column.render?.(skill)}</div>
-              ))}
-            </div>
+    sort: { id: string; direction: "asc" | "desc" } | null;
+    onSortChange: (
+      sort: { id: string; direction: "asc" | "desc" } | null,
+    ) => void;
+  }) => {
+    const sortableColumns = columns.filter((column) => column.sortable);
+    const nextSort = (column: (typeof columns)[number]) => {
+      if (sort?.id !== column.key) {
+        return { id: column.key, direction: "asc" as const };
+      }
+      if (sort.direction === "asc") {
+        return { id: column.key, direction: "desc" as const };
+      }
+      return null;
+    };
+
+    return (
+      <div>
+        <div data-testid="table-column-keys">
+          {columns.map((column) => (
+            <span
+              data-column-key={column.key}
+              data-column-width={column.width}
+              key={column.key}
+            />
           ))}
-    </div>
-  ),
+        </div>
+        {sortableColumns.map((column) => {
+          const label =
+            column.sortLabel ??
+            (typeof column.header === "string" ? column.header : column.key);
+          const direction = sort?.id === column.key ? sort.direction : null;
+          const action =
+            direction === "asc"
+              ? `Sort by ${label} descending`
+              : direction === "desc"
+                ? `Clear sort for ${label}`
+                : `Sort by ${label} ascending`;
+          return (
+            <button
+              data-sortable-id={column.key}
+              key={column.key}
+              onClick={() => onSortChange(nextSort(column))}
+            >
+              {action}
+            </button>
+          );
+        })}
+        {data.length === 0
+          ? noResultsMessage
+          : data.map((skill) => (
+              <div data-testid="skill-row" key={skill.id}>
+                {columns.slice(0, 1).map((column) => (
+                  <div key={column.key}>{column.render?.(skill)}</div>
+                ))}
+              </div>
+            ))}
+      </div>
+    );
+  },
 }));
 
 function makeSkills(count: number): Array<Record<string, unknown>> {
@@ -288,6 +422,7 @@ function makeSkills(count: number): Array<Record<string, unknown>> {
     summary: "Example skill",
     sourceKind: "manual",
     classification: "custom",
+    tags: [],
     latestVersionId: `version_${index}`,
     versionCount: 1,
     seenCount: 0,
@@ -306,6 +441,12 @@ function makeSuggestion(index: number): Record<string, unknown> {
   };
 }
 
+function renderedSkillNames(): string[] {
+  return screen
+    .getAllByTestId("skill-row")
+    .map((row) => row.querySelector("a")?.textContent ?? "");
+}
+
 beforeEach(() => {
   testState.fetchNextPage.mockReset();
   testState.fetchNextPage.mockResolvedValue(undefined);
@@ -317,6 +458,8 @@ beforeEach(() => {
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
   testState.metricTotalCount = undefined;
+  testState.metricPageSize = 200;
+  testState.loadedMetricPageCount = 1;
   testState.skillRequests = [];
   testState.metricSkillRequests = [];
   testState.searchValue = "example";
@@ -329,9 +472,13 @@ beforeEach(() => {
   testState.suggestions = [];
   testState.suggestionTotal = 0;
   testState.suggestionRequests = [];
-  testState.approveAll.isPending = false;
-  testState.approveAll.mutateAsync.mockReset();
   testState.toastInfo.mockReset();
+  testState.adminAllowed = true;
+  testState.policyHookCalls = 0;
+  testState.policyError = null;
+  testState.policyRefetch.mockReset().mockResolvedValue(undefined);
+  testState.invalidatePolicies.mockReset().mockResolvedValue(undefined);
+  testState.policies = [];
   testState.invalidateSkills.mockReset().mockResolvedValue(undefined);
   testState.invalidateSkill.mockReset().mockResolvedValue(undefined);
   testState.invalidateDistributions.mockReset().mockResolvedValue(undefined);
@@ -344,6 +491,282 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("links admins to prompt injection policy setup", () => {
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "Set up scanning" });
+    expect(link.getAttribute("href")).toBe(
+      "/risk-policies/new?kind=standard&category=prompt_injection",
+    );
+  });
+
+  it("links admins to the enabled prompt injection policy", () => {
+    testState.policies = [
+      {
+        id: "policy_pi",
+        enabled: true,
+        sources: ["gitleaks", "prompt_injection"],
+      },
+    ];
+
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "View policy" });
+    expect(link.getAttribute("href")).toBe("/risk-policies/policy_pi");
+  });
+
+  it("does not load policy configuration for non-admin skill readers", () => {
+    testState.adminAllowed = false;
+
+    render(<SkillsList />);
+
+    expect(screen.queryByText("Set up prompt injection scanning")).toBeNull();
+    expect(testState.policyHookCalls).toBe(0);
+  });
+
+  it("shows a retry when prompt injection policy status fails to load", () => {
+    testState.policyError = new Error("policy request failed");
+
+    render(<SkillsList />);
+
+    expect(
+      screen.getByText("Unable to load prompt injection policy"),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry policy status" }),
+    );
+    expect(testState.policyRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes prompt injection policy status with the skills page", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(testState.invalidatePolicies).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+  });
+
+  it("shows only the compact skills table columns", () => {
+    render(<SkillsList />);
+
+    expect(
+      Array.from(
+        screen
+          .getByTestId("table-column-keys")
+          .querySelectorAll("[data-column-key]"),
+      ).map((element) => element.getAttribute("data-column-key")),
+    ).toEqual([
+      "name",
+      "source",
+      "activations",
+      "efficacy",
+      "estimatedSavings",
+      "updated",
+      "share",
+      "actions",
+    ]);
+
+    const renderedColumns = screen
+      .getByTestId("table-column-keys")
+      .querySelectorAll("[data-column-key]");
+    const widthsByKey = new Map(
+      Array.from(renderedColumns).map((element) => [
+        element.getAttribute("data-column-key"),
+        element.getAttribute("data-column-width"),
+      ]),
+    );
+
+    expect(widthsByKey.get("activations")).toBe("0.8fr");
+    expect(widthsByKey.get("estimatedSavings")).toBe("0.8fr");
+  });
+
+  it("sorts the approved columns through header controls without a toolbar sort", () => {
+    render(<SkillsList />);
+
+    expect(
+      screen
+        .getAllByRole("button", { name: /sort by .* ascending/i })
+        .map((button) => button.getAttribute("data-sortable-id")),
+    ).toEqual([
+      "name",
+      "source",
+      "activations",
+      "efficacy",
+      "estimatedSavings",
+      "updated",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Apply metric sort" }),
+    ).toBeNull();
+  });
+
+  it("sorts the current server page by skill and clears back to backend order", () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
+      { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
+      { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
+    ];
+    render(<SkillsList />);
+
+    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Skill ascending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Alpha", "Mike", "Zulu"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Skill descending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Zulu", "Mike", "Alpha"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear sort for Skill" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(testState.metricSkillRequests).toEqual([]);
+  });
+
+  it("sorts activations across loaded pages and keeps missing efficacy values last", () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "missing", displayName: "Missing" },
+      { ...makeSkills(1)[0], id: "high", displayName: "High" },
+      { ...makeSkills(1)[0], id: "low", displayName: "Low" },
+    ];
+    testState.insightsData = {
+      result: {
+        insights: [
+          {
+            skillId: "high",
+            metrics: {
+              activations: 5,
+              efficacy: { averageScore: 0.9, estimatedMinutesSavedTotal: 9 },
+            },
+          },
+          {
+            skillId: "low",
+            metrics: {
+              activations: 2,
+              efficacy: { averageScore: 0.2, estimatedMinutesSavedTotal: 2 },
+            },
+          },
+        ],
+      },
+    };
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["Missing", "Low", "High"]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+    expect(testState.metricSkillRequests).not.toEqual([]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Efficacy ascending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["Low", "High", "Missing"]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort by Efficacy descending" }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Estimated savings ascending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["Low", "High", "Missing"]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Estimated savings descending",
+      }),
+    );
+    expect(renderedSkillNames()).toEqual(["High", "Low", "Missing"]);
+  });
+
+  it("drains metric pages before sorting activations across the page boundary", async () => {
+    testState.skills = makeSkills(201);
+    testState.hasNextPage = true;
+    testState.insightsData = {
+      result: {
+        insights: [
+          { skillId: "skill_0", metrics: { activations: 90 } },
+          { skillId: "skill_200", metrics: { activations: 100 } },
+        ],
+      },
+    };
+    const { rerender } = render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
+    rerender(<SkillsList />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    );
+
+    expect(renderedSkillNames().slice(0, 2)).toEqual([
+      "Example 200",
+      "Example 0",
+    ]);
+    expect(screen.getByText("1-50 of 201")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(renderedSkillNames()[0]).toBe("Example 49");
+    expect(screen.getByText("51-100 of 201")).toBeTruthy();
+  });
+
+  it("keeps an active header sort when search resets pagination", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 50")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
+    expect(screen.getByText("Example 0")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("keeps an active header sort when filters reset pagination", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 50")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(screen.getByText("Example 0")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) descending",
+      }),
+    ).toBeTruthy();
+  });
+
   it("requests suggestion pages with the exact supported limit", () => {
     render(<SkillsList />);
 
@@ -370,7 +793,11 @@ describe("SkillsList pagination surfaces", () => {
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     expect(screen.getByText("Unable to load more skills.")).toBeTruthy();
@@ -390,7 +817,11 @@ describe("SkillsList pagination surfaces", () => {
     testState.error = new Error("next page failed");
     render(<SkillsList />);
     fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     expect(
       screen.getByText("Search incomplete. Retry to check remaining skills."),
@@ -432,7 +863,11 @@ describe("SkillsList pagination surfaces", () => {
 
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
     await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
     expect(
       screen.getByText("Loading all skills to finish this view..."),
@@ -457,12 +892,61 @@ describe("SkillsList pagination surfaces", () => {
     testState.insightsError = new Error("insights unavailable");
     render(<SkillsList />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
 
     await waitFor(() =>
       expect(screen.getAllByTestId("skill-row")).toHaveLength(50),
     );
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it("keeps metric sorting cleared after insights recover", async () => {
+    testState.skills = [
+      { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
+      { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
+      { ...makeSkills(1)[0], id: "mike", displayName: "Mike" },
+      ...makeSkills(48),
+    ];
+    const { rerender } = render(<SkillsList />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Example 47")).toBeTruthy();
+
+    testState.insightsData = undefined;
+    testState.insightsError = new Error("insights unavailable");
+    rerender(<SkillsList />);
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Previous" })
+          .hasAttribute("disabled"),
+      ).toBe(true),
+    );
+
+    testState.metricSkillRequests = [];
+    testState.insightsData = { result: { insights: [] } };
+    testState.insightsError = null;
+    rerender(<SkillsList />);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Sort by Activations (30d) ascending",
+      }),
+    ).toBeTruthy();
+    expect(testState.metricSkillRequests).toEqual([]);
+    expect(renderedSkillNames().slice(0, 3)).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(
+      screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("badges skills with open suggestions and drains suggestion pages", async () => {
@@ -475,232 +959,18 @@ describe("SkillsList pagination surfaces", () => {
     await waitFor(() =>
       expect(testState.suggestionFetchNextPage).toHaveBeenCalledOnce(),
     );
-    expect(
-      screen
-        .getByRole("button", { name: "Approve all (2)" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
   });
 
-  it("disables bulk approval and retries when suggestion loading fails", () => {
+  it("retries when suggestion loading fails", () => {
     testState.suggestions = [makeSuggestion(0)];
     testState.suggestionTotal = 2;
     testState.suggestionError = new Error("suggestions unavailable");
     render(<SkillsList />);
 
     expect(screen.getByText("suggestions unavailable")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Approve all (2)" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
     fireEvent.click(
       screen.getByRole("button", { name: "Retry suggested edits" }),
     );
     expect(testState.suggestionRefetch).toHaveBeenCalledOnce();
-  });
-
-  it("lists every skill and reports mixed bulk outcomes exactly", async () => {
-    testState.suggestions = [0, 1, 2, 3].map(makeSuggestion);
-    testState.suggestionTotal = 4;
-    testState.approveAll.mutateAsync.mockResolvedValue({
-      items: [
-        { outcome: "applied" },
-        { outcome: "superseded" },
-        { outcome: "conflict" },
-        { outcome: "failed" },
-      ],
-    });
-    render(<SkillsList />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (4)" }));
-    const region = screen.getByRole("region", {
-      name: "Skills included in bulk approval",
-    });
-    expect(region.getAttribute("tabindex")).toBe("0");
-    expect(screen.getAllByText("Example 0").length).toBeGreaterThan(1);
-    expect(screen.getAllByText("Example 3").length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "Approve 4 edits" }));
-
-    await waitFor(() =>
-      expect(testState.approveAll.mutateAsync).toHaveBeenCalledWith({
-        request: {
-          approveAllSkillSuggestionsRequestBody: {
-            suggestionIds: [
-              "suggestion_0",
-              "suggestion_1",
-              "suggestion_2",
-              "suggestion_3",
-            ],
-          },
-        },
-      }),
-    );
-    expect(testState.toastInfo).toHaveBeenCalledWith(
-      "Applied 1, superseded 1, conflicts 1, failed 1, skipped 0.",
-    );
-    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-  });
-
-  it("confirms loaded IDs and excludes suggestions that appear after opening", async () => {
-    testState.suggestions = [makeSuggestion(0), makeSuggestion(1)];
-    testState.suggestionTotal = 99;
-    testState.approveAll.mutateAsync.mockResolvedValue({ items: [] });
-    const { rerender } = render(<SkillsList />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (2)" }));
-    const region = screen.getByRole("region", {
-      name: "Skills included in bulk approval",
-    });
-    expect(within(region).getByText("Example 0")).toBeTruthy();
-    expect(within(region).getByText("Example 1")).toBeTruthy();
-
-    testState.suggestions = [
-      makeSuggestion(0),
-      makeSuggestion(1),
-      makeSuggestion(2),
-    ];
-    rerender(<SkillsList />);
-    expect(within(region).queryByText("Example 2")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Approve 2 edits" }));
-
-    await waitFor(() =>
-      expect(testState.approveAll.mutateAsync).toHaveBeenCalledWith({
-        request: {
-          approveAllSkillSuggestionsRequestBody: {
-            suggestionIds: ["suggestion_0", "suggestion_1"],
-          },
-        },
-      }),
-    );
-    expect(testState.toastInfo).toHaveBeenCalledWith(
-      "Applied 0, superseded 0, conflicts 0, failed 0, skipped 2.",
-    );
-  });
-
-  it("keeps a transport warning visible through a zero-result refresh", async () => {
-    testState.suggestions = [makeSuggestion(0)];
-    testState.suggestionTotal = 1;
-    testState.approveAll.mutateAsync.mockRejectedValue(
-      new Error("connection lost"),
-    );
-    const { rerender } = render(<SkillsList />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (1)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Approve 1 edits" }));
-    expect(
-      await screen.findByText(
-        /Some edits may have applied. Review the refreshed state before retrying/,
-      ),
-    ).toBeTruthy();
-    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateSkills).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateSkill).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateDistributions).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateVersions).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateFeedback).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-    expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
-      testState.queryClient,
-    );
-
-    testState.suggestions = [];
-    testState.suggestionTotal = 0;
-    rerender(<SkillsList />);
-    expect(screen.getByText(/Some edits may have applied/)).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Approve 1 edits" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Approve 1 edits" }));
-    expect(testState.approveAll.mutateAsync).toHaveBeenCalledOnce();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByText(/Some edits may have applied/)).toBeNull();
-    expect(screen.queryByRole("button", { name: /Approve all/ })).toBeNull();
-  });
-
-  it("disables bulk controls through reconciliation and resets uncertainty on reopen", async () => {
-    testState.suggestions = [makeSuggestion(0)];
-    testState.suggestionTotal = 1;
-    testState.approveAll.mutateAsync
-      .mockRejectedValueOnce(new Error("connection lost"))
-      .mockResolvedValueOnce({ items: [{ outcome: "applied" }] });
-    render(<SkillsList />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (1)" }));
-    const submit = screen.getByRole("button", { name: "Approve 1 edits" });
-    const cancel = screen.getByRole("button", { name: "Cancel" });
-    let finishInvalidation!: () => void;
-    testState.invalidateSuggestions.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finishInvalidation = resolve;
-      }),
-    );
-    fireEvent.click(submit);
-
-    await waitFor(() =>
-      expect(testState.invalidateSuggestions).toHaveBeenCalled(),
-    );
-    expect(submit.hasAttribute("disabled")).toBe(true);
-    expect(cancel.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(cancel);
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByText("Approve all suggested edits?")).toBeTruthy();
-
-    await act(async () => finishInvalidation());
-    expect(await screen.findByText(/Some edits may have applied/)).toBeTruthy();
-    expect(submit.hasAttribute("disabled")).toBe(true);
-    expect(cancel.hasAttribute("disabled")).toBe(false);
-    fireEvent.click(submit);
-    expect(testState.approveAll.mutateAsync).toHaveBeenCalledOnce();
-
-    fireEvent.click(cancel);
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (1)" }));
-    expect(
-      screen
-        .getByRole("button", { name: "Approve 1 edits" })
-        .hasAttribute("disabled"),
-    ).toBe(false);
-    expect(screen.queryByText(/Some edits may have applied/)).toBeNull();
-  });
-
-  it("does not turn refresh failure into a bulk mutation failure", async () => {
-    testState.suggestions = [makeSuggestion(0)];
-    testState.suggestionTotal = 1;
-    testState.approveAll.mutateAsync.mockResolvedValue({
-      items: [{ outcome: "applied" }],
-    });
-    testState.invalidateSuggestions.mockRejectedValue(
-      new Error("refresh failed"),
-    );
-    render(<SkillsList />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Approve all (1)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Approve 1 edits" }));
-
-    await waitFor(() =>
-      expect(testState.toastInfo).toHaveBeenCalledWith(
-        "Applied 1, superseded 0, conflicts 0, failed 0, skipped 0.",
-      ),
-    );
-    expect(screen.queryByText("Bulk approval failed")).toBeNull();
   });
 });

@@ -33,7 +33,7 @@ export function SettingsInlineEmptyState({
     ) : null);
 
   return (
-    <div className="bg-muted/20 flex min-h-[88px] flex-col items-start justify-between gap-3 rounded-md border border-dashed px-4 py-3 sm:flex-row sm:items-center">
+    <div className="bg-muted/20 flex min-h-[88px] flex-col items-start justify-between gap-3 border border-dashed px-4 py-3 sm:flex-row sm:items-center">
       <div className="min-w-0 space-y-1">
         <Text small className="font-medium">
           {title}

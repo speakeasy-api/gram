@@ -1,18 +1,23 @@
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
-import { DotTable } from "@/components/ui/DotTable";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
+import {
+  DangerSettingsSection,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
@@ -34,6 +39,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -45,10 +51,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -57,35 +64,53 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  type PluginPackagePlatform,
+  usePluginPackageDownload,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
 import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
-import { PluginServerTableRow } from "./PluginServerTableRow";
+import {
+  activePluginSection,
+  PLUGIN_ASSIGNMENTS_SECTION_ID,
+  PLUGIN_OVERVIEW_SECTION_ID,
+  PLUGIN_SERVERS_SECTION_ID,
+  PLUGIN_SETTINGS_SECTION_ID,
+  PLUGIN_SKILLS_SECTION_ID,
+} from "./plugin-detail-sections";
+import { countPluginInstalls } from "./plugin-reach";
 import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
+import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
-// a Remote MCP-backed mcp_server. The kind determines whether it is submitted
-// as a toolset_id or an mcp_server_id, mirroring the collections picker.
+// a Remote- or unproxied-MCP-backed mcp_server. The kind determines
+// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
+// collections picker.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
+  isUnproxied?: boolean;
 };
+
+function serverOptionSuffix(option: ServerOption): string {
+  if (option.kind !== "mcpServer") return "";
+  return option.isUnproxied ? " (Unproxied MCP)" : " (Remote MCP)";
+}
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
@@ -93,24 +118,34 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const location = useLocation();
   const project = useProject();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const navigate = useNavigate();
+  // Each nav entry is its own subpage, so only the section named by the path
+  // renders.
+  const section = activePluginSection(location.pathname, pluginId);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
+    useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useViewMode();
-  // The component stays mounted when only :pluginId changes, so a stale query
-  // from a previous plugin would filter the new plugin's lists.
-  useEffect(() => setSearch(""), [pluginId]);
+  const [serverSearch, setServerSearch] = useState("");
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  // The component stays mounted when only :pluginId changes, so stale searches
+  // would filter the new plugin's lists.
+  useEffect(() => {
+    setServerSearch("");
+    setAssignmentSearch("");
+  }, [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  useRecentLabelOverride(location.pathname, plugin.name);
   // Polled so the publish-freshness badges/banner pick up the Temporal
   // generator-rollout schedule's auto-sync without a manual refresh.
   const { data: publishStatus } = usePublishStatus(undefined, undefined, {
@@ -118,6 +153,11 @@ export default function PluginDetail(): JSX.Element | null {
   });
 
   const client = useSdkClient();
+  const { isDownloading, download } = usePluginPackageDownload(
+    client,
+    pluginId!,
+    setIsDownloadMenuOpen,
+  );
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -138,15 +178,22 @@ export default function PluginDetail(): JSX.Element | null {
     useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
+      ),
     [mcpServersData],
   );
   const publishableMcpServers = useMemo(() => {
     const serverIdsWithEndpoint = new Set(
       (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
     );
+    // Unproxied-backed servers are never proxied, so they never gain an
+    // mcp_endpoints row — exempt them from the endpoint requirement, mirroring
+    // the backend's AddPluginServer check (server/internal/plugins/impl.go).
     return mcpServers.filter(
-      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
+      (s) =>
+        s.visibility !== "disabled" &&
+        (serverIdsWithEndpoint.has(s.id) || !!s.unproxiedMcpServerId),
     );
   }, [mcpServers, mcpEndpointsData]);
 
@@ -154,8 +201,8 @@ export default function PluginDetail(): JSX.Element | null {
     isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
 
   // Roles and members resolve the plugin's assignment principal URNs to human
-  // names in the summary below (and seed the assignment sheet). React Query
-  // dedupes these with the sheet's own calls.
+  // names in the assignments section (and seed the assignment sheet). React
+  // Query dedupes these with the sheet's own calls.
   const { data: rolesData } = useRoles();
   const { data: membersData } = useMembers();
   const roleByUrn = useMemo(
@@ -167,17 +214,25 @@ export default function PluginDetail(): JSX.Element | null {
     [membersData?.members],
   );
 
-  // Assignments only gate delivery for the device agent (agent.getPlugins);
-  // marketplace installs (Claude/Cursor/Codex) ship every published plugin. So
-  // only surface the section for device-agent orgs: those enrolled in the
-  // program (the gram-device-agent flag) or with devices that have actually
-  // synced (productFeatures.deviceAgent — member-readable, unlike the admin-only
-  // synced-users list, so non-admin viewers see the section too).
-  const isDeviceAgentEnabled =
-    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
+  const showAssignments = usePluginAssignmentsVisible();
   const { data: productFeatures } = useProductFeatures();
-  const showAssignments =
-    isDeviceAgentEnabled || (productFeatures?.deviceAgent ?? false);
+
+  // Device-agent reach powers the Installs stat. It's an admin-only, org-scoped
+  // list, so it's fetched only for device-agent orgs and degrades quietly
+  // (throwOnError:false) when the viewer can't read it.
+  const {
+    data: syncedUsersData,
+    isLoading: isLoadingSynced,
+    error: syncedUsersError,
+  } = useSyncedAgentUsers(undefined, undefined, {
+    throwOnError: false,
+    enabled: showAssignments,
+  });
+  // The synced-users list is admin-only; a non-admin viewer's request is
+  // forbidden, leaving reach unknown. Distinguish that from a genuine zero so
+  // the Installs metric doesn't misreport "no data" as "no installs". Loading
+  // is a separate state, surfaced via the card's refreshing spinner.
+  const installsUnavailable = !isLoadingSynced && !!syncedUsersError;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -190,13 +245,14 @@ export default function PluginDetail(): JSX.Element | null {
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
+      setIsManageCollaboratorsOpen(false);
       void invalidateAllPublishStatus(queryClient);
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });
@@ -213,7 +269,7 @@ export default function PluginDetail(): JSX.Element | null {
   // current pending state. The "Publish now" toast action closure is created
   // when offerPublish runs (before any publish starts), so it can't read a live
   // isPending — without this guard, stacking edits into multiple toasts lets a
-  // user fire concurrent publishes that the disabled header button prevents.
+  // user fire concurrent publishes that the disabled buttons prevent.
   const isPublishingRef = useRef(publishMutation.isPending);
   isPublishingRef.current = publishMutation.isPending;
   const handlePublish = useCallback(
@@ -228,9 +284,9 @@ export default function PluginDetail(): JSX.Element | null {
   );
 
   // Nudge the user to publish straight after an edit instead of hunting for
-  // Re-publish on the list page. A connected project republishes in one click;
-  // a configured-but-unconnected project needs the first-publish dialog (it
-  // collects collaborators). Unconfigured projects get no nudge — there's
+  // Sync on the marketplace banner. A connected project republishes in one
+  // click; a configured-but-unconnected project needs the first-publish dialog
+  // (it collects collaborators). Unconfigured projects get no nudge — there's
   // nowhere to publish to.
   const offerPublish = useCallback(
     (message: string) => {
@@ -339,15 +395,6 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
-    setIsDownloadMenuOpen(false);
-    try {
-      await downloadPluginPackage(client, pluginId!, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    }
-  };
-
   const toolsetById = useMemo(() => {
     const map = new Map<string, ToolsetEntry>();
     for (const t of toolsets) map.set(t.id, t);
@@ -373,6 +420,7 @@ export default function PluginDetail(): JSX.Element | null {
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
+        isUnproxied: !!s.unproxiedMcpServerId,
       });
     }
     return opts;
@@ -387,6 +435,12 @@ export default function PluginDetail(): JSX.Element | null {
 
   const servers = plugin.servers ?? [];
   const assignments = plugin.assignments ?? [];
+  const installs = countPluginInstalls(
+    assignments,
+    syncedUsersData?.users ?? [],
+    membersData?.members ?? [],
+    rolesData?.roles ?? [],
+  );
 
   // Exclude servers already added to the plugin, keyed per backend.
   const addedToolsetIds = new Set(
@@ -401,68 +455,20 @@ export default function PluginDetail(): JSX.Element | null {
       : !addedMcpServerIds.has(o.id),
   );
 
-  // Client-side search across the page's entry lists. Servers match on their
-  // displayed name; assignments match on the resolved principal label (role
-  // name, member name, email, "Everyone") plus the member's email. Skills are
-  // filtered inside PluginSkillsSection with the same query.
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredServers = normalizedSearch
+  // Client-side search over the server section, matching on the displayed name.
+  const normalizedServerSearch = serverSearch.trim().toLowerCase();
+  const filteredServers = normalizedServerSearch
     ? servers.filter((s) =>
-        s.displayName.toLowerCase().includes(normalizedSearch),
+        s.displayName.toLowerCase().includes(normalizedServerSearch),
       )
     : servers;
-  const filteredAssignments = normalizedSearch
-    ? assignments.filter((a) => {
-        const { label } = describePrincipal(
-          a.principalUrn,
-          roleByUrn,
-          memberByUrn,
-        );
-        const email = memberByUrn.get(a.principalUrn)?.email ?? "";
-        return (
-          label.toLowerCase().includes(normalizedSearch) ||
-          email.toLowerCase().includes(normalizedSearch)
-        );
-      })
-    : assignments;
 
-  // Precomputed section bodies keep the JSX below free of nested ternaries
-  // while distinguishing "nothing added yet" from "no search matches".
+  // Distinguish "nothing added yet" from "no search matches".
   let serversContent: JSX.Element;
   if (servers.length === 0) {
     serversContent = <SectionEmptyState title="No servers added yet" />;
   } else if (filteredServers.length === 0) {
     serversContent = <SectionEmptyState title="No servers match your search" />;
-  } else if (viewMode === "table") {
-    serversContent = (
-      <DotTable
-        headers={[
-          { label: "Name" },
-          { label: "Publish status" },
-          { label: "Type" },
-          { label: "Visibility" },
-          { label: "", className: "text-right" },
-        ]}
-      >
-        {filteredServers.map((server) => (
-          <PluginServerTableRow
-            key={server.id}
-            server={server}
-            toolset={
-              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
-            }
-            mcpServer={
-              server.mcpServerId
-                ? mcpServerById.get(server.mcpServerId)
-                : undefined
-            }
-            isLoading={isLoadingServers}
-            onRemove={() => handleRemoveServer(server)}
-            lastPublishedAt={publishStatus?.lastPublishedAt}
-          />
-        ))}
-      </DotTable>
-    );
   } else {
     serversContent = (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -486,6 +492,24 @@ export default function PluginDetail(): JSX.Element | null {
       </div>
     );
   }
+
+  // Client-side search over the assignments section, matching on the resolved
+  // principal label (role name, member name, email, "Everyone") plus email.
+  const normalizedAssignmentSearch = assignmentSearch.trim().toLowerCase();
+  const filteredAssignments = normalizedAssignmentSearch
+    ? assignments.filter((a) => {
+        const { label } = describePrincipal(
+          a.principalUrn,
+          roleByUrn,
+          memberByUrn,
+        );
+        const email = memberByUrn.get(a.principalUrn)?.email ?? "";
+        return (
+          label.toLowerCase().includes(normalizedAssignmentSearch) ||
+          email.toLowerCase().includes(normalizedAssignmentSearch)
+        );
+      })
+    : assignments;
 
   let assignmentsContent: JSX.Element;
   if (assignments.length === 0) {
@@ -516,282 +540,294 @@ export default function PluginDetail(): JSX.Element | null {
           substitutions={{ [pluginId ?? ""]: plugin.name }}
         />
       </Page.Header>
-      <Page.Body fullWidth noPadding>
-        {/* Hero — full-width grey band, separated from the servers list by a
-            bottom border. Page.Body runs full-width/no-padding so this band
-            reaches the pane edges; the band's own content stays centered in the
-            same max-w-7xl column as the sections below. */}
-        <div className="border-border mb-8 border-b bg-neutral-50 px-8 pt-8 pb-8 dark:bg-neutral-900/40">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-6">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="bg-primary/5 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
-                <Puzzle className="text-muted-foreground h-7 w-7" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold">{plugin.name}</h1>
-                  {isDefaultPlugin && (
-                    <Badge variant="information">
-                      <Badge.Text>Default</Badge.Text>
-                    </Badge>
-                  )}
-                </div>
-                <Text muted small className="mt-1 font-mono">
-                  {plugin.slug}
-                </Text>
-                <Text small className="mt-4 max-w-xl">
-                  {description}
-                </Text>
-                <PublishFreshnessIndicator publishStatus={publishStatus} />
-              </div>
-            </div>
-            <Stack
-              direction="horizontal"
-              gap={2}
-              align="center"
-              className="shrink-0"
-            >
-              <DropdownMenu
-                open={isDownloadMenuOpen}
-                onOpenChange={setIsDownloadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <PluginInstallButton />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      // Defer until after the dropdown has fully closed to
-                      // avoid a Radix focus-trap/body-lock conflict between
-                      // the closing menu and the opening sheet (same pattern
-                      // as MCPDetails.tsx).
-                      setTimeout(() => setIsInstallSheetOpen(true), 0);
-                    }}
-                    disabled={
-                      !publishStatus?.connected ||
-                      !publishStatus.repoOwner ||
-                      !publishStatus.repoName
-                    }
-                  >
-                    <div className="flex flex-col">
-                      <span>GitHub installation (preferred)</span>
-                      {(!publishStatus?.connected ||
-                        !publishStatus.repoOwner ||
-                        !publishStatus.repoName) && (
-                        <span className="text-muted-foreground text-xs">
-                          Requires marketplace setup
-                        </span>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("claude");
-                    }}
-                  >
-                    Download as zip — Claude
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("cursor");
-                    }}
-                  >
-                    Download as zip — Cursor
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleDownload("codex");
-                    }}
-                  >
-                    Download as zip — Codex
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {publishStatus?.connected &&
-                publishStatus.repoOwner &&
-                publishStatus.repoName && (
-                  <InstallInstructionsDialog
-                    open={isInstallSheetOpen}
-                    onOpenChange={setIsInstallSheetOpen}
-                    repoOwner={publishStatus.repoOwner}
-                    repoName={publishStatus.repoName}
-                    marketplaceUrl={publishStatus.marketplaceUrl}
-                    candidatePlugins={[
-                      {
-                        name: plugin.name,
-                        slug: plugin.slug,
-                        description: plugin.description,
-                      },
-                    ]}
-                  />
-                )}
-              <PublishStatusControl
-                publishStatus={publishStatus}
-                isPending={publishMutation.isPending}
-                onRepublish={() => handlePublish([])}
-                onOpenDialog={() => setIsPublishDialogOpen(true)}
-              />
-              {/* Low-frequency, destructive-leaning actions are tucked behind an
-                overflow menu so the hero bar stays down to the two primary
-                actions (Install / Publish) and doesn't wrap on narrow widths. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="secondary" aria-label="More actions">
-                    <Button.Icon>
-                      <Icon name="ellipsis" className="h-4 w-4" />
-                    </Button.Icon>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
-                    Edit name
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setIsDeleteOpen(true)}
-                  >
-                    Delete plugin
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </Stack>
-          </div>
-        </div>
-
-        {/* Everything below the hero re-centers in the max-w-7xl column that
-            Page.Body would normally provide (disabled here via fullWidth). */}
-        <div className="mx-auto w-full max-w-7xl px-8 pb-24">
-          {/* One search box narrows every entry list on the page (servers,
-            assignments, skills) rather than a per-section input. */}
-          <Page.Toolbar className="mb-8">
-            <Page.Toolbar.Search
-              value={search}
-              onChange={setSearch}
-              placeholder="Search servers, skills, and assignments"
-            />
-            <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
-          </Page.Toolbar>
-
-          {/* Servers section */}
-          <div className="mb-3 flex items-center gap-3">
-            <div className="border-border flex-1 border-t" />
-            <Text
-              small
-              muted
-              className="shrink-0 font-mono text-xs tracking-wide uppercase"
-            >
-              MCP Servers
-            </Text>
-            <div className="border-border flex-1 border-t" />
-          </div>
-          <div className="mb-3 flex justify-end">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsAddServerOpen(true)}
-            >
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Server</Button.Text>
-            </Button>
-          </div>
-          <div className="mb-8">{serversContent}</div>
-
-          {/* Assignments only affect device-agent delivery, so the section is
-            hidden for marketplace-only orgs (see showAssignments). */}
-          {showAssignments && (
-            <>
-              <div className="mb-3 flex items-center gap-3">
-                <div className="border-border flex-1 border-t" />
-                <div className="flex shrink-0 items-center gap-2">
-                  <Text
-                    small
-                    muted
-                    className="font-mono text-xs tracking-wide uppercase"
-                  >
-                    Assignments
-                  </Text>
-                  {assignments.length > 0 && (
-                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-                      {assignments.length}
-                    </span>
-                  )}
-                </div>
-                <div className="border-border flex-1 border-t" />
-              </div>
-              <div className="mb-3 flex items-center justify-between gap-4">
-                <Text small muted className="max-w-md">
-                  Controls delivery to devices running the Speakeasy agent.
-                  Marketplace installs (Claude, Cursor, Codex) receive every
-                  published plugin regardless.
-                </Text>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsAssignmentsOpen(true)}
+      <Page.Body fullWidth className="gap-0">
+        <div className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8">
+          {section === PLUGIN_OVERVIEW_SECTION_ID && (
+            <section className="space-y-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Overview</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    {description}
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <Stack
+                  direction="horizontal"
+                  gap={2}
+                  align="center"
+                  className="shrink-0"
                 >
-                  <Button.LeftIcon>
-                    <Icon name="users" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Manage assignments</Button.Text>
-                </Button>
+                  <MarketplaceSyncButton
+                    publishStatus={publishStatus}
+                    isPending={publishMutation.isPending}
+                    onSync={() => handlePublish([])}
+                  />
+                  <PluginInstallControl
+                    plugin={{
+                      name: plugin.name,
+                      slug: plugin.slug,
+                      description: plugin.description,
+                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
+                    }}
+                    publishStatus={publishStatus}
+                    isDownloadMenuOpen={isDownloadMenuOpen}
+                    onDownloadMenuOpenChange={setIsDownloadMenuOpen}
+                    onDownload={(platform) => void download(platform)}
+                    isDownloading={isDownloading}
+                    isInstallSheetOpen={isInstallSheetOpen}
+                    onInstallSheetOpenChange={setIsInstallSheetOpen}
+                  />
+                </Stack>
               </div>
-              <div className="mb-8">{assignmentsContent}</div>
-            </>
+
+              <StatTileGroup>
+                <StatTile
+                  title="MCP servers"
+                  value={plugin.serverCount ?? servers.length}
+                  tone="information"
+                  format="number"
+                  icon="network"
+                />
+                <StatTile
+                  title="Skills"
+                  value={plugin.skillCount ?? 0}
+                  tone="information"
+                  format="number"
+                  icon="sparkles"
+                />
+                {showAssignments && (
+                  <>
+                    <StatTile
+                      title="Assignments"
+                      value={plugin.assignmentCount ?? assignments.length}
+                      tone="information"
+                      format="number"
+                      icon="users"
+                      subtext="Roles, users, and emails"
+                    />
+                    <StatTile
+                      title="Installs"
+                      value={installs}
+                      tone="information"
+                      displayValue={installsUnavailable ? "—" : undefined}
+                      format="number"
+                      icon="download"
+                      isRefreshing={isLoadingSynced}
+                      subtext={
+                        installsUnavailable
+                          ? "Requires admin access"
+                          : "Running the device agent"
+                      }
+                      tooltip={
+                        installsUnavailable
+                          ? "Install counts require organization admin access."
+                          : undefined
+                      }
+                    />
+                  </>
+                )}
+              </StatTileGroup>
+
+              <PublishFreshnessIndicator publishStatus={publishStatus} />
+            </section>
           )}
 
-          {/* Skills ride the same publish flow as servers, so changes offer a
-            republish. Orgs without the skills feature keep the teaser. */}
-          {productFeatures?.skillsEnabled ? (
+          {section === PLUGIN_SERVERS_SECTION_ID && (
+            <SettingsSection>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <SettingsSection.Header>
+                  <div className="flex items-center gap-2">
+                    <SettingsSection.Title>MCP Servers</SettingsSection.Title>
+                    {servers.length > 0 && (
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
+                        {servers.length}
+                      </span>
+                    )}
+                  </div>
+                  <SettingsSection.Description>
+                    MCP servers bundled in this plugin. Everyone who installs
+                    the plugin gets these servers.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <div className="flex items-center gap-2">
+                  {servers.length > 0 && (
+                    <SearchBar
+                      value={serverSearch}
+                      onChange={setServerSearch}
+                      placeholder="Search servers"
+                      className="h-9 w-56"
+                    />
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="plus" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Server</Button.Text>
+                  </Button>
+                </div>
+              </div>
+              {serversContent}
+            </SettingsSection>
+          )}
+
+          {section === PLUGIN_SKILLS_SECTION_ID && (
             <RequireScope
               scope="skill:read"
               resourceId={project.id}
-              level="section"
+              level="page"
             >
               <PluginSkillsSection
+                key={pluginId!}
                 pluginId={pluginId!}
-                searchQuery={search}
-                viewMode={viewMode}
+                viewMode="grid"
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>
-          ) : (
-            <>
-              <div className="mb-3 flex items-center gap-3">
-                <div className="border-border flex-1 border-t" />
-                <Text
-                  small
-                  muted
-                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
-                >
-                  Skills
-                </Text>
-                <div className="border-border flex-1 border-t" />
-              </div>
-              <div className="mb-8">
-                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-                    <Sparkles className="text-muted-foreground h-7 w-7" />
+          )}
+
+          {/* Assignments only affect device-agent delivery, so the section is
+              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
+              Now that it's a route, a bookmark can still land here — say why the
+              page is empty rather than rendering nothing. Wait for
+              productFeatures before doing so, since the visibility flag reads
+              false while it loads. */}
+          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
+            !showAssignments &&
+            !!productFeatures && (
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Assignments</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    Assignments control delivery to devices running the
+                    Speakeasy agent.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <SectionEmptyState
+                  title="Assignments aren't available for this project"
+                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
+                />
+              </SettingsSection>
+            )}
+
+          {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
+            <SettingsSection>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <SettingsSection.Header>
+                  <div className="flex items-center gap-2">
+                    <SettingsSection.Title>Assignments</SettingsSection.Title>
+                    {assignments.length > 0 && (
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
+                        {assignments.length}
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Text variant="subheading" as="div">
-                        Skills
-                      </Text>
-                      <Badge variant="neutral">
-                        <Badge.Text>Coming soon</Badge.Text>
-                      </Badge>
-                    </div>
-                    <Text small muted>
-                      Bundle reusable skills alongside your MCP servers in this
-                      plugin.
-                    </Text>
-                  </div>
+                  <SettingsSection.Description>
+                    Controls delivery to devices running the Speakeasy agent.
+                    Marketplace installs receive every published plugin
+                    regardless.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <div className="flex items-center gap-2">
+                  {assignments.length > 0 && (
+                    <SearchBar
+                      value={assignmentSearch}
+                      onChange={setAssignmentSearch}
+                      placeholder="Search assignments"
+                      className="h-9 w-56"
+                    />
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAssignmentsOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="users" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Manage assignments</Button.Text>
+                  </Button>
                 </div>
               </div>
+              {assignmentsContent}
+            </SettingsSection>
+          )}
+
+          {section === PLUGIN_SETTINGS_SECTION_ID && (
+            <>
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>Plugin details</SettingsSection.Title>
+                  <SettingsSection.Description>
+                    Registry identity and presentation metadata.
+                  </SettingsSection.Description>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body>
+                    <dl className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Name</dt>
+                        <dd className="mt-1 text-sm">{plugin.name}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Slug</dt>
+                        <dd className="mt-1 font-mono text-sm">
+                          {plugin.slug}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">
+                          Description
+                        </dt>
+                        <dd className="mt-1 text-sm">
+                          {plugin.description || "None"}
+                        </dd>
+                      </div>
+                    </dl>
+                  </SettingsSection.Body>
+                  <SettingsSection.Footer>
+                    <SettingsSection.FooterHint>
+                      Editing republishes the plugin on your next sync.
+                    </SettingsSection.FooterHint>
+                    <SettingsSection.FooterActions>
+                      <Button size="sm" onClick={() => setIsEditOpen(true)}>
+                        Edit details
+                      </Button>
+                    </SettingsSection.FooterActions>
+                  </SettingsSection.Footer>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
+              <DangerSettingsSection>
+                <DangerSettingsSection.Header>
+                  <DangerSettingsSection.Title>
+                    Danger zone
+                  </DangerSettingsSection.Title>
+                </DangerSettingsSection.Header>
+                <DangerSettingsSection.Panel>
+                  <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Text className="text-sm font-semibold">
+                        Delete this plugin
+                      </Text>
+                      <Text small muted className="max-w-xl">
+                        {isDefaultPlugin
+                          ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
+                          : "Deleting removes this plugin from all assigned users on the next publish."}
+                      </Text>
+                    </div>
+                    <Button
+                      variant="destructive-primary"
+                      onClick={() => setIsDeleteOpen(true)}
+                    >
+                      Delete plugin
+                    </Button>
+                  </DangerSettingsSection.Body>
+                </DangerSettingsSection.Panel>
+              </DangerSettingsSection>
             </>
           )}
         </div>
@@ -881,7 +917,7 @@ export default function PluginDetail(): JSX.Element | null {
                 ) : availableServerOptions.length > 0 ? (
                   <select
                     name="serverKey"
-                    className="bg-background rounded-md border px-3 py-2 text-sm"
+                    className="bg-background border px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select an MCP server</option>
@@ -891,7 +927,7 @@ export default function PluginDetail(): JSX.Element | null {
                         value={serverOptionKey(o.kind, o.id)}
                       >
                         {o.name}
-                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
+                        {serverOptionSuffix(o)}
                       </option>
                     ))}
                   </select>
@@ -935,6 +971,13 @@ export default function PluginDetail(): JSX.Element | null {
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
+        <PublishDialog
+          mode="manage"
+          open={isManageCollaboratorsOpen}
+          onOpenChange={setIsManageCollaboratorsOpen}
+          onPublish={handlePublish}
+          isPending={publishMutation.isPending}
+        />
         <PluginAssignmentsSheet
           pluginId={pluginId!}
           pluginName={plugin.name}
@@ -951,54 +994,33 @@ export default function PluginDetail(): JSX.Element | null {
   );
 }
 
-// Durable publish affordance for the plugin detail header. Renders nothing when
-// the server has no GitHub publishing configured; otherwise it surfaces the
-// project's publish freshness (sourced from getPublishStatus) and a one-click
-// path to publish without returning to the plugins list.
-function PublishStatusControl({
+// Always-available manual re-sync for a connected marketplace. The banner only
+// surfaces a Sync action when it detects unpublished changes; this button lets
+// the user force a republish at any time (e.g. to recover from a failed push or
+// re-run the generator), restoring the old detail page's persistent Sync
+// control. Renders nothing until the project is connected — the not-connected
+// publish path lives in the marketplace banner.
+function MarketplaceSyncButton({
   publishStatus,
   isPending,
-  onRepublish,
-  onOpenDialog,
+  onSync,
 }: {
   publishStatus: PublishStatusResult | undefined;
   isPending: boolean;
-  onRepublish: () => void;
-  onOpenDialog: () => void;
+  onSync: () => void;
 }): JSX.Element | null {
-  if (!publishStatus?.configured) return null;
+  if (!publishStatus?.connected) return null;
 
-  // Never published: the first publish needs the dialog (it collects repo
-  // collaborators), so there's no freshness to show yet.
-  if (!publishStatus.connected) {
-    return (
-      <Button variant="secondary" onClick={onOpenDialog} disabled={isPending}>
-        <Button.LeftIcon>
-          <Icon name="upload" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>
-          {isPending ? "Publishing..." : "Publish Private Marketplace"}
-        </Button.Text>
-      </Button>
-    );
-  }
-
-  // up_to_date is absent when freshness can't be determined (connection
-  // predates fingerprinting) — treat only an explicit false as dirty.
   const hasUnpublishedChanges = publishStatus.upToDate === false;
 
   return (
-    <Button
-      variant={hasUnpublishedChanges ? "primary" : "secondary"}
-      onClick={onRepublish}
-      disabled={isPending}
-    >
+    <Button variant="secondary" onClick={onSync} disabled={isPending}>
       <Button.LeftIcon>
         <Icon name="refresh-cw" className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>
         {isPending
-          ? "Publishing..."
+          ? "Syncing..."
           : hasUnpublishedChanges
             ? "Sync changes"
             : "Sync"}
@@ -1007,15 +1029,123 @@ function PublishStatusControl({
   );
 }
 
-// Shows the published freshness of a connected project under the plugin
-// metadata: an explicit "Unpublished changes" vs "Up to date" badge, paired
-// with the last-published time and the manifest version currently live in the
-// published repo. The timestamp shows in both states (it's still useful to
-// know when the last publish happened while there are pending changes), and
-// the live version is what plugin clients report for installed plugins (e.g.
-// Claude Code's /plugin listing), so it's the value to compare against when
-// debugging sync lag. Renders nothing when not connected, or when freshness
-// is unknown and there's nothing published to show.
+// Install affordance for the plugin overview: a download menu offering the
+// preferred GitHub-marketplace install (when the marketplace is set up) and
+// per-platform zip downloads, plus the install-instructions sheet.
+export function PluginInstallControl({
+  plugin,
+  publishStatus,
+  isDownloadMenuOpen,
+  onDownloadMenuOpenChange,
+  onDownload,
+  isDownloading,
+  isInstallSheetOpen,
+  onInstallSheetOpenChange,
+}: {
+  plugin: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible: boolean;
+  };
+  publishStatus: PublishStatusResult | undefined;
+  isDownloadMenuOpen: boolean;
+  onDownloadMenuOpenChange: (open: boolean) => void;
+  onDownload: (platform: PluginPackagePlatform) => void;
+  isDownloading: boolean;
+  isInstallSheetOpen: boolean;
+  onInstallSheetOpenChange: (open: boolean) => void;
+}): JSX.Element {
+  const marketplaceReady = !!(
+    publishStatus?.connected &&
+    publishStatus.repoOwner &&
+    publishStatus.repoName
+  );
+
+  return (
+    <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
+      <DropdownMenu
+        open={isDownloadMenuOpen}
+        onOpenChange={onDownloadMenuOpenChange}
+      >
+        <DropdownMenuTrigger asChild>
+          <PluginInstallButton loading={isDownloading} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => {
+              // Defer until after the dropdown has fully closed to avoid a
+              // Radix focus-trap/body-lock conflict between the closing menu
+              // and the opening sheet (same pattern as MCPDetails.tsx).
+              setTimeout(() => onInstallSheetOpenChange(true), 0);
+            }}
+            disabled={!marketplaceReady}
+          >
+            <div className="flex flex-col">
+              <span>GitHub installation (preferred)</span>
+              {!marketplaceReady && (
+                <span className="text-muted-foreground text-xs">
+                  Requires marketplace setup
+                </span>
+              )}
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("claude")}
+          >
+            Download as zip — Claude
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("cursor")}
+          >
+            Download as zip — Cursor
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("codex")}
+          >
+            Download as zip — Codex
+          </DropdownMenuItem>
+          {plugin.agentPluginsV1Compatible && (
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => onDownload("agent-plugin")}
+            >
+              Download Agent Plugins ZIP
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {marketplaceReady && publishStatus && (
+        <InstallInstructionsDialog
+          open={isInstallSheetOpen}
+          onOpenChange={onInstallSheetOpenChange}
+          repoOwner={publishStatus.repoOwner!}
+          repoName={publishStatus.repoName!}
+          marketplaceUrl={publishStatus.marketplaceUrl}
+          candidatePlugins={[
+            {
+              name: plugin.name,
+              slug: plugin.slug,
+              description: plugin.description,
+            },
+          ]}
+        />
+      )}
+    </Stack>
+  );
+}
+
+// Shows the published freshness of a connected project under the overview
+// stats: an explicit "Requires syncing" vs "Up to date" badge, paired with the
+// last-published time and the manifest version currently live in the published
+// repo. The timestamp shows in both states, and the live version is what plugin
+// clients report for installed plugins, so it's the value to compare against
+// when debugging sync lag. Renders nothing when not connected, or when
+// freshness is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
 }: {
@@ -1081,7 +1211,7 @@ function PublishFreshnessIndicator({
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-4 grid w-fit grid-cols-[max-content_1fr] items-center gap-x-8 gap-y-2">
+    <div className="grid w-fit grid-cols-[max-content_1fr] items-center gap-x-8 gap-y-2">
       {rows.map((row) => (
         <Fragment key={row.label}>
           <Text muted small>
@@ -1135,7 +1265,7 @@ function PluginServerCard({
   };
 
   return (
-    <DotCard
+    <Card.Entity
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
@@ -1164,10 +1294,12 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote MCP servers have no Gram-side tool catalog, so the
-            // tool-collection badge is omitted.
+            // Remote/unproxied MCP servers have no Gram-side tool
+            // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              Remote MCP
+              {mcpServer?.unproxiedMcpServerId
+                ? "Unproxied MCP · Not proxied"
+                : "Remote MCP"}
             </Badge>
           ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
@@ -1209,6 +1341,6 @@ function PluginServerCard({
           <Trash2 className="h-4 w-4" />
         </UiButton>
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

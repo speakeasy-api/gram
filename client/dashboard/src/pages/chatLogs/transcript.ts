@@ -408,9 +408,9 @@ export function rowSearchFields(
 /** Coarse message-type bucket for the header transcript filter. System turns
  * fold into "assistant" (model-side output) so the filter stays a clean
  * user / assistant / tool triad rather than exposing a rare fourth chip. */
-export type MessageCategory = "user" | "assistant" | "tool";
+type MessageCategory = "user" | "assistant" | "tool";
 
-export function rowCategory(row: TranscriptRow): MessageCategory {
+function rowCategory(row: TranscriptRow): MessageCategory {
   if (row.kind === "tool") return "tool";
   return row.entryType === "user" ? "user" : "assistant";
 }
@@ -454,6 +454,19 @@ export function displayItemRows(item: DisplayItem): TranscriptRow[] {
   if (item.type === "row") return [item.row];
   if (item.type === "toolGroup") return item.rows;
   return [];
+}
+
+/** Whether a rendered item contains the raw chat message being targeted. A
+ * tool group can contain several rows and each tool row can span its assistant
+ * call plus tool-result messages, so callers should use this instead of
+ * comparing display item IDs directly. */
+export function displayItemContainsMessage(
+  item: DisplayItem,
+  messageId: string,
+): boolean {
+  return displayItemRows(item).some((row) =>
+    rowMessageIds(row).includes(messageId),
+  );
 }
 
 /** Below this, a run of consecutive tool rows stays as individual rows — a lone

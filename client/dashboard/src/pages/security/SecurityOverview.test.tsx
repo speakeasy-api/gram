@@ -11,8 +11,9 @@ vi.mock("@/components/chart/ChartCard", () => ({
   ChartCard: () => null,
 }));
 
-vi.mock("@/components/chart/MetricCard", () => ({
-  MetricCard: () => null,
+vi.mock("@/components/chart/stat-tile", () => ({
+  StatTile: () => null,
+  StatTileGroup: () => null,
 }));
 
 vi.mock("@/components/insights-dock", () => ({
@@ -52,12 +53,14 @@ vi.mock("@/components/require-scope", async () => {
   };
 });
 
-vi.mock("@/components/ui/DashboardCard", async () => {
+vi.mock("@/components/ui/Card", async () => {
   const { createElement } = await import("react");
 
   return {
-    DashboardCard: ({ children }: { children: ReactNode }) =>
-      createElement("div", null, children),
+    Card: {
+      Dashboard: ({ children }: { children: ReactNode }) =>
+        createElement("div", null, children),
+    },
   };
 });
 

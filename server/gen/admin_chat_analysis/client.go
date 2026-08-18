@@ -15,18 +15,20 @@ import (
 
 // Client is the "adminChatAnalysis" service client.
 type Client struct {
-	GetSettingsEndpoint             goa.Endpoint
-	UpsertWorkUnitsSettingsEndpoint goa.Endpoint
-	TriggerAnalysisEndpoint         goa.Endpoint
+	GetSettingsEndpoint                  goa.Endpoint
+	UpsertWorkUnitsSettingsEndpoint      goa.Endpoint
+	UpsertBusinessMemorySettingsEndpoint goa.Endpoint
+	TriggerAnalysisEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "adminChatAnalysis" service client given the
 // endpoints.
-func NewClient(getSettings, upsertWorkUnitsSettings, triggerAnalysis goa.Endpoint) *Client {
+func NewClient(getSettings, upsertWorkUnitsSettings, upsertBusinessMemorySettings, triggerAnalysis goa.Endpoint) *Client {
 	return &Client{
-		GetSettingsEndpoint:             getSettings,
-		UpsertWorkUnitsSettingsEndpoint: upsertWorkUnitsSettings,
-		TriggerAnalysisEndpoint:         triggerAnalysis,
+		GetSettingsEndpoint:                  getSettings,
+		UpsertWorkUnitsSettingsEndpoint:      upsertWorkUnitsSettings,
+		UpsertBusinessMemorySettingsEndpoint: upsertBusinessMemorySettings,
+		TriggerAnalysisEndpoint:              triggerAnalysis,
 	}
 }
 
@@ -70,6 +72,29 @@ func (c *Client) GetSettings(ctx context.Context, p *GetSettingsPayload) (res *C
 func (c *Client) UpsertWorkUnitsSettings(ctx context.Context, p *UpsertWorkUnitsSettingsPayload) (res *ChatAnalysisSettings, err error) {
 	var ires any
 	ires, err = c.UpsertWorkUnitsSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ChatAnalysisSettings), nil
+}
+
+// UpsertBusinessMemorySettings calls the "upsertBusinessMemorySettings"
+// endpoint of the "adminChatAnalysis" service.
+// UpsertBusinessMemorySettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpsertBusinessMemorySettings(ctx context.Context, p *UpsertBusinessMemorySettingsPayload) (res *ChatAnalysisSettings, err error) {
+	var ires any
+	ires, err = c.UpsertBusinessMemorySettingsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

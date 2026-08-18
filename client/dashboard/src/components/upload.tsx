@@ -123,21 +123,25 @@ export function FullWidthUpload({
     }
   };
 
-  const handlers = useFileDropZoneHandlers(onUpload, allowedExtensions);
+  // isValidFile is state, not a DOM prop — keep it out of the spread.
+  const { isValidFile, ...dropHandlers } = useFileDropZoneHandlers(
+    onUpload,
+    allowedExtensions,
+  );
   return (
     <div
       tabIndex={0}
       className={cn("grid w-full max-w-2xl gap-4", className)}
-      {...(isLoading ? {} : handlers)}
+      {...(isLoading ? {} : dropHandlers)}
     >
       <div className="flex w-full items-center justify-center">
         <label
           htmlFor="dropzone-file"
           className={cn(
-            "trans flex w-full flex-col items-center justify-center rounded-lg border-1 border-dashed p-10",
+            "trans flex w-full flex-col items-center justify-center border-1 border-dashed p-10",
             isLoading
               ? "border-primary/50 bg-primary/5 cursor-default"
-              : !handlers.isValidFile
+              : !isValidFile
                 ? "border-destructive bg-destructive/10 cursor-pointer"
                 : "border-muted-foreground/50 hover:bg-input/20 cursor-pointer",
           )}

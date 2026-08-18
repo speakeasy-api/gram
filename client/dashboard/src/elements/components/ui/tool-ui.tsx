@@ -79,8 +79,11 @@ interface SectionMatch {
   /** Short rule label shown when this match is active (e.g. "pii.phone_number"). */
   label?: string;
   /** Optional action for this finding, surfaced as a button while it is the
-   * active match (e.g. open the create-exclusion flow). */
+   * active match (e.g. open the setup-exclusion-rule flow). */
   onExclude?: () => void;
+  /** Optional action for this finding, surfaced alongside onExclude while it
+   * is the active match (mark this one finding as a false positive). */
+  onMarkFalsePositive?: () => void;
 }
 
 interface SectionHighlight {
@@ -528,14 +531,24 @@ function HighlightedCode({
                 {activeMatch.label}
               </span>
             )}
+            {!isSearch && activeMatch?.onMarkFalsePositive && (
+              <button
+                type="button"
+                onClick={activeMatch.onMarkFalsePositive}
+                title="Mark this finding as a false positive"
+                className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Mark false positive
+              </button>
+            )}
             {!isSearch && activeMatch?.onExclude && (
               <button
                 type="button"
                 onClick={activeMatch.onExclude}
-                title="Create an exclusion for this finding"
+                title="Set up an exclusion rule for this finding"
                 className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Create exclusion
+                Set up exclusion rule
               </button>
             )}
           </div>
@@ -713,6 +726,10 @@ function ToolUIMetaSection({
 }): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
+
   return (
     <div data-slot="tool-ui-meta-section" className="border-t border-border">
       <SectionDisclosureHeader
@@ -748,6 +765,10 @@ function ToolUISection({
   highlight,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   // For structured content, we don't stringify it
   const isStructured = isStructuredContent(content);
@@ -1163,31 +1184,21 @@ function ToolUIGroup({
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  // A headerless group shows its children unconditionally; when it gains a
-  // header mid-stream, start expanded — collapsing would hide content the
-  // user was already looking at.
-  const [prevHeaderless, setPrevHeaderless] = useState(headerless);
-  if (prevHeaderless !== headerless) {
-    setPrevHeaderless(headerless);
-    if (prevHeaderless) setIsExpanded(true);
-  }
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   const showChildren = headerless || isExpanded;
 
   return (
-    <div
-      data-slot="tool-ui-group"
-      className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
-        className,
-      )}
-    >
-      {/* Group header */}
+    <div data-slot="tool-ui-group" className={className}>
+      {/* Group header — a bare annotation line; the chrome lives on the
+          expanded content below. */}
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
-          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
+          className="flex w-fit cursor-pointer items-center gap-1.5 py-1 text-left"
         >
           {icon || (
             <StatusIndicator
@@ -1196,27 +1207,29 @@ function ToolUIGroup({
           )}
           <span
             className={cn(
-              "flex-1 text-sm font-medium",
+              "text-sm font-medium text-muted-foreground",
               status === "running" && "shimmer",
             )}
           >
             {title}
           </span>
-          <ChevronDownIcon
+          <ChevronRightIcon
             className={cn(
               "size-4 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
+              isExpanded && "rotate-90",
             )}
           />
         </button>
       )}
 
       {/* Collapsed children are hidden, not unmounted — unmounting would
-          reset their state (expansion, async syntax highlighting). */}
+          reset their state (expansion, async syntax highlighting). The border
+          wraps all tools; the cards inside render borderless. */}
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          !headerless && "border-t border-border",
+          "overflow-hidden rounded-lg border border-border bg-card",
+          !headerless && "mt-2",
           !showChildren && "hidden",
         )}
       >

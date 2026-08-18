@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 )
 
 func TestGenerateLegibleOrgName_Format(t *testing.T) {
@@ -25,4 +27,15 @@ func TestGenerateLegibleOrgName_Distribution(t *testing.T) {
 		seen[generateLegibleOrgName()] = struct{}{}
 	}
 	require.Greater(t, len(seen), 100, "expected diverse names, got %d unique of 200", len(seen))
+}
+
+func TestGenerateLegibleOrgName_PassesValidation(t *testing.T) {
+	t.Parallel()
+
+	for range 200 {
+		name := generateLegibleOrgName()
+		validated, err := orgprovision.ValidateName(name)
+		require.NoError(t, err, "generated name %q must pass validation", name)
+		require.Equal(t, name, validated, "generated name %q must survive normalization unchanged", name)
+	}
 }

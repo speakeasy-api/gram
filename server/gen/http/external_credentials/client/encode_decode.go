@@ -2129,6 +2129,487 @@ func DecodeGetGcpIamCredentialResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildVerifyGcpIamCredentialRequest instantiates a HTTP request object with
+// method and path set to call the "externalCredentials" service
+// "verifyGcpIamCredential" endpoint
+func (c *Client) BuildVerifyGcpIamCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyGcpIamCredentialExternalCredentialsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("externalCredentials", "verifyGcpIamCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyGcpIamCredentialRequest returns an encoder for requests sent to
+// the externalCredentials verifyGcpIamCredential server.
+func EncodeVerifyGcpIamCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*externalcredentials.VerifyGcpIamCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("externalCredentials", "verifyGcpIamCredential", "*externalcredentials.VerifyGcpIamCredentialPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeVerifyGcpIamCredentialResponse returns a decoder for responses
+// returned by the externalCredentials verifyGcpIamCredential endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeVerifyGcpIamCredentialResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyGcpIamCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyGcpIamCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			res := NewVerifyGcpIamCredentialVerifyCredentialResultOK(&body)
+			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body VerifyGcpIamCredentialRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialRateLimitExceeded(&body)
+		case http.StatusUnauthorized:
+			var (
+				body VerifyGcpIamCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyGcpIamCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyGcpIamCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyGcpIamCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyGcpIamCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyGcpIamCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyGcpIamCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyGcpIamCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+				}
+				err = ValidateVerifyGcpIamCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+				}
+				return nil, NewVerifyGcpIamCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyGcpIamCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+				}
+				err = ValidateVerifyGcpIamCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+				}
+				return nil, NewVerifyGcpIamCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("externalCredentials", "verifyGcpIamCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyGcpIamCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			err = ValidateVerifyGcpIamCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "verifyGcpIamCredential", err)
+			}
+			return nil, NewVerifyGcpIamCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("externalCredentials", "verifyGcpIamCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetGcpSetupInfoRequest instantiates a HTTP request object with method
+// and path set to call the "externalCredentials" service "getGcpSetupInfo"
+// endpoint
+func (c *Client) BuildGetGcpSetupInfoRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGcpSetupInfoExternalCredentialsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("externalCredentials", "getGcpSetupInfo", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGcpSetupInfoRequest returns an encoder for requests sent to the
+// externalCredentials getGcpSetupInfo server.
+func EncodeGetGcpSetupInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*externalcredentials.GetGcpSetupInfoPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("externalCredentials", "getGcpSetupInfo", "*externalcredentials.GetGcpSetupInfoPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetGcpSetupInfoResponse returns a decoder for responses returned by
+// the externalCredentials getGcpSetupInfo endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetGcpSetupInfoResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGcpSetupInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGcpSetupInfoResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			res := NewGetGcpSetupInfoGcpSetupInfoOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGcpSetupInfoUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGcpSetupInfoForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGcpSetupInfoBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGcpSetupInfoNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGcpSetupInfoConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGcpSetupInfoUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGcpSetupInfoInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGcpSetupInfoInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+				}
+				err = ValidateGetGcpSetupInfoInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+				}
+				return nil, NewGetGcpSetupInfoInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGcpSetupInfoUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+				}
+				err = ValidateGetGcpSetupInfoUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+				}
+				return nil, NewGetGcpSetupInfoUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("externalCredentials", "getGcpSetupInfo", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGcpSetupInfoGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			err = ValidateGetGcpSetupInfoGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalCredentials", "getGcpSetupInfo", err)
+			}
+			return nil, NewGetGcpSetupInfoGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("externalCredentials", "getGcpSetupInfo", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteAwsIamCredentialRequest instantiates a HTTP request object with
 // method and path set to call the "externalCredentials" service
 // "deleteAwsIamCredential" endpoint

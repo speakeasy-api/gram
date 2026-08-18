@@ -28,6 +28,10 @@ type Client struct {
 	// switchScopes endpoint.
 	SwitchScopesDoer goahttp.Doer
 
+	// EnterDemo Doer is the HTTP client used to make requests to the enterDemo
+	// endpoint.
+	EnterDemoDoer goahttp.Doer
+
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
 
@@ -61,6 +65,7 @@ func NewClient(
 		CallbackDoer:        doer,
 		LoginDoer:           doer,
 		SwitchScopesDoer:    doer,
+		EnterDemoDoer:       doer,
 		LogoutDoer:          doer,
 		RegisterDoer:        doer,
 		InfoDoer:            doer,
@@ -139,6 +144,30 @@ func (c *Client) SwitchScopes() goa.Endpoint {
 		resp, err := c.SwitchScopesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "switchScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnterDemo returns an endpoint that makes HTTP requests to the auth service
+// enterDemo server.
+func (c *Client) EnterDemo() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnterDemoRequest(c.encoder)
+		decodeResponse = DecodeEnterDemoResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnterDemoRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnterDemoDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "enterDemo", err)
 		}
 		return decodeResponse(resp)
 	}

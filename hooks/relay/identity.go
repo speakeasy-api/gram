@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -327,17 +329,123 @@ func findCodexBinary() string {
 	}
 	home, _ := os.UserHomeDir()
 	codexHome := firstNonEmpty(os.Getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-	for _, candidate := range []string{
-		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
-		filepath.Join(home, ".local", "bin", "codex"),
-		"/usr/local/bin/codex",
-		"/Applications/Codex.app/Contents/Resources/codex",
-	} {
+	return probeCodexBinary(codexBinaryCandidates(home, codexHome))
+}
+
+// probeCodexBinary returns the first candidate that is a runnable file. A
+// present-but-non-executable path is skipped rather than returned: the caller
+// execs the result, so a path it cannot run is worse than none.
+func probeCodexBinary(candidates []string) string {
+	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
 			return candidate
 		}
 	}
 	return ""
+}
+
+// codexBinaryCandidates lists the install locations to probe, in preference
+// order, when codex is not on PATH. A managed or user install outranks the
+// copies bundled inside an app: OpenAI merged the standalone Codex app into
+// the ChatGPT app, so ChatGPT.app is probed ahead of the frozen Codex.app and
+// a machine carrying both prefers the maintained copy. Mirrors the ordering
+// the generated install script's find_codex uses.
+func codexBinaryCandidates(home, codexHome string) []string {
+	candidates := []string{
+		filepath.Join(codexHome, "packages", "standalone", "current", "bin", "codex"),
+		filepath.Join(home, ".local", "bin", "codex"),
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+	}
+	// The editor extensions ship their own copy, and on a machine that runs
+	// Codex only from an editor it is the only one there is.
+	candidates = append(candidates, codexEditorExtensionBinaries(home)...)
+	// Frozen: superseded by the unified ChatGPT app, so it ranks last.
+	return append(candidates, "/Applications/Codex.app/Contents/Resources/codex")
+}
+
+// codexEditorExtensionBinaries finds the codex copies bundled with the ChatGPT
+// editor extensions. Both path segments vary — the extension directory carries
+// the version and platform, the inner directory the target triple — so they are
+// globbed rather than listed. Matches come back newest-first by the version
+// parsed out of the extension directory name: an editor leaves the superseded
+// build on disk across an upgrade, and probing a stale codex first means
+// running a binary the user already replaced. The whole set is ordered at once
+// rather than per editor, because the newest build on a machine may live under
+// any of them.
+func codexEditorExtensionBinaries(home string) []string {
+	if home == "" {
+		return nil
+	}
+	var found []string
+	versions := map[string][]int{}
+	for _, editorDir := range []string{".vscode", ".vscode-insiders", ".vscode-server", ".cursor", ".windsurf"} {
+		matches, err := filepath.Glob(filepath.Join(home, editorDir, "extensions", "openai.chatgpt-*", "bin", "*", "codex"))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			versions[match] = codexExtensionVersion(match)
+			found = append(found, match)
+		}
+	}
+	// Stable so equally-versioned copies keep glob order and the probe order
+	// stays reproducible run to run.
+	slices.SortStableFunc(found, func(a, b string) int {
+		return compareCodexExtensionVersions(versions[a], versions[b])
+	})
+	return found
+}
+
+// codexExtensionVersion reads the version out of an
+// openai.chatgpt-<version>-<platform> extension directory as its numeric
+// components, so 26.10.0 can outrank 26.9.0 — a lexical comparison gets that
+// backwards the moment a component grows a digit. A name we cannot read yields
+// nil, which the ordering treats as unknown rather than as version zero.
+func codexExtensionVersion(binary string) []int {
+	// <extensions>/openai.chatgpt-<version>-<platform>/bin/<triple>/codex
+	name := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(binary))))
+	rest, ok := strings.CutPrefix(name, "openai.chatgpt-")
+	if !ok {
+		return nil
+	}
+	version, _, _ := strings.Cut(rest, "-")
+	var components []int
+	for field := range strings.SplitSeq(version, ".") {
+		number, err := strconv.Atoi(field)
+		if err != nil {
+			return nil
+		}
+		components = append(components, number)
+	}
+	return components
+}
+
+// compareCodexExtensionVersions orders parsed versions newest-first. An
+// unreadable version sorts last but is never dropped: a copy that exists on
+// disk is still worth probing when nothing better is installed.
+func compareCodexExtensionVersions(a, b []int) int {
+	switch {
+	case len(a) == 0 && len(b) == 0:
+		return 0
+	case len(a) == 0:
+		return 1
+	case len(b) == 0:
+		return -1
+	}
+	for i := range max(len(a), len(b)) {
+		var left, right int
+		if i < len(a) {
+			left = a[i]
+		}
+		if i < len(b) {
+			right = b[i]
+		}
+		if left != right {
+			return cmp.Compare(right, left)
+		}
+	}
+	return 0
 }
 
 func codexAuthFileEmail() string {

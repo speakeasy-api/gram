@@ -28,9 +28,29 @@ type GetUserSessionClientResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
@@ -39,6 +59,55 @@ type GetUserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
+}
+
+// RefreshUserSessionClientCIMDResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body.
+type RefreshUserSessionClientCIMDResponseBody struct {
+	// The user_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning user_session_issuer id.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// Validated on every /authorize.
+	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
+	ClientIDIssuedAt string   `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -421,6 +490,196 @@ type GetUserSessionClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RefreshUserSessionClientCIMDUnauthorizedResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshUserSessionClientCIMDUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDForbiddenResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshUserSessionClientCIMDForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDBadRequestResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshUserSessionClientCIMDBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDNotFoundResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshUserSessionClientCIMDNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDConflictResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshUserSessionClientCIMDConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDUnsupportedMediaResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshUserSessionClientCIMDUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDInvalidResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshUserSessionClientCIMDInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDInvariantViolationResponseBody is the type of
+// the "userSessionClients" service "refreshUserSessionClientCIMD" endpoint
+// HTTP response body for the "invariant_violation" error.
+type RefreshUserSessionClientCIMDInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDUnexpectedResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshUserSessionClientCIMDUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshUserSessionClientCIMDGatewayErrorResponseBody is the type of the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshUserSessionClientCIMDGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RevokeUserSessionClientUnauthorizedResponseBody is the type of the
 // "userSessionClients" service "revokeUserSessionClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -618,9 +877,29 @@ type UserSessionClientResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
@@ -629,6 +908,10 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // NewListUserSessionClientsResponseBody builds the HTTP response body from the
@@ -658,14 +941,49 @@ func NewListUserSessionClientsResponseBody(res *usersessionclients.ListUserSessi
 // service.
 func NewGetUserSessionClientResponseBody(res *types.UserSessionClient) *GetUserSessionClientResponseBody {
 	body := &GetUserSessionClientResponseBody{
-		ID:                    res.ID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientName:            res.ClientName,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                             res.ID,
+		UserSessionIssuerID:            res.UserSessionIssuerID,
+		ClientID:                       res.ClientID,
+		ClientIDMetadataURI:            res.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      res.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: res.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           res.ClientIDMetadataEtag,
+		ClientName:                     res.ClientName,
+		ClientIDIssuedAt:               res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          res.ClientSecretExpiresAt,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+		ActiveSessionCount:             res.ActiveSessionCount,
+	}
+	if res.RedirectUris != nil {
+		body.RedirectUris = make([]string, len(res.RedirectUris))
+		for i, val := range res.RedirectUris {
+			body.RedirectUris[i] = val
+		}
+	} else {
+		body.RedirectUris = []string{}
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDResponseBody builds the HTTP response body
+// from the result of the "refreshUserSessionClientCIMD" endpoint of the
+// "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDResponseBody(res *types.UserSessionClient) *RefreshUserSessionClientCIMDResponseBody {
+	body := &RefreshUserSessionClientCIMDResponseBody{
+		ID:                             res.ID,
+		UserSessionIssuerID:            res.UserSessionIssuerID,
+		ClientID:                       res.ClientID,
+		ClientIDMetadataURI:            res.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      res.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: res.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           res.ClientIDMetadataEtag,
+		ClientName:                     res.ClientName,
+		ClientIDIssuedAt:               res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          res.ClientSecretExpiresAt,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+		ActiveSessionCount:             res.ActiveSessionCount,
 	}
 	if res.RedirectUris != nil {
 		body.RedirectUris = make([]string, len(res.RedirectUris))
@@ -978,6 +1296,156 @@ func NewGetUserSessionClientGatewayErrorResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewRefreshUserSessionClientCIMDUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDUnauthorizedResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDUnauthorizedResponseBody {
+	body := &RefreshUserSessionClientCIMDUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDForbiddenResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDForbiddenResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDForbiddenResponseBody {
+	body := &RefreshUserSessionClientCIMDForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDBadRequestResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDBadRequestResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDBadRequestResponseBody {
+	body := &RefreshUserSessionClientCIMDBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDNotFoundResponseBody builds the HTTP response
+// body from the result of the "refreshUserSessionClientCIMD" endpoint of the
+// "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDNotFoundResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDNotFoundResponseBody {
+	body := &RefreshUserSessionClientCIMDNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDConflictResponseBody builds the HTTP response
+// body from the result of the "refreshUserSessionClientCIMD" endpoint of the
+// "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDConflictResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDConflictResponseBody {
+	body := &RefreshUserSessionClientCIMDConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDUnsupportedMediaResponseBody {
+	body := &RefreshUserSessionClientCIMDUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDInvalidResponseBody builds the HTTP response
+// body from the result of the "refreshUserSessionClientCIMD" endpoint of the
+// "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDInvalidResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDInvalidResponseBody {
+	body := &RefreshUserSessionClientCIMDInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "refreshUserSessionClientCIMD"
+// endpoint of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDInvariantViolationResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDInvariantViolationResponseBody {
+	body := &RefreshUserSessionClientCIMDInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDUnexpectedResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDUnexpectedResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDUnexpectedResponseBody {
+	body := &RefreshUserSessionClientCIMDUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshUserSessionClientCIMDGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "refreshUserSessionClientCIMD" endpoint
+// of the "userSessionClients" service.
+func NewRefreshUserSessionClientCIMDGatewayErrorResponseBody(res *goa.ServiceError) *RefreshUserSessionClientCIMDGatewayErrorResponseBody {
+	body := &RefreshUserSessionClientCIMDGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRevokeUserSessionClientUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "revokeUserSessionClient" endpoint of the
 // "userSessionClients" service.
@@ -1146,6 +1614,18 @@ func NewListUserSessionClientsPayload(userSessionIssuerID *string, cursor *strin
 // getUserSessionClient endpoint payload.
 func NewGetUserSessionClientPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.GetUserSessionClientPayload {
 	v := &usersessionclients.GetUserSessionClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRefreshUserSessionClientCIMDPayload builds a userSessionClients service
+// refreshUserSessionClientCIMD endpoint payload.
+func NewRefreshUserSessionClientCIMDPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.RefreshUserSessionClientCIMDPayload {
+	v := &usersessionclients.RefreshUserSessionClientCIMDPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

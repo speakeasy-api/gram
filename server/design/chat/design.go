@@ -23,6 +23,7 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("user_id", String, "Filter by Gram user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
@@ -72,6 +73,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("user_id")
 			Param("source")
 			Param("assistant_id")
 			Param("source_kind")
@@ -95,6 +97,42 @@ var _ = Service("chat", func() {
 		Meta("openapi:operationId", "listChats")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats", "type": "query"}`)
+	})
+
+	Method("getAssistantSessionSummary", func() {
+		Security(security.Session, security.ProjectSlug)
+		Description("Get assistant session activity totals for a time range.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("assistant_id", String, "The assistant whose activity to summarize", func() {
+				Format(FormatUUID)
+			})
+			Attribute("from", String, "Start of the activity range (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "End of the activity range (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Required("assistant_id", "from", "to")
+		})
+
+		Result(AssistantSessionSummary)
+
+		HTTP(func() {
+			GET("/rpc/chat.getAssistantSessionSummary")
+			Param("assistant_id")
+			Param("from")
+			Param("to")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAssistantSessionSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAssistantSessionSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AssistantSessionSummary", "type": "query"}`)
 	})
 
 	Method("getWorkUnitsTrend", func() {
@@ -334,6 +372,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
 	})
 
+	Method("summarizeToolCall", func() {
+		Description("Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat containing the tool call", func() { Format(FormatUUID) })
+			Attribute("message_id", String, "The ID of the assistant message containing the tool call", func() { Format(FormatUUID) })
+			Attribute("tool_call_id", String, "The provider-assigned ID of the tool call")
+			Required("id", "message_id", "tool_call_id")
+		})
+
+		Result(SummarizeToolCallResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarizeToolCall")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeToolCall")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarizeToolCall")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeToolCall"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -423,6 +489,14 @@ var ListChatsResult = Type("ListChatsResult", func() {
 	Required("chats", "total")
 })
 
+var AssistantSessionSummary = Type("AssistantSessionSummary", func() {
+	Attribute("sessions", Int64, "Number of sessions with activity in the range")
+	Attribute("messages", Int64, "Number of messages created in the range")
+	Attribute("total_tokens", Int64, "Tokens consumed in the range")
+	Attribute("total_cost", Float64, "Cost in USD incurred in the range")
+	Required("sessions", "messages", "total_tokens", "total_cost")
+})
+
 var SummarizeChatResult = Type("SummarizeChatResult", func() {
 	Attribute("summary", String, "The session summary text")
 	Attribute("summary_generated_at", String, func() {
@@ -431,6 +505,15 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 	})
 	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
 	Required("summary", "summary_generated_at", "cached")
+})
+
+var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
+	Attribute("summary", String, "A concise two-sentence description of the tool call and its effect")
+	Attribute("impact", String, "Whether the tool call only read data or could change state", func() {
+		Enum("read_only", "destructive")
+	})
+	Attribute("cached", Boolean, "True when a stored summary was returned without calling the model")
+	Required("summary", "impact", "cached")
 })
 
 var ChatOverview = Type("ChatOverview", func() {
@@ -442,6 +525,8 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
+	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")
+	Attribute("litellm_proxied", Boolean, "True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
 		Format(FormatDateTime)

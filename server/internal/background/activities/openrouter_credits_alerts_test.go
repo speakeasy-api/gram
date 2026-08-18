@@ -10,15 +10,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	modelkeysrepo "github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func setupOpenRouterCreditsAlertsTest(t *testing.T, dbName string) (*activities.MaybeSendOpenRouterCreditsAlerts, *pgxpool.Pool, *captureLoopsClient, cache.Cache) {
@@ -36,7 +43,10 @@ func setupOpenRouterCreditsAlertsTest(t *testing.T, dbName string) (*activities.
 		testenv.NewLogger(t),
 		conn,
 		cacheAdapter,
-		email.NewService(testenv.NewLogger(t), captured),
+		email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+			"openrouter_chat_credits_threshold":     "chat-credits-test-id",
+			"openrouter_internal_credits_threshold": "internal-credits-test-id",
+		}), true),
 		testenv.NewMeterProvider(t),
 	)
 
@@ -47,6 +57,11 @@ func setupOpenRouterCreditsAlertsTest(t *testing.T, dbName string) (*activities.
 // alertEmail is stored as the billing alert contact; a non-empty byokSlot
 // additionally attaches an enabled customer model provider key in that slot.
 func createAlertOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, alertEmail string, byokSlot string) (orgID, orgName string) {
+	t.Helper()
+	return createAlertOrgWithAccountType(t, ctx, conn, alertEmail, byokSlot, billing.TierEnterprise)
+}
+
+func createAlertOrgWithAccountType(t *testing.T, ctx context.Context, conn *pgxpool.Pool, alertEmail string, byokSlot string, accountType billing.Tier) (orgID, orgName string) {
 	t.Helper()
 
 	orgID = "org-" + uuid.NewString()[:8]
@@ -59,6 +74,10 @@ func createAlertOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, alert
 		Whitelisted: pgtype.Bool{},
 	})
 	require.NoError(t, err)
+	require.NoError(t, orgrepo.New(conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+		GramAccountType: string(accountType),
+		ID:              orgID,
+	}))
 
 	_, err = usagerepo.New(conn).UpsertBillingMetadata(ctx, usagerepo.UpsertBillingMetadataParams{
 		OrganizationID:         orgID,
@@ -91,6 +110,32 @@ func createAlertOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, alert
 	return orgID, orgName
 }
 
+func seedAlertAdminRecipient(t *testing.T, conn *pgxpool.Pool, organizationID, userID, adminEmail string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(t.Context(), usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       adminEmail,
+		DisplayName: userID,
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).CreateOrganizationUserRelationshipFixture(t.Context(), testrepo.CreateOrganizationUserRelationshipFixtureParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	}))
+	selectors, err := authz.NewSelector(authz.ScopeOrgAdmin, organizationID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+		Scope:          string(authz.ScopeOrgAdmin),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+}
+
 func chatCreditsMetric(orgID string, used float64, limit int64) activities.OpenRouterCreditsMetric {
 	return activities.OpenRouterCreditsMetric{
 		OrganizationID:   orgID,
@@ -117,10 +162,16 @@ func internalCreditsMetric(orgID string, used float64, limit int64) activities.O
 	return m
 }
 
+func paygCreditsMetric(orgID string, used float64, limit int64) activities.OpenRouterCreditsMetric {
+	m := chatCreditsMetric(orgID, used, limit)
+	m.AccountType = string(billing.TierPayg)
+	return m
+}
+
 // Template IDs distinguish which email family a captured send used.
 var (
-	chatCreditsTemplateID     = string(email.OpenRouterChatCreditsThreshold{}.TransactionalID())
-	internalCreditsTemplateID = string(email.OpenRouterInternalCreditsThreshold{}.TransactionalID())
+	chatCreditsTemplateID     = "chat-credits-test-id"
+	internalCreditsTemplateID = "internal-credits-test-id"
 )
 
 func TestMaybeSendOpenRouterCreditsAlerts_SendsHighestCrossedThreshold(t *testing.T) {
@@ -228,6 +279,66 @@ func TestMaybeSendOpenRouterCreditsAlerts_SkipsWithoutAlertEmail(t *testing.T) {
 
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 95, 100)}))
 	require.Empty(t, captured.Sent(), "no billing alert contact means no email")
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_PAYGWithoutExplicitEmailSendsAllEffectiveAdmins(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, _ := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_payg_admins")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "", "", billing.TierPayg)
+	seedAlertAdminRecipient(t, conn, orgID, "admin-beta", "beta@example.test")
+	seedAlertAdminRecipient(t, conn, orgID, "admin-alpha", "alpha@example.test")
+
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+
+	sent := captured.Sent()
+	require.Len(t, sent, 2)
+	require.Equal(t, "alpha@example.test", sent[0].Email)
+	require.Equal(t, "beta@example.test", sent[1].Email)
+	require.NotEqual(t, sent[0].IdempotencyKey, sent[1].IdempotencyKey)
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_PAYGExplicitEmailOverridesAdmins(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, _ := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_payg_explicit")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
+	seedAlertAdminRecipient(t, conn, orgID, "admin-unused", "admin@example.test")
+
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+
+	sent := captured.Sent()
+	require.Len(t, sent, 1)
+	require.Equal(t, "billing@example.test", sent[0].Email)
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_PartialPAYGAudienceRetriesOnlyFailedRecipients(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_payg_partial_retry")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "", "", billing.TierPayg)
+	seedAlertAdminRecipient(t, conn, orgID, "admin-alpha", "alpha@example.test")
+	seedAlertAdminRecipient(t, conn, orgID, "admin-beta", "beta@example.test")
+	captured.FailNext(1)
+
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+	firstAttempt := captured.Sent()
+	require.Len(t, firstAttempt, 1)
+	require.Equal(t, "beta@example.test", firstAttempt[0].Email)
+
+	// The org reservation remains at its short retry TTL because one recipient
+	// failed; an immediate workflow tick does not hammer Loops.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+	require.Len(t, captured.Sent(), 1)
+
+	deleteAlertReservation(t, ctx, cacheAdapter, orgID, openrouter.KeyTypeChat, 90)
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+	retry := captured.Sent()
+	require.Len(t, retry, 2)
+	require.Equal(t, "alpha@example.test", retry[1].Email)
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_ChatBYOKSuppressesOnlyChatAlerts(t *testing.T) {

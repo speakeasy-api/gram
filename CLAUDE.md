@@ -78,9 +78,9 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 <commands>
 
-- `pnpm -F dashboard type-check`: Type-check the dashboard
-- `pnpm -F dashboard build`: Build the dashboard
-- `pnpm -F dashboard dev`: Run dev server
+- `aube run -F dashboard type-check`: Type-check the dashboard
+- `aube run -F dashboard build`: Build the dashboard
+- `aube run -F dashboard dev`: Run dev server
 
 </commands>
 
@@ -113,50 +113,15 @@ mise run start
 
 </important>
 
-## Skills
-
-Skills provide domain-specific rules and best practices.
-
-<important>
-
-Activate a skill when your task falls within its scope.
-
-</important>
-
-| Skill                             | When to activate                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------- |
-| `golang`                          | Writing or editing Go code                                                      |
-| `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema      |
-| `clickhouse`                      | Working with ClickHouse queries, schema, or migrations in the `server/` package |
-| `frontend`                        | Working on the React frontend in `client/`                                      |
-| `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices           |
-| `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature      |
-| `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)              |
-| `gram-audit-logging`              | Recording or exposing audit events via the auditlogs management API             |
-| `gram-rbac`                       | Adding or enforcing authorization scopes, grants, or roles                      |
-| `gram-pubsub`                     | Declaring Pub/Sub topics/subscriptions via proto, or publishing/consuming       |
-| `gram-pubsub-python`              | Building or running Python (`pystreams/`) Pub/Sub subscribers, NLP/ML use cases |
-| `gram-telemetry-query-dimensions` | Adding telemetry query group/filter attributes                                  |
-| `feature-flag`                    | Deciding between `productfeatures` vs PostHog flags, or adding either           |
-| `glint`                           | Authoring or editing analyzers in the `glint/` go/analysis package              |
-| `mise-tasks`                      | Creating or editing mise task scripts in `.mise-tasks/`                         |
-| `jaeger`                          | Testing backend endpoints locally and inspecting traces via Jaeger API          |
-| `pitchfork`                       | Starting/stopping/restarting local dev services or querying their logs          |
-| `worktrunk`                       | `wt` worktrees: create/boot/remove stacks, hooks, config (via `./zero` opt-in)  |
-| `writing-skills`                  | Adding or editing an agent skill in `.agents/skills/` and validating it         |
-| `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog          |
-| `datadog-insights`                | Running the full Gram production health digest and posting it to Slack          |
-| `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
-| `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
-| `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
-| `pr`                              | Creating a Pull Request for current changes                                     |
-| `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
-
 # Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
-- Identify any of the skills above that are relevant to the task so you can activate when implementing.
+- Identify any available skills relevant to the task so you can activate them when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
+
+## Pull requests
+
+**Use the `pull-request` skill when preparing pull requests.** It contains the guidelines we follow to prepare work for review and how to present the PR title and description.
 
 ## Cursor Cloud specific instructions
 

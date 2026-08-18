@@ -7,13 +7,15 @@ package repo
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createOpenRouterAPIKey = `-- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
-  , key
+  , key_encrypted
   , key_hash
   , monthly_credits
 ) VALUES (
@@ -23,13 +25,13 @@ INSERT INTO openrouter_api_keys (
   , $4
   , $5
 )
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 }
@@ -38,7 +40,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	row := q.db.QueryRow(ctx, createOpenRouterAPIKey,
 		arg.OrganizationID,
 		arg.KeyType,
-		arg.Key,
+		arg.KeyEncrypted,
 		arg.KeyHash,
 		arg.MonthlyCredits,
 	)
@@ -47,6 +49,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -58,8 +61,30 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	return i, err
 }
 
+const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type DisableOpenRouterAPIKeyParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Locks the key down without deleting it, so a reinstated organization keeps
+// the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
+// refuses to hand the key to a completion.
+func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -78,6 +103,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -107,17 +133,18 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = $1, key_hash = $2, key = $3
+SET monthly_credits = $1, key_hash = $2,
+    disabled = disabled AND NOT $3::boolean
 WHERE organization_id = $4
   AND key_type = $5
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Key            string
+	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -126,7 +153,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
-		arg.Key,
+		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)
@@ -135,6 +162,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -164,7 +192,7 @@ type UpdateOpenRouterKeyMonthlyCreditsParams struct {
 // metrics-collection reconciliation path when the upstream OpenRouter limit
 // diverges from the locally cached value (e.g. after a manual change on the
 // OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
-// key-provisioning write path and also mutates key/key_hash.
+// key-provisioning write path and also mutates key_hash.
 func (q *Queries) UpdateOpenRouterKeyMonthlyCredits(ctx context.Context, arg UpdateOpenRouterKeyMonthlyCreditsParams) error {
 	_, err := q.db.Exec(ctx, updateOpenRouterKeyMonthlyCredits, arg.MonthlyCredits, arg.OrganizationID, arg.KeyType)
 	return err

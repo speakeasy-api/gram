@@ -1,0 +1,225 @@
+edition = "2024";
+
+package gram.otel.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
+
+// LogRecord is one OTLP log record carried as a single self-contained message.
+//
+// It is a wire-compatible superset of opentelemetry.proto.logs.v1.LogRecord:
+// every field OTLP defines keeps OTLP's exact field number and scalar type, so
+// these bytes unmarshal directly into an OTLP LogRecord and vice versa. That is
+// why the numbering below is not sequential — it is OTLP's numbering, not ours,
+// and it must not be renumbered. Everything Gram adds lives at 1000+, where an
+// OTLP parser skips it as unknown fields.
+//
+// This message is the high-resolution record of what was observed. Storage
+// projections are derived from it and are allowed to be lossy — a ClickHouse
+// JSON column, for instance, collapses int64 and double into one number type.
+// Keeping the topic lossless is what makes those projections re-derivable when
+// their shape needs to change.
+//
+// The one structural change from OTLP is that the
+// ResourceLogs → ScopeLogs → LogRecord nesting is collapsed: the resource and
+// scope a record belonged to are carried inline, so one message is one record
+// and a subscriber never has to walk a tree. The cost is that resource and
+// scope repeat on every record, which at volume is a large share of the
+// payload. Publisher-side compression (opt-in, off by default) reduces it on
+// the wire; the archive writer regroups records under a shared resource and
+// scope, so the durable copy does not pay it at all.
+//
+// The nested Resource, InstrumentationScope, AnyValue and friends are copies of
+// the types in opentelemetry.proto.{resource,common}.v1 rather than imports,
+// because a Pub/Sub schema must be a single self-contained file (the generator
+// strips imports before compiling the definition). Their field numbers match
+// the originals, which is what keeps this message wire-compatible.
+//
+// Delivery is at-least-once and retried publishes can duplicate messages, so
+// consumers must dedupe by record_id. Note that presence differs from OTLP: these
+// fields have explicit presence (proto editions default) where OTLP's proto3
+// fields have implicit presence, so a zero value is serialized here and omitted
+// there. Both parse either way; only the byte count differs.
+message LogRecord {
+  // Field 4 is reserved upstream (a removed `name` field). Do not use it.
+  reserved 4;
+
+  // Nanoseconds since the Unix epoch at which the event occurred. 0 means the
+  // producer did not know, in which case observed_time_unix_nano stands in.
+  fixed64 time_unix_nano = 1;
+
+  SeverityNumber severity_number = 2;
+  string severity_text = 3;
+
+  // The log body. Typed exactly as OTLP types it: a string body, a number, or
+  // a whole structured payload.
+  AnyValue body = 5;
+
+  repeated KeyValue attributes = 6;
+  uint32 dropped_attributes_count = 7;
+
+  // W3C trace flags for the emitting span context.
+  fixed32 flags = 8;
+
+  // OTLP raw form: 16 and 8 bytes respectively. Empty means the record has no
+  // span context; OTLP also treats an all-zero value as invalid/absent, so
+  // consumers must accept both.
+  bytes trace_id = 9;
+  bytes span_id = 10;
+
+  // Nanoseconds since the Unix epoch at which the collector observed the
+  // event.
+  fixed64 observed_time_unix_nano = 11;
+
+  // Event name for records that represent a named event (OTLP 1.5+).
+  string event_name = 12;
+
+  // ---------------------------------------------------------------------
+  // Inlined OTLP context and Gram additions. Invisible to an OTLP parser,
+  // which treats these as unknown fields.
+  //
+  // resource and scope are held as whole submessages rather than loose fields
+  // so the archive writer rebuilds ResourceLogs/ScopeLogs by assigning them
+  // across, not by reassembling. The schema_urls sit beside them because
+  // upstream declares those on ResourceLogs/ScopeLogs, not on the resource or
+  // the scope itself.
+  // ---------------------------------------------------------------------
+
+  // Publisher-assigned unique id for this record. Not an OTLP concept, and not
+  // provenance either: it is a delivery concern, giving consumers a stable
+  // dedupe key since OTLP log records carry no identity of their own. Must
+  // survive republishing of the same record.
+  string record_id = 1000;
+
+  Resource resource = 1001;
+  string resource_schema_url = 1002;
+
+  InstrumentationScope scope = 1003;
+  string scope_schema_url = 1004;
+
+  Provenance provenance = 1005;
+
+  // Provenance is where a record came from: which component emitted it and
+  // which tenant it belongs to. Its presence answers whether a record passed
+  // through the Gram ingest edge at all — one relayed straight from an OTLP
+  // producer has none.
+  //
+  // Retention, data classification and anything else policy-derived does not
+  // belong here: those are computed from current policy state rather than
+  // observed, and would need their own submessage if they are ever pinned onto
+  // a record.
+  message Provenance {
+    // Emitting component, e.g. risk, mcp-gateway, rbac.
+    string source = 1;
+
+    // Tenancy, stamped by the ingesting edge from authenticated state. Resource
+    // attributes are producer-controlled, so tenancy is never read back out of
+    // them.
+    string organization_id = 2;
+    string project_id = 3;
+  }
+
+  // Resource is a copy of opentelemetry.proto.resource.v1.Resource, field
+  // numbers included. Field 3 (entity_refs) is not carried: it is Development
+  // status upstream. It stays reserved so the number cannot be reused for
+  // something else, which would break the compatibility guarantee.
+  message Resource {
+    reserved 3;
+
+    repeated KeyValue attributes = 1;
+    uint32 dropped_attributes_count = 2;
+  }
+
+  // InstrumentationScope is a copy of
+  // opentelemetry.proto.common.v1.InstrumentationScope, field numbers included.
+  message InstrumentationScope {
+    string name = 1;
+    string version = 2;
+    repeated KeyValue attributes = 3;
+    uint32 dropped_attributes_count = 4;
+  }
+
+  // SeverityNumber mirrors opentelemetry.proto.logs.v1.SeverityNumber value
+  // for value, so a forwarder can cast straight across. The OTLP zero value is
+  // SEVERITY_NUMBER_UNSPECIFIED, which is also what a producer that does not
+  // classify severity should send.
+  enum SeverityNumber {
+    SEVERITY_NUMBER_UNSPECIFIED = 0;
+    SEVERITY_NUMBER_TRACE = 1;
+    SEVERITY_NUMBER_TRACE2 = 2;
+    SEVERITY_NUMBER_TRACE3 = 3;
+    SEVERITY_NUMBER_TRACE4 = 4;
+    SEVERITY_NUMBER_DEBUG = 5;
+    SEVERITY_NUMBER_DEBUG2 = 6;
+    SEVERITY_NUMBER_DEBUG3 = 7;
+    SEVERITY_NUMBER_DEBUG4 = 8;
+    SEVERITY_NUMBER_INFO = 9;
+    SEVERITY_NUMBER_INFO2 = 10;
+    SEVERITY_NUMBER_INFO3 = 11;
+    SEVERITY_NUMBER_INFO4 = 12;
+    SEVERITY_NUMBER_WARN = 13;
+    SEVERITY_NUMBER_WARN2 = 14;
+    SEVERITY_NUMBER_WARN3 = 15;
+    SEVERITY_NUMBER_WARN4 = 16;
+    SEVERITY_NUMBER_ERROR = 17;
+    SEVERITY_NUMBER_ERROR2 = 18;
+    SEVERITY_NUMBER_ERROR3 = 19;
+    SEVERITY_NUMBER_ERROR4 = 20;
+    SEVERITY_NUMBER_FATAL = 21;
+    SEVERITY_NUMBER_FATAL2 = 22;
+    SEVERITY_NUMBER_FATAL3 = 23;
+    SEVERITY_NUMBER_FATAL4 = 24;
+  }
+
+  // AnyValue is a copy of opentelemetry.proto.common.v1.AnyValue, field numbers
+  // included. An unset oneof is OTLP's empty value and is distinct from an
+  // empty string.
+  //
+  // Field 8 (string_value_strindex) is not carried: it is Alpha upstream and
+  // used exclusively by the Profiling signal, which specifies that receivers of
+  // other signals treat its presence as non-fatal and process the value as
+  // absent. It stays reserved so the number cannot be reused.
+  message AnyValue {
+    reserved 8;
+
+    oneof value {
+      string string_value = 1;
+      bool bool_value = 2;
+      int64 int_value = 3;
+      double double_value = 4;
+      ArrayValue array_value = 5;
+      KeyValueList kvlist_value = 6;
+      bytes bytes_value = 7;
+    }
+  }
+
+  // ArrayValue is a copy of opentelemetry.proto.common.v1.ArrayValue. Element
+  // types may be heterogeneous, exactly as in OTLP.
+  message ArrayValue {
+    repeated AnyValue values = 1;
+  }
+
+  // KeyValueList is a copy of opentelemetry.proto.common.v1.KeyValueList.
+  message KeyValueList {
+    repeated KeyValue values = 1;
+  }
+
+  // KeyValue is a copy of opentelemetry.proto.common.v1.KeyValue.
+  //
+  // Field 3 (key_strindex) is not carried, for the same reason as
+  // AnyValue.string_value_strindex: it indexes into a Profiling-signal string
+  // table that logs and traces do not carry. Reserved so it cannot be reused.
+  message KeyValue {
+    reserved 3;
+
+    string key = 1;
+    AnyValue value = 2;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

@@ -1,0 +1,5 @@
+model_list:
+  - model_name: openrouter
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY

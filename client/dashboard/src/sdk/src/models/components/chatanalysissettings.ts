@@ -13,6 +13,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ChatAnalysisSettings = {
   /**
+   * Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.
+   */
+  businessMemoryDailyCap: number;
+  /**
+   * Whether completed sessions are mined for business memories.
+   */
+  businessMemoryEnabled: boolean;
+  /**
    * Whether these values are platform defaults rather than stored organization settings.
    */
   isDefault: boolean;
@@ -36,6 +44,8 @@ export const ChatAnalysisSettings$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    business_memory_daily_cap: z.int(),
+    business_memory_enabled: z.boolean(),
     is_default: z.boolean(),
     organization_id: z.string(),
     work_units_daily_cap: z.int(),
@@ -43,6 +53,8 @@ export const ChatAnalysisSettings$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "business_memory_daily_cap": "businessMemoryDailyCap",
+      "business_memory_enabled": "businessMemoryEnabled",
       "is_default": "isDefault",
       "organization_id": "organizationId",
       "work_units_daily_cap": "workUnitsDailyCap",

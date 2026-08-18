@@ -473,6 +473,31 @@ func (s *Service) prepareProxyBackendContext(
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.
 	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
+	if issuerGated {
+		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeNotFound, err, "issuer-gated mcp server project not found")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load issuer-gated mcp server project").LogError(ctx, logger)
+		}
+
+		// Public issuer-gated endpoints may carry an anonymous subject, which
+		// intentionally has no dashboard AuthContext. Private endpoints still
+		// require one; when present, always bind it to the owning organization
+		// before exposing a project context to the proxy.
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			if mcpServer.Visibility == mcpservers.VisibilityPrivate {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+		} else {
+			if project.OrganizationID != authCtx.ActiveOrganizationID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+		}
+	}
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's
@@ -517,7 +542,11 @@ func (s *Service) prepareProxyBackendContext(
 
 		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
+			serverName := ""
+			if mcpServer.Name.Valid {
+				serverName = mcpServer.Name.String
+			}
+			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the

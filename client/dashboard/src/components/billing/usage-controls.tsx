@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/utils";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useCallback, useState } from "react";
 
 export const TopUpCTA = (): JSX.Element => {
@@ -18,7 +18,7 @@ export const TopUpCTA = (): JSX.Element => {
         telemetry.capture("topup_checkout_error", { error: "empty link" });
         return;
       }
-      window.open(link, "_blank");
+      openSafeExternalUrl(link);
     } catch (err) {
       telemetry.capture("topup_checkout_error", {
         error: err instanceof Error ? err.message : "unknown",
@@ -63,10 +63,7 @@ export const UsageProgress = ({
 
   const includedProgress = (
     <div
-      className={cn(
-        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
-        anyOverage && "rounded-r-none",
-      )}
+      className="bg-muted relative h-4 overflow-hidden dark:bg-neutral-800"
       style={{ width: `${includedWidth}%` }}
     >
       <div
@@ -80,7 +77,7 @@ export const UsageProgress = ({
 
   const overageProgress = anyOverage ? (
     <div
-      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
+      className="bg-muted relative h-4 overflow-hidden dark:bg-neutral-800"
       style={{ width: `${overageWidth}%` }}
     >
       <div

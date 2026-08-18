@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
 import { DotRow } from "@/components/ui/DotRow";
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
@@ -34,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { Heading } from "@/components/ui/Heading";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,6 +44,7 @@ import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProviderSheet";
+import { CreateRemoteSessionClientSheet } from "./CreateRemoteSessionClientSheet";
 import { issuerDisplayName } from "./issuerDisplay";
 import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
 import { migrationCandidates } from "./migrationCandidates";
@@ -54,27 +56,24 @@ export function RemoteIdentityProvidersRoot(): JSX.Element {
 
 export function RemoteIdentityProvidersPage(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <RemoteIdentityProvidersOverview />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <RemoteIdentityProvidersOverview />
+    </RequireScope>
   );
 }
 
 function RemoteIdentityProvidersOverview() {
   const queryClient = useQueryClient();
+  const orgRoutes = useOrgRoutes();
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { data, isLoading } = useOrganizationRemoteSessionIssuers({});
   const [deleteTarget, setDeleteTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [moveTarget, setMoveTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [migrateSource, setMigrateSource] =
+    useState<OrganizationRemoteSessionIssuer | null>(null);
+  const [addClientTarget, setAddClientTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -164,11 +163,10 @@ function RemoteIdentityProvidersOverview() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>
-          Organizational Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.CTA>
+      <ResourceListPage
+        title="Organizational Remote Identity Providers"
+        description="Identity providers shared across every project in the organization. Prefer creating clients on platform maintained providers when available unless client setup documentation needs customization for your organization workflows."
+        primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Button.LeftIcon>
@@ -177,36 +175,35 @@ function RemoteIdentityProvidersOverview() {
               <Button.Text>New Remote Identity Provider</Button.Text>
             </Button>
           </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Upstream identity providers shared across every project in the
-          organization. These have no owning project and are inherited
-          everywhere.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <IssuerTable
-            items={organizational}
-            isLoading={isLoading}
-            showProject={false}
-            emptyMessage="No organizational identity providers yet."
-            onDelete={setDeleteTarget}
-            onMakeOrganizational={handleMakeOrganizational}
-            onMoveToProject={setMoveTarget}
-            onConsolidate={setMigrateSource}
-            onRefreshMetadata={handleRefreshMetadata}
-            refreshPending={refreshMetadata.isPending}
-          />
-        </Page.Section.Body>
-      </Page.Section>
+        }
+      >
+        <IssuerTable
+          items={organizational}
+          isLoading={isLoading}
+          showProject={false}
+          emptyMessage="No organizational identity providers yet."
+          onDelete={setDeleteTarget}
+          onMakeOrganizational={handleMakeOrganizational}
+          onMoveToProject={setMoveTarget}
+          onConsolidate={setMigrateSource}
+          onRefreshMetadata={handleRefreshMetadata}
+          refreshPending={refreshMetadata.isPending}
+        />
 
-      <Page.Section>
-        <Page.Section.Title>
-          Project-Specific Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.Description className="max-w-2xl">
-          Upstream identity providers scoped to a single project.
-        </Page.Section.Description>
-        <Page.Section.Body>
+        {/* The page header (eyebrow + display title) is rendered once by the
+            template above; the remaining tiers are plain section headings. */}
+        <Stack gap={6} className="mt-3 mb-6">
+          <div>
+            <Heading variant="h4" className="mb-2">
+              Project-Specific Remote Identity Providers
+            </Heading>
+            <Text muted small className="max-w-2xl">
+              Identity providers within a single project in the organization.
+              Prefer creating clients on platform maintained providers when
+              available unless client setup documentation needs customization
+              for your organization workflows.
+            </Text>
+          </div>
           <IssuerTable
             items={projectSpecific}
             isLoading={isLoading}
@@ -219,26 +216,51 @@ function RemoteIdentityProvidersOverview() {
             onRefreshMetadata={handleRefreshMetadata}
             refreshPending={refreshMetadata.isPending}
           />
-        </Page.Section.Body>
-      </Page.Section>
+        </Stack>
 
-      {platform.length > 0 && (
-        <Page.Section>
-          <Page.Section.Title>
-            Platform Remote Identity Providers
-          </Page.Section.Title>
-          <Page.Section.Description className="max-w-2xl">
-            Well-known upstream identity providers curated by platform admins
-            and inherited by every organization. These are read-only here; you
-            can register your own clients against them, but only platform admins
-            can edit, move, or delete them.
-          </Page.Section.Description>
-          <Page.Section.Body>
+        {platform.length > 0 && (
+          <Stack gap={6} className="mt-3 mb-6">
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+              gap={4}
+            >
+              <div className="min-w-0">
+                <Heading variant="h4" className="mb-2">
+                  Platform Remote Identity Providers
+                </Heading>
+                <Text muted small className="max-w-2xl">
+                  Common identity providers maintained by the platform
+                  administrators for configuring your own clients. Prefer using
+                  these over creating duplicate providers unless the client
+                  setup documentation needs to be customized when creating MCP
+                  Servers.
+                </Text>
+              </div>
+              {/* Platform admins curate these on their own page. The CTA is the
+                  only platform-admin-aware chrome on this tenant surface, and it
+                  is a link — it grants nothing that the catalog page does not
+                  gate again on its own. */}
+              {isPlatformAdmin ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={() =>
+                    orgRoutes.platformRemoteIdentityProviders.goTo()
+                  }
+                >
+                  <Button.Text>Manage Platform Providers</Button.Text>
+                </Button>
+              ) : null}
+            </Stack>
             <IssuerTable
               items={platform}
               isLoading={isLoading}
               showProject={false}
               readOnly
+              onAddClient={setAddClientTarget}
               emptyMessage="No platform identity providers available."
               onDelete={setDeleteTarget}
               onMakeOrganizational={handleMakeOrganizational}
@@ -247,9 +269,9 @@ function RemoteIdentityProvidersOverview() {
               onRefreshMetadata={handleRefreshMetadata}
               refreshPending={refreshMetadata.isPending}
             />
-          </Page.Section.Body>
-        </Page.Section>
-      )}
+          </Stack>
+        )}
+      </ResourceListPage>
 
       <CreateRemoteIdentityProviderSheet
         open={createOpen}
@@ -279,6 +301,19 @@ function RemoteIdentityProvidersOverview() {
           onClose={() => setMigrateSource(null)}
         />
       )}
+
+      {/* Keyed on the issuer so reopening the sheet for a different provider
+          remounts it rather than reusing the previous provider's draft. */}
+      {addClientTarget && (
+        <CreateRemoteSessionClientSheet
+          key={addClientTarget.issuer.id}
+          open
+          onOpenChange={(open) => {
+            if (!open) setAddClientTarget(null);
+          }}
+          issuer={addClientTarget.issuer}
+        />
+      )}
     </>
   );
 }
@@ -288,6 +323,7 @@ function IssuerTable({
   isLoading,
   showProject,
   readOnly = false,
+  onAddClient,
   emptyMessage,
   onDelete,
   onMakeOrganizational,
@@ -299,9 +335,13 @@ function IssuerTable({
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
   showProject: boolean;
-  // readOnly drops the actions column for tiers the tenant cannot mutate
-  // (platform issuers): the row still links to the read-only detail view.
+  // readOnly drops the issuer-mutation actions for tiers the tenant cannot
+  // change (platform issuers): the row still links to the detail view.
   readOnly?: boolean;
+  // Registering a client is not an issuer mutation — it creates a tenant-owned
+  // row that happens to point at this issuer — so read-only tiers still offer
+  // it. Supplying this puts the actions column back with just that one action.
+  onAddClient?: (item: OrganizationRemoteSessionIssuer) => void;
   emptyMessage: string;
   onDelete: (item: OrganizationRemoteSessionIssuer) => void;
   onMakeOrganizational: (item: OrganizationRemoteSessionIssuer) => void;
@@ -312,7 +352,8 @@ function IssuerTable({
 }) {
   const orgRoutes = useOrgRoutes();
 
-  const actionsHeader = readOnly ? [] : [{ label: "" }];
+  const showActions = !readOnly || !!onAddClient;
+  const actionsHeader = showActions ? [{ label: "" }] : [];
   const headers = showProject
     ? [
         { label: "Provider" },
@@ -324,9 +365,15 @@ function IssuerTable({
 
   if (!isLoading && items.length === 0) {
     return (
-      <Text muted className="py-8 text-center">
-        {emptyMessage}
-      </Text>
+      <Stack
+        className="border-border border py-8"
+        align="center"
+        justify="center"
+      >
+        <Text variant="body" muted>
+          {emptyMessage}
+        </Text>
+      </Stack>
     );
   }
 
@@ -370,22 +417,70 @@ function IssuerTable({
               {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
             </Text>
           </td>
-          {!readOnly && (
+          {showActions && (
             <td className="px-3 py-3 text-right">
-              <RowActions
-                item={item}
-                onDelete={() => onDelete(item)}
-                onMakeOrganizational={() => onMakeOrganizational(item)}
-                onMoveToProject={() => onMoveToProject(item)}
-                onConsolidate={() => onConsolidate(item)}
-                onRefreshMetadata={() => onRefreshMetadata(item)}
-                refreshPending={refreshPending}
-              />
+              {readOnly ? (
+                <InheritedIssuerRowActions
+                  issuerLabel={issuerDisplayName(item.issuer)}
+                  onAddClient={() => onAddClient?.(item)}
+                />
+              ) : (
+                <RowActions
+                  item={item}
+                  onDelete={() => onDelete(item)}
+                  onMakeOrganizational={() => onMakeOrganizational(item)}
+                  onMoveToProject={() => onMoveToProject(item)}
+                  onConsolidate={() => onConsolidate(item)}
+                  onRefreshMetadata={() => onRefreshMetadata(item)}
+                  refreshPending={refreshPending}
+                />
+              )}
             </td>
           )}
         </DotRow>
       ))}
     </DotTable>
+  );
+}
+
+// InheritedIssuerRowActions is the menu for issuers the tenant cannot modify
+// (the platform tier). Registering a client is the one thing they can do with
+// one, so it is the only entry. Gated on org:admin to match the New Client
+// control on the issuer's Clients tab, which calls the same endpoint.
+function InheritedIssuerRowActions({
+  issuerLabel,
+  onAddClient,
+}: {
+  issuerLabel: string;
+  onAddClient: () => void;
+}) {
+  return (
+    <div className="relative z-20" onClick={(e) => e.stopPropagation()}>
+      <RequireScope scope="org:admin" level="section">
+        {/* Non-modal for the same reason as RowActions below: creating a client
+            invalidates the issuers query and reorders rows, unmounting this
+            menu mid-close, which would strand Radix's body pointer-events
+            lock. */}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="tertiary"
+              size="sm"
+              aria-label={`Actions for ${issuerLabel}`}
+            >
+              <Button.LeftIcon>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button.LeftIcon>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onAddClient}>
+              Add Client
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </RequireScope>
+    </div>
   );
 }
 

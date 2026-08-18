@@ -342,6 +342,9 @@ components:
           items:
             $ref: '#/components/schemas/HookMCPData'
           description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+        mcp_inventory_collected:
+          type: boolean
+          description: Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
         message:
           $ref: '#/components/schemas/HookMessageData'
         notification:
@@ -374,6 +377,7 @@ components:
             - session.started
             - session.updated
             - session.ended
+            - mcp.inventory
             - prompt.submitted
             - tool.requested
             - tool.completed
@@ -755,11 +759,13 @@ tags:
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: organizationAssets
+    description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
   - name: assistantMemories
     description: Manage assistant memory records.
   - name: assistants
@@ -768,6 +774,8 @@ tags:
     description: Manages audit logs in Gram.
   - name: auth
     description: Managed auth for gram producers and dashboard.
+  - name: businessMemories
+    description: Inspect and semantically search business memories.
   - name: chat
     description: Managed chats for gram AI consumers.
   - name: chatSessions
@@ -802,6 +810,10 @@ tags:
     description: Explore third-party tools in Gram.
   - name: keys
     description: Managing system api keys.
+  - name: litellm
+    description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
+  - name: mcpApproval
+    description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
@@ -816,10 +828,16 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminAssets
+    description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: adminOpenRouterKeys
+    description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformMcp
+    description: Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
@@ -866,14 +884,18 @@ tags:
     description: Manage project trigger instances and static trigger definitions.
   - name: tunneledMcp
     description: Managing customer-hosted tunneled MCP servers.
+  - name: unproxiedMcp
+    description: Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuers
     description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: userSessionIssuersCimdClients
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

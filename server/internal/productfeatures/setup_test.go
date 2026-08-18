@@ -100,11 +100,10 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 		DisabledAt:         conv.PtrToPGTimestamptz(nil),
 	})
 	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithAdminGrants(ctx)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, audit.NewLogger())
 
 	return ctx, &testInstance{

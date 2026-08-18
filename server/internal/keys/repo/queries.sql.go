@@ -107,6 +107,45 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (Del
 	return i, err
 }
 
+const deleteAPIKeyByProject = `-- name: DeleteAPIKeyByProject :one
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, key_prefix, scopes
+`
+
+type DeleteAPIKeyByProjectParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type DeleteAPIKeyByProjectRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	KeyPrefix      string
+	Scopes         []string
+}
+
+func (q *Queries) DeleteAPIKeyByProject(ctx context.Context, arg DeleteAPIKeyByProjectParams) (DeleteAPIKeyByProjectRow, error) {
+	row := q.db.QueryRow(ctx, deleteAPIKeyByProject, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i DeleteAPIKeyByProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.Scopes,
+	)
+	return i, err
+}
+
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
 SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
@@ -154,11 +193,46 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 	return i, err
 }
 
+const isAPIKeyManagedByActiveLiteLLMInstance = `-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
+SELECT EXISTS (
+  SELECT 1
+  FROM litellm_instances li
+  JOIN api_keys ak
+    ON ak.organization_id = li.organization_id
+   AND ak.project_id = li.project_id
+   AND ak.id = li.api_key_id
+  WHERE ak.id = $1
+    AND ak.organization_id = $2
+    AND ak.deleted IS FALSE
+    AND li.deleted IS FALSE
+)
+`
+
+type IsAPIKeyManagedByActiveLiteLLMInstanceParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) IsAPIKeyManagedByActiveLiteLLMInstance(ctx context.Context, arg IsAPIKeyManagedByActiveLiteLLMInstanceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isAPIKeyManagedByActiveLiteLLMInstance, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
 SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
-WHERE organization_id = $1
-  AND deleted IS FALSE
+WHERE api_keys.organization_id = $1
+  AND api_keys.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM litellm_instances li
+    WHERE li.organization_id = api_keys.organization_id
+      AND li.project_id = api_keys.project_id
+      AND li.api_key_id = api_keys.id
+      AND li.deleted IS FALSE
+  )
 ORDER BY created_at DESC
 `
 

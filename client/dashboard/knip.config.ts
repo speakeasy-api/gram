@@ -6,8 +6,9 @@ const config: KnipConfig = {
   entry: ["src/theme-init.ts"],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
-    // Invoked from the lint:format script; not on the dep tree.
-    "oxfmt",
+    // The package manager itself, used to chain scripts and to reach the
+    // workspace-root oxfmt binary; not on the dep tree.
+    "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
   ],
@@ -23,6 +24,10 @@ const config: KnipConfig = {
     // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
     // happens to use every part of it today.
     "src/components/ui/**/*",
+    // Page-template layer + its composite widgets: a shared page-shape library
+    // (all templates + widgets) whose full API is exposed whether or not every
+    // page has migrated onto it yet — same rationale as components/ui above.
+    "src/components/page-templates/**/*",
   ],
 };
 

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import React, { FC, PropsWithChildren, ReactNode } from "react";
 import { Icon } from "../Icon";
+import { SimpleTooltip } from "../Tooltip";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
@@ -41,7 +42,7 @@ const CardHeader: FC<CardHeaderProps> = ({
     )}
   >
     {icon && (
-      <div className="flex-shrink-0 rounded-[8px] border p-2">
+      <div className="flex-shrink-0 border p-2">
         <Icon name={icon.name} size={icon.size} />
       </div>
     )}
@@ -155,7 +156,7 @@ const Card: FC<CardProps> = ({ children, onClick, href, className }) => {
   return (
     <Wrapper
       className={cn(
-        "relative flex h-full w-full flex-col rounded-[8px] border bg-card text-card-foreground shadow",
+        "relative flex h-full w-full flex-col border bg-card text-card-foreground",
         isInteractive && "cursor-pointer hover:bg-card/70",
         className,
       )}
@@ -231,7 +232,124 @@ const CardActions: FC<PropsWithChildren<{ className?: string }>> = ({
 );
 CardActions.displayName = "CardActions";
 
+type CardEntityProps = {
+  children: ReactNode;
+  /** Content centered in a bordered box on the icon rail. */
+  icon?: ReactNode;
+  /** Additional styling for the icon rail surface. */
+  iconRailClassName?: string;
+  /** Extra content layered on the icon rail (e.g. an "Added" badge). */
+  overlay?: ReactNode;
+  className?: string;
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+};
+
+/**
+ * Horizontal entity card: a flat icon rail on the left, content on the right.
+ * Used by catalog, MCP, source and plugin index pages. Replaces the former
+ * DotCard — same API, minus the dot-pattern illustration.
+ */
+const CardEntity: FC<CardEntityProps> = ({
+  children,
+  icon,
+  iconRailClassName,
+  className,
+  overlay,
+  onClick,
+}) => (
+  <div
+    onClick={onClick}
+    // Clickable cards are plain divs, so give them button semantics for
+    // keyboard and assistive-tech users; non-interactive cards stay plain.
+    {...(onClick && {
+      role: "button",
+      tabIndex: 0,
+      onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+        }
+      },
+    })}
+    className={cn(
+      "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
+      "hover:border-neutral-hover",
+      className,
+    )}
+  >
+    <div
+      className={cn(
+        "relative w-40 shrink-0 overflow-hidden border-r bg-surface-secondary-default",
+        iconRailClassName,
+      )}
+    >
+      {icon && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="border bg-card p-3">{icon}</div>
+        </div>
+      )}
+      {overlay}
+    </div>
+    <div className="flex min-w-0 flex-1 flex-col p-4">{children}</div>
+  </div>
+);
+CardEntity.displayName = "CardEntity";
+
+type CardDashboardProps = {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  tooltip?: string;
+  /** Body classes, e.g. `p-0` for content that should reach the card edges. */
+  bodyClassName?: string;
+  /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
+  className?: string;
+};
+
+/**
+ * Card.Dashboard — a titled dashboard panel: an eyebrow title bar (with an
+ * optional info tooltip and a right-aligned action) over a divider and a body.
+ * Formerly the standalone DashboardCard.
+ */
+function CardDashboard({
+  title,
+  action,
+  children,
+  tooltip,
+  bodyClassName,
+  className,
+}: CardDashboardProps): JSX.Element {
+  return (
+    <div
+      className={cn(
+        "bg-card text-card-foreground relative flex h-full w-full flex-col border",
+        className,
+      )}
+    >
+      <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-eyebrow">{title}</h3>
+          {tooltip && (
+            <SimpleTooltip tooltip={tooltip}>
+              <button
+                type="button"
+                aria-label={`About ${title}`}
+                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+              >
+                <Icon name="info" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className={cn("px-6 py-5", bodyClassName)}>{children}</div>
+    </div>
+  );
+}
+
 const CardWithSubcomponents = Object.assign(Card, {
+  Entity: CardEntity,
   Header: CardHeader,
   Title: CardTitle,
   Description: CardDescription,
@@ -239,6 +357,7 @@ const CardWithSubcomponents = Object.assign(Card, {
   Actions: CardActions,
   Content: CardContent,
   Footer: CardFooter,
+  Dashboard: CardDashboard,
 });
 
 export { CardWithSubcomponents as Card };

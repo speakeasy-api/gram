@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -98,7 +97,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
@@ -109,7 +108,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
 	}
 
-	slug, err := computeServerSlug(payload.URL, serverID)
+	slug, err := conv.URLBackedSlug(payload.URL, serverID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
@@ -254,7 +253,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if err := validateURL(ctx, s.policy, *payload.URL); err != nil {
+		if _, err := s.policy.ValidateHTTPURL(ctx, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
@@ -292,7 +291,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// Always recompute slug from the post-update URL so it tracks the URL
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
-	slug, err := computeServerSlug(finalURL, existingServer.ID)
+	slug, err := conv.URLBackedSlug(finalURL, existingServer.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
@@ -348,7 +347,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
@@ -754,29 +753,6 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-// validateURL checks that the given URL string is a valid absolute HTTP(S) URL
-// whose host is permitted by the supplied [guardian.Policy].
-func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("url scheme must be http or https")
-	}
-
-	if u.Host == "" {
-		return fmt.Errorf("url must include a host")
-	}
-
-	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
-		return fmt.Errorf("validate host: %w", err)
-	}
-
-	return nil
 }
 
 // validateHeaderValueSource checks that exactly one of value or

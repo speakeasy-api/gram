@@ -333,7 +333,8 @@ SELECT
   e.observed_at,
   e.reserved_on,
   e.created_at AS evaluation_created_at,
-  e.attempts
+  e.attempts,
+  COALESCE(NULLIF(c.external_user_id, ''), c.user_id, '') AS author_id
 FROM chat_analysis_evaluations e
 JOIN projects p
   ON p.id = e.project_id

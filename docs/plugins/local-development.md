@@ -85,7 +85,7 @@ You can fully exercise plugin creation, editing, and per-platform ZIP downloads 
 2. Create a plugin (name required, slug auto-generated)
 3. Add MCP servers (toolsets with MCP enabled)
 4. Configure assignments
-5. Use **Download** on the plugin detail page to get a ZIP for Claude, Cursor, or Codex
+5. Use **Download** on the plugin detail page to get a ZIP for each supported coding agent
 
 The **Publish to GitHub** button will be hidden/disabled when the server has no GitHub config.
 

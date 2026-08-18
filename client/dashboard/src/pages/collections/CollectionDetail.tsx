@@ -352,7 +352,7 @@ function CollectionDetailInner() {
       <SimpleTooltip tooltip={installDisabledReason}>
         <span
           aria-label={`Install unavailable: ${installDisabledReason}`}
-          className="focus-visible:ring-ring inline-flex w-full rounded-xs focus-visible:ring-2 focus-visible:outline-none sm:w-auto"
+          className="focus-visible:ring-ring inline-flex w-full focus-visible:ring-2 focus-visible:outline-none sm:w-auto"
           tabIndex={0}
         >
           {bulkInstallButton}
@@ -373,16 +373,16 @@ function CollectionDetailInner() {
           {/* Main content */}
           <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="bg-card mb-6 rounded-xl border p-5 shadow-sm">
+            <div className="bg-card mb-6 border p-5">
               <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
-                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border">
+                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center border">
                     <LayoutGrid className="text-muted-foreground h-8 w-8" />
                   </div>
                   <div className="min-w-0 space-y-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="truncate text-2xl font-semibold">
+                        <h1 className="text-display-sm truncate font-thin">
                           {collection.name}
                         </h1>
                         <Badge variant="neutral" className="text-xs">
@@ -461,7 +461,7 @@ function CollectionDetailInner() {
             </div>
 
             {!isLoading && collectionMcpJson.excludedCount > 0 && (
-              <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 rounded-md border p-3">
+              <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 border p-3">
                 <AlertTriangle className="text-warning-foreground mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <Text variant="body" className="font-medium">
@@ -477,7 +477,7 @@ function CollectionDetailInner() {
             {/* Edit Form */}
             {editing && (
               <RequireScope scope="org:admin" level="section">
-                <div className="mb-4 space-y-4 rounded-lg border p-5">
+                <div className="mb-4 space-y-4 border p-5">
                   <h2 className="text-base font-semibold">
                     Edit collection details
                   </h2>
@@ -505,7 +505,7 @@ function CollectionDetailInner() {
                       <button
                         type="button"
                         className={cn(
-                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                           editVisibility === "public"
                             ? "border-foreground/30 bg-accent"
                             : "border-border hover:bg-accent/50",
@@ -518,7 +518,7 @@ function CollectionDetailInner() {
                       <button
                         type="button"
                         className={cn(
-                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                           editVisibility === "private"
                             ? "border-foreground/30 bg-accent"
                             : "border-border hover:bg-accent/50",
@@ -578,7 +578,7 @@ function CollectionDetailInner() {
 
             {/* About */}
             {!editing && (
-              <div className="mb-4 rounded-lg border p-5">
+              <div className="mb-4 border p-5">
                 <h2 className="mb-2 text-base font-semibold">
                   About this collection
                 </h2>
@@ -589,7 +589,7 @@ function CollectionDetailInner() {
             )}
 
             {/* MCP Servers */}
-            <div className="rounded-lg border p-5">
+            <div className="border p-5">
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="text-base font-semibold">Included servers</h2>
@@ -623,7 +623,7 @@ function CollectionDetailInner() {
               </div>
               {editingServers && (
                 <RequireScope scope="org:admin" level="section">
-                  <div className="mb-4 rounded-lg border p-4">
+                  <div className="mb-4 border p-4">
                     <div className="mb-3">
                       <h3 className="text-sm font-medium">Edit servers</h3>
                       <p className="text-muted-foreground mt-1 text-xs">
@@ -631,7 +631,7 @@ function CollectionDetailInner() {
                         in this collection.
                       </p>
                     </div>
-                    <div className="rounded-md border">
+                    <div className="border">
                       <div className="relative border-b">
                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                         <input
@@ -788,14 +788,14 @@ function CollectionDetailInner() {
                     return (
                       <div
                         key={server.registrySpecifier}
-                        className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
+                        className="bg-card hover:bg-accent/30 flex flex-col gap-4 border p-4 transition-colors sm:flex-row sm:items-center"
                       >
-                        <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
+                        <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center border">
                           {server.iconUrl ? (
                             <img
                               src={server.iconUrl}
                               alt=""
-                              className="h-6 w-6 rounded"
+                              className="h-6 w-6"
                             />
                           ) : (
                             <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -844,7 +844,7 @@ function CollectionDetailInner() {
           {/* Sidebar */}
           <div className="w-full shrink-0 space-y-4 xl:w-72">
             {/* Stats */}
-            <div className="rounded-lg border p-5">
+            <div className="border p-5">
               <h3 className="mb-3 text-base font-semibold">Stats</h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
@@ -855,7 +855,7 @@ function CollectionDetailInner() {
             </div>
 
             {/* Details */}
-            <div className="rounded-lg border p-5">
+            <div className="border p-5">
               <h3 className="mb-3 text-base font-semibold">Details</h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
@@ -877,7 +877,7 @@ function CollectionDetailInner() {
             </div>
 
             <RequireScope scope="org:admin" level="section">
-              <div className="border-destructive/30 rounded-lg border p-5">
+              <div className="border-destructive/30 border p-5">
                 <h3 className="text-destructive mb-2 text-base font-semibold">
                   Danger Zone
                 </h3>
@@ -951,7 +951,7 @@ function CollectionDetailInner() {
             </Dialog.Header>
             <div className="space-y-4 py-2">
               {pendingInstallServer && (
-                <div className="rounded-lg border p-3">
+                <div className="border p-3">
                   <div className="text-sm font-medium">
                     {pendingInstallServer.title ??
                       pendingInstallServer.registrySpecifier}

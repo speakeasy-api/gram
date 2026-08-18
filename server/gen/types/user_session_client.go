@@ -14,9 +14,29 @@ type UserSessionClient struct {
 	ID string
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName string
 	// Validated on every /authorize.
 	RedirectUris     []string
@@ -25,4 +45,8 @@ type UserSessionClient struct {
 	ClientSecretExpiresAt *string
 	CreatedAt             string
 	UpdatedAt             string
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int
 }

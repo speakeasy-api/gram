@@ -21,21 +21,29 @@ type RiskOverviewWindowParams struct {
 }
 
 // overviewFindings returns the base builder every overview read shares:
-// tenant + window scoped, live findings only. Dead-letter sentinel rows and
-// insert-time exclusion annotations are filtered here; false_positive_at is
-// filtered for forward-compatibility (post-hoc marks are not mirrored to
-// ClickHouse yet, so the column is NULL on every row today).
+// tenant + window scoped, live findings only.
 //
-// Counts use uniqExact(id), never count(): findings arrive over Pub/Sub with
-// at-least-once delivery and the table is a plain append-only MergeTree, so
-// redelivered rows sharing an id are expected.
+// risk_findings is append-only: a manual dismiss/undo (mirrorFalsePositiveToClickHouse)
+// appends a fresh row for an id that may already have one, rather than
+// updating in place, and Pub/Sub's at-least-once delivery can also redeliver
+// an identical row. Deduping to one row per id is therefore required for
+// correctness, not just cheapness — collapsing straight to a count would
+// double-count an id with two rows and, worse, a stale first row would still
+// satisfy "false_positive_at IS NULL" even after a second row dismissed it.
+// The inner select keeps only each id's most-recently-inserted row
+// (ROW_NUMBER() OVER ... ORDER BY inserted_at DESC); dead-letter sentinels
+// and exclusion/dismissal annotations are then filtered on that latest state.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
-	return sq.Select(columns...).
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("created_at >= ?", p.From).
-		Where("created_at < ?", p.To).
+		Where("created_at < ?", p.To)
+
+	return sq.Select(columns...).
+		FromSelect(latest, "latest").
+		Where("rn = 1").
 		Where("dead_letter_reason = ''").
 		Where("excluded_at IS NULL").
 		Where("false_positive_at IS NULL")

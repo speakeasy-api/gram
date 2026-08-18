@@ -47,6 +47,10 @@ export type RiskResult = {
    */
   endPos?: number | undefined;
   /**
+   * When this result was manually marked as a false positive. Null when not dismissed.
+   */
+  falsePositiveAt?: Date | undefined;
+  /**
    * The result ID.
    */
   id: string;
@@ -108,6 +112,9 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       ),
       description: z.optional(z.string()),
       end_pos: z.optional(z.int()),
+      false_positive_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       id: z.string(),
       match: z.optional(z.string()),
       match_redacted: z.optional(z.string()),
@@ -129,6 +136,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_pos": "endPos",
+        "false_positive_at": "falsePositiveAt",
         "match_redacted": "matchRedacted",
         "policy_id": "policyId",
         "policy_version": "policyVersion",

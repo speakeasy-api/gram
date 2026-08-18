@@ -86,6 +86,8 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 	require.NoError(t, err)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		enc,
 		policy,
@@ -167,6 +169,7 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 		RefreshTokenEncrypted: conv.PtrToPGText(&refreshEncStr),
 		RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Scopes:                []string{},
+		Resource:              pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 }

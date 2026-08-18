@@ -122,25 +122,22 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = $2
   AND scope = $3
-  AND COALESCE(effect, 'allow') = COALESCE($4::text, 'allow')
-  AND selectors = $5
+  AND selectors = $4
 `
 
 type DeletePrincipalGrantByIdentityParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         string
 	Selectors      []byte
 }
 
-// Removes a specific grant row by principal, scope, effect, and selector.
+// Removes a specific grant row by principal, scope, and selector.
 func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg DeletePrincipalGrantByIdentityParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantByIdentity,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	if err != nil {
@@ -205,30 +202,73 @@ const deletePrincipalGrantsByTarget = `-- name: DeletePrincipalGrantsByTarget :e
 DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
-  AND COALESCE(effect, 'allow') = COALESCE($3::text, 'allow')
-  AND selectors = $4
+  AND selectors = $3
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
 	OrganizationID string
 	Scope          string
-	Effect         string
 	Selectors      []byte
 }
 
 // Removes every principal row for one exact grant target. Used by audience
 // replacement writes where the caller supplies the full desired principal set.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget,
-		arg.OrganizationID,
-		arg.Scope,
-		arg.Effect,
-		arg.Selectors,
-	)
+	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getActiveOrganizationAdmin = `-- name: GetActiveOrganizationAdmin :one
+SELECT DISTINCT
+  users.id,
+  users.display_name,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.user_id = users.id
+  AND ora.deleted_at IS NULL
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE our.organization_id = $1
+  AND our.user_id = $2
+  AND our.deleted IS FALSE
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+`
+
+type GetActiveOrganizationAdminParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+type GetActiveOrganizationAdminRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+}
+
+// Returns one active organization administrator and their Loops contact fields.
+// Resolve roles only through the internal user ID. WorkOS role assignments
+// are not treated as internal authorization state until they are linked.
+func (q *Queries) GetActiveOrganizationAdmin(ctx context.Context, arg GetActiveOrganizationAdminParams) (GetActiveOrganizationAdminRow, error) {
+	row := q.db.QueryRow(ctx, getActiveOrganizationAdmin, arg.OrganizationID, arg.UserID)
+	var i GetActiveOrganizationAdminRow
+	err := row.Scan(&i.ID, &i.DisplayName, &i.Email)
+	return i, err
 }
 
 const getActiveOrganizationRoleBySlug = `-- name: GetActiveOrganizationRoleBySlug :one
@@ -493,9 +533,10 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY($2::text[])
 `
 
@@ -507,7 +548,6 @@ type GetPrincipalGrantsParams struct {
 type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -522,12 +562,7 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -607,27 +642,29 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 }
 
 const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO NOTHING
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+WHERE principal_grants.effect IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 }
 
-// Creates a single grant row and leaves existing identical rows untouched.
+// Creates a single grant row, leaves existing allow rows untouched, and converts
+// a conflicting legacy effect row to the allow-only NULL representation.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	if err != nil {
@@ -731,6 +768,67 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 	for rows.Next() {
 		var i ListAccessNotificationUsersRow
 		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveOrganizationAdmins = `-- name: ListActiveOrganizationAdmins :many
+SELECT DISTINCT
+  users.id,
+  users.display_name,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.user_id = users.id
+  AND ora.deleted_at IS NULL
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id
+`
+
+type ListActiveOrganizationAdminsRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+}
+
+// Returns a best-effort notification audience of active organization
+// administrators and their Loops contact fields. This is not an authorization
+// decision or a delivery guarantee; callers use the admins available when the
+// notification is sent.
+// Resolve roles only through the internal user ID. WorkOS role assignments
+// are not treated as internal authorization state until they are linked.
+func (q *Queries) ListActiveOrganizationAdmins(ctx context.Context, organizationID string) ([]ListActiveOrganizationAdminsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveOrganizationAdmins, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveOrganizationAdminsRow
+	for rows.Next() {
+		var i ListActiveOrganizationAdminsRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1286,9 +1384,10 @@ func (q *Queries) ListOrganizationRolesByOrg(ctx context.Context, organizationID
 
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
-SELECT id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND ($2::text = '' OR principal_urn = $2)
 ORDER BY principal_urn, scope
 `
@@ -1304,7 +1403,6 @@ type ListPrincipalGrantsByOrgRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -1328,7 +1426,6 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 			&i.PrincipalUrn,
 			&i.PrincipalType,
 			&i.Scope,
-			&i.Effect,
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1344,9 +1441,10 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 }
 
 const listPrincipalGrantsByResource = `-- name: ListPrincipalGrantsByResource :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text,
@@ -1365,7 +1463,6 @@ type ListPrincipalGrantsByResourceParams struct {
 type ListPrincipalGrantsByResourceRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -1384,12 +1481,7 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 	var items []ListPrincipalGrantsByResourceRow
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1401,9 +1493,10 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 }
 
 const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResourceIDs :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text
@@ -1422,7 +1515,6 @@ type ListPrincipalGrantsByResourceIDsParams struct {
 type ListPrincipalGrantsByResourceIDsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -1444,15 +1536,38 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	var items []ListPrincipalGrantsByResourceIDsRow
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceIDsRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRetainedResolvedChallengeIDs = `-- name: ListRetainedResolvedChallengeIDs :many
+SELECT challenge_id FROM authz_challenge_resolutions
+WHERE organization_id = $1
+  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
+`
+
+// Resolutions cannot predate their challenge, so records older than ClickHouse's
+// 90-day challenge retention cannot match a retained bucket.
+func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRetainedResolvedChallengeIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var challenge_id string
+		if err := rows.Scan(&challenge_id); err != nil {
+			return nil, err
+		}
+		items = append(items, challenge_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1905,18 +2020,19 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
 
 type UpsertPrincipalGrantParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 }
 
@@ -1926,20 +2042,18 @@ type UpsertPrincipalGrantRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
-// the updated_at is refreshed. Uses COALESCE to match the functional unique index.
+// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
+// any legacy effect is normalized to the allow-only NULL representation.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	var i UpsertPrincipalGrantRow
@@ -1949,7 +2063,6 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.PrincipalUrn,
 		&i.PrincipalType,
 		&i.Scope,
-		&i.Effect,
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,

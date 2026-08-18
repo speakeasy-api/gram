@@ -112,6 +112,9 @@ type GetPluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -139,6 +142,9 @@ type CreatePluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -166,6 +172,9 @@ type UpdatePluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -219,6 +228,82 @@ type UpdatePluginServerResponseBody struct {
 type SetPluginAssignmentsResponseBody struct {
 	// The updated assignments.
 	Assignments []*PluginAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+}
+
+// GetPlatformMCPPackageStatusResponseBody is the type of the "plugins" service
+// "getPlatformMCPPackageStatus" endpoint HTTP response body.
+type GetPlatformMCPPackageStatusResponseBody struct {
+	// Organization package admission: enabled, disabled, or indeterminate.
+	Admission string `form:"admission" json:"admission" xml:"admission"`
+	// Whether organization admission currently permits installing the package.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Fixed Platform MCP package identity.
+	PackageName string `form:"package_name" json:"package_name" xml:"package_name"`
+	// Deterministic Claude direct-download ZIP filename.
+	ClaudeFilename string `form:"claude_filename" json:"claude_filename" xml:"claude_filename"`
+	// Deterministic portable Agent Plugins direct-download ZIP filename.
+	AgentPluginFilename string `form:"agent_plugin_filename" json:"agent_plugin_filename" xml:"agent_plugin_filename"`
+	// Literal default project that owns the canonical organization marketplace,
+	// when present.
+	CanonicalProjectSlug *string `form:"canonical_project_slug,omitempty" json:"canonical_project_slug,omitempty" xml:"canonical_project_slug,omitempty"`
+	// Effective name of the canonical marketplace, when its default project is
+	// present.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether the canonical default project has a published GitHub marketplace.
+	MarketplaceConnected bool `form:"marketplace_connected" json:"marketplace_connected" xml:"marketplace_connected"`
+	// Git URL used by supported clients to register the canonical marketplace.
+	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Canonical GitHub repository URL.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
+	// Whether the last successful canonical publish recorded the Platform package
+	// fingerprint.
+	PackagePresent bool `form:"package_present" json:"package_present" xml:"package_present"`
+	// Platform package freshness: current, stale, missing, unavailable, or
+	// indeterminate.
+	Freshness string `form:"freshness" json:"freshness" xml:"freshness"`
+	// Whether an organization admin can publish or repair the canonical package
+	// now.
+	RepairAllowed bool `form:"repair_allowed" json:"repair_allowed" xml:"repair_allowed"`
+	// Whether keyless direct downloads are currently admitted.
+	DirectDownloadAvailable bool `form:"direct_download_available" json:"direct_download_available" xml:"direct_download_available"`
+}
+
+// RepairPlatformMCPPackageResponseBody is the type of the "plugins" service
+// "repairPlatformMCPPackage" endpoint HTTP response body.
+type RepairPlatformMCPPackageResponseBody struct {
+	// Organization package admission: enabled, disabled, or indeterminate.
+	Admission string `form:"admission" json:"admission" xml:"admission"`
+	// Whether organization admission currently permits installing the package.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Fixed Platform MCP package identity.
+	PackageName string `form:"package_name" json:"package_name" xml:"package_name"`
+	// Deterministic Claude direct-download ZIP filename.
+	ClaudeFilename string `form:"claude_filename" json:"claude_filename" xml:"claude_filename"`
+	// Deterministic portable Agent Plugins direct-download ZIP filename.
+	AgentPluginFilename string `form:"agent_plugin_filename" json:"agent_plugin_filename" xml:"agent_plugin_filename"`
+	// Literal default project that owns the canonical organization marketplace,
+	// when present.
+	CanonicalProjectSlug *string `form:"canonical_project_slug,omitempty" json:"canonical_project_slug,omitempty" xml:"canonical_project_slug,omitempty"`
+	// Effective name of the canonical marketplace, when its default project is
+	// present.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether the canonical default project has a published GitHub marketplace.
+	MarketplaceConnected bool `form:"marketplace_connected" json:"marketplace_connected" xml:"marketplace_connected"`
+	// Git URL used by supported clients to register the canonical marketplace.
+	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Canonical GitHub repository URL.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
+	// Whether the last successful canonical publish recorded the Platform package
+	// fingerprint.
+	PackagePresent bool `form:"package_present" json:"package_present" xml:"package_present"`
+	// Platform package freshness: current, stale, missing, unavailable, or
+	// indeterminate.
+	Freshness string `form:"freshness" json:"freshness" xml:"freshness"`
+	// Whether an organization admin can publish or repair the canonical package
+	// now.
+	RepairAllowed bool `form:"repair_allowed" json:"repair_allowed" xml:"repair_allowed"`
+	// Whether keyless direct downloads are currently admitted.
+	DirectDownloadAvailable bool `form:"direct_download_available" json:"direct_download_available" xml:"direct_download_available"`
 }
 
 // GetPublishStatusResponseBody is the type of the "plugins" service
@@ -1948,6 +2033,25 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadPluginPackageFailedPreconditionResponseBody is the type of the
+// "plugins" service "downloadPluginPackage" endpoint HTTP response body for
+// the "failed_precondition" error.
+type DownloadPluginPackageFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadPluginPackageUnauthorizedResponseBody is the type of the "plugins"
 // service "downloadPluginPackage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2123,6 +2227,215 @@ type DownloadPluginPackageUnexpectedResponseBody struct {
 // service "downloadPluginPackage" endpoint HTTP response body for the
 // "gateway_error" error.
 type DownloadPluginPackageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginFailedPreconditionResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "failed_precondition" error.
+type DownloadPlatformMCPPluginFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginUnauthorizedResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "unauthorized" error.
+type DownloadPlatformMCPPluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginForbiddenResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "forbidden" error.
+type DownloadPlatformMCPPluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginBadRequestResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "bad_request" error.
+type DownloadPlatformMCPPluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginNotFoundResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "not_found" error.
+type DownloadPlatformMCPPluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginConflictResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "conflict" error.
+type DownloadPlatformMCPPluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginUnsupportedMediaResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DownloadPlatformMCPPluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginInvalidResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "invalid" error.
+type DownloadPlatformMCPPluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DownloadPlatformMCPPluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginUnexpectedResponseBody is the type of the "plugins"
+// service "downloadPlatformMCPPlugin" endpoint HTTP response body for the
+// "unexpected" error.
+type DownloadPlatformMCPPluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadPlatformMCPPluginGatewayErrorResponseBody is the type of the
+// "plugins" service "downloadPlatformMCPPlugin" endpoint HTTP response body
+// for the "gateway_error" error.
+type DownloadPlatformMCPPluginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2503,6 +2816,405 @@ type DownloadCodexInstallScriptUnexpectedResponseBody struct {
 // "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
 // for the "gateway_error" error.
 type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusUnauthorizedResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetPlatformMCPPackageStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusForbiddenResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "forbidden" error.
+type GetPlatformMCPPackageStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusBadRequestResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "bad_request" error.
+type GetPlatformMCPPackageStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusNotFoundResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetPlatformMCPPackageStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusConflictResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "conflict" error.
+type GetPlatformMCPPackageStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetPlatformMCPPackageStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusInvalidResponseBody is the type of the "plugins"
+// service "getPlatformMCPPackageStatus" endpoint HTTP response body for the
+// "invalid" error.
+type GetPlatformMCPPackageStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusInvariantViolationResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetPlatformMCPPackageStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusUnexpectedResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "unexpected" error.
+type GetPlatformMCPPackageStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPlatformMCPPackageStatusGatewayErrorResponseBody is the type of the
+// "plugins" service "getPlatformMCPPackageStatus" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetPlatformMCPPackageStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageFailedPreconditionResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "failed_precondition" error.
+type RepairPlatformMCPPackageFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageUnauthorizedResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "unauthorized" error.
+type RepairPlatformMCPPackageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageForbiddenResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "forbidden" error.
+type RepairPlatformMCPPackageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageBadRequestResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "bad_request" error.
+type RepairPlatformMCPPackageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageNotFoundResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "not_found" error.
+type RepairPlatformMCPPackageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageConflictResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "conflict" error.
+type RepairPlatformMCPPackageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageUnsupportedMediaResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RepairPlatformMCPPackageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageInvalidResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "invalid" error.
+type RepairPlatformMCPPackageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageInvariantViolationResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RepairPlatformMCPPackageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageUnexpectedResponseBody is the type of the "plugins"
+// service "repairPlatformMCPPackage" endpoint HTTP response body for the
+// "unexpected" error.
+type RepairPlatformMCPPackageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairPlatformMCPPackageGatewayErrorResponseBody is the type of the
+// "plugins" service "repairPlatformMCPPackage" endpoint HTTP response body for
+// the "gateway_error" error.
+type RepairPlatformMCPPackageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3282,6 +3994,9 @@ type PluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -3313,7 +4028,7 @@ type PluginServerResponseBody struct {
 type PluginAssignmentResponseBody struct {
 	// Unique assignment identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Principal URN (e.g. role:engineering, user:id, or *).
+	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
 }
@@ -3354,16 +4069,17 @@ func NewListPluginsResponseBody(res *plugins.ListPluginsResult) *ListPluginsResp
 // the "getPlugin" endpoint of the "plugins" service.
 func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 	body := &GetPluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3392,16 +4108,17 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody {
 	body := &CreatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3430,16 +4147,17 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody {
 	body := &UpdatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3509,6 +4227,52 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 		}
 	} else {
 		body.Assignments = []*PluginAssignmentResponseBody{}
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusResponseBody builds the HTTP response body
+// from the result of the "getPlatformMCPPackageStatus" endpoint of the
+// "plugins" service.
+func NewGetPlatformMCPPackageStatusResponseBody(res *plugins.PlatformMCPPackageStatusResult) *GetPlatformMCPPackageStatusResponseBody {
+	body := &GetPlatformMCPPackageStatusResponseBody{
+		Admission:               res.Admission,
+		Available:               res.Available,
+		PackageName:             res.PackageName,
+		ClaudeFilename:          res.ClaudeFilename,
+		AgentPluginFilename:     res.AgentPluginFilename,
+		CanonicalProjectSlug:    res.CanonicalProjectSlug,
+		MarketplaceName:         res.MarketplaceName,
+		MarketplaceConnected:    res.MarketplaceConnected,
+		MarketplaceURL:          res.MarketplaceURL,
+		RepoURL:                 res.RepoURL,
+		PackagePresent:          res.PackagePresent,
+		Freshness:               res.Freshness,
+		RepairAllowed:           res.RepairAllowed,
+		DirectDownloadAvailable: res.DirectDownloadAvailable,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageResponseBody builds the HTTP response body from
+// the result of the "repairPlatformMCPPackage" endpoint of the "plugins"
+// service.
+func NewRepairPlatformMCPPackageResponseBody(res *plugins.PlatformMCPPackageStatusResult) *RepairPlatformMCPPackageResponseBody {
+	body := &RepairPlatformMCPPackageResponseBody{
+		Admission:               res.Admission,
+		Available:               res.Available,
+		PackageName:             res.PackageName,
+		ClaudeFilename:          res.ClaudeFilename,
+		AgentPluginFilename:     res.AgentPluginFilename,
+		CanonicalProjectSlug:    res.CanonicalProjectSlug,
+		MarketplaceName:         res.MarketplaceName,
+		MarketplaceConnected:    res.MarketplaceConnected,
+		MarketplaceURL:          res.MarketplaceURL,
+		RepoURL:                 res.RepoURL,
+		PackagePresent:          res.PackagePresent,
+		Freshness:               res.Freshness,
+		RepairAllowed:           res.RepairAllowed,
+		DirectDownloadAvailable: res.DirectDownloadAvailable,
 	}
 	return body
 }
@@ -4852,6 +5616,21 @@ func NewSetPluginAssignmentsGatewayErrorResponseBody(res *goa.ServiceError) *Set
 	return body
 }
 
+// NewDownloadPluginPackageFailedPreconditionResponseBody builds the HTTP
+// response body from the result of the "downloadPluginPackage" endpoint of the
+// "plugins" service.
+func NewDownloadPluginPackageFailedPreconditionResponseBody(res *goa.ServiceError) *DownloadPluginPackageFailedPreconditionResponseBody {
+	body := &DownloadPluginPackageFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDownloadPluginPackageUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "downloadPluginPackage" endpoint of the
 // "plugins" service.
@@ -4992,6 +5771,171 @@ func NewDownloadPluginPackageUnexpectedResponseBody(res *goa.ServiceError) *Down
 // "plugins" service.
 func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *DownloadPluginPackageGatewayErrorResponseBody {
 	body := &DownloadPluginPackageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginFailedPreconditionResponseBody builds the HTTP
+// response body from the result of the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+func NewDownloadPlatformMCPPluginFailedPreconditionResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginFailedPreconditionResponseBody {
+	body := &DownloadPlatformMCPPluginFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+func NewDownloadPlatformMCPPluginUnauthorizedResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginUnauthorizedResponseBody {
+	body := &DownloadPlatformMCPPluginUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginForbiddenResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginForbiddenResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginForbiddenResponseBody {
+	body := &DownloadPlatformMCPPluginForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginBadRequestResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginBadRequestResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginBadRequestResponseBody {
+	body := &DownloadPlatformMCPPluginBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginNotFoundResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginNotFoundResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginNotFoundResponseBody {
+	body := &DownloadPlatformMCPPluginNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginConflictResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginConflictResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginConflictResponseBody {
+	body := &DownloadPlatformMCPPluginConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+func NewDownloadPlatformMCPPluginUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginUnsupportedMediaResponseBody {
+	body := &DownloadPlatformMCPPluginUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginInvalidResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginInvalidResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginInvalidResponseBody {
+	body := &DownloadPlatformMCPPluginInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+func NewDownloadPlatformMCPPluginInvariantViolationResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginInvariantViolationResponseBody {
+	body := &DownloadPlatformMCPPluginInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginUnexpectedResponseBody builds the HTTP response
+// body from the result of the "downloadPlatformMCPPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadPlatformMCPPluginUnexpectedResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginUnexpectedResponseBody {
+	body := &DownloadPlatformMCPPluginUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPlatformMCPPluginGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+func NewDownloadPlatformMCPPluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadPlatformMCPPluginGatewayErrorResponseBody {
+	body := &DownloadPlatformMCPPluginGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5292,6 +6236,321 @@ func NewDownloadCodexInstallScriptUnexpectedResponseBody(res *goa.ServiceError) 
 // of the "plugins" service.
 func NewDownloadCodexInstallScriptGatewayErrorResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptGatewayErrorResponseBody {
 	body := &DownloadCodexInstallScriptGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusUnauthorizedResponseBody {
+	body := &GetPlatformMCPPackageStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusForbiddenResponseBody builds the HTTP response
+// body from the result of the "getPlatformMCPPackageStatus" endpoint of the
+// "plugins" service.
+func NewGetPlatformMCPPackageStatusForbiddenResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusForbiddenResponseBody {
+	body := &GetPlatformMCPPackageStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusBadRequestResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusBadRequestResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusBadRequestResponseBody {
+	body := &GetPlatformMCPPackageStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusNotFoundResponseBody builds the HTTP response
+// body from the result of the "getPlatformMCPPackageStatus" endpoint of the
+// "plugins" service.
+func NewGetPlatformMCPPackageStatusNotFoundResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusNotFoundResponseBody {
+	body := &GetPlatformMCPPackageStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusConflictResponseBody builds the HTTP response
+// body from the result of the "getPlatformMCPPackageStatus" endpoint of the
+// "plugins" service.
+func NewGetPlatformMCPPackageStatusConflictResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusConflictResponseBody {
+	body := &GetPlatformMCPPackageStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusUnsupportedMediaResponseBody {
+	body := &GetPlatformMCPPackageStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusInvalidResponseBody builds the HTTP response
+// body from the result of the "getPlatformMCPPackageStatus" endpoint of the
+// "plugins" service.
+func NewGetPlatformMCPPackageStatusInvalidResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusInvalidResponseBody {
+	body := &GetPlatformMCPPackageStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusInvariantViolationResponseBody {
+	body := &GetPlatformMCPPackageStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusUnexpectedResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusUnexpectedResponseBody {
+	body := &GetPlatformMCPPackageStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPlatformMCPPackageStatusGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+func NewGetPlatformMCPPackageStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetPlatformMCPPackageStatusGatewayErrorResponseBody {
+	body := &GetPlatformMCPPackageStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageFailedPreconditionResponseBody builds the HTTP
+// response body from the result of the "repairPlatformMCPPackage" endpoint of
+// the "plugins" service.
+func NewRepairPlatformMCPPackageFailedPreconditionResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageFailedPreconditionResponseBody {
+	body := &RepairPlatformMCPPackageFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageUnauthorizedResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageUnauthorizedResponseBody {
+	body := &RepairPlatformMCPPackageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageForbiddenResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageForbiddenResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageForbiddenResponseBody {
+	body := &RepairPlatformMCPPackageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageBadRequestResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageBadRequestResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageBadRequestResponseBody {
+	body := &RepairPlatformMCPPackageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageNotFoundResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageNotFoundResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageNotFoundResponseBody {
+	body := &RepairPlatformMCPPackageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageConflictResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageConflictResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageConflictResponseBody {
+	body := &RepairPlatformMCPPackageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "repairPlatformMCPPackage" endpoint of
+// the "plugins" service.
+func NewRepairPlatformMCPPackageUnsupportedMediaResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageUnsupportedMediaResponseBody {
+	body := &RepairPlatformMCPPackageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageInvalidResponseBody builds the HTTP response body
+// from the result of the "repairPlatformMCPPackage" endpoint of the "plugins"
+// service.
+func NewRepairPlatformMCPPackageInvalidResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageInvalidResponseBody {
+	body := &RepairPlatformMCPPackageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "repairPlatformMCPPackage" endpoint of
+// the "plugins" service.
+func NewRepairPlatformMCPPackageInvariantViolationResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageInvariantViolationResponseBody {
+	body := &RepairPlatformMCPPackageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageUnexpectedResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageUnexpectedResponseBody {
+	body := &RepairPlatformMCPPackageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairPlatformMCPPackageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "repairPlatformMCPPackage" endpoint of the
+// "plugins" service.
+func NewRepairPlatformMCPPackageGatewayErrorResponseBody(res *goa.ServiceError) *RepairPlatformMCPPackageGatewayErrorResponseBody {
+	body := &RepairPlatformMCPPackageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6037,6 +7296,17 @@ func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionTo
 	return v
 }
 
+// NewDownloadPlatformMCPPluginPayload builds a plugins service
+// downloadPlatformMCPPlugin endpoint payload.
+func NewDownloadPlatformMCPPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadPlatformMCPPluginPayload {
+	v := &plugins.DownloadPlatformMCPPluginPayload{}
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDownloadObservabilityPluginPayload builds a plugins service
 // downloadObservabilityPlugin endpoint payload.
 func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadObservabilityPluginPayload {
@@ -6052,6 +7322,25 @@ func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string
 // downloadCodexInstallScript endpoint payload.
 func NewDownloadCodexInstallScriptPayload(sessionToken *string, projectSlugInput *string) *plugins.DownloadCodexInstallScriptPayload {
 	v := &plugins.DownloadCodexInstallScriptPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetPlatformMCPPackageStatusPayload builds a plugins service
+// getPlatformMCPPackageStatus endpoint payload.
+func NewGetPlatformMCPPackageStatusPayload(sessionToken *string) *plugins.GetPlatformMCPPackageStatusPayload {
+	v := &plugins.GetPlatformMCPPackageStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRepairPlatformMCPPackagePayload builds a plugins service
+// repairPlatformMCPPackage endpoint payload.
+func NewRepairPlatformMCPPackagePayload(sessionToken *string, projectSlugInput *string) *plugins.RepairPlatformMCPPackagePayload {
+	v := &plugins.RepairPlatformMCPPackagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

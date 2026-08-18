@@ -65,6 +65,41 @@ func BuildUpsertWorkUnitsSettingsPayload(adminChatAnalysisUpsertWorkUnitsSetting
 	return v, nil
 }
 
+// BuildUpsertBusinessMemorySettingsPayload builds the payload for the
+// adminChatAnalysis upsertBusinessMemorySettings endpoint from CLI flags.
+func BuildUpsertBusinessMemorySettingsPayload(adminChatAnalysisUpsertBusinessMemorySettingsBody string, adminChatAnalysisUpsertBusinessMemorySettingsSessionToken string) (*adminchatanalysis.UpsertBusinessMemorySettingsPayload, error) {
+	var err error
+	var body UpsertBusinessMemorySettingsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminChatAnalysisUpsertBusinessMemorySettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"business_memory_daily_cap\": 1,\n      \"business_memory_enabled\": false\n   }'")
+		}
+		if body.BusinessMemoryDailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", body.BusinessMemoryDailyCap, 0, true))
+		}
+		if body.BusinessMemoryDailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", body.BusinessMemoryDailyCap, 10000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminChatAnalysisUpsertBusinessMemorySettingsSessionToken != "" {
+			sessionToken = &adminChatAnalysisUpsertBusinessMemorySettingsSessionToken
+		}
+	}
+	v := &adminchatanalysis.UpsertBusinessMemorySettingsPayload{
+		BusinessMemoryEnabled:  body.BusinessMemoryEnabled,
+		BusinessMemoryDailyCap: body.BusinessMemoryDailyCap,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildTriggerAnalysisPayload builds the payload for the adminChatAnalysis
 // triggerAnalysis endpoint from CLI flags.
 func BuildTriggerAnalysisPayload(adminChatAnalysisTriggerAnalysisSessionToken string) (*adminchatanalysis.TriggerAnalysisPayload, error) {

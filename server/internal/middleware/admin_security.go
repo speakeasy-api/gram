@@ -41,8 +41,13 @@ func AdminCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 }
 
 // AdminOriginCheck rejects any unsafe HTTP method whose Origin (or Referer if
-// Origin is absent) is not in the allowlist. CSRF defence for cookie-based
-// admin auth when SameSite=None is required for cross-origin web UIs.
+// Origin is absent) is neither in the allowlist nor the host the request
+// arrived on. CSRF defence for cookie-based admin auth when SameSite=None is
+// required for cross-origin web UIs.
+//
+// The same-host rule keeps a single-origin deployment working: a browser sends
+// Origin on a same-origin unsafe method too, so an empty allowlist would
+// otherwise reject every write.
 func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 	set := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -67,14 +72,47 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				}
 			}
 
-			if _, ok := set[origin]; !ok {
-				http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
+			if _, ok := set[origin]; ok {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			if sameHost(r, origin) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
 	}
+}
+
+// sameHost reports whether origin names the host the request arrived on.
+//
+// The scheme is not compared: a TLS-terminating ingress leaves the server
+// seeing plain HTTP. X-Forwarded-Host wins over Host because such an ingress
+// can rewrite Host to an internal service name. Neither header is forgeable
+// across sites: the browser sets Host, and X-Forwarded-Host makes the request
+// non-simple, so it needs a preflight that AdminCORS answers only for an
+// allowlisted origin.
+func sameHost(r *http.Request, origin string) bool {
+	if origin == "" {
+		return false
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	// Several proxies append to the header; the browser's host comes first.
+	host, _, _ = strings.Cut(host, ",")
+
+	return strings.EqualFold(strings.TrimSpace(host), u.Host)
 }
 
 // AdminCookieAttributes rewrites Set-Cookie response headers for the admin
@@ -121,6 +159,25 @@ func (c *adminCookieRewriter) Write(b []byte) (int, error) {
 		return n, fmt.Errorf("write admin response: %w", err)
 	}
 	return n, nil
+}
+
+// Flush must be forwarded explicitly — the embedded interface hides the
+// underlying writer's Flush from type asserts, breaking streaming. Flushing
+// commits headers, so the cookie rewrite has to happen first.
+func (c *adminCookieRewriter) Flush() {
+	if !c.wroteHeader {
+		c.rewrite()
+		c.wroteHeader = true
+	}
+	// ResponseController finds flush support through FlushError and Unwrap
+	// chains that a direct http.Flusher assert would miss.
+	_ = http.NewResponseController(c.ResponseWriter).Flush()
+}
+
+// Unwrap lets http.ResponseController reach controls of the underlying
+// writer that this wrapper does not forward.
+func (c *adminCookieRewriter) Unwrap() http.ResponseWriter {
+	return c.ResponseWriter
 }
 
 func (c *adminCookieRewriter) rewrite() {

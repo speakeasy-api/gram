@@ -219,7 +219,7 @@ function ClaudeCodeInstallContent({
             {!pluginSlug && (
               <p className="text-muted-foreground mt-2 text-xs">
                 Replace{" "}
-                <code className="bg-muted rounded px-1 py-0.5">
+                <code className="bg-muted px-1 py-0.5">
                   &lt;plugin-slug&gt;
                 </code>{" "}
                 with the slug of the plugin you want to install.
@@ -250,15 +250,13 @@ function ClaudeCodeInstallContent({
                     claude.ai
                   </ExternalTextLink>{" "}
                   as an organization admin, navigate to{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Organization settings → Claude Code
                   </code>
                   , then click{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                    Manage
-                  </code>{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">Manage</code>{" "}
                   under{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Managed Settings
                   </code>
                   .
@@ -270,7 +268,7 @@ function ClaudeCodeInstallContent({
               description: (
                 <>
                   Merge this entry into the org's managed{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     settings.json
                   </code>{" "}
                   — this registers the marketplace and enables{" "}
@@ -287,18 +285,18 @@ function ClaudeCodeInstallContent({
                     {!pluginSlug && (
                       <>
                         Replace{" "}
-                        <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                        <code className="bg-muted px-1 py-0.5 text-xs">
                           &lt;plugin-slug&gt;
                         </code>{" "}
                         with the slug of the plugin you want to enable. Use{" "}
                       </>
                     )}
                     {pluginSlug && "Use "}
-                    <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    <code className="bg-muted px-1 py-0.5 text-xs">
                       strictKnownMarketplaces
                     </code>{" "}
                     instead of{" "}
-                    <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                    <code className="bg-muted px-1 py-0.5 text-xs">
                       extraKnownMarketplaces
                     </code>{" "}
                     to lock the org to this marketplace and reject all others.
@@ -364,11 +362,11 @@ function ClaudeCoworkInstallContent({
                     claude.ai
                   </ExternalTextLink>{" "}
                   as an organization admin and navigate to{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Organization settings → Plugins
                   </code>
                   , then click{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Add plugin
                   </code>
                   .
@@ -380,9 +378,7 @@ function ClaudeCoworkInstallContent({
               description: (
                 <>
                   Select{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                    GitHub
-                  </code>{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">GitHub</code>{" "}
                   as the source and enter your repo:
                 </>
               ),
@@ -451,7 +447,7 @@ function CursorInstallContent({
               description: (
                 <>
                   Navigate to{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Settings → Plugins → Import
                   </code>{" "}
                   and paste the repository URL:
@@ -465,7 +461,7 @@ function CursorInstallContent({
               description: pluginName ? (
                 <>
                   In Cursor's team marketplace settings, mark the{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     {pluginName}
                   </code>{" "}
                   plugin as required so its tools are available to every team
@@ -550,7 +546,7 @@ function CodexInstallContent({
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
           enables hooks in{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
           , and pre-approves all hook events — no manual Settings → Hooks step
@@ -569,7 +565,7 @@ function CodexInstallContent({
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
           Then run:{" "}
-          <code className="bg-muted rounded px-1 py-0.5">
+          <code className="bg-muted px-1 py-0.5">
             bash ~/Downloads/gram-codex-install.sh
           </code>
         </p>
@@ -601,7 +597,7 @@ function CodexInstallContent({
                 <>
                   Hooks are behind a feature flag and the plugin must be
                   explicitly enabled. Add all of the following to{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     ~/.codex/config.toml
                   </code>
                   :
@@ -612,7 +608,7 @@ function CodexInstallContent({
               children: !pluginSlug && (
                 <p className="text-muted-foreground text-xs">
                   Replace{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     &lt;plugin-slug&gt;
                   </code>{" "}
                   with the slug of the plugin you want to enable.
@@ -624,11 +620,11 @@ function CodexInstallContent({
               description: (
                 <>
                   After restarting Codex, open{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     Settings → Hooks
                   </code>{" "}
                   and enable each hook listed under the{" "}
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  <code className="bg-muted px-1 py-0.5 text-xs">
                     {pluginName}
                   </code>{" "}
                   plugin. Codex requires manual approval for each hook event
@@ -642,11 +638,11 @@ function CodexInstallContent({
         <RelatedLinks
           links={[
             {
-              href: "https://developers.openai.com/codex/hooks",
+              href: "https://learn.chatgpt.com/docs/hooks",
               label: "Hooks Docs",
             },
             {
-              href: "https://developers.openai.com/codex/plugins/build",
+              href: "https://developers.openai.com/plugins/build/plugins",
               label: "Plugin Docs",
             },
           ]}
@@ -731,16 +727,11 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download the Gram observability plugin as a ZIP — a self-contained{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            .opencode
-          </code>{" "}
-          plugin with a hooks-scoped API key already embedded (no CLI, no key to
+          <code className="bg-muted px-1 py-0.5 text-xs">.opencode</code> plugin
+          with a hooks-scoped API key already embedded (no CLI, no key to
           export). Extract it into your repo's{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            .opencode/
-          </code>{" "}
-          (or{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">.opencode/</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.config/opencode/
           </code>{" "}
           for every repo) and opencode auto-discovers it on next start.
@@ -757,7 +748,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
           Then extract:{" "}
-          <code className="bg-muted rounded px-1 py-0.5">
+          <code className="bg-muted px-1 py-0.5">
             unzip observability-opencode.zip -d .opencode
           </code>
         </p>
@@ -772,9 +763,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         </p>
         <p className="text-muted-foreground text-sm">
           Prefer the CLI? Install the{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            speakeasy-hooks
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
           binary:
         </p>
         <CodeBlock language="bash" className="bg-background">
@@ -782,7 +771,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         </CodeBlock>
         <p className="text-muted-foreground text-sm">
           Then run it from your repo to render the same plugin into{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+          <code className="bg-muted px-1 py-0.5 text-xs">
             .opencode/plugin/
           </code>
           :
@@ -797,14 +786,12 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Merge an entry into the{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">mcp</code>{" "}
-          block of your project's{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            opencode.json
-          </code>
-          . Replace the placeholders with the name, URL, and auth token from
-          that server's own install page — that token is separate from the Gram
-          hooks credential.
+          <code className="bg-muted px-1 py-0.5 text-xs">mcp</code> block of
+          your project's{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">opencode.json</code>.
+          Replace the placeholders with the name, URL, and auth token from that
+          server's own install page — that token is separate from the Gram hooks
+          credential.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}
@@ -959,7 +946,7 @@ export function InstallInstructionsDialog({
                         setPluginConfirmed(true);
                       }}
                       className={cn(
-                        "border-border bg-card hover:border-primary/50 hover:bg-muted/50 flex cursor-pointer flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors",
+                        "border-border bg-card hover:border-primary/50 hover:bg-muted/50 flex cursor-pointer flex-col items-start gap-1 border p-4 text-left transition-colors",
                         plugin.slug === selectedPluginSlug &&
                           "border-primary bg-primary/5",
                       )}
@@ -1003,13 +990,13 @@ export function InstallInstructionsDialog({
                         if (p.available) setSelected(p.id);
                       }}
                       className={cn(
-                        "border-border bg-card flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors",
+                        "border-border bg-card flex flex-col items-center gap-2 border p-4 text-center transition-colors",
                         p.available
                           ? "hover:border-primary/50 hover:bg-muted/50 cursor-pointer"
                           : "cursor-not-allowed opacity-50",
                       )}
                     >
-                      <div className="bg-secondary flex h-10 w-10 items-center justify-center rounded-lg">
+                      <div className="bg-secondary flex h-10 w-10 items-center justify-center">
                         <HookSourceIcon source={p.source} className="size-5" />
                       </div>
                       <span className="text-sm font-medium">{p.label}</span>

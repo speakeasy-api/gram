@@ -87,6 +87,7 @@ export function buildSkillsQuery(
       search: request?.search,
       sourceKinds: request?.sourceKinds,
       classifications: request?.classifications,
+      tags: request?.tags,
       sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -132,6 +133,7 @@ export function buildSkillsInfiniteQuery(
       search: request?.search,
       sourceKinds: request?.sourceKinds,
       classifications: request?.classifications,
+      tags: request?.tags,
       sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -174,6 +176,7 @@ export function queryKeySkills(
     search?: string | undefined;
     sourceKinds?: Array<SourceKinds> | undefined;
     classifications?: Array<Classifications> | undefined;
+    tags?: Array<string> | undefined;
     sort?: Sort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
@@ -190,6 +193,7 @@ export function queryKeySkillsInfinite(
     search?: string | undefined;
     sourceKinds?: Array<SourceKinds> | undefined;
     classifications?: Array<Classifications> | undefined;
+    tags?: Array<string> | undefined;
     sort?: Sort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;

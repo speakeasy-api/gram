@@ -8,15 +8,12 @@ import {
   Loader2,
   Pin,
   Search,
-  Sparkles,
   SlidersHorizontal,
+  Sparkles,
   TriangleAlert,
-  User,
-  Wrench,
   X,
 } from "lucide-react";
 import {
-  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -68,7 +65,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
-import { formatPlatform } from "@/lib/formatPlatform";
+import { formatChatSource } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -76,7 +73,7 @@ import {
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState, riskResultAnchorId } from "./chatHelpers";
+import { riskResultAnchorId } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -85,9 +82,8 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemContainsMessage,
   displayItemRows,
-  type MessageCategory,
-  rowCategory,
   rowHasRiskFlag,
   rowIsFlagged,
   rowSearchFields,
@@ -105,6 +101,7 @@ import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
+import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
@@ -118,6 +115,8 @@ interface ChatDetailPanelProps {
   chatId: string;
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** One-based raw transcript message index to load, center, and highlight. */
+  focusedMessageTurn?: number;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -130,7 +129,7 @@ interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
   chatId: string | null;
 }
 
-type ViewMode = "chat" | "tools" | "exclusion";
+type ViewMode = "chat" | "effects" | "tools" | "exclusion";
 
 /** One navigable search hit: a single query occurrence within one field of one
  * display row. `key` is stable across pagination (built from the row id, not its
@@ -202,6 +201,7 @@ export function ChatDetailSheet({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus,
   dimNonRisk,
 }: ChatDetailSheetProps): JSX.Element {
@@ -227,6 +227,7 @@ export function ChatDetailSheet({
                   chatId={chatId}
                   onClose={onClose}
                   onDelete={onDelete}
+                  focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                 />
@@ -262,6 +263,8 @@ function SessionSummary({
     accountType?: string;
     accountEmail?: string;
     source?: string;
+    originatingClient?: string;
+    litellmProxied?: boolean;
     createdAt: Date;
     totalCost?: number;
     totalInputTokens?: number;
@@ -294,7 +297,7 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
         >
           {compact ? (
             <span className="inline-flex items-center gap-1.5">
@@ -344,7 +347,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {formatPlatform(chat.source)}
+                  {formatChatSource(chat.source, chat)}
                 </span>
               </MetaRow>
             )}
@@ -427,7 +430,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {formatPlatform(chat.source)}
+              {formatChatSource(chat.source, chat)}
             </span>
           </Badge.Text>
         </Badge>
@@ -446,70 +449,31 @@ function ChatDetailMetadataBadges({
   );
 }
 
-const MESSAGE_TYPES: ReadonlyArray<{
-  key: MessageCategory;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-}> = [
-  { key: "user", label: "User", icon: User },
-  { key: "assistant", label: "Assistant", icon: Sparkles },
-  { key: "tool", label: "Tool calls", icon: Wrench },
-];
-
-const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
-  MESSAGE_TYPES.map((t) => t.key),
-);
-
-/** A single toggle in the header filter bar. */
-/** Header filter bar: a multi-select segmented control over message types and a
- * "Risky only" switch, separated by a hairline. Right-aligned on its own row. */
+/** Header filter bar: condensed-view toggle + optional "Risky only" switch. */
 function MessageFilterBar({
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
 }: {
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
-  /** The "Risky only" view is driven by risk findings, which are an org-admin
-   * resource (risk.results.list). Hide the toggle for everyone else. */
   showRiskyOnly: boolean;
 }) {
-  const toggleType = (key: MessageCategory) => {
-    const next = new Set(typeFilter);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    // Never leave the transcript fully empty — clearing the last type resets.
-    if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
-    onTypeFilterChange(next);
-  };
-
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
-        {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
-          const on = typeFilter.has(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggleType(key)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
-                on
-                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground",
-              )}
-            >
-              <Glyph className="size-3.5" />
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={condensed}
+          onCheckedChange={onCondensedChange}
+          aria-label="Condensed view"
+        />
+        <span className="text-muted-foreground text-xs font-medium">
+          Condensed
+        </span>
       </div>
       {showRiskyOnly && (
         <>
@@ -519,7 +483,7 @@ function MessageFilterBar({
               checked={riskyOnly}
               onCheckedChange={onRiskyOnlyChange}
               aria-label="Show only risky messages"
-              className={riskyOnly ? "bg-red-800" : undefined}
+              className={riskyOnly ? "bg-destructive" : undefined}
             />
             <span className="text-muted-foreground text-xs font-medium">
               Risky only
@@ -558,9 +522,9 @@ function ThreadSearchBar({
   // (meaningless) prev/next nav while keeping clear available.
   const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
-    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -655,8 +619,8 @@ function ChatDetailHeader({
   canManageChat,
   compactMetadata,
   showFilter,
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
@@ -677,8 +641,8 @@ function ChatDetailHeader({
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
   showRiskyOnly: boolean;
@@ -735,7 +699,7 @@ function ChatDetailHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
               >
                 <SlidersHorizontal className="size-4" />
                 Actions
@@ -781,7 +745,7 @@ function ChatDetailHeader({
           </DropdownMenu>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <Icon name="x" className="size-5" />
@@ -795,8 +759,8 @@ function ChatDetailHeader({
           <div className="min-w-0 flex-1">{searchBar}</div>
           <div className="shrink-0">
             <MessageFilterBar
-              typeFilter={typeFilter}
-              onTypeFilterChange={onTypeFilterChange}
+              condensed={condensed}
+              onCondensedChange={onCondensedChange}
               riskyOnly={riskyOnly}
               onRiskyOnlyChange={onRiskyOnlyChange}
               showRiskyOnly={showRiskyOnly}
@@ -947,6 +911,7 @@ function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
@@ -960,11 +925,6 @@ function ChatDetailPanel({
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
-  // Header transcript filter — which message types to show (all on by default)
-  // plus an optional "risky only" toggle.
-  const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
-    () => new Set(ALL_CATEGORIES),
-  );
   const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
@@ -1040,6 +1000,43 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const validFocusedMessageTurn =
+    focusedMessageTurn !== undefined &&
+    Number.isInteger(focusedMessageTurn) &&
+    focusedMessageTurn > 0
+      ? focusedMessageTurn
+      : undefined;
+  const transcriptMessageCount = transcript.messages.length;
+  const transcriptLoading = transcript.isLoading;
+  const transcriptFetchingNewer = transcript.isFetchingNewer;
+  const transcriptHasMoreAfter = transcript.hasMoreAfter;
+  const loadNextTranscriptPage = transcript.fetchNewer;
+
+  // Provenance can cite a turn beyond the cheap first transcript page. Load
+  // forward pages only until that raw one-based message index is available.
+  useEffect(() => {
+    if (
+      validFocusedMessageTurn === undefined ||
+      transcriptLoading ||
+      transcriptFetchingNewer ||
+      transcriptMessageCount >= validFocusedMessageTurn ||
+      !transcriptHasMoreAfter
+    ) {
+      return;
+    }
+    loadNextTranscriptPage();
+  }, [
+    validFocusedMessageTurn,
+    transcriptLoading,
+    transcriptFetchingNewer,
+    transcriptMessageCount,
+    transcriptHasMoreAfter,
+    loadNextTranscriptPage,
+  ]);
+  const focusedMessageId =
+    validFocusedMessageTurn === undefined
+      ? null
+      : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
   const { data: membersData } = useMembers();
   const userLabel = chat
     ? chatOwnerLabel(
@@ -1092,7 +1089,6 @@ function ChatDetailPanel({
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
     setView("chat");
-    setTypeFilter(new Set(ALL_CATEGORIES));
     setRiskyOnly(false);
     setExclusionState(null);
     setPendingExclusionKey(null);
@@ -1153,26 +1149,18 @@ function ChatDetailPanel({
     () => buildTranscript(chatMessages, chat?.contentParts ?? []),
     [chatMessages, chat?.contentParts],
   );
-  // Apply the header filters at the row level so generation dividers and risk
-  // gaps recompute against exactly what's shown (no orphaned dividers).
-  const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
+  const filterActive = riskyOnly;
   const visibleRows = useMemo(() => {
-    let rows = transcriptRows;
-    if (typeFilter.size < ALL_CATEGORIES.size) {
-      rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
-    }
-    if (riskyOnly) {
-      // `is_risk` on each windowed message is the authorized "which messages are
-      // risky" signal — it rides chat.load (no internal seq exposed), so the
-      // filter works even when the org-admin-only risk.results.list (which powers
-      // the match-detail badges) is forbidden. Fall back to per-message risk
-      // results for safety.
-      rows = rows.filter(
-        (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
-      );
-    }
-    return rows;
-  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
+    if (!riskyOnly) return transcriptRows;
+    // `is_risk` on each windowed message is the authorized "which messages are
+    // risky" signal — it rides chat.load (no internal seq exposed), so the
+    // filter works even when the org-admin-only risk.results.list (which powers
+    // the match-detail badges) is forbidden. Fall back to per-message risk
+    // results for safety.
+    return transcriptRows.filter(
+      (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
+    );
+  }, [transcriptRows, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const windowGaps = windowed?.gaps;
@@ -1186,17 +1174,25 @@ function ChatDetailPanel({
       }),
     [visibleRows, hasMoreBefore, hasMoreAfter, windowGaps],
   );
+  const focusedItemIndex = useMemo(() => {
+    if (!focusedMessageId) return null;
+    const index = displayItems.findIndex((item) =>
+      displayItemContainsMessage(item, focusedMessageId),
+    );
+    return index >= 0 ? index : null;
+  }, [displayItems, focusedMessageId]);
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
   // the first finding, however far down it is. Plain cost/default views open at
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
+    if (focusedItemIndex !== null) return focusedItemIndex;
     if (!dimNonRisk) return null;
     const idx = displayItems.findIndex((it) =>
       displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
-  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+  }, [focusedItemIndex, dimNonRisk, displayItems, riskResultsByMessage]);
 
   // Unified per-occurrence search navigation: flat-map the loaded display rows
   // into every query occurrence (message text / tool name / args / output) in
@@ -1287,8 +1283,9 @@ function ChatDetailPanel({
       // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
       // that the plain from-start transcript uses — otherwise the window's top
       // edge eagerly expands older messages on mount.
-      scrollToFinding: riskWindowed || searchActive,
-      scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
+      scrollToFinding:
+        riskWindowed || searchActive || validFocusedMessageTurn !== undefined,
+      scrollToItemIndex: activeOccurrence?.itemIndex ?? focusedItemIndex,
       scrollNonce,
       activeOccurrence: activeOccurrence
         ? {
@@ -1298,17 +1295,21 @@ function ChatDetailPanel({
             indexInField: activeOccurrence.indexInField,
           }
         : null,
+      focusedMessageId,
     };
   }, [
     hasMoreBefore,
     hasMoreAfter,
     riskWindowed,
     searchActive,
+    validFocusedMessageTurn,
     windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
+    focusedItemIndex,
+    focusedMessageId,
   ]);
 
   // "Load all messages": shown whenever part of the conversation isn't loaded
@@ -1323,6 +1324,12 @@ function ChatDetailPanel({
     if (windowed) windowed.loadAll();
     else transcript.loadRest();
   }, [windowed, transcript]);
+
+  useEffect(() => {
+    if (view === "effects" && !fullyLoaded && !loadingAllMessages) {
+      loadAllMessages();
+    }
+  }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
   const userLabelOverride = chat ? userLabel : undefined;
 
@@ -1350,10 +1357,10 @@ function ChatDetailPanel({
     ],
   );
 
-  // "Create exclusion" swaps the transcript for the exclusion editor in-place
-  // (with a back button) rather than stacking a second sheet on top.
+  // "Setup exclusion rule" swaps the transcript for the exclusion editor
+  // in-place (with a back button) rather than stacking a second sheet on top.
   const openExclusion = useCallback((result: RiskResult) => {
-    setExclusionState(findingToExclusionState(result));
+    setExclusionState({ mode: "create", results: [result] });
     setPendingExclusionKey(findingKey(result));
     setView("exclusion");
   }, []);
@@ -1442,14 +1449,14 @@ function ChatDetailPanel({
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
-        showFilter={view === "chat"}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
+        showFilter={view === "chat" || view === "effects"}
+        condensed={view === "effects"}
+        onCondensedChange={(on) => setView(on ? "effects" : "chat")}
         riskyOnly={riskyOnly}
         onRiskyOnlyChange={setRiskyOnly}
         showRiskyOnly={canViewRisk}
         searchBar={
-          riskWindowed ? undefined : (
+          riskWindowed || view === "effects" ? undefined : (
             <ThreadSearchBar
               value={searchInput}
               onChange={setSearchInput}
@@ -1563,6 +1570,20 @@ function ChatDetailPanel({
                     : "No messages to display."
             }
           />
+          {view === "effects" && (
+            <div className="bg-background absolute inset-0 z-10 flex flex-col">
+              <EffectsView
+                chatId={chatId}
+                rows={visibleRows}
+                riskResultsByMessage={riskResultsByMessage}
+                claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
+                claudeTurnByPromptId={claudeTurnByPromptId}
+                userLabel={chat?.externalUserId}
+                userLabelOverride={userLabelOverride}
+                isLoading={chatLoading || loadingAllMessages}
+              />
+            </div>
+          )}
         </CreateExclusionContext.Provider>
 
         {view === "tools" && (
@@ -1583,8 +1604,8 @@ function ChatDetailPanel({
             <SubViewBar
               title={
                 exclusionState.mode === "edit"
-                  ? "Edit exclusion"
-                  : "Create exclusion"
+                  ? "Edit exclusion rule"
+                  : "Set up exclusion rule"
               }
               onBack={closeExclusion}
             />

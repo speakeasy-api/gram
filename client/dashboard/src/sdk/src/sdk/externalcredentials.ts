@@ -8,15 +8,19 @@ import { externalCredentialsDeleteAwsIam } from "../funcs/externalCredentialsDel
 import { externalCredentialsDeleteGcpIam } from "../funcs/externalCredentialsDeleteGcpIam.js";
 import { externalCredentialsGetAwsIam } from "../funcs/externalCredentialsGetAwsIam.js";
 import { externalCredentialsGetGcpIam } from "../funcs/externalCredentialsGetGcpIam.js";
+import { externalCredentialsGetGcpSetupInfo } from "../funcs/externalCredentialsGetGcpSetupInfo.js";
 import { externalCredentialsList } from "../funcs/externalCredentialsList.js";
 import { externalCredentialsListAwsIam } from "../funcs/externalCredentialsListAwsIam.js";
 import { externalCredentialsListGcpIam } from "../funcs/externalCredentialsListGcpIam.js";
 import { externalCredentialsUpdateAwsIam } from "../funcs/externalCredentialsUpdateAwsIam.js";
 import { externalCredentialsUpdateGcpIam } from "../funcs/externalCredentialsUpdateGcpIam.js";
+import { externalCredentialsVerifyGcpIam } from "../funcs/externalCredentialsVerifyGcpIam.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AwsIamCredential } from "../models/components/awsiamcredential.js";
 import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
+import { GcpSetupInfo } from "../models/components/gcpsetupinfo.js";
 import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
+import { VerifyCredentialResult } from "../models/components/verifycredentialresult.js";
 import {
   CreateAwsIamCredentialRequest,
   CreateAwsIamCredentialSecurity,
@@ -42,6 +46,10 @@ import {
   GetGcpIamCredentialSecurity,
 } from "../models/operations/getgcpiamcredential.js";
 import {
+  GetGcpSetupInfoRequest,
+  GetGcpSetupInfoSecurity,
+} from "../models/operations/getgcpsetupinfo.js";
+import {
   ListAwsIamCredentialsRequest,
   ListAwsIamCredentialsSecurity,
 } from "../models/operations/listawsiamcredentials.js";
@@ -61,6 +69,10 @@ import {
   UpdateGcpIamCredentialRequest,
   UpdateGcpIamCredentialSecurity,
 } from "../models/operations/updategcpiamcredential.js";
+import {
+  VerifyGcpIamCredentialRequest,
+  VerifyGcpIamCredentialSecurity,
+} from "../models/operations/verifygcpiamcredential.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class ExternalCredentials extends ClientSDK {
@@ -106,7 +118,7 @@ export class ExternalCredentials extends ClientSDK {
    * deleteAwsIamCredential externalCredentials
    *
    * @remarks
-   * Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+   * Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
    */
   async deleteAwsIam(
     request: DeleteAwsIamCredentialRequest,
@@ -125,7 +137,7 @@ export class ExternalCredentials extends ClientSDK {
    * deleteGcpIamCredential externalCredentials
    *
    * @remarks
-   * Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+   * Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
    */
   async deleteGcpIam(
     request: DeleteGcpIamCredentialRequest,
@@ -171,6 +183,25 @@ export class ExternalCredentials extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(externalCredentialsGetGcpIam(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGcpSetupInfo externalCredentials
+   *
+   * @remarks
+   * Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+   */
+  async getGcpSetupInfo(
+    request?: GetGcpSetupInfoRequest | undefined,
+    security?: GetGcpSetupInfoSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GcpSetupInfo> {
+    return unwrapAsync(externalCredentialsGetGcpSetupInfo(
       this,
       request,
       security,
@@ -266,6 +297,25 @@ export class ExternalCredentials extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(externalCredentialsUpdateGcpIam(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpIamCredential externalCredentials
+   *
+   * @remarks
+   * Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+   */
+  async verifyGcpIam(
+    request: VerifyGcpIamCredentialRequest,
+    security?: VerifyGcpIamCredentialSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<VerifyCredentialResult> {
+    return unwrapAsync(externalCredentialsVerifyGcpIam(
       this,
       request,
       security,

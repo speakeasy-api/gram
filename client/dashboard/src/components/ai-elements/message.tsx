@@ -23,7 +23,7 @@ export const Message = ({
 );
 
 const messageContentVariants = cva(
-  "is-user:dark flex flex-col gap-2 overflow-hidden rounded-lg text-sm",
+  "is-user:dark flex flex-col gap-2 overflow-hidden text-sm",
   {
     variants: {
       variant: {

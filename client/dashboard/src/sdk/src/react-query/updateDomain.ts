@@ -54,7 +54,7 @@ export type UpdateDomainMutationError =
  * updateDomain domains
  *
  * @remarks
- * Update the IP allowlist for the organization's custom domain
+ * Update settings for the organization's custom domain
  */
 export function useUpdateDomainMutation(
   options?: MutationHookOptions<

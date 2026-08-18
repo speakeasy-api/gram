@@ -26,8 +26,11 @@ type Client struct {
 	RemovePluginServerEndpoint          goa.Endpoint
 	SetPluginAssignmentsEndpoint        goa.Endpoint
 	DownloadPluginPackageEndpoint       goa.Endpoint
+	DownloadPlatformMCPPluginEndpoint   goa.Endpoint
 	DownloadObservabilityPluginEndpoint goa.Endpoint
 	DownloadCodexInstallScriptEndpoint  goa.Endpoint
+	GetPlatformMCPPackageStatusEndpoint goa.Endpoint
+	RepairPlatformMCPPackageEndpoint    goa.Endpoint
 	GetPublishStatusEndpoint            goa.Endpoint
 	PublishPluginsEndpoint              goa.Endpoint
 	GetMarketplaceSettingsEndpoint      goa.Endpoint
@@ -35,7 +38,7 @@ type Client struct {
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
+func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadPlatformMCPPlugin, downloadObservabilityPlugin, downloadCodexInstallScript, getPlatformMCPPackageStatus, repairPlatformMCPPackage, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
 	return &Client{
 		ListPluginsEndpoint:                 listPlugins,
 		GetPluginEndpoint:                   getPlugin,
@@ -47,8 +50,11 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 		RemovePluginServerEndpoint:          removePluginServer,
 		SetPluginAssignmentsEndpoint:        setPluginAssignments,
 		DownloadPluginPackageEndpoint:       downloadPluginPackage,
+		DownloadPlatformMCPPluginEndpoint:   downloadPlatformMCPPlugin,
 		DownloadObservabilityPluginEndpoint: downloadObservabilityPlugin,
 		DownloadCodexInstallScriptEndpoint:  downloadCodexInstallScript,
+		GetPlatformMCPPackageStatusEndpoint: getPlatformMCPPackageStatus,
+		RepairPlatformMCPPackageEndpoint:    repairPlatformMCPPackage,
 		GetPublishStatusEndpoint:            getPublishStatus,
 		PublishPluginsEndpoint:              publishPlugins,
 		GetMarketplaceSettingsEndpoint:      getMarketplaceSettings,
@@ -253,6 +259,7 @@ func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmen
 // DownloadPluginPackage calls the "downloadPluginPackage" endpoint of the
 // "plugins" service.
 // DownloadPluginPackage may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -271,6 +278,31 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 		return
 	}
 	o := ires.(*DownloadPluginPackageResponseData)
+	return o.Result, o.Body, nil
+}
+
+// DownloadPlatformMCPPlugin calls the "downloadPlatformMCPPlugin" endpoint of
+// the "plugins" service.
+// DownloadPlatformMCPPlugin may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DownloadPlatformMCPPlugin(ctx context.Context, p *DownloadPlatformMCPPluginPayload) (res *DownloadPlatformMCPPluginResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.DownloadPlatformMCPPluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*DownloadPlatformMCPPluginResponseData)
 	return o.Result, o.Body, nil
 }
 
@@ -320,6 +352,53 @@ func (c *Client) DownloadCodexInstallScript(ctx context.Context, p *DownloadCode
 	}
 	o := ires.(*DownloadCodexInstallScriptResponseData)
 	return o.Result, o.Body, nil
+}
+
+// GetPlatformMCPPackageStatus calls the "getPlatformMCPPackageStatus" endpoint
+// of the "plugins" service.
+// GetPlatformMCPPackageStatus may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPlatformMCPPackageStatus(ctx context.Context, p *GetPlatformMCPPackageStatusPayload) (res *PlatformMCPPackageStatusResult, err error) {
+	var ires any
+	ires, err = c.GetPlatformMCPPackageStatusEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PlatformMCPPackageStatusResult), nil
+}
+
+// RepairPlatformMCPPackage calls the "repairPlatformMCPPackage" endpoint of
+// the "plugins" service.
+// RepairPlatformMCPPackage may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RepairPlatformMCPPackage(ctx context.Context, p *RepairPlatformMCPPackagePayload) (res *PlatformMCPPackageStatusResult, err error) {
+	var ires any
+	ires, err = c.RepairPlatformMCPPackageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PlatformMCPPackageStatusResult), nil
 }
 
 // GetPublishStatus calls the "getPublishStatus" endpoint of the "plugins"

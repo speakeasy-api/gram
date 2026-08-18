@@ -647,10 +647,6 @@ func DecodeUpdateDomainRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpdateDomainRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
 
 		var (
 			sessionToken *string
@@ -818,6 +814,219 @@ func EncodeUpdateDomainError(encoder func(context.Context, http.ResponseWriter) 
 				body = formatter(ctx, res)
 			} else {
 				body = NewUpdateDomainGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSetRootMcpEndpointResponse returns an encoder for responses returned
+// by the domains setRootMcpEndpoint endpoint.
+func EncodeSetRootMcpEndpointResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*domains.CustomDomain)
+		enc := encoder(ctx, w)
+		body := NewSetRootMcpEndpointResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSetRootMcpEndpointRequest returns a decoder for requests sent to the
+// domains setRootMcpEndpoint endpoint.
+func DecodeSetRootMcpEndpointRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*domains.SetRootMcpEndpointPayload, error) {
+	return func(r *http.Request) (*domains.SetRootMcpEndpointPayload, error) {
+		var payload *domains.SetRootMcpEndpointPayload
+		var (
+			body SetRootMcpEndpointRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetRootMcpEndpointRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewSetRootMcpEndpointPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetRootMcpEndpointError returns an encoder for errors returned by the
+// setRootMcpEndpoint domains endpoint.
+func EncodeSetRootMcpEndpointError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetRootMcpEndpointGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1408,20 +1617,22 @@ func EncodeListMcpEndpointsError(encoder func(context.Context, http.ResponseWrit
 // *CustomDomainResponseBody from a value of type *domains.CustomDomain.
 func marshalDomainsCustomDomainToCustomDomainResponseBody(v *domains.CustomDomain) *CustomDomainResponseBody {
 	res := &CustomDomainResponseBody{
-		ID:                   v.ID,
-		OrganizationID:       v.OrganizationID,
-		Domain:               v.Domain,
-		Verified:             v.Verified,
-		Activated:            v.Activated,
-		CreatedAt:            v.CreatedAt,
-		UpdatedAt:            v.UpdatedAt,
-		IsUpdating:           v.IsUpdating,
-		HealthStatus:         v.HealthStatus,
-		HealthIssue:          v.HealthIssue,
-		HealthCheckedAt:      v.HealthCheckedAt,
-		UnhealthySince:       v.UnhealthySince,
-		CertificateExpiresAt: v.CertificateExpiresAt,
-		ConsecutiveFailures:  v.ConsecutiveFailures,
+		ID:                       v.ID,
+		OrganizationID:           v.OrganizationID,
+		Domain:                   v.Domain,
+		Verified:                 v.Verified,
+		Activated:                v.Activated,
+		CreatedAt:                v.CreatedAt,
+		UpdatedAt:                v.UpdatedAt,
+		IsUpdating:               v.IsUpdating,
+		HealthStatus:             v.HealthStatus,
+		HealthIssue:              v.HealthIssue,
+		HealthCheckedAt:          v.HealthCheckedAt,
+		UnhealthySince:           v.UnhealthySince,
+		CertificateExpiresAt:     v.CertificateExpiresAt,
+		ConsecutiveFailures:      v.ConsecutiveFailures,
+		RootMcpEndpointID:        v.RootMcpEndpointID,
+		OpenaiAppsChallengeToken: v.OpenaiAppsChallengeToken,
 	}
 	if v.IPAllowlist != nil {
 		res.IPAllowlist = make([]string, len(v.IPAllowlist))
@@ -1448,6 +1659,7 @@ func marshalDomainsCustomDomainMcpEndpointToCustomDomainMcpEndpointResponseBody(
 		McpServerID:   v.McpServerID,
 		McpServerName: v.McpServerName,
 		McpServerSlug: v.McpServerSlug,
+		IsDomainRoot:  v.IsDomainRoot,
 	}
 
 	return res

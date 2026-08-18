@@ -15,16 +15,28 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Operator visibility into DCR'd MCP clients (user_session_clients). Read +
-// revoke; registrations are written by /mcp/{slug}/register.
+// Operator visibility into MCP clients registered against a user-session
+// issuer (user_session_clients). Read + revoke. Registrations are written by
+// /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata
+// Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri
+// distinguishes the two.
 type Service interface {
 	// List user_session_clients in the caller's project.
 	ListUserSessionClients(context.Context, *ListUserSessionClientsPayload) (res *ListUserSessionClientsResult, err error)
 	// Get a user_session_client by id.
 	GetUserSessionClient(context.Context, *GetUserSessionClientPayload) (res *types.UserSessionClient, err error)
-	// Soft-delete a user_session_client. Future tokens minted for this client_id
-	// are rejected; existing live user_sessions keep working until they hit
-	// expires_at.
+	// Force a CIMD client's metadata document to be re-read. Purges the stored
+	// cache state (expiry + ETag) before re-fetching, so the read is
+	// unconditional: a host answering 304 Not Modified cannot re-confirm the copy
+	// the operator is discarding. Rejected for DCR clients. Deliberately bypasses
+	// the document cache, so it carries a per-client cooldown: a refresh shortly
+	// after the last successful read returns rate_limit_exceeded.
+	RefreshUserSessionClientCIMD(context.Context, *RefreshUserSessionClientCIMDPayload) (res *types.UserSessionClient, err error)
+	// Soft-delete a user_session_client and cascade to the user_sessions it
+	// issued. A DCR client stays revoked. A CIMD client does not: its identity is
+	// the metadata document URL, so the next /authorize re-resolves that document
+	// and registers a fresh row. Durably blocking a CIMD client is admission
+	// control's job, not revocation's.
 	RevokeUserSessionClient(context.Context, *RevokeUserSessionClientPayload) (err error)
 }
 
@@ -48,7 +60,7 @@ const ServiceName = "userSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listUserSessionClients", "getUserSessionClient", "revokeUserSessionClient"}
+var MethodNames = [4]string{"listUserSessionClients", "getUserSessionClient", "refreshUserSessionClientCIMD", "revokeUserSessionClient"}
 
 // GetUserSessionClientPayload is the payload type of the userSessionClients
 // service getUserSessionClient method.
@@ -80,6 +92,16 @@ type ListUserSessionClientsResult struct {
 	Items []*types.UserSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// RefreshUserSessionClientCIMDPayload is the payload type of the
+// userSessionClients service refreshUserSessionClientCIMD method.
+type RefreshUserSessionClientCIMDPayload struct {
+	// The user_session_client id.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // RevokeUserSessionClientPayload is the payload type of the userSessionClients

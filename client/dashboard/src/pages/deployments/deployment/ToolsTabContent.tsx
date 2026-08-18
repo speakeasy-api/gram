@@ -1,4 +1,3 @@
-import { Heading } from "@/components/ui/Heading";
 import { ToolList } from "@/components/tool-list";
 import { useListTools } from "@/hooks/toolTypes";
 import { useMemo } from "react";
@@ -19,9 +18,7 @@ export const ToolsTabContent = ({
 
   return (
     <div className="w-full max-w-full overflow-hidden">
-      <Heading variant="h2" className="mb-6">
-        Tools
-      </Heading>
+      <h2 className="text-eyebrow mb-6">Tools</h2>
       <ToolList tools={toolDefinitions} readOnly />
     </div>
   );

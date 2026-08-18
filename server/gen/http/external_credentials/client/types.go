@@ -51,18 +51,10 @@ type UpdateAwsIamCredentialRequestBody struct {
 type CreateGcpIamCredentialRequestBody struct {
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
-	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
-	// Workload Identity Federation pool ID. Set together with the other wif_*
-	// fields.
-	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
-	// Workload Identity Federation provider ID. Set together with the other wif_*
-	// fields.
-	WifProviderID *string `form:"wif_provider_id,omitempty" json:"wif_provider_id,omitempty" xml:"wif_provider_id,omitempty"`
-	// GCP project number backing the WIF pool. Set together with the other wif_*
-	// fields.
-	WifProjectNumber *string `form:"wif_project_number,omitempty" json:"wif_project_number,omitempty" xml:"wif_project_number,omitempty"`
+	// The service account in your project that Gram impersonates. Grant Gram's own
+	// service account roles/iam.serviceAccountTokenCreator on it — see
+	// externalCredentials.getGcpSetupInfo.
+	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
 // UpdateGcpIamCredentialRequestBody is the type of the "externalCredentials"
@@ -72,18 +64,10 @@ type UpdateGcpIamCredentialRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
-	ImpersonateServiceAccount *string `form:"impersonate_service_account,omitempty" json:"impersonate_service_account,omitempty" xml:"impersonate_service_account,omitempty"`
-	// Workload Identity Federation pool ID. Set together with the other wif_*
-	// fields.
-	WifPoolID *string `form:"wif_pool_id,omitempty" json:"wif_pool_id,omitempty" xml:"wif_pool_id,omitempty"`
-	// Workload Identity Federation provider ID. Set together with the other wif_*
-	// fields.
-	WifProviderID *string `form:"wif_provider_id,omitempty" json:"wif_provider_id,omitempty" xml:"wif_provider_id,omitempty"`
-	// GCP project number backing the WIF pool. Set together with the other wif_*
-	// fields.
-	WifProjectNumber *string `form:"wif_project_number,omitempty" json:"wif_project_number,omitempty" xml:"wif_project_number,omitempty"`
+	// The service account in your project that Gram impersonates. Grant Gram's own
+	// service account roles/iam.serviceAccountTokenCreator on it — see
+	// externalCredentials.getGcpSetupInfo.
+	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
 // CreateAwsIamCredentialResponseBody is the type of the "externalCredentials"
@@ -267,6 +251,30 @@ type GetGcpIamCredentialResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the credential was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// VerifyGcpIamCredentialResponseBody is the type of the "externalCredentials"
+// service "verifyGcpIamCredential" endpoint HTTP response body.
+type VerifyGcpIamCredentialResponseBody struct {
+	// Whether Gram could assume the credential's identity.
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// The principal the credential resolves to — the impersonated service account.
+	Principal *string `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
+	// Human-readable detail about the probe outcome, including the failure reason
+	// when it did not verify.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
+}
+
+// GetGcpSetupInfoResponseBody is the type of the "externalCredentials" service
+// "getGcpSetupInfo" endpoint HTTP response body.
+type GetGcpSetupInfoResponseBody struct {
+	// Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on
+	// the service account you want Gram to impersonate. Empty when the running
+	// environment cannot report one (local development backed by a user login
+	// rather than a service-account key).
+	ServiceAccountEmail *string `form:"service_account_email,omitempty" json:"service_account_email,omitempty" xml:"service_account_email,omitempty"`
+	// The IAM role to grant Gram's service account on the target service account.
+	RequiredRole *string `form:"required_role,omitempty" json:"required_role,omitempty" xml:"required_role,omitempty"`
 }
 
 // CreateAwsIamCredentialUnauthorizedResponseBody is the type of the
@@ -1979,6 +1987,405 @@ type GetGcpIamCredentialGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// VerifyGcpIamCredentialRateLimitExceededResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type VerifyGcpIamCredentialRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialUnauthorizedResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "unauthorized" error.
+type VerifyGcpIamCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialForbiddenResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "forbidden" error.
+type VerifyGcpIamCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialBadRequestResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "bad_request" error.
+type VerifyGcpIamCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialNotFoundResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "not_found" error.
+type VerifyGcpIamCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialConflictResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "conflict" error.
+type VerifyGcpIamCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialUnsupportedMediaResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "unsupported_media" error.
+type VerifyGcpIamCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialInvalidResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "invalid" error.
+type VerifyGcpIamCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialInvariantViolationResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "invariant_violation" error.
+type VerifyGcpIamCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialUnexpectedResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "unexpected" error.
+type VerifyGcpIamCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpIamCredentialGatewayErrorResponseBody is the type of the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint HTTP
+// response body for the "gateway_error" error.
+type VerifyGcpIamCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoUnauthorizedResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetGcpSetupInfoUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoForbiddenResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "forbidden" error.
+type GetGcpSetupInfoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoBadRequestResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "bad_request" error.
+type GetGcpSetupInfoBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoNotFoundResponseBody is the type of the "externalCredentials"
+// service "getGcpSetupInfo" endpoint HTTP response body for the "not_found"
+// error.
+type GetGcpSetupInfoNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoConflictResponseBody is the type of the "externalCredentials"
+// service "getGcpSetupInfo" endpoint HTTP response body for the "conflict"
+// error.
+type GetGcpSetupInfoConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoUnsupportedMediaResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetGcpSetupInfoUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoInvalidResponseBody is the type of the "externalCredentials"
+// service "getGcpSetupInfo" endpoint HTTP response body for the "invalid"
+// error.
+type GetGcpSetupInfoInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoInvariantViolationResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetGcpSetupInfoInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoUnexpectedResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "unexpected" error.
+type GetGcpSetupInfoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGcpSetupInfoGatewayErrorResponseBody is the type of the
+// "externalCredentials" service "getGcpSetupInfo" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetGcpSetupInfoGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteAwsIamCredentialUnauthorizedResponseBody is the type of the
 // "externalCredentials" service "deleteAwsIamCredential" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2412,9 +2819,6 @@ func NewCreateGcpIamCredentialRequestBody(p *externalcredentials.CreateGcpIamCre
 	body := &CreateGcpIamCredentialRequestBody{
 		Name:                      p.Name,
 		ImpersonateServiceAccount: p.ImpersonateServiceAccount,
-		WifPoolID:                 p.WifPoolID,
-		WifProviderID:             p.WifProviderID,
-		WifProjectNumber:          p.WifProjectNumber,
 	}
 	return body
 }
@@ -2427,9 +2831,6 @@ func NewUpdateGcpIamCredentialRequestBody(p *externalcredentials.UpdateGcpIamCre
 		ID:                        p.ID,
 		Name:                      p.Name,
 		ImpersonateServiceAccount: p.ImpersonateServiceAccount,
-		WifPoolID:                 p.WifPoolID,
-		WifProviderID:             p.WifProviderID,
-		WifProjectNumber:          p.WifProjectNumber,
 	}
 	return body
 }
@@ -3951,6 +4352,345 @@ func NewGetGcpIamCredentialGatewayError(body *GetGcpIamCredentialGatewayErrorRes
 	return v
 }
 
+// NewVerifyGcpIamCredentialVerifyCredentialResultOK builds a
+// "externalCredentials" service "verifyGcpIamCredential" endpoint result from
+// a HTTP "OK" response.
+func NewVerifyGcpIamCredentialVerifyCredentialResultOK(body *VerifyGcpIamCredentialResponseBody) *externalcredentials.VerifyCredentialResult {
+	v := &externalcredentials.VerifyCredentialResult{
+		Verified:  *body.Verified,
+		Principal: body.Principal,
+		Detail:    body.Detail,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialRateLimitExceeded builds a externalCredentials
+// service verifyGcpIamCredential endpoint rate_limit_exceeded error.
+func NewVerifyGcpIamCredentialRateLimitExceeded(body *VerifyGcpIamCredentialRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialUnauthorized builds a externalCredentials service
+// verifyGcpIamCredential endpoint unauthorized error.
+func NewVerifyGcpIamCredentialUnauthorized(body *VerifyGcpIamCredentialUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialForbidden builds a externalCredentials service
+// verifyGcpIamCredential endpoint forbidden error.
+func NewVerifyGcpIamCredentialForbidden(body *VerifyGcpIamCredentialForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialBadRequest builds a externalCredentials service
+// verifyGcpIamCredential endpoint bad_request error.
+func NewVerifyGcpIamCredentialBadRequest(body *VerifyGcpIamCredentialBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialNotFound builds a externalCredentials service
+// verifyGcpIamCredential endpoint not_found error.
+func NewVerifyGcpIamCredentialNotFound(body *VerifyGcpIamCredentialNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialConflict builds a externalCredentials service
+// verifyGcpIamCredential endpoint conflict error.
+func NewVerifyGcpIamCredentialConflict(body *VerifyGcpIamCredentialConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialUnsupportedMedia builds a externalCredentials
+// service verifyGcpIamCredential endpoint unsupported_media error.
+func NewVerifyGcpIamCredentialUnsupportedMedia(body *VerifyGcpIamCredentialUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialInvalid builds a externalCredentials service
+// verifyGcpIamCredential endpoint invalid error.
+func NewVerifyGcpIamCredentialInvalid(body *VerifyGcpIamCredentialInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialInvariantViolation builds a externalCredentials
+// service verifyGcpIamCredential endpoint invariant_violation error.
+func NewVerifyGcpIamCredentialInvariantViolation(body *VerifyGcpIamCredentialInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialUnexpected builds a externalCredentials service
+// verifyGcpIamCredential endpoint unexpected error.
+func NewVerifyGcpIamCredentialUnexpected(body *VerifyGcpIamCredentialUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpIamCredentialGatewayError builds a externalCredentials service
+// verifyGcpIamCredential endpoint gateway_error error.
+func NewVerifyGcpIamCredentialGatewayError(body *VerifyGcpIamCredentialGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoGcpSetupInfoOK builds a "externalCredentials" service
+// "getGcpSetupInfo" endpoint result from a HTTP "OK" response.
+func NewGetGcpSetupInfoGcpSetupInfoOK(body *GetGcpSetupInfoResponseBody) *externalcredentials.GcpSetupInfo {
+	v := &externalcredentials.GcpSetupInfo{
+		ServiceAccountEmail: body.ServiceAccountEmail,
+		RequiredRole:        *body.RequiredRole,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoUnauthorized builds a externalCredentials service
+// getGcpSetupInfo endpoint unauthorized error.
+func NewGetGcpSetupInfoUnauthorized(body *GetGcpSetupInfoUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoForbidden builds a externalCredentials service
+// getGcpSetupInfo endpoint forbidden error.
+func NewGetGcpSetupInfoForbidden(body *GetGcpSetupInfoForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoBadRequest builds a externalCredentials service
+// getGcpSetupInfo endpoint bad_request error.
+func NewGetGcpSetupInfoBadRequest(body *GetGcpSetupInfoBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoNotFound builds a externalCredentials service
+// getGcpSetupInfo endpoint not_found error.
+func NewGetGcpSetupInfoNotFound(body *GetGcpSetupInfoNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoConflict builds a externalCredentials service
+// getGcpSetupInfo endpoint conflict error.
+func NewGetGcpSetupInfoConflict(body *GetGcpSetupInfoConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoUnsupportedMedia builds a externalCredentials service
+// getGcpSetupInfo endpoint unsupported_media error.
+func NewGetGcpSetupInfoUnsupportedMedia(body *GetGcpSetupInfoUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoInvalid builds a externalCredentials service
+// getGcpSetupInfo endpoint invalid error.
+func NewGetGcpSetupInfoInvalid(body *GetGcpSetupInfoInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoInvariantViolation builds a externalCredentials service
+// getGcpSetupInfo endpoint invariant_violation error.
+func NewGetGcpSetupInfoInvariantViolation(body *GetGcpSetupInfoInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoUnexpected builds a externalCredentials service
+// getGcpSetupInfo endpoint unexpected error.
+func NewGetGcpSetupInfoUnexpected(body *GetGcpSetupInfoUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGcpSetupInfoGatewayError builds a externalCredentials service
+// getGcpSetupInfo endpoint gateway_error error.
+func NewGetGcpSetupInfoGatewayError(body *GetGcpSetupInfoGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteAwsIamCredentialUnauthorized builds a externalCredentials service
 // deleteAwsIamCredential endpoint unauthorized error.
 func NewDeleteAwsIamCredentialUnauthorized(body *DeleteAwsIamCredentialUnauthorizedResponseBody) *goa.ServiceError {
@@ -4523,6 +5263,24 @@ func ValidateGetGcpIamCredentialResponseBody(body *GetGcpIamCredentialResponseBo
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialResponseBody runs the validations defined on
+// VerifyGcpIamCredentialResponseBody
+func ValidateVerifyGcpIamCredentialResponseBody(body *VerifyGcpIamCredentialResponseBody) (err error) {
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoResponseBody runs the validations defined on
+// GetGcpSetupInfoResponseBody
+func ValidateGetGcpSetupInfoResponseBody(body *GetGcpSetupInfoResponseBody) (err error) {
+	if body.RequiredRole == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_role", "body"))
 	}
 	return
 }
@@ -6674,6 +7432,512 @@ func ValidateGetGcpIamCredentialUnexpectedResponseBody(body *GetGcpIamCredential
 // ValidateGetGcpIamCredentialGatewayErrorResponseBody runs the validations
 // defined on getGcpIamCredential_gateway_error_response_body
 func ValidateGetGcpIamCredentialGatewayErrorResponseBody(body *GetGcpIamCredentialGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialRateLimitExceededResponseBody runs the
+// validations defined on
+// verifyGcpIamCredential_rate_limit_exceeded_response_body
+func ValidateVerifyGcpIamCredentialRateLimitExceededResponseBody(body *VerifyGcpIamCredentialRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialUnauthorizedResponseBody runs the validations
+// defined on verifyGcpIamCredential_unauthorized_response_body
+func ValidateVerifyGcpIamCredentialUnauthorizedResponseBody(body *VerifyGcpIamCredentialUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialForbiddenResponseBody runs the validations
+// defined on verifyGcpIamCredential_forbidden_response_body
+func ValidateVerifyGcpIamCredentialForbiddenResponseBody(body *VerifyGcpIamCredentialForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialBadRequestResponseBody runs the validations
+// defined on verifyGcpIamCredential_bad_request_response_body
+func ValidateVerifyGcpIamCredentialBadRequestResponseBody(body *VerifyGcpIamCredentialBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialNotFoundResponseBody runs the validations
+// defined on verifyGcpIamCredential_not_found_response_body
+func ValidateVerifyGcpIamCredentialNotFoundResponseBody(body *VerifyGcpIamCredentialNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialConflictResponseBody runs the validations
+// defined on verifyGcpIamCredential_conflict_response_body
+func ValidateVerifyGcpIamCredentialConflictResponseBody(body *VerifyGcpIamCredentialConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialUnsupportedMediaResponseBody runs the
+// validations defined on verifyGcpIamCredential_unsupported_media_response_body
+func ValidateVerifyGcpIamCredentialUnsupportedMediaResponseBody(body *VerifyGcpIamCredentialUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialInvalidResponseBody runs the validations
+// defined on verifyGcpIamCredential_invalid_response_body
+func ValidateVerifyGcpIamCredentialInvalidResponseBody(body *VerifyGcpIamCredentialInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialInvariantViolationResponseBody runs the
+// validations defined on
+// verifyGcpIamCredential_invariant_violation_response_body
+func ValidateVerifyGcpIamCredentialInvariantViolationResponseBody(body *VerifyGcpIamCredentialInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialUnexpectedResponseBody runs the validations
+// defined on verifyGcpIamCredential_unexpected_response_body
+func ValidateVerifyGcpIamCredentialUnexpectedResponseBody(body *VerifyGcpIamCredentialUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpIamCredentialGatewayErrorResponseBody runs the validations
+// defined on verifyGcpIamCredential_gateway_error_response_body
+func ValidateVerifyGcpIamCredentialGatewayErrorResponseBody(body *VerifyGcpIamCredentialGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoUnauthorizedResponseBody runs the validations defined
+// on getGcpSetupInfo_unauthorized_response_body
+func ValidateGetGcpSetupInfoUnauthorizedResponseBody(body *GetGcpSetupInfoUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoForbiddenResponseBody runs the validations defined on
+// getGcpSetupInfo_forbidden_response_body
+func ValidateGetGcpSetupInfoForbiddenResponseBody(body *GetGcpSetupInfoForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoBadRequestResponseBody runs the validations defined
+// on getGcpSetupInfo_bad_request_response_body
+func ValidateGetGcpSetupInfoBadRequestResponseBody(body *GetGcpSetupInfoBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoNotFoundResponseBody runs the validations defined on
+// getGcpSetupInfo_not_found_response_body
+func ValidateGetGcpSetupInfoNotFoundResponseBody(body *GetGcpSetupInfoNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoConflictResponseBody runs the validations defined on
+// getGcpSetupInfo_conflict_response_body
+func ValidateGetGcpSetupInfoConflictResponseBody(body *GetGcpSetupInfoConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoUnsupportedMediaResponseBody runs the validations
+// defined on getGcpSetupInfo_unsupported_media_response_body
+func ValidateGetGcpSetupInfoUnsupportedMediaResponseBody(body *GetGcpSetupInfoUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoInvalidResponseBody runs the validations defined on
+// getGcpSetupInfo_invalid_response_body
+func ValidateGetGcpSetupInfoInvalidResponseBody(body *GetGcpSetupInfoInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoInvariantViolationResponseBody runs the validations
+// defined on getGcpSetupInfo_invariant_violation_response_body
+func ValidateGetGcpSetupInfoInvariantViolationResponseBody(body *GetGcpSetupInfoInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoUnexpectedResponseBody runs the validations defined
+// on getGcpSetupInfo_unexpected_response_body
+func ValidateGetGcpSetupInfoUnexpectedResponseBody(body *GetGcpSetupInfoUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGcpSetupInfoGatewayErrorResponseBody runs the validations defined
+// on getGcpSetupInfo_gateway_error_response_body
+func ValidateGetGcpSetupInfoGatewayErrorResponseBody(body *GetGcpSetupInfoGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

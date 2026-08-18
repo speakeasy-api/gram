@@ -18,29 +18,25 @@ import (
 
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
-	Mounts                               []*MountPoint
-	ListRoles                            http.Handler
-	GetRole                              http.Handler
-	CreateRole                           http.Handler
-	UpdateRole                           http.Handler
-	DeleteRole                           http.Handler
-	ListScopes                           http.Handler
-	ListMembers                          http.Handler
-	ListGrants                           http.Handler
-	UpdateMemberRoles                    http.Handler
-	ListShadowMCPInventory               http.Handler
-	GetShadowMCPInventoryServer          http.Handler
-	UpdateShadowMCPInventoryServerName   http.Handler
-	ListShadowMCPInventoryUsers          http.Handler
-	UpsertShadowMCPInventoryPolicyBypass http.Handler
-	DeleteShadowMCPInventoryPolicyBypass http.Handler
-	ResolveShadowMCPInventoryRequest     http.Handler
-	GetRBACStatus                        http.Handler
-	EnableRBAC                           http.Handler
-	DisableRBAC                          http.Handler
-	ListChallenges                       http.Handler
-	ListChallengeBuckets                 http.Handler
-	ResolveChallenge                     http.Handler
+	Mounts                             []*MountPoint
+	ListRoles                          http.Handler
+	GetRole                            http.Handler
+	CreateRole                         http.Handler
+	UpdateRole                         http.Handler
+	DeleteRole                         http.Handler
+	ListScopes                         http.Handler
+	ListMembers                        http.Handler
+	ListGrants                         http.Handler
+	UpdateMemberRoles                  http.Handler
+	ListShadowMCPInventory             http.Handler
+	GetShadowMCPInventoryServer        http.Handler
+	UpdateShadowMCPInventoryServerName http.Handler
+	ListShadowMCPInventoryUsers        http.Handler
+	ResolveShadowMCPInventoryRequest   http.Handler
+	RequestAccess                      http.Handler
+	ListChallenges                     http.Handler
+	ListChallengeBuckets               http.Handler
+	ResolveChallenge                   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -83,38 +79,30 @@ func New(
 			{"GetShadowMCPInventoryServer", "GET", "/rpc/access.getShadowMCPInventoryServer"},
 			{"UpdateShadowMCPInventoryServerName", "POST", "/rpc/access.updateShadowMCPInventoryServerName"},
 			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
-			{"UpsertShadowMCPInventoryPolicyBypass", "POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass"},
-			{"DeleteShadowMCPInventoryPolicyBypass", "DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass"},
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
-			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
-			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
-			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
+			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 		},
-		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
-		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
-		CreateRole:                           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
-		UpdateRole:                           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
-		DeleteRole:                           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
-		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
-		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
-		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpdateMemberRoles:                    NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
-		ListShadowMCPInventory:               NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
-		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
-		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameHandler(e.UpdateShadowMCPInventoryServerName, mux, decoder, encoder, errhandler, formatter),
-		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersHandler(e.ListShadowMCPInventoryUsers, mux, decoder, encoder, errhandler, formatter),
-		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassHandler(e.UpsertShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
-		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassHandler(e.DeleteShadowMCPInventoryPolicyBypass, mux, decoder, encoder, errhandler, formatter),
-		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
-		GetRBACStatus:                        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
-		EnableRBAC:                           NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
-		DisableRBAC:                          NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
-		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
-		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
-		ResolveChallenge:                     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
+		ListRoles:                          NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
+		GetRole:                            NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
+		CreateRole:                         NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
+		UpdateRole:                         NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
+		DeleteRole:                         NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListScopes:                         NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
+		ListMembers:                        NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		ListGrants:                         NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
+		UpdateMemberRoles:                  NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
+		ListShadowMCPInventory:             NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
+		GetShadowMCPInventoryServer:        NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
+		UpdateShadowMCPInventoryServerName: NewUpdateShadowMCPInventoryServerNameHandler(e.UpdateShadowMCPInventoryServerName, mux, decoder, encoder, errhandler, formatter),
+		ListShadowMCPInventoryUsers:        NewListShadowMCPInventoryUsersHandler(e.ListShadowMCPInventoryUsers, mux, decoder, encoder, errhandler, formatter),
+		ResolveShadowMCPInventoryRequest:   NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
+		RequestAccess:                      NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
+		ListChallenges:                     NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
+		ListChallengeBuckets:               NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
+		ResolveChallenge:                   NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -136,12 +124,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetShadowMCPInventoryServer = m(s.GetShadowMCPInventoryServer)
 	s.UpdateShadowMCPInventoryServerName = m(s.UpdateShadowMCPInventoryServerName)
 	s.ListShadowMCPInventoryUsers = m(s.ListShadowMCPInventoryUsers)
-	s.UpsertShadowMCPInventoryPolicyBypass = m(s.UpsertShadowMCPInventoryPolicyBypass)
-	s.DeleteShadowMCPInventoryPolicyBypass = m(s.DeleteShadowMCPInventoryPolicyBypass)
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
-	s.GetRBACStatus = m(s.GetRBACStatus)
-	s.EnableRBAC = m(s.EnableRBAC)
-	s.DisableRBAC = m(s.DisableRBAC)
+	s.RequestAccess = m(s.RequestAccess)
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
@@ -165,12 +149,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetShadowMCPInventoryServerHandler(mux, h.GetShadowMCPInventoryServer)
 	MountUpdateShadowMCPInventoryServerNameHandler(mux, h.UpdateShadowMCPInventoryServerName)
 	MountListShadowMCPInventoryUsersHandler(mux, h.ListShadowMCPInventoryUsers)
-	MountUpsertShadowMCPInventoryPolicyBypassHandler(mux, h.UpsertShadowMCPInventoryPolicyBypass)
-	MountDeleteShadowMCPInventoryPolicyBypassHandler(mux, h.DeleteShadowMCPInventoryPolicyBypass)
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
-	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
-	MountEnableRBACHandler(mux, h.EnableRBAC)
-	MountDisableRBACHandler(mux, h.DisableRBAC)
+	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
@@ -873,114 +853,6 @@ func NewListShadowMCPInventoryUsersHandler(
 	})
 }
 
-// MountUpsertShadowMCPInventoryPolicyBypassHandler configures the mux to serve
-// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint.
-func MountUpsertShadowMCPInventoryPolicyBypassHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/access.upsertShadowMCPInventoryPolicyBypass", f)
-}
-
-// NewUpsertShadowMCPInventoryPolicyBypassHandler creates a HTTP handler which
-// loads the HTTP request and calls the "access" service
-// "upsertShadowMCPInventoryPolicyBypass" endpoint.
-func NewUpsertShadowMCPInventoryPolicyBypassHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeUpsertShadowMCPInventoryPolicyBypassRequest(mux, decoder)
-		encodeResponse = EncodeUpsertShadowMCPInventoryPolicyBypassResponse(encoder)
-		encodeError    = EncodeUpsertShadowMCPInventoryPolicyBypassError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "upsertShadowMCPInventoryPolicyBypass")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountDeleteShadowMCPInventoryPolicyBypassHandler configures the mux to serve
-// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint.
-func MountDeleteShadowMCPInventoryPolicyBypassHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("DELETE", "/rpc/access.deleteShadowMCPInventoryPolicyBypass", f)
-}
-
-// NewDeleteShadowMCPInventoryPolicyBypassHandler creates a HTTP handler which
-// loads the HTTP request and calls the "access" service
-// "deleteShadowMCPInventoryPolicyBypass" endpoint.
-func NewDeleteShadowMCPInventoryPolicyBypassHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux, decoder)
-		encodeResponse = EncodeDeleteShadowMCPInventoryPolicyBypassResponse(encoder)
-		encodeError    = EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "deleteShadowMCPInventoryPolicyBypass")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
 // MountResolveShadowMCPInventoryRequestHandler configures the mux to serve the
 // "access" service "resolveShadowMCPInventoryRequest" endpoint.
 func MountResolveShadowMCPInventoryRequestHandler(mux goahttp.Muxer, h http.Handler) {
@@ -1035,21 +907,21 @@ func NewResolveShadowMCPInventoryRequestHandler(
 	})
 }
 
-// MountGetRBACStatusHandler configures the mux to serve the "access" service
-// "getRBACStatus" endpoint.
-func MountGetRBACStatusHandler(mux goahttp.Muxer, h http.Handler) {
+// MountRequestAccessHandler configures the mux to serve the "access" service
+// "requestAccess" endpoint.
+func MountRequestAccessHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.getRBACStatus", f)
+	mux.Handle("POST", "/rpc/access.requestAccess", f)
 }
 
-// NewGetRBACStatusHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "getRBACStatus" endpoint.
-func NewGetRBACStatusHandler(
+// NewRequestAccessHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "requestAccess" endpoint.
+func NewRequestAccessHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -1058,119 +930,13 @@ func NewGetRBACStatusHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetRBACStatusRequest(mux, decoder)
-		encodeResponse = EncodeGetRBACStatusResponse(encoder)
-		encodeError    = EncodeGetRBACStatusError(encoder, formatter)
+		decodeRequest  = DecodeRequestAccessRequest(mux, decoder)
+		encodeResponse = EncodeRequestAccessResponse(encoder)
+		encodeError    = EncodeRequestAccessError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getRBACStatus")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountEnableRBACHandler configures the mux to serve the "access" service
-// "enableRBAC" endpoint.
-func MountEnableRBACHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/access.enableRBAC", f)
-}
-
-// NewEnableRBACHandler creates a HTTP handler which loads the HTTP request and
-// calls the "access" service "enableRBAC" endpoint.
-func NewEnableRBACHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeEnableRBACRequest(mux, decoder)
-		encodeResponse = EncodeEnableRBACResponse(encoder)
-		encodeError    = EncodeEnableRBACError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "enableRBAC")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountDisableRBACHandler configures the mux to serve the "access" service
-// "disableRBAC" endpoint.
-func MountDisableRBACHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/access.disableRBAC", f)
-}
-
-// NewDisableRBACHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "disableRBAC" endpoint.
-func NewDisableRBACHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeDisableRBACRequest(mux, decoder)
-		encodeResponse = EncodeDisableRBACResponse(encoder)
-		encodeError    = EncodeDisableRBACError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "disableRBAC")
+		ctx = context.WithValue(ctx, goa.MethodKey, "requestAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

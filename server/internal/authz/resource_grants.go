@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -41,16 +40,12 @@ func (r Resource) Kind() string {
 // one or more principals.
 type ResourceGrant struct {
 	Resource
-	Effect     PolicyEffect
 	Principals []urn.Principal
 	Selector   Selector
 }
 
 func (r ResourceGrant) Validate() error {
 	if err := r.Resource.Validate(); err != nil {
-		return err
-	}
-	if err := validatePolicyEffect(r.Effect); err != nil {
 		return err
 	}
 	for _, principal := range r.Principals {
@@ -135,12 +130,10 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 		return fmt.Errorf("marshal grant selector: %w", err)
 	}
 
-	effect := conv.Default(resource.Effect, PolicyEffectAllow)
 	q := repo.New(db)
 	if _, err := q.DeletePrincipalGrantsByTarget(ctx, repo.DeletePrincipalGrantsByTargetParams{
 		OrganizationID: resource.OrganizationID,
 		Scope:          string(resource.Scope),
-		Effect:         string(effect),
 		Selectors:      selectorBytes,
 	}); err != nil {
 		return fmt.Errorf("delete grant audience: %w", err)
@@ -151,7 +144,6 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
-			Effect:         effect.pgText(),
 			Selectors:      selectorBytes,
 		}); err != nil {
 			return fmt.Errorf("upsert grant audience principal: %w", err)
@@ -189,7 +181,6 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
-			Effect:         PolicyEffectAllow.pgText(),
 			Selectors:      selectorBytes,
 		}); err != nil {
 			return fmt.Errorf("upsert resource grant: %w", err)
@@ -210,7 +201,6 @@ func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource Resou
 	}
 	grant := &RoleGrant{
 		Scope:     string(resource.Scope),
-		Effect:    conv.Default(resource.Effect, PolicyEffectAllow),
 		Selectors: []Selector{resource.selector()},
 	}
 
@@ -234,7 +224,6 @@ func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource Re
 	}
 	grant := &RoleGrant{
 		Scope:     string(resource.Scope),
-		Effect:    conv.Default(resource.Effect, PolicyEffectAllow),
 		Selectors: []Selector{resource.selector()},
 	}
 
@@ -272,7 +261,6 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
-			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selector,
 		})
 	}
@@ -318,7 +306,6 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
-			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selector,
 		})
 	}

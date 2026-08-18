@@ -14,33 +14,50 @@ pin = true
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.24.0"
-"github:speakeasy-api/speakeasy" = "1.789.1"
+# Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
+# installed version and the version generation runs on can mismatch.
+"github:speakeasy-api/speakeasy" = "1.791.1"
 "github:FiloSottile/mkcert" = "1.4.4"
-apko = "1.2.29"
-flyctl = "0.4.74"
+apko = "1.2.31"
+flyctl = "0.4.77"
 go = "1.26.5"
 golangci-lint = "2.12.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
-melange = "0.56.4"
+melange = "0.56.5"
+# Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
+# aube resolves its own runtime and cannot read this file, so without that
+# mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.17.0"
+aube = "1.38.1"
+# Kept for `changeset publish` only, which shells out to a package manager by
+# name and has no aube branch — it picks between pnpm, yarn and npm. Both
+# versions resolve to pnpm here, off different inputs: 2.31.0 (what we pin)
+# asks package-manager-detector, which answers pnpm because pnpm-lock.yaml is
+# on disk; 3.0.0 asks manypkg for the workspace tool, which answers pnpm
+# because pnpm-workspace.yaml is. aube keeps writing both files in place, so
+# releases need a real pnpm on PATH either way.
+#
+# Publishing via npm instead is not a drop-in: our public packages carry
+# `workspace:` and `catalog:` specifiers that pnpm rewrites at pack time and
+# npm would ship verbatim.
+"github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
-uv = "0.11.32"
+uv = "0.12.1"
 yq = "4.53.3"
 # hk ≥1.47 fails to evaluate the json.Parser usage in hk.pkl
 # ("unknown method 'parse'"); keep 1.46.0 until hk.pkl is ported.
 hk = "1.46.0"
 pkl = "0.32.1"
-"github:temporalio/cli" = "1.8.1"
+"github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.72.0"
-ruff = "0.15.20"
+ruff = "0.16.1"
 "github:ast-grep/ast-grep" = "0.45.0"
-pitchfork = "2.19.0"
+pitchfork = "2.20.0"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -120,6 +137,8 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+## Cannot reuse GRAM_SERVER_URL: viteprod unsets it.
+GRAM_APP_URL = "{{env.GRAM_SERVER_URL}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -192,7 +211,9 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 ##########################
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
+OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
+OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -200,8 +221,11 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-JAEGER_WEB_PORT = "16686"
+GRAFANA_PORT = "13000"
+TEMPO_HTTP_PORT = "13200"
+LOKI_HTTP_PORT = "13100"
 PROMETHEUS_PORT = "9099"
+LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and
 ## used by the CLI to point to the correct Gram API server
@@ -268,6 +292,18 @@ PULSE_REGISTRY_KEY = { default = "unset" }
 ##########
 GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
 
+##########################
+## Stripe configuration ##
+##########################
+## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
+## validate the sandbox TUM meter, product, and metered price. The task writes
+## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+STRIPE_API_KEY = { default = "unset" }
+STRIPE_WEBHOOK_SECRET = { default = "unset" }
+STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_METER_ID_TUM = { default = "" }
+STRIPE_METER_EVENT_NAME = { default = "tum" }
+
 #########################
 ## Polar configuration ##
 #########################
@@ -286,7 +322,18 @@ GRAM_ADMIN_PORT = "8083"
 GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_PORT}}"
 GRAM_ADMIN_CONTROL_PORT = "8084"
 GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
-GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+GRAM_ADMIN_DASHBOARD_PORT = "5174"
+## Where the admin API itself listens. Only the admin dashboard dev proxy
+## dials this; browsers never do.
+GRAM_ADMIN_BACKEND_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+## The browser-facing admin origin, and therefore the origin the OIDC redirect
+## URI is built from. In production the SPA and the admin API share one origin
+## behind one ingress. Locally the Vite dev server is that origin, because it
+## proxies /admin through to GRAM_ADMIN_BACKEND_URL.
+GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}"
+## AdminOriginCheck rejects every unsafe method whose Origin is not listed, and
+## the flag has no default, so local writes 403 without this.
+GRAM_ADMIN_ALLOWED_ORIGINS = "{{env.GRAM_ADMIN_SERVER_URL}}"
 GRAM_ADMIN_ENCRYPTION_KEY = "unset"
 GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"

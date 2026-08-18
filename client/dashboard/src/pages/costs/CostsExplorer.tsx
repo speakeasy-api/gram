@@ -1,4 +1,5 @@
 import { formatCost } from "@/lib/money";
+import { Page } from "@/components/page-layout";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
 import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
@@ -1310,7 +1311,8 @@ export function CostsExplorer(): JSX.Element {
         <InsightsConfig hideTrigger />
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Costs</h1>
+            <Page.Eyebrow />
+            <h1 className="text-display-sm font-thin">Costs</h1>
             <p className="text-muted-foreground text-sm">
               Break down this project's AI spend by division, department, user,
               agent, and model.

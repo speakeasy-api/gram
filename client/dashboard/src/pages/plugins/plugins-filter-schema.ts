@@ -13,7 +13,12 @@ import {
  * plugins under different row ids.
  */
 export const PLUGINS_FILTERS = defineFilters([
-  { id: "servers", label: "Including servers", kind: "multiselect" },
+  {
+    id: "servers",
+    label: "Including servers",
+    kind: "multiselect",
+    allLabel: "All servers",
+  },
 ]);
 
 function serverKey(server: PluginServer): string {

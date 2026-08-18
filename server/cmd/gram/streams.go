@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -22,11 +25,15 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -53,6 +60,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage"
+	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
 func newStreamsCommand() *cli.Command {
@@ -84,6 +93,34 @@ func newStreamsCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:    "temporal-address",
+			Usage:   "The address of the temporal server",
+			EnvVars: []string{"TEMPORAL_ADDRESS"},
+			Value:   "localhost:7233",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-namespace",
+			Usage:   "The temporal namespace to use",
+			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			Value:   "default",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-cert",
+			Usage:   "Client cert of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-key",
+			Usage:   "Client key of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
+		},
+		&cli.StringFlag{
 			Name:     "encryption-key",
 			Usage:    "Key for App level AES encryption/decyryption",
 			Required: true,
@@ -99,6 +136,34 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
+		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-id-tum",
+			Aliases: []string{"stripe.meter_id_tum"},
+			Usage:   "The Stripe TUM billing meter ID",
+			EnvVars: []string{"STRIPE_METER_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -193,10 +258,11 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, gcpFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, riskFlags...)
-	flags = append(flags, clickHouseFlags...)
+	flags = append(flags, gcpFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, riskIngestFlags()...)
+	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -214,8 +280,11 @@ func newStreamsCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 
-			ctx, cancel := context.WithCancel(c.Context)
-			defer cancel()
+			// Without a signal handler the runtime kills the process on SIGTERM,
+			// so the Action never returns and the After hook never runs the
+			// shutdownFuncs registered below.
+			ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
@@ -236,6 +305,22 @@ func newStreamsCommand() *cli.Command {
 			if len(gen.Descriptors) == 0 {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
+
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create temporal client: %w", err)
+			}
+			if temporalEnv == nil {
+				return errors.New("insufficient options to create temporal client")
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -279,7 +364,12 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -288,7 +378,7 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -313,26 +403,12 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse risk_findings writer (sole write path). Only connect
-			// when the kill switch is off so a disabled deployment does not
-			// require ClickHouse reachability.
-			//
-			// A ClickHouse connect/ping failure must NOT abort streams: taking
-			// the process down would also kill every other receiver. Degrade
-			// instead — log the failure and disable only the ClickHouse
-			// receiver.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
-			var chConn clickhouse.Conn
-			if enableCHRiskWrites {
-				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse risk_findings writer", attr.SlogError(err))
-					enableCHRiskWrites = false
-				} else {
-					shutdownFuncs = append(shutdownFuncs, shutdown)
-					chConn = conn
-				}
+			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create clickhouse client: %w", err)
 			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
@@ -375,7 +451,7 @@ func newStreamsCommand() *cli.Command {
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					[]*o11y.NamedResource[client.Client]{},
+					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)
@@ -403,6 +479,21 @@ func newStreamsCommand() *cli.Command {
 				broker:     psbroker,
 			}
 
+			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create svix client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, svixShutdown)
+
+			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
+			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
+				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
+					return fmt.Errorf("schedule PAYG key refresh: %w", err)
+				}
+				return svixRelayHandler.Handle(ctx, event, metadata)
+			})
+
 			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
 
 			// Start subscription receivers in this block
@@ -415,6 +506,13 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
+
+				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
+
+				mustReceive(
+					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},
+					authz.NewChallengeCHWriter(logger, chConn),
+				)
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(
@@ -438,6 +536,8 @@ func newStreamsCommand() *cli.Command {
 			if err := group.Wait(); err != nil {
 				return fmt.Errorf("streaming error: %w", err)
 			}
+
+			logger.InfoContext(c.Context, "shutdown signal received, all receivers stopped")
 
 			return nil
 		},

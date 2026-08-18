@@ -11,19 +11,24 @@ import (
 )
 
 type RemoteSession struct {
-	ID                    uuid.UUID
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                     uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	AutoRefresh            bool
+	LastRefreshAttemptAt   pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type RemoteSessionClient struct {
@@ -54,6 +59,7 @@ type RemoteSessionIssuer struct {
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
+	RevocationEndpoint                pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
 	ServiceDocumentation              pgtype.Text

@@ -1,6 +1,5 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Link } from "@/components/ui/Link";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
@@ -67,23 +66,23 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
         heading="Install Page"
         description="Share this page to give simple instructions for getting started with this MCP server in Cursor or Claude Desktop."
       >
-        <div className="bg-muted/20 flex items-center gap-2 rounded-lg border p-2">
+        <div className="bg-muted/20 flex items-center gap-2 border p-2">
           <CodeBlock
             className="flex-grow overflow-hidden"
-            innerClassName="!p-2 !pr-10 !bg-white dark:!bg-zinc-950"
+            innerClassName="!p-2 !pr-10 !bg-card"
             preClassName="whitespace-nowrap overflow-auto"
             copyable={true}
           >
             {`${mcpUrl}/install`}
           </CodeBlock>
-          <Link href={`${mcpUrl}/install`} target="_blank" asChild>
-            <Button variant="primary" className="px-4">
+          <Button variant="primary" className="px-4" asChild>
+            <a href={`${mcpUrl}/install`} target="_blank" rel="noreferrer">
               <Button.LeftIcon>
                 <Icon name="external-link" className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>View</Button.Text>
-            </Button>
-          </Link>
+            </a>
+          </Button>
         </div>
       </PageSection>
     </Stack>
@@ -102,7 +101,7 @@ function BuiltInToolsTab() {
         <Heading variant="h3">Tools</Heading>
       </Stack>
 
-      <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+      <div className="border-neutral-softest w-full overflow-hidden border">
         <div className="bg-surface-secondary-default border-neutral-softest flex items-center border-b py-4 pr-3 pl-4">
           <p className="text-foreground text-sm leading-6">MCP Logs</p>
         </div>

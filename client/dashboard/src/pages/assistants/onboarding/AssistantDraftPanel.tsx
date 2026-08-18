@@ -1,22 +1,18 @@
-import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
-import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -24,7 +20,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
+import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
+import { AssistantTriggersList } from "./AssistantTriggersList";
+import { Section } from "./PanelSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
 const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
@@ -41,7 +41,6 @@ export function AssistantDraftPanel(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
   const queryClient = useQueryClient();
-  const { data: productFeatures } = useProductFeatures();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
@@ -130,11 +129,11 @@ export function AssistantDraftPanel(): JSX.Element {
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
-            </TabsList>
+            </PageTabsList>
           </div>
 
           <TabsContent
@@ -142,29 +141,10 @@ export function AssistantDraftPanel(): JSX.Element {
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
             <Stack gap={5}>
-              <Section title="Overview">
-                <Row label="Status">
-                  <AssistantStatusToggle
-                    assistant={a}
-                    onUpdated={() => void draft.refetchAssistant()}
-                  />
-                </Row>
-                <Row label="Model">
-                  <code className="text-xs">{a.model}</code>
-                </Row>
-                <Row label="Owner">
-                  <AssistantOwner
-                    createdByUserId={a.createdByUserId}
-                    variant="row"
-                  />
-                </Row>
-                <Row label="Concurrency">
-                  <Text small>{a.maxConcurrency}</Text>
-                </Row>
-                <Row label="Warm TTL">
-                  <Text small>{a.warmTtlSeconds}s</Text>
-                </Row>
-              </Section>
+              <AssistantOverviewSettings
+                assistant={a}
+                onUpdated={() => void draft.refetchAssistant()}
+              />
 
               <Section
                 title="System instructions"
@@ -184,9 +164,9 @@ export function AssistantDraftPanel(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => setEditingInstructions(true)}
-                    className="hover:border-border block w-full rounded-md border border-transparent text-left"
+                    className="hover:border-border block w-full border border-transparent text-left"
                   >
-                    <pre className="bg-muted/30 max-h-48 overflow-y-auto rounded-md p-3 font-mono text-[11px] whitespace-pre-wrap">
+                    <pre className="bg-muted/30 max-h-48 overflow-y-auto p-3 font-mono text-[11px] whitespace-pre-wrap">
                       {a.instructions}
                     </pre>
                   </button>
@@ -197,72 +177,18 @@ export function AssistantDraftPanel(): JSX.Element {
                 )}
               </Section>
 
-              {productFeatures?.skillsEnabled === true && (
-                <RequireScope
-                  scope="skill:read"
-                  resourceId={project.id}
-                  level="section"
-                >
-                  <AssistantSkillsSection />
-                </RequireScope>
-              )}
-
-              <Section
-                title={`MCP Servers (${
-                  a.toolsets.length + (a.mcpServers ?? []).length
-                })`}
-                empty="No MCP servers attached."
-                isEmpty={
-                  a.toolsets.length === 0 && (a.mcpServers ?? []).length === 0
-                }
+              <RequireScope
+                scope="skill:read"
+                resourceId={project.id}
+                level="section"
               >
-                <Stack gap={2}>
-                  {a.toolsets.map((t) => (
-                    <routes.mcp.details.Link
-                      key={t.toolsetSlug}
-                      params={[t.toolsetSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
-                    >
-                      <Stack gap={0} className="min-w-0">
-                        <code className="truncate text-xs">
-                          {t.toolsetSlug}
-                        </code>
-                        {t.environmentSlug && (
-                          <Text small muted className="text-[11px]">
-                            env: {t.environmentSlug}
-                          </Text>
-                        )}
-                      </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
-                    </routes.mcp.details.Link>
-                  ))}
-                  {(a.mcpServers ?? []).map((m) => (
-                    <routes.mcp.x.Link
-                      key={m.mcpServerSlug}
-                      params={[m.mcpServerSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
-                    >
-                      <Stack gap={0} className="min-w-0">
-                        <code className="truncate text-xs">
-                          {m.mcpServerSlug}
-                        </code>
-                        {m.environmentSlug && (
-                          <Text small muted className="text-[11px]">
-                            env: {m.environmentSlug}
-                          </Text>
-                        )}
-                      </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
-                    </routes.mcp.x.Link>
-                  ))}
-                </Stack>
-              </Section>
+                <AssistantSkillsSection />
+              </RequireScope>
+
+              <AssistantMCPServersSection
+                assistant={a}
+                onUpdated={() => void draft.refetchAssistant()}
+              />
             </Stack>
           </TabsContent>
 
@@ -277,45 +203,7 @@ export function AssistantDraftPanel(): JSX.Element {
             value="triggers"
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
-            {triggers.length === 0 ? (
-              <Text small muted>
-                No triggers wired up.
-              </Text>
-            ) : (
-              <Stack gap={2}>
-                {triggers.map((t) => (
-                  <div
-                    key={t.id}
-                    className="border-border flex items-start justify-between gap-2 rounded-md border px-3 py-2"
-                  >
-                    <Stack gap={1} className="min-w-0">
-                      <Stack direction="horizontal" gap={2} align="center">
-                        <Text small className="font-medium">
-                          {t.name}
-                        </Text>
-                        <Badge variant="neutral" className="text-[10px]">
-                          {t.definitionSlug}
-                        </Badge>
-                      </Stack>
-                      {t.webhookUrl && (
-                        <code className="text-muted-foreground truncate text-[10px]">
-                          {t.webhookUrl}
-                        </code>
-                      )}
-                    </Stack>
-                    {t.status === "active" ? (
-                      <Badge variant="neutral" className="text-[10px]">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="neutral" className="text-[10px]">
-                        Paused
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </Stack>
-            )}
+            <AssistantTriggersList triggers={triggers} />
           </TabsContent>
         </Tabs>
       )}
@@ -328,55 +216,6 @@ export function AssistantDraftPanel(): JSX.Element {
           onUpdated={() => void draft.refetchAssistant()}
         />
       )}
-    </div>
-  );
-}
-
-function Section({
-  title,
-  children,
-  empty,
-  isEmpty,
-  action,
-}: {
-  title: string;
-  children: React.ReactNode;
-  empty?: string;
-  isEmpty?: boolean;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <Text variant="body" className="text-xs font-semibold uppercase">
-          {title}
-        </Text>
-        {action}
-      </div>
-      {isEmpty && empty ? (
-        <Text small muted>
-          {empty}
-        </Text>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <Text small muted>
-        {label}
-      </Text>
-      <div>{children}</div>
     </div>
   );
 }

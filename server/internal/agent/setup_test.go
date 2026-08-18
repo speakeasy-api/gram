@@ -14,6 +14,9 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -22,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -46,11 +50,29 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// stubProductFeatures controls org feature state without database rows. The
+// session-portability endpoints are the only feature-gated agent surface;
+// tests flip the field to exercise the gate.
+type stubProductFeatures struct {
+	sessionPortability bool
+}
+
+func (s *stubProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	if feature == productfeatures.FeatureSessionPortability {
+		return s.sessionPortability, nil
+	}
+	return false, nil
+}
+
 type testInstance struct {
 	service   *agent.Service
 	conn      *pgxpool.Pool
 	orgID     string
 	projectID uuid.UUID
+	features  *stubProductFeatures
+	// blobs is the same store the service writes handoff documents to, so
+	// tests can assert a burned handoff left nothing behind in it.
+	blobs assets.BlobStore
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -82,18 +104,32 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	// behavior is exercised explicitly via withPerUserKeyAuth.
 	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, testServerURL)
+	features := &stubProductFeatures{sessionPortability: true}
+	blobs := assetstest.NewTestBlobStore(t)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs)
 
 	return ctx, &testInstance{
 		service:   svc,
 		conn:      conn,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
+		features:  features,
+		blobs:     blobs,
 	}
+}
+
+// withPlatformAdmin rewrites the request's auth context to look like a
+// Speakeasy platform administrator, which is what allows editing the
+// platform-admin-only configuration keys (update_channel, blocked_versions).
+func withPlatformAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // withPerUserKeyAuth rewrites the request's auth context to look like a per-user

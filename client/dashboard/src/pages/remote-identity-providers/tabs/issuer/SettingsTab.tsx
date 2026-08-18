@@ -1,7 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -11,57 +9,21 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
   IssuerUrlField,
 } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import { useIssuerDiscovery } from "../../../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "../../../mcp/x/tabs/settings/sections/authentication/useIssuerDuplicatePreflight";
 import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
 import { issuerDisplayName } from "../../issuerDisplay";
-
-function SettingsSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-4 border-b pb-6 last:border-b-0 last:pb-0">
-      <div className="flex flex-col gap-1">
-        <Text className="font-medium">{title}</Text>
-        {description && (
-          <Text small muted>
-            {description}
-          </Text>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
-      <Input value={value} onChange={onChange} />
-    </div>
-  );
-}
+import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
+import { buildUpdateIssuerForm } from "../../issuerSettingsForm";
 
 export function SettingsTab({
   issuer,
@@ -97,6 +59,7 @@ export function SettingsTab({
     clearDiscoverError,
     runDiscover,
     handleResetEndpoints,
+    resetEndpointState,
     showDiscoverControls,
     showResetControls,
     endpointWarnings,
@@ -114,6 +77,7 @@ export function SettingsTab({
         issuer.tokenEndpointAuthMethodsSupported ?? [],
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
+      revocationEndpoint: issuer.revocationEndpoint ?? "",
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
@@ -149,6 +113,25 @@ export function SettingsTab({
   // Repointing a provider is exactly what Discover-then-Save is for, so the two
   // swap rather than sit side by side.
   const issuerUrlMatchesSaved = issuerUrl.trim() === issuer.issuer;
+
+  // Repointing a provider can duplicate an existing one just as creating it
+  // can, so the same preflight runs here. It is gated on the URL having
+  // diverged from what is saved: while they match, the only record it could
+  // report is this one. excludeId covers the remaining case, a
+  // normalization-equivalent edit (a trailing slash on your own URL) that the
+  // shared candidate set still matches.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState(issuer.issuer);
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "organization",
+    // Gated on settledIssuerUrl, NOT on issuerUrlMatchesSaved: that flag tracks
+    // the live input, and gating on it while keying the query on the settled
+    // value lets the two disagree — type a new URL, blur, then type the saved
+    // one back without blurring, and the gate closes while the key still points
+    // at the other URL.
+    enabled: settledIssuerUrl.trim() !== issuer.issuer,
+    excludeId: issuer.id,
+  });
 
   const refreshMetadata =
     useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
@@ -194,49 +177,20 @@ export function SettingsTab({
     : null;
 
   const handleSave = () => {
-    // Only forward the RFC 8414 metadata arrays when a fresh discovery produced
-    // them for the current URL; otherwise omit so the server keeps the existing
-    // values (COALESCE narg semantics).
-    const arraysFromDiscovery =
-      discoveredSnapshot && discoveredSnapshot.url === issuerUrl.trim();
     update.mutate({
       request: {
-        updateRemoteSessionIssuerForm: {
+        updateRemoteSessionIssuerForm: buildUpdateIssuerForm({
           id: issuer.id,
-          name: name.trim(),
-          slug: slug.trim(),
-          // An empty string clears the stored URL to NULL.
-          clientSetupDocumentationUrl: clientSetupDocumentationUrl.trim(),
-          issuer: issuerUrl.trim(),
-          authorizationEndpoint: authorizationEndpoint.trim(),
-          tokenEndpoint: tokenEndpoint.trim(),
-          registrationEndpoint: registrationEndpoint.trim(),
-          jwksUri: jwksUri.trim(),
-          scopesSupported: arraysFromDiscovery
-            ? discoveredSnapshot.scopesSupported
-            : undefined,
-          grantTypesSupported: arraysFromDiscovery
-            ? discoveredSnapshot.grantTypesSupported
-            : undefined,
-          responseTypesSupported: arraysFromDiscovery
-            ? discoveredSnapshot.responseTypesSupported
-            : undefined,
-          tokenEndpointAuthMethodsSupported: arraysFromDiscovery
-            ? discoveredSnapshot.tokenEndpointAuthMethodsSupported
-            : undefined,
-          clientIdMetadataDocumentSupported: arraysFromDiscovery
-            ? discoveredSnapshot.clientIdMetadataDocumentSupported
-            : undefined,
-          serviceDocumentation: arraysFromDiscovery
-            ? discoveredSnapshot.serviceDocumentation
-            : undefined,
-          opPolicyUri: arraysFromDiscovery
-            ? discoveredSnapshot.opPolicyUri
-            : undefined,
-          opTosUri: arraysFromDiscovery
-            ? discoveredSnapshot.opTosUri
-            : undefined,
-        },
+          name,
+          slug,
+          clientSetupDocumentationUrl,
+          issuerUrl,
+          authorizationEndpoint,
+          tokenEndpoint,
+          registrationEndpoint,
+          jwksUri,
+          discoveredSnapshot,
+        }),
       },
     });
   };
@@ -247,8 +201,8 @@ export function SettingsTab({
         title="Provider"
         description="How this identity provider is labelled in the dashboard."
       >
-        <Field label="Display name" value={name} onChange={setName} />
-        <Field label="Slug" value={slug} onChange={setSlug} />
+        <SettingsField label="Display name" value={name} onChange={setName} />
+        <SettingsField label="Slug" value={slug} onChange={setSlug} />
       </SettingsSection>
 
       <SettingsSection
@@ -257,9 +211,39 @@ export function SettingsTab({
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
+          onIssuerUrlSettled={setSettledIssuerUrl}
+          duplicateWarning={
+            <IssuerDuplicateWarning
+              viewerScope="organization"
+              matches={duplicateMatches}
+              renderLink={(match) => (
+                <Button asChild variant="secondary">
+                  <Link
+                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                      match.id,
+                    )}
+                  >
+                    View existing provider
+                  </Link>
+                </Button>
+              )}
+            />
+          }
           onIssuerUrlChange={(value) => {
             setIssuerUrl(value);
+            // Any edit invalidates the last blur, so a warning cannot outlive
+            // the URL it describes.
+            setSettledIssuerUrl("");
             clearDiscoverError();
+            // The endpoint fields belong to the settled URL — the saved issuer,
+            // or the last discovery if one ran. Once the typed URL diverges
+            // they describe the wrong provider, and Save would submit the old
+            // provider's endpoints under the new URL. Clear them so the
+            // operator re-runs Discover or types values for the new provider.
+            const settledUrl = discoveredSnapshot?.url ?? issuer.issuer;
+            if (value.trim() !== settledUrl) {
+              resetEndpointState();
+            }
           }}
         />
         <EndpointsFields
@@ -301,7 +285,9 @@ export function SettingsTab({
                     request: { riskIDRequestBody: { id: issuer.id } },
                   })
                 }
-                disabled={refreshMetadata.isPending}
+                // Also blocked while Save runs: a save built from pre-refresh
+                // fields finishing after the refresh would silently undo it.
+                disabled={refreshMetadata.isPending || update.isPending}
               >
                 <Button.Text>
                   {refreshMetadata.isPending
@@ -323,7 +309,7 @@ export function SettingsTab({
         title="Client setup"
         description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
       >
-        <Field
+        <SettingsField
           label="Client setup documentation URL"
           value={clientSetupDocumentationUrl}
           onChange={setClientSetupDocumentationUrl}
@@ -338,7 +324,10 @@ export function SettingsTab({
 
       <div>
         <RequireScope scope="org:admin" level="component">
-          <Button onClick={handleSave} disabled={update.isPending}>
+          <Button
+            onClick={handleSave}
+            disabled={update.isPending || refreshMetadata.isPending}
+          >
             <Button.Text>
               {update.isPending ? "Saving…" : "Save changes"}
             </Button.Text>
@@ -346,7 +335,7 @@ export function SettingsTab({
         </RequireScope>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
+      <div className="border-destructive/30 flex flex-col gap-2 border p-4">
         <Text className="font-medium">Danger Zone</Text>
         <Text small muted>
           Deleting this provider is permanent. All clients must be deleted

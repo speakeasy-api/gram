@@ -107,16 +107,12 @@ export function UserSessionDurationField({
     setDurationNumber(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
   };
 
-  const handleUnitChange = (value: string) => {
-    setDurationUnit(value as DurationUnit);
-  };
-
   return (
     <Field data-invalid={update.isError ? true : undefined}>
       <FieldLabel htmlFor="mcp-auth-session-duration">
-        Session Duration
+        Maximum Session Duration
       </FieldLabel>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Input
           id="mcp-auth-session-duration"
           type="number"
@@ -125,7 +121,10 @@ export function UserSessionDurationField({
           onChange={handleNumberChange}
           className="w-[100px]"
         />
-        <Select value={durationUnit} onValueChange={handleUnitChange}>
+        <Select
+          value={durationUnit}
+          onValueChange={(value) => setDurationUnit(value as DurationUnit)}
+        >
           <SelectTrigger className="w-[120px]">
             <SelectValue />
           </SelectTrigger>
@@ -137,7 +136,7 @@ export function UserSessionDurationField({
             ))}
           </SelectContent>
         </Select>
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope scope="project:write" level="component">
           <Button
             variant="primary"
             size="md"
@@ -149,8 +148,9 @@ export function UserSessionDurationField({
         </RequireScope>
       </div>
       <FieldDescription>
-        Users authenticate with Speakeasy before using this server. Choose how
-        long issued sessions stay valid before re-authentication.
+        Users authenticate with Speakeasy before using this server. Sessions can
+        never outlive this duration; the consent screen lets users pick any
+        shorter length.
       </FieldDescription>
       {update.isError && <FieldError>{update.error.message}</FieldError>}
     </Field>

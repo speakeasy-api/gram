@@ -1,8 +1,8 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
@@ -30,6 +30,7 @@ import {
   KeyRound,
   LayoutDashboard,
   MessageSquareText,
+  Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -66,7 +67,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const canViewTeamAccess =
     !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     {
       key: "overview",
       title: "Overview",
@@ -129,6 +130,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       active: activeTab === "prompts",
     },
     {
+      key: "sessions",
+      title: "Clients and Sessions",
+      Icon: Plug,
+      href: mcpDetailTabHref(routes, toolsetSlug, "sessions"),
+      active: activeTab === "sessions",
+    },
+    {
       key: "settings",
       title: "Settings",
       Icon: SettingsIcon,
@@ -145,13 +153,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <MCPStatusDropdown toolset={toolset} />
       </div>
 
       {mcpUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
             <Text
               variant="small"
@@ -171,21 +179,25 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       )}
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
         <Text variant="small">{toolset.tools?.length ?? 0}</Text>
       </div>
 
       <div className="border-border flex items-stretch border-t pt-3">
-        <a
-          href={installPageUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
-        >
-          Installation page
-          <ExternalLink className="h-3 w-3" />
-        </a>
-        <div className="bg-border w-px self-stretch" />
+        {installPageUrl && (
+          <>
+            <a
+              href={installPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+            >
+              Installation page
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            <div className="bg-border w-px self-stretch" />
+          </>
+        )}
         <routes.playground.Link
           queryParams={{ toolset: toolset.slug }}
           className="flex flex-1 items-center justify-center hover:no-underline"
@@ -200,7 +212,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.mcp.href()}
       cardContent={cardContent}
       items={items}

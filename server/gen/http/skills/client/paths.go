@@ -32,6 +32,11 @@ func ListSkillsPath() string {
 	return "/rpc/skills.list"
 }
 
+// ListTagsSkillsPath returns the URL path to the skills service listTags HTTP endpoint.
+func ListTagsSkillsPath() string {
+	return "/rpc/skills.listTags"
+}
+
 // ListSuggestionsSkillsPath returns the URL path to the skills service listSuggestions HTTP endpoint.
 func ListSuggestionsSkillsPath() string {
 	return "/rpc/skills.listSuggestions"

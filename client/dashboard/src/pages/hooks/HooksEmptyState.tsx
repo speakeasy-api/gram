@@ -20,7 +20,7 @@ function ProviderCard({
     <button
       type="button"
       onClick={onInstall}
-      className="border-border hover:border-primary hover:bg-muted/50 relative flex min-w-[160px] cursor-pointer flex-col items-center rounded-lg border p-6 transition-all"
+      className="border-border hover:border-primary hover:bg-muted/50 relative flex min-w-[160px] cursor-pointer flex-col items-center border p-6 transition-all"
     >
       <IconComponent className="mb-3 size-12" />
       <span className="text-sm font-medium">{name}</span>
@@ -52,11 +52,11 @@ export function HooksEmptyState({
         <div className="w-full max-w-2xl space-y-8 text-center">
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
-            <div className="bg-muted flex size-16 items-center justify-center rounded-full">
+            <div className="border-border flex size-16 items-center justify-center border">
               <Icon name="workflow" className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="mb-2 text-xl font-semibold">{title}</h2>
+              <h2 className="text-display-sm mb-2 font-thin">{title}</h2>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 {subtitle}
               </p>
@@ -65,7 +65,7 @@ export function HooksEmptyState({
 
           {/* Installation Options */}
           <div>
-            <h3 className="mb-4 text-sm font-medium">
+            <h3 className="text-eyebrow mb-4">
               Choose Your AI Coding Assistant
             </h3>
             <div className="flex flex-wrap items-center justify-center gap-4">

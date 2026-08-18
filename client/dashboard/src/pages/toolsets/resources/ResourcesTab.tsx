@@ -156,7 +156,7 @@ function ResourceCard({
       <Card>
         <Card.Header>
           <Stack direction="horizontal" gap={2} align="center">
-            <div className="bg-muted shrink-0 rounded-md p-2">
+            <div className="bg-muted shrink-0 p-2">
               <Newspaper
                 className="text-muted-foreground size-5"
                 strokeWidth={1.5}
@@ -210,7 +210,7 @@ function ResourceSelectPopover({
           <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
             <Card.Header>
               <Stack direction="horizontal" gap={2} align="center">
-                <div className="bg-muted shrink-0 rounded-md p-2">
+                <div className="bg-muted shrink-0 p-2">
                   <Newspaper
                     className="text-muted-foreground size-5"
                     strokeWidth={1.5}

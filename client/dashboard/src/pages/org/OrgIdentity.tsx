@@ -1,10 +1,11 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -113,8 +114,11 @@ function SSOConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          toast.info("Continue setup in the WorkOS portal");
+          if (openSafeExternalUrl(data.url)) {
+            toast.info("Continue setup in the WorkOS portal");
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
         },
       },
     );
@@ -162,8 +166,11 @@ function DirectorySyncConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          toast.info("Continue setup in the WorkOS portal");
+          if (openSafeExternalUrl(data.url)) {
+            toast.info("Continue setup in the WorkOS portal");
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
         },
       },
     );
@@ -243,7 +250,7 @@ function IdentitySection({
         <Text as="div" muted small className="mb-4">
           {description}
         </Text>
-        <div className="border-border overflow-hidden rounded-lg border">
+        <div className="border-border overflow-hidden border">
           <div className="flex items-center gap-4 p-4">
             <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
               {providerIcon}
@@ -279,18 +286,7 @@ function IdentitySection({
 }
 
 export default function OrgIdentity(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgIdentityInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <OrgIdentityInner />;
 }
 
 function OrgIdentityInner() {
@@ -303,8 +299,7 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Heading variant="h4">Identity</Heading>
+    <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
       <div className="flex flex-col gap-6">
         <IdentitySection
           sectionId="sso"
@@ -364,6 +359,6 @@ function OrgIdentityInner() {
           }
         />
       </div>
-    </div>
+    </SettingsPage>
   );
 }

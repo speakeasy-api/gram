@@ -54,9 +54,17 @@ export type CustomDomain = {
    */
   isUpdating: boolean;
   /**
+   * The token served for OpenAI app-submission domain verification, if configured
+   */
+  openaiAppsChallengeToken?: string | undefined;
+  /**
    * The ID of the organization this domain belongs to
    */
   organizationId: string;
+  /**
+   * The MCP endpoint currently mapped to the domain root, if any
+   */
+  rootMcpEndpointId?: string | undefined;
   /**
    * When the current unhealthy period began.
    */
@@ -93,7 +101,9 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
       id: z.string(),
       ip_allowlist: z.array(z.string()),
       is_updating: z.boolean(),
+      openai_apps_challenge_token: z.optional(z.string()),
       organization_id: z.string(),
+      root_mcp_endpoint_id: z.optional(z.string()),
       unhealthy_since: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -113,7 +123,9 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         "health_status": "healthStatus",
         "ip_allowlist": "ipAllowlist",
         "is_updating": "isUpdating",
+        "openai_apps_challenge_token": "openaiAppsChallengeToken",
         "organization_id": "organizationId",
+        "root_mcp_endpoint_id": "rootMcpEndpointId",
         "unhealthy_since": "unhealthySince",
         "updated_at": "updatedAt",
       });

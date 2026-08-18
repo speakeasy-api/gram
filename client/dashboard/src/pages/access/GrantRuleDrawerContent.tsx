@@ -43,6 +43,7 @@ import {
   type ServerGroup,
 } from "./serverMerge";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import { AnnotationBadgeIcons } from "@/components/tool-list/AnnotationBadges";
 
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
@@ -334,7 +335,7 @@ export function GrantRuleDrawerContent({
     resourceType === "chat"
   ) {
     return (
-      <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+      <span className="border-input text-muted-foreground inline-flex h-7 items-center border bg-transparent px-2 py-1 text-xs">
         {resourceType === "environment"
           ? "All in project"
           : resourceType === "chat"
@@ -834,7 +835,7 @@ function ToolSelectionPanel({
                     type="button"
                     onClick={() => toggleAnnotation(opt.key)}
                     className={cn(
-                      "border-input hover:bg-accent inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+                      "border-input hover:bg-accent inline-flex items-center gap-1 border px-2 py-1 text-xs transition-colors",
                       isActive &&
                         "border-primary bg-primary/5 text-primary font-medium",
                     )}
@@ -877,7 +878,7 @@ function ToolSelectionPanel({
 
           {/* Search */}
           <div className="flex items-center gap-2 px-3 pb-3">
-            <div className="border-input flex h-8 flex-1 items-center gap-2 rounded-md border px-2">
+            <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
               <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
               <input
                 type="text"
@@ -1191,7 +1192,13 @@ function ServerToolRow({
                   <HighlightMatch
                     text={tool.name}
                     query={q}
-                    className="truncate"
+                    className="min-w-0 flex-1 truncate text-left"
+                  />
+                  <AnnotationBadgeIcons
+                    readOnly={Boolean(tool.annotations?.readOnlyHint)}
+                    destructive={Boolean(tool.annotations?.destructiveHint)}
+                    idempotent={Boolean(tool.annotations?.idempotentHint)}
+                    openWorld={Boolean(tool.annotations?.openWorldHint)}
                   />
                 </button>
               );
@@ -1328,7 +1335,7 @@ function CollectionGroupPanel({
             <button
               type="button"
               onClick={disabled ? undefined : goToCreateCollection}
-              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-xs transition-colors"
+              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs shadow-xs transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new collection
@@ -1387,7 +1394,7 @@ function CollectionGroupPanel({
             key={group.id}
             type="button"
             onClick={toggleAll}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm"
           >
             <Checkbox
               checked={allSelected}
@@ -1415,7 +1422,7 @@ function CollectionGroupPanel({
             <button
               type="button"
               onClick={disabled ? undefined : goToCreateCollection}
-              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-xs transition-colors"
+              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 px-3 py-1.5 text-xs transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new collection
@@ -1446,7 +1453,7 @@ function ResourceCheckbox({
       onClick={() => onToggle(id)}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
-        compact ? "h-10 rounded-none text-sm" : "rounded-sm py-2 text-sm",
+        compact ? "h-10 text-sm" : "py-2 text-sm",
         checked && "font-medium",
       )}
     >
@@ -1476,7 +1483,7 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 rounded-sm px-3 py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-sm",
         selected && "font-medium",
       )}
     >
@@ -1511,7 +1518,7 @@ function HighlightMatch({
   return (
     <span className={className}>
       {text.slice(0, idx)}
-      <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-800/60">
+      <mark className="bg-yellow-200 dark:bg-yellow-800/60">
         {text.slice(idx, idx + query.length)}
       </mark>
       {text.slice(idx + query.length)}

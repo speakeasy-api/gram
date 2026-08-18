@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,11 +25,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -63,9 +63,27 @@ type testInstance struct {
 	sessionManager      *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	redis               *redis.Client
+	// features is the injectable flag provider wired into the service; tests
+	// flip FlagUserSessionCIMD on it per organization.
+	features *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestServiceWithRevoker(t, nil)
+}
+
+// newTestServiceWithRevoker builds the service with a substitute
+// TokenRevoker so revoke tests can exercise the revocation-cache failure path
+// without an unreachable Redis, which would cost ~1.7s per seeded session
+// (1s DialTimeout plus go-redis retries). Pass nil for the real
+// chatsessions.Manager over the test Redis.
+//
+// guardianOpts extend the guardian policy the CIMD resolver fetches through —
+// e.g. guardian.WithTLSRootCAs so refresh tests can trust an httptest TLS
+// document server.
+func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -78,49 +96,38 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	enc := testenv.NewEncryptionClient(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-	serverURL, err := url.Parse("http://0.0.0.0")
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
 
-	// usersessions reaches the legacy gram registration migration through a
-	// remotesessions.Service; construct one over the same test database.
-	remoteSessionsService := remotesessions.NewService(
-		logger,
-		tracerProvider,
-		conn,
-		sessionManager,
-		authzEngine,
-		enc,
-		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)),
-		guardianPolicy,
-		audit.NewLogger(),
-		serverURL,
-		cache.NewRedisCacheAdapter(redisClient),
-	)
+	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
+	if revoker != nil {
+		tokenRevoker = revoker
+	}
+
+	features := &feature.InMemory{}
 
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
+		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
-		chatSessionsManager,
+		tokenRevoker,
 		authzEngine,
 		audit.NewLogger(),
+		guardianPolicy,
+		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
-		remoteSessionsService,
+		ratelimit.NewRedisStore(redisClient),
+		features,
 	)
 
 	return ctx, &testInstance{
@@ -129,7 +136,64 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager:      sessionManager,
 		chatSessionsManager: chatSessionsManager,
 		redis:               redisClient,
+		features:            features,
 	}
+}
+
+// failingTokenRevoker is a usersessions.TokenRevoker whose every push fails,
+// and which records how many pushes were attempted. TokenRevoker is our own
+// interface rather than a vendor type, so a hand-rolled stub is preferred to
+// testify/mock here.
+type failingTokenRevoker struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (f *failingTokenRevoker) RevokeToken(_ context.Context, jti string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return fmt.Errorf("revocation cache unavailable for jti %s", jti)
+}
+
+func (f *failingTokenRevoker) Calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// partialTokenRevoker fails only for the jtis registered with failOn and
+// records every jti it was asked to revoke, so tests can pin the mixed
+// success/failure accounting the handler reports.
+type partialTokenRevoker struct {
+	mu     sync.Mutex
+	failed map[string]bool
+	calls  []string
+}
+
+func (p *partialTokenRevoker) failOn(jti string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.failed == nil {
+		p.failed = map[string]bool{}
+	}
+	p.failed[jti] = true
+}
+
+func (p *partialTokenRevoker) RevokeToken(_ context.Context, jti string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, jti)
+	if p.failed[jti] {
+		return fmt.Errorf("revocation cache rejected jti %s", jti)
+	}
+	return nil
+}
+
+func (p *partialTokenRevoker) Calls() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.calls)
 }
 
 // jtiRevoked reports whether the chat_session_revoked:{jti}: key exists in
@@ -201,6 +265,28 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	return row, nil
 }
 
+// seedCimdUserSessionClient inserts a CIMD-resolved user_session_clients row.
+// It has to go through the CIMD upsert rather than seedUserSessionClient
+// because CreateUserSessionClient cannot write client_id_metadata_uri at all --
+// that column is only ever set by the authorize-time CIMD path. documentURL
+// becomes both client_id and client_id_metadata_uri, which the
+// user_session_clients_client_id_metadata_uri_match_check constraint requires.
+func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, documentURL string) (repo.UserSessionClient, error) {
+	t.Helper()
+
+	r := repo.New(conn)
+	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID: issuerID,
+		ClientID:            documentURL,
+		ClientName:          "test-cimd-" + documentURL,
+		RedirectUris:        []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
+	}
+	return row, nil
+}
+
 // seedUserSession inserts a user_sessions row directly through the SQLc repo
 // so revoke and cascade tests can exercise behaviour against rows the
 // management API will not write itself.
@@ -211,15 +297,33 @@ func seedUserSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issu
 	return seedUserSessionWithExpiry(t, ctx, conn, issuerID, principalURN, now.Add(24*time.Hour), now.Add(time.Hour))
 }
 
+// seedUserSessionForClient inserts a user_sessions row bound to a
+// user_session_clients row, so the client-revoke cascade has something to
+// sweep up. Sessions seeded through seedUserSession carry no client id and
+// are deliberately invisible to SoftDeleteUserSessionsByClientID.
+func seedUserSessionForClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID, clientID uuid.UUID, principalURN urn.SessionSubject) (repo.UserSession, error) {
+	t.Helper()
+
+	now := time.Now()
+	return seedUserSessionFull(t, ctx, conn, issuerID, uuid.NullUUID{UUID: clientID, Valid: true}, principalURN, now.Add(24*time.Hour), now.Add(time.Hour))
+}
+
 // seedUserSessionWithExpiry inserts a user_sessions row with explicit access-
 // token (expires_at) and refresh-token (refresh_expires_at) expiry times so
 // tests can exercise the status filter's reliance on refresh_expires_at.
 func seedUserSessionWithExpiry(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, principalURN urn.SessionSubject, expiresAt, refreshExpiresAt time.Time) (repo.UserSession, error) {
 	t.Helper()
 
+	return seedUserSessionFull(t, ctx, conn, issuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, principalURN, expiresAt, refreshExpiresAt)
+}
+
+func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, clientID uuid.NullUUID, principalURN urn.SessionSubject, expiresAt, refreshExpiresAt time.Time) (repo.UserSession, error) {
+	t.Helper()
+
 	r := repo.New(conn)
 	row, err := r.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: issuerID,
+		UserSessionClientID: clientID,
 		SubjectUrn:          principalURN,
 		Jti:                 "jti-" + uuid.NewString(),
 		RefreshTokenHash:    "hash-" + uuid.NewString(),

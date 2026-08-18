@@ -247,7 +247,7 @@ export function PlaygroundLogsPanel({
                 <div className="text-muted-foreground mb-1.5 text-[11px] font-semibold tracking-wider uppercase">
                   Details
                 </div>
-                <div className="bg-background/60 border-border/40 divide-border/40 divide-y rounded border">
+                <div className="bg-background/60 border-border/40 divide-border/40 divide-y border">
                   <div className="flex justify-between px-2.5 py-1.5 text-[11px]">
                     <span className="text-muted-foreground font-medium">
                       Service
@@ -305,7 +305,7 @@ export function PlaygroundLogsPanel({
                   <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                     Message
                   </div>
-                  <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
+                  <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
                     {selectedLog.body}
                   </pre>
                 </div>
@@ -319,7 +319,7 @@ export function PlaygroundLogsPanel({
                     <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                       Attributes
                     </div>
-                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.attributes, null, 2)}
                     </pre>
                   </div>
@@ -333,7 +333,7 @@ export function PlaygroundLogsPanel({
                     <div className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
                       Resource Attributes
                     </div>
-                    <pre className="bg-background/60 border-border/40 overflow-x-auto rounded border p-2 font-mono text-[10px] leading-relaxed">
+                    <pre className="bg-background/60 border-border/40 overflow-x-auto border p-2 font-mono text-[10px] leading-relaxed">
                       {JSON.stringify(selectedLog.resourceAttributes, null, 2)}
                     </pre>
                   </div>

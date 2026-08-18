@@ -69,29 +69,13 @@ type Client struct {
 	// the listShadowMCPInventoryUsers endpoint.
 	ListShadowMCPInventoryUsersDoer goahttp.Doer
 
-	// UpsertShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
-	// requests to the upsertShadowMCPInventoryPolicyBypass endpoint.
-	UpsertShadowMCPInventoryPolicyBypassDoer goahttp.Doer
-
-	// DeleteShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
-	// requests to the deleteShadowMCPInventoryPolicyBypass endpoint.
-	DeleteShadowMCPInventoryPolicyBypassDoer goahttp.Doer
-
 	// ResolveShadowMCPInventoryRequest Doer is the HTTP client used to make
 	// requests to the resolveShadowMCPInventoryRequest endpoint.
 	ResolveShadowMCPInventoryRequestDoer goahttp.Doer
 
-	// GetRBACStatus Doer is the HTTP client used to make requests to the
-	// getRBACStatus endpoint.
-	GetRBACStatusDoer goahttp.Doer
-
-	// EnableRBAC Doer is the HTTP client used to make requests to the enableRBAC
-	// endpoint.
-	EnableRBACDoer goahttp.Doer
-
-	// DisableRBAC Doer is the HTTP client used to make requests to the disableRBAC
-	// endpoint.
-	DisableRBACDoer goahttp.Doer
+	// RequestAccess Doer is the HTTP client used to make requests to the
+	// requestAccess endpoint.
+	RequestAccessDoer goahttp.Doer
 
 	// ListChallenges Doer is the HTTP client used to make requests to the
 	// listChallenges endpoint.
@@ -125,33 +109,29 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRolesDoer:                            doer,
-		GetRoleDoer:                              doer,
-		CreateRoleDoer:                           doer,
-		UpdateRoleDoer:                           doer,
-		DeleteRoleDoer:                           doer,
-		ListScopesDoer:                           doer,
-		ListMembersDoer:                          doer,
-		ListGrantsDoer:                           doer,
-		UpdateMemberRolesDoer:                    doer,
-		ListShadowMCPInventoryDoer:               doer,
-		GetShadowMCPInventoryServerDoer:          doer,
-		UpdateShadowMCPInventoryServerNameDoer:   doer,
-		ListShadowMCPInventoryUsersDoer:          doer,
-		UpsertShadowMCPInventoryPolicyBypassDoer: doer,
-		DeleteShadowMCPInventoryPolicyBypassDoer: doer,
-		ResolveShadowMCPInventoryRequestDoer:     doer,
-		GetRBACStatusDoer:                        doer,
-		EnableRBACDoer:                           doer,
-		DisableRBACDoer:                          doer,
-		ListChallengesDoer:                       doer,
-		ListChallengeBucketsDoer:                 doer,
-		ResolveChallengeDoer:                     doer,
-		RestoreResponseBody:                      restoreBody,
-		scheme:                                   scheme,
-		host:                                     host,
-		decoder:                                  dec,
-		encoder:                                  enc,
+		ListRolesDoer:                          doer,
+		GetRoleDoer:                            doer,
+		CreateRoleDoer:                         doer,
+		UpdateRoleDoer:                         doer,
+		DeleteRoleDoer:                         doer,
+		ListScopesDoer:                         doer,
+		ListMembersDoer:                        doer,
+		ListGrantsDoer:                         doer,
+		UpdateMemberRolesDoer:                  doer,
+		ListShadowMCPInventoryDoer:             doer,
+		GetShadowMCPInventoryServerDoer:        doer,
+		UpdateShadowMCPInventoryServerNameDoer: doer,
+		ListShadowMCPInventoryUsersDoer:        doer,
+		ResolveShadowMCPInventoryRequestDoer:   doer,
+		RequestAccessDoer:                      doer,
+		ListChallengesDoer:                     doer,
+		ListChallengeBucketsDoer:               doer,
+		ResolveChallengeDoer:                   doer,
+		RestoreResponseBody:                    restoreBody,
+		scheme:                                 scheme,
+		host:                                   host,
+		decoder:                                dec,
+		encoder:                                enc,
 	}
 }
 
@@ -467,54 +447,6 @@ func (c *Client) ListShadowMCPInventoryUsers() goa.Endpoint {
 	}
 }
 
-// UpsertShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
-// requests to the access service upsertShadowMCPInventoryPolicyBypass server.
-func (c *Client) UpsertShadowMCPInventoryPolicyBypass() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpsertShadowMCPInventoryPolicyBypassRequest(c.encoder)
-		decodeResponse = DecodeUpsertShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertShadowMCPInventoryPolicyBypassRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpsertShadowMCPInventoryPolicyBypassDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "upsertShadowMCPInventoryPolicyBypass", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DeleteShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
-// requests to the access service deleteShadowMCPInventoryPolicyBypass server.
-func (c *Client) DeleteShadowMCPInventoryPolicyBypass() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDeleteShadowMCPInventoryPolicyBypassRequest(c.encoder)
-		decodeResponse = DecodeDeleteShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteShadowMCPInventoryPolicyBypassRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DeleteShadowMCPInventoryPolicyBypassDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "deleteShadowMCPInventoryPolicyBypass", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // ResolveShadowMCPInventoryRequest returns an endpoint that makes HTTP
 // requests to the access service resolveShadowMCPInventoryRequest server.
 func (c *Client) ResolveShadowMCPInventoryRequest() goa.Endpoint {
@@ -539,15 +471,15 @@ func (c *Client) ResolveShadowMCPInventoryRequest() goa.Endpoint {
 	}
 }
 
-// GetRBACStatus returns an endpoint that makes HTTP requests to the access
-// service getRBACStatus server.
-func (c *Client) GetRBACStatus() goa.Endpoint {
+// RequestAccess returns an endpoint that makes HTTP requests to the access
+// service requestAccess server.
+func (c *Client) RequestAccess() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetRBACStatusRequest(c.encoder)
-		decodeResponse = DecodeGetRBACStatusResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeRequestAccessRequest(c.encoder)
+		decodeResponse = DecodeRequestAccessResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetRBACStatusRequest(ctx, v)
+		req, err := c.BuildRequestAccessRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -555,57 +487,9 @@ func (c *Client) GetRBACStatus() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetRBACStatusDoer.Do(req)
+		resp, err := c.RequestAccessDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "getRBACStatus", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// EnableRBAC returns an endpoint that makes HTTP requests to the access
-// service enableRBAC server.
-func (c *Client) EnableRBAC() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeEnableRBACRequest(c.encoder)
-		decodeResponse = DecodeEnableRBACResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildEnableRBACRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.EnableRBACDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "enableRBAC", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DisableRBAC returns an endpoint that makes HTTP requests to the access
-// service disableRBAC server.
-func (c *Client) DisableRBAC() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDisableRBACRequest(c.encoder)
-		decodeResponse = DecodeDisableRBACResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDisableRBACRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DisableRBACDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "disableRBAC", err)
+			return nil, goahttp.ErrRequestError("access", "requestAccess", err)
 		}
 		return decodeResponse(resp)
 	}

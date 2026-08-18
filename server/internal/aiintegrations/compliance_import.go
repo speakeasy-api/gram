@@ -3,6 +3,7 @@ package aiintegrations
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -18,7 +19,6 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -114,10 +114,10 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 // the whole story instead of only the first error to win the race.
 func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, cfg Config) (string, error) {
 	if cfg.Provider != ProviderAnthropicCompliance {
-		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for compliance import: %s", cfg.Provider)
+		return "", fmt.Errorf("unsupported ai integration provider for compliance import: %s", cfg.Provider)
 	}
 	if cfg.ExternalOrganizationID == nil {
-		return "", oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
+		return "", fmt.Errorf("external_organization_id is required for anthropic_compliance")
 	}
 
 	client := anthropicapi.New(s.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey))
@@ -218,15 +218,16 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 			s.heartbeat(ctx, "message_write", progress.MessagePagesWritten+1)
 
 			if _, err := s.writer.WriteExternal(ctx, cfg.ProjectID, batch.rows); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "write anthropic compliance chat messages")
+				return fmt.Errorf("write anthropic compliance chat messages: %w", err)
 			}
 
 			if batch.lastID != "" {
 				if err := chatrepo.New(s.db).UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
 					LastCursorID: conv.ToPGText(batch.lastID),
 					ChatID:       batch.chatID,
+					ProjectID:    cfg.ProjectID,
 				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
+					return fmt.Errorf("record anthropic compliance chat cursor: %w", err)
 				}
 			}
 			progress.MessagePagesWritten++
@@ -242,7 +243,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 				AiIntegrationConfigID: cfg.ID,
 				Schedule:              ScheduleAnthropicCompliance,
 			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "advance anthropic compliance activities cursor")
+				return fmt.Errorf("advance anthropic compliance activities cursor: %w", err)
 			}
 			progress.CursorPersisted = batch.activitiesCursor
 		}
@@ -286,7 +287,7 @@ func (s *ComplianceImportService) streamChatActivities(ctx context.Context, clie
 			Limit:           anthropicComplianceActivityPageLimit,
 		})
 		if err != nil {
-			return nextCursor, oops.E(oops.CodeUnexpected, err, "list anthropic compliance activities")
+			return nextCursor, fmt.Errorf("list anthropic compliance activities: %w", err)
 		}
 		progress.ActivityPages++
 
@@ -328,7 +329,7 @@ func (s *ComplianceImportService) backfillChatActivities(ctx context.Context, cl
 			Limit:           anthropicComplianceActivityPageLimit,
 		})
 		if err != nil {
-			return nextCursor, oops.E(oops.CodeUnexpected, err, "list anthropic compliance activities")
+			return nextCursor, fmt.Errorf("list anthropic compliance activities: %w", err)
 		}
 		progress.ActivityPages++
 
@@ -396,7 +397,7 @@ func (s *ComplianceImportService) emitPageActivities(ctx context.Context, page *
 func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Config, activity anthropicapi.Activity, users *connectedUserResolver) (uuid.UUID, string, error) {
 	createdAt, err := activity.CreatedAtTime()
 	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "parse anthropic compliance activity timestamp")
+		return uuid.Nil, "", fmt.Errorf("parse anthropic compliance activity timestamp: %w", err)
 	}
 
 	if createdAt.IsZero() {
@@ -421,16 +422,19 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 		Title:     pgtype.Text{String: "", Valid: false},
 		CreatedAt: conv.ToPGTimestamptz(createdAt),
 		UpdatedAt: conv.ToPGTimestamptz(createdAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat")
+		return uuid.Nil, "", fmt.Errorf("upsert anthropic compliance chat: %w", err)
 	}
 	messagesCursor, err := chatrepo.New(s.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 		AiIntegrationConfigID: cfg.ID,
 		ChatID:                chatID,
+		ProjectID:             cfg.ProjectID,
 	})
 	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "link anthropic compliance chat")
+		return uuid.Nil, "", fmt.Errorf("link anthropic compliance chat: %w", err)
 	}
 	return chatID, messagesCursor.String, nil
 }
@@ -454,7 +458,7 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 		})
 
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "get anthropic compliance chat messages")
+			return fmt.Errorf("get anthropic compliance chat messages: %w", err)
 		}
 		progress.MessagePagesFetched++
 
@@ -511,9 +515,11 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		Title:          conv.ToPGText(page.Name),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat metadata")
+		return fmt.Errorf("upsert anthropic compliance chat metadata: %w", err)
 	}
 	if resolvedChatID != chatID {
 		s.logger.WarnContext(ctx, "anthropic compliance chat resolved to different id",
@@ -544,7 +550,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 
 		createdAt, err := msg.CreatedAtTime()
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse anthropic compliance message timestamp")
+			return nil, fmt.Errorf("parse anthropic compliance message timestamp: %w", err)
 		}
 
 		if createdAt.IsZero() {
@@ -638,8 +644,10 @@ func renderComplianceContent(raw json.RawMessage) string {
 
 // connectedUserResolver lazily maps actor emails to connected user ids
 // within the organization, caching lookups (including misses) for the
-// duration of one sync run. It is only used from the fetch goroutine and
-// is not safe for concurrent use.
+// duration of one sync run. It is not safe for concurrent use: each import
+// run constructs its own resolver and must call it from a single goroutine
+// (the Anthropic import's fetch goroutine, the ChatGPT import's ProcessPage
+// consumer).
 type connectedUserResolver struct {
 	users *usersrepo.Queries
 	orgID string
@@ -670,7 +678,7 @@ func (r *connectedUserResolver) resolve(ctx context.Context, email string) (stri
 		OrganizationID: r.orgID,
 	})
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "hydrate anthropic compliance user")
+		return "", fmt.Errorf("hydrate compliance connected user: %w", err)
 	}
 
 	r.cache[email] = ""

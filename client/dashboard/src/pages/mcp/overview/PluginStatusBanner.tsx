@@ -25,6 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, CircleCheck, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { StatusBanner } from "@/components/status-banner";
 import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
 import { HostedServerRef } from "./MCPOverviewTab";
 import { Spinner } from "@/components/ui/Spinner";
@@ -234,173 +235,155 @@ export function PluginStatusBanner({
   if (isSaving) saveButtonText = "Publishing";
 
   return (
-    <div className="border border-border/70 relative overflow-hidden rounded-xl shadow-sm">
-      <div
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
-          isTrulyPublished ? "opacity-0" : "opacity-100",
-        )}
-      />
-      <div
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 transition-colors transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
-          isTrulyPublished ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div className="relative flex flex-col">
-        <div className="flex items-center justify-between gap-8 p-6">
-          <div className="flex max-w-md flex-col gap-3">
-            <div className="flex items-center gap-2">
-              {isTrulyPublished ? (
-                <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
-              ) : (
-                <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
+    <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
+      <div className="flex items-center justify-between gap-8 p-6">
+        <div className="flex max-w-md flex-col gap-3">
+          <div className="flex items-center gap-2">
+            {isTrulyPublished ? (
+              <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
+            )}
+            <Text
+              className={cn(
+                "text-warning-foreground text-base font-semibold",
+                isTrulyPublished && "text-emerald-500",
               )}
-              <Text
-                className={cn(
-                  "text-warning-foreground text-base font-semibold",
-                  isTrulyPublished && "text-emerald-500",
-                )}
-              >
-                {isTrulyPublished
-                  ? `Published to ${memberPlugins.length} plugin${
-                      memberPlugins.length > 1 ? "s" : ""
-                    }`
-                  : isPublished
-                    ? "Marketplace needs setup"
-                    : "Not published to any plugin"}
-              </Text>
-              {isRefetching && (
-                <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
-              )}
-            </div>
-            <Text variant="small" className="text-muted-foreground/90">
-              Plugins are the preferred way to distribute MCP servers to your
-              organization's users. Plugins are installed via marketplaces which
-              are GitHub repositories that Speakeasy hosts on your behalf.
+            >
+              {isTrulyPublished
+                ? `Published to ${memberPlugins.length} plugin${
+                    memberPlugins.length > 1 ? "s" : ""
+                  }`
+                : isPublished
+                  ? "Marketplace needs setup"
+                  : "Not published to any plugin"}
             </Text>
-            {plugins.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 rounded-md border px-3 text-sm shadow-xs outline-none"
-                    >
-                      <span
-                        className={cn(
-                          "truncate",
-                          selectedPluginIds.length === 0 &&
-                            "text-muted-foreground",
-                        )}
-                      >
-                        {summarizePluginSelection(selectedPluginIds, plugins)}
-                      </span>
-                      <ChevronDown className="text-muted-foreground size-4 shrink-0" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-80 p-1">
-                    <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-                      {plugins.map((plugin) => (
-                        <label
-                          key={plugin.id}
-                          className="hover:bg-accent flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-sm"
-                        >
-                          <Checkbox
-                            checked={selectedPluginIds.includes(plugin.id)}
-                            onCheckedChange={() => togglePlugin(plugin.id)}
-                            className="mt-0.5"
-                          />
-                          <div className="flex flex-col">
-                            <span>{plugin.name}</span>
-                            {plugin.description && (
-                              <span className="text-muted-foreground text-xs">
-                                {plugin.description}
-                              </span>
-                            )}
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  size="sm"
-                  disabled={!hasChanges || isSaving}
-                  onClick={() => void handleSave()}
-                >
-                  {isSaving && (
-                    <Button.LeftIcon>
-                      <Spinner />
-                    </Button.LeftIcon>
-                  )}
-                  <Button.Text>{saveButtonText}</Button.Text>
-                </Button>
-              </div>
+            {isRefetching && (
+              <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
             )}
           </div>
-          <ClientIconFan />
-        </div>
-
-        {isPublished && (
-          <>
-            <div className="border-border border-t" />
-            <div className="flex items-center justify-between gap-4 p-6">
-              <div className="flex flex-col gap-1">
-                <Text className="text-sm font-semibold">
-                  Install the plugin
-                </Text>
-                <Text variant="small" className="text-muted-foreground/90">
-                  {marketplaceReady
-                    ? "Your team installs the plugin in their AI client to start using this server."
-                    : "Your project marketplace isn't fully set up yet, which means you won't be able to install this MCP via the plugin."}
-                </Text>
-              </div>
-              {marketplaceReady &&
-              publishStatus?.repoOwner &&
-              publishStatus.repoName ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setIsInstallDialogOpen(true)}
+          <Text variant="small" className="text-muted-foreground/90">
+            Plugins are the preferred way to distribute MCP servers to your
+            organization's users. Plugins are installed via marketplaces which
+            are GitHub repositories that Speakeasy hosts on your behalf.
+          </Text>
+          {plugins.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
                   >
-                    <Button.LeftIcon>
-                      <Plus className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Install</Button.Text>
-                  </Button>
-                  <routes.plugins.Link>
-                    <Button size="sm" variant="secondary">
-                      <Button.Text>Go to plugins</Button.Text>
-                    </Button>
-                  </routes.plugins.Link>
-                  <InstallInstructionsDialog
-                    open={isInstallDialogOpen}
-                    onOpenChange={setIsInstallDialogOpen}
-                    repoOwner={publishStatus.repoOwner}
-                    repoName={publishStatus.repoName}
-                    marketplaceUrl={publishStatus.marketplaceUrl}
-                    candidatePlugins={memberPlugins.map((plugin) => ({
-                      name: plugin.name,
-                      slug: plugin.slug,
-                      description: plugin.description,
-                    }))}
-                  />
-                </div>
-              ) : (
+                    <span
+                      className={cn(
+                        "truncate",
+                        selectedPluginIds.length === 0 &&
+                          "text-muted-foreground",
+                      )}
+                    >
+                      {summarizePluginSelection(selectedPluginIds, plugins)}
+                    </span>
+                    <ChevronDown className="text-muted-foreground size-4 shrink-0" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 p-1">
+                  <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+                    {plugins.map((plugin) => (
+                      <label
+                        key={plugin.id}
+                        className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
+                      >
+                        <Checkbox
+                          checked={selectedPluginIds.includes(plugin.id)}
+                          onCheckedChange={() => togglePlugin(plugin.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex flex-col">
+                          <span>{plugin.name}</span>
+                          {plugin.description && (
+                            <span className="text-muted-foreground text-xs">
+                              {plugin.description}
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Button
+                size="sm"
+                disabled={!hasChanges || isSaving}
+                onClick={() => void handleSave()}
+              >
+                {isSaving && (
+                  <Button.LeftIcon>
+                    <Spinner />
+                  </Button.LeftIcon>
+                )}
+                <Button.Text>{saveButtonText}</Button.Text>
+              </Button>
+            </div>
+          )}
+        </div>
+        <ClientIconFan />
+      </div>
+
+      {isPublished && (
+        <>
+          <div className="border-border border-t" />
+          <div className="flex items-center justify-between gap-4 p-6">
+            <div className="flex flex-col gap-1">
+              <Text className="text-sm font-semibold">Install the plugin</Text>
+              <Text variant="small" className="text-muted-foreground/90">
+                {marketplaceReady
+                  ? "Your team installs the plugin in their AI client to start using this server."
+                  : "Your project marketplace isn't fully set up yet, which means you won't be able to install this MCP via the plugin."}
+              </Text>
+            </div>
+            {marketplaceReady &&
+            publishStatus?.repoOwner &&
+            publishStatus.repoName ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => setIsInstallDialogOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Install</Button.Text>
+                </Button>
                 <routes.plugins.Link>
-                  <Button size="sm" variant="primary">
-                    Set up marketplace
+                  <Button size="sm" variant="secondary">
+                    <Button.Text>Go to plugins</Button.Text>
                   </Button>
                 </routes.plugins.Link>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                <InstallInstructionsDialog
+                  open={isInstallDialogOpen}
+                  onOpenChange={setIsInstallDialogOpen}
+                  repoOwner={publishStatus.repoOwner}
+                  repoName={publishStatus.repoName}
+                  marketplaceUrl={publishStatus.marketplaceUrl}
+                  candidatePlugins={memberPlugins.map((plugin) => ({
+                    name: plugin.name,
+                    slug: plugin.slug,
+                    description: plugin.description,
+                  }))}
+                />
+              </div>
+            ) : (
+              <routes.plugins.Link>
+                <Button size="sm" variant="primary">
+                  Set up marketplace
+                </Button>
+              </routes.plugins.Link>
+            )}
+          </div>
+        </>
+      )}
+    </StatusBanner>
   );
 }

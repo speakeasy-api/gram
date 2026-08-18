@@ -9,7 +9,7 @@ import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Heading";
+import { Card } from "@/components/ui/Card";
 import type { Action } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
@@ -26,11 +26,11 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
-import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
 import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -51,6 +51,7 @@ import {
 import { type IconName } from "@/components/ui/Icon/names";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Copy,
   History,
@@ -68,9 +69,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
+import {
+  formatSubjectLabel,
+  getActorLabel,
+  renderVerb,
+} from "@/lib/audit-log-format";
 
-import { ActionBadge, ActionDot } from "@/components/auditlogs/feed";
+import { ActionIconTile } from "@/components/auditlogs/feed";
 
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;
@@ -85,7 +90,9 @@ export default function OrgHome(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
+      {/* fullWidth + noPadding so the welcome banner can run edge to edge;
+          everything else re-applies the page column below. */}
+      <Page.Body fullWidth noPadding className="gap-0">
         <RequireScope
           scope={["org:read", "project:read", "org:admin"]}
           level="page"
@@ -276,114 +283,126 @@ function OrgHomeInner() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-2">
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="Search projects..."
-            className="flex-1"
-          />
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          {canAdmin && (
-            <AddNewMenu
-              onCreateProject={() => setCreateDialogOpen(true)}
-              onInviteMember={() => orgRoutes.team.goTo()}
-              onManageRoles={() => orgRoutes.access.roles.goTo()}
-            />
-          )}
-        </div>
+      <OrgWelcomeBanner />
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
-          <main className="flex min-w-0 flex-col gap-3">
-            <Heading variant="h4">Projects</Heading>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
+        {/* `items-start` so each column is only as tall as its content — the
+            default stretch left the Projects card padded with dead space
+            whenever the rail was taller, which is the common case for orgs
+            with one or two projects. */}
+        <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[1fr_420px] 2xl:grid-cols-[1fr_500px]">
+          <main className="flex min-w-0 flex-col gap-6">
+            <div className="flex items-center gap-2">
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search projects..."
+                className="flex-1"
+              />
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              {canAdmin && (
+                <AddNewMenu
+                  onCreateProject={() => setCreateDialogOpen(true)}
+                  onInviteMember={() => orgRoutes.team.goTo()}
+                  onManageRoles={() => orgRoutes.access.roles.goTo()}
+                />
+              )}
+            </div>
 
-            {filteredProjects.length === 0 && isSearching ? (
-              <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                <Text muted>No projects matching &ldquo;{search}&rdquo;</Text>
-                <RequireScope scope="org:admin" level="component">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setNewProjectName(search);
-                      setCreateDialogOpen(true);
-                    }}
-                  >
-                    <Plus className="size-4" />
-                    Create &ldquo;{search}&rdquo;
-                  </Button>
-                </RequireScope>
-              </div>
-            ) : (
-              <>
-                {favoriteProjects.length > 0 && (
-                  <>
-                    <section className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Star className="text-foreground size-3.5 fill-current" />
-                        <Text small className="text-foreground font-medium">
-                          Your favorites
-                        </Text>
-                      </div>
-                      {renderProjectContainer(
-                        favoriteProjects.map(renderProjectItem),
+            {/* List rows run edge to edge; grid cards need the card's own
+                padding so they do not collide with its border. */}
+            <Card.Dashboard
+              title="Projects"
+              // Not h-full: a single project row would otherwise stretch to
+              // whatever height the activity rail sets.
+              className="h-auto"
+              // Grid keeps the card's side padding but drops the top, so the
+              // first divider sits the same distance below the header as it
+              // does in list mode, where the body is flush.
+              bodyClassName={viewMode === "grid" ? "px-6 pt-0 pb-5" : "p-0"}
+            >
+              {filteredProjects.length === 0 && isSearching ? (
+                <div className="border-border bg-card flex flex-col items-center gap-3 border border-dashed py-12 text-center">
+                  <Text muted>No projects matching &ldquo;{search}&rdquo;</Text>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setNewProjectName(search);
+                        setCreateDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="size-4" />
+                      Create &ldquo;{search}&rdquo;
+                    </Button>
+                  </RequireScope>
+                </div>
+              ) : (
+                <>
+                  {favoriteProjects.length > 0 && (
+                    <>
+                      <section className="flex flex-col">
+                        <SectionDivider
+                          label="Favorites"
+                          inset={viewMode === "list"}
+                        />
+                        {renderProjectContainer(
+                          favoriteProjects.map(renderProjectItem),
+                        )}
+                      </section>
+                      {visibleOtherProjects.length > 0 && (
+                        <SectionDivider
+                          label="All projects"
+                          inset={viewMode === "list"}
+                        />
                       )}
-                    </section>
-                    {visibleOtherProjects.length > 0 && (
-                      <div
-                        className="flex items-center gap-3"
-                        aria-hidden="true"
-                      >
-                        <div className="bg-border h-px flex-1" />
-                        <Text muted small className="text-muted-foreground/80">
-                          All projects
-                        </Text>
-                        <div className="bg-border h-px flex-1" />
+                    </>
+                  )}
+
+                  {renderProjectContainer(
+                    visibleOtherProjects.map(renderProjectItem),
+                  )}
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((prev) => !prev)}
+                      className={cn(
+                        "text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex w-full items-center justify-center gap-1.5 border-dashed py-3 text-sm font-medium transition-colors",
+                        viewMode === "list" ? "border-t" : "mt-4 border",
+                      )}
+                    >
+                      {expanded ? (
+                        <>
+                          Show less
+                          <ChevronUp className="size-4" />
+                        </>
+                      ) : (
+                        <>
+                          Show all {otherProjects.length} projects
+                          <ChevronDown className="size-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {otherProjects.length === 0 &&
+                    favoriteProjects.length === 0 && (
+                      <div className="border-border bg-card flex flex-col items-center gap-3 border border-dashed py-12 text-center">
+                        <Text muted>No projects yet</Text>
+                        <RequireScope scope="org:admin" level="component">
+                          <Button
+                            size="sm"
+                            onClick={() => setCreateDialogOpen(true)}
+                          >
+                            <Plus className="size-4" />
+                            Create your first project
+                          </Button>
+                        </RequireScope>
                       </div>
                     )}
-                  </>
-                )}
-
-                {renderProjectContainer(
-                  visibleOtherProjects.map(renderProjectItem),
-                )}
-                {hasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((prev) => !prev)}
-                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
-                  >
-                    {expanded ? (
-                      <>
-                        Show less
-                        <ChevronUp className="size-4" />
-                      </>
-                    ) : (
-                      <>
-                        Show all {otherProjects.length} projects
-                        <ChevronDown className="size-4" />
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {otherProjects.length === 0 &&
-                  favoriteProjects.length === 0 && (
-                    <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                      <Text muted>No projects yet</Text>
-                      <RequireScope scope="org:admin" level="component">
-                        <Button
-                          size="sm"
-                          onClick={() => setCreateDialogOpen(true)}
-                        >
-                          <Plus className="size-4" />
-                          Create your first project
-                        </Button>
-                      </RequireScope>
-                    </div>
-                  )}
-              </>
-            )}
+                </>
+              )}
+            </Card.Dashboard>
           </main>
 
           <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
@@ -457,18 +476,45 @@ function AddNewMenu({
 }
 
 function ProjectList({ children }: { children: React.ReactNode }) {
+  // No border of its own — the Projects card already draws one, and nesting
+  // two reads as a box in a box.
   return (
-    <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+    <div className="border-border divide-border divide-y overflow-hidden">
       {children}
+    </div>
+  );
+}
+
+/**
+ * Short stub, label, then a rule out to the card edge — separates the project
+ * groups so favorites and "All projects" read as the same kind of break.
+ * `inset` lines the stub up with the row padding in list mode, where the rows
+ * themselves run edge to edge.
+ */
+function SectionDivider({ label, inset }: { label: string; inset: boolean }) {
+  return (
+    <div className={cn("flex items-center gap-3 pt-5 pb-2", inset && "px-4")}>
+      <div aria-hidden="true" className="bg-border h-px w-6 shrink-0" />
+      {/* A real heading, not decoration: it is the only thing distinguishing
+          the favourites group from the rest of the list for screen readers. */}
+      <Text
+        as="h3"
+        muted
+        small
+        className="text-muted-foreground/80 shrink-0 font-normal"
+      >
+        {label}
+      </Text>
+      <div aria-hidden="true" className="bg-border h-px flex-1" />
     </div>
   );
 }
 
 function ProjectGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {children}
-    </div>
+    // Two across at most: the main column gives up width to the activity rail
+    // from xl, and a third card there truncates every name and slug.
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">{children}</div>
   );
 }
 
@@ -480,7 +526,7 @@ function ViewModeToggle({
   onChange: (mode: "list" | "grid") => void;
 }) {
   return (
-    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 rounded-md border p-1">
+    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 border p-1">
       <ViewModeButton
         active={value === "grid"}
         onClick={() => onChange("grid")}
@@ -517,7 +563,7 @@ function ViewModeButton({
       aria-label={ariaLabel}
       aria-pressed={active}
       className={cn(
-        "flex size-8 items-center justify-center rounded transition-colors",
+        "flex size-8 items-center justify-center transition-colors",
         active
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -546,49 +592,61 @@ function ProjectRow({
 
   return (
     <TableRowContextMenu actions={actions}>
-      <div className="group hover:bg-muted/40 relative flex items-center gap-4 px-4 py-3 transition-colors">
-        {/* Decorative content: pointer-events-none routes clicks through to the
-            Link overlay below, while the actions region opts back in. */}
-        <ProjectAvatar
-          project={project}
-          className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
-        />
+      {/* Below `md` the row stacks: identity and summary first, then the
+          facepile and actions on their own line — side by side there is not
+          enough width for the summary without it running under the faces. */}
+      <div
+        className={cn(
+          "group hover:bg-muted/40 relative flex flex-col gap-3 px-4 py-4 transition-colors md:flex-row md:items-center md:gap-4",
+          isFavorite && "bg-muted/30",
+        )}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {/* Decorative content: pointer-events-none routes clicks through to
+              the Link overlay below, while the actions region opts back in. */}
+          <ProjectAvatar
+            project={project}
+            className="pointer-events-none h-9 w-9 shrink-0"
+          />
 
-        <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
-          <div className="w-44 min-w-0 shrink-0">
-            <Text
-              variant="subheading"
-              as="div"
-              className="text-foreground truncate text-sm font-medium"
-            >
-              {project.name}
-            </Text>
-            <Text small muted className="truncate font-mono text-xs">
-              {project.slug}
-            </Text>
-          </div>
+          <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-6">
+            <div className="min-w-0 sm:w-44 sm:shrink-0">
+              <Text
+                variant="subheading"
+                as="div"
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {project.name}
+              </Text>
+              <Text small muted className="truncate font-mono text-xs">
+                {project.slug}
+              </Text>
+            </div>
 
-          <div className="hidden min-w-0 flex-1 sm:block">
-            <RecentActionBlock log={latestLog} />
+            <div className="min-w-0 flex-1">
+              <RecentActionBlock log={latestLog} />
+            </div>
           </div>
         </div>
 
-        <div
-          className="relative z-10 hidden md:flex"
-          onClick={(e) => {
-            // Keep clicks on the facepile from triggering the row's Link overlay.
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
-          <MemberFacepile members={facepile} maxFaces={5} />
-        </div>
+        <div className="flex items-center justify-between gap-3 pl-13 md:justify-end md:pl-0">
+          <div
+            className="relative z-10 flex"
+            onClick={(e) => {
+              // Keep clicks on the facepile from triggering the row's Link overlay.
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <MemberFacepile members={facepile} maxFaces={5} />
+          </div>
 
-        <ProjectRowActions
-          actions={actions}
-          isFavorite={isFavorite}
-          onToggleFavorite={onToggleFavorite}
-        />
+          <ProjectRowActions
+            actions={actions}
+            isFavorite={isFavorite}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </div>
 
         {/* Anchor overlay sits on top of pointer-events-none children, so the
             entire row is one navigation target — interactive controls above
@@ -623,12 +681,14 @@ function ProjectCard({
     <CardContextMenu actions={actions}>
       {/* The card div keeps `relative`, so the Link overlay below still fills
           the card rather than the context-menu wrapper. */}
-      <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
+      <div
+        className={cn(
+          "group border-border bg-card hover:border-foreground relative flex h-full flex-col gap-3 border p-4 transition-colors",
+          isFavorite && "bg-muted/30",
+        )}
+      >
         <div className="pointer-events-none flex items-start gap-3">
-          <ProjectAvatar
-            project={project}
-            className="h-10 w-10 shrink-0 rounded-md"
-          />
+          <ProjectAvatar project={project} className="h-10 w-10 shrink-0" />
           <div className="min-w-0 flex-1">
             <Text
               variant="subheading"
@@ -643,19 +703,19 @@ function ProjectCard({
           </div>
         </div>
 
-        <div className="pointer-events-none min-h-[42px] flex-1">
+        <div className="pointer-events-none min-w-0 flex-1">
           <RecentActionBlock log={latestLog} />
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <div
-            className="relative z-10"
+            className="relative z-10 min-w-0"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
             }}
           >
-            <MemberFacepile members={facepile} maxFaces={5} />
+            <MemberFacepile members={facepile} maxFaces={3} />
           </div>
           <ProjectRowActions
             actions={actions}
@@ -667,7 +727,7 @@ function ProjectCard({
         <Link
           to={`/${orgSlug}/projects/${project.slug}`}
           aria-label={`Open ${project.name}`}
-          className="absolute inset-0 rounded-lg"
+          className="absolute inset-0"
         />
       </div>
     </CardContextMenu>
@@ -762,7 +822,7 @@ function ProjectRowActions({
         aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
         aria-pressed={isFavorite}
         className={cn(
-          "hover:bg-muted flex size-8 items-center justify-center rounded-md transition-colors",
+          "hover:bg-muted flex size-8 items-center justify-center transition-colors",
           isFavorite ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -776,7 +836,7 @@ function ProjectRowActions({
           <button
             type="button"
             aria-label="More actions"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center transition-colors"
           >
             <MoreHorizontal className="size-4" />
           </button>
@@ -831,7 +891,7 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
       </Text>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="text-muted-foreground inline-flex w-fit cursor-default text-xs">
+          <span className="text-muted-foreground inline-flex max-w-full min-w-0 cursor-default text-xs">
             <span className="truncate">
               {dateTimeFormatters.humanize(log.createdAt, {
                 includeTime: false,
@@ -878,13 +938,13 @@ function TimestampDetail({ date }: { date: Date }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           UTC
         </span>
         <span>{utc}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="bg-background/20 rounded-sm px-1 py-0.5 text-[10px] uppercase">
+        <span className="bg-background/20 px-1 py-0.5 text-[10px] uppercase">
           {tzAbbr}
         </span>
         <span>{local}</span>
@@ -898,39 +958,52 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
   const preview = logs.slice(0, AUDIT_PREVIEW_LIMIT);
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <Heading variant="h4">Recent activity</Heading>
-        <orgRoutes.auditLogs.Link className="text-primary text-sm font-medium hover:underline">
+    <Card.Dashboard
+      bodyClassName={preview.length === 0 ? undefined : "p-0"}
+      title="Recent activity"
+      tooltip="Recent administrative activity across this organization — project, MCP server, access and key changes. Most recent first."
+      action={
+        <orgRoutes.auditLogs.Link className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline">
           View all
+          <ChevronRight className="size-3" />
         </orgRoutes.auditLogs.Link>
-      </div>
+      }
+    >
       {preview.length === 0 ? (
-        <div className="border-border bg-card rounded-lg border border-dashed px-4 py-6 text-center">
-          <Text muted small>
-            Activity will appear here as your team makes changes.
-          </Text>
-        </div>
+        <Text muted small>
+          Activity will appear here as your team makes changes.
+        </Text>
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {preview.map((log) => (
             <li
               key={log.id}
-              className="flex items-start gap-2 px-3 py-3 text-xs"
+              className="flex items-start gap-3 px-6 py-3 text-xs"
             >
-              <ActionDot action={log.action} />
+              <ActionIconTile action={log.action} />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <ActionBadge action={log.action} />
-                  <Text small className="truncate leading-snug">
-                    <span className="text-foreground font-medium">
-                      {getActorLabel(log)}
-                    </span>{" "}
-                    <span className="text-muted-foreground">
-                      {renderVerb(log)}
-                    </span>
-                  </Text>
-                </div>
+                <Text small className="truncate leading-snug">
+                  <span className="text-foreground font-medium">
+                    {getActorLabel(log)}
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    {renderVerb(log)}
+                  </span>
+                  {log.subjectDisplayName && (
+                    <>
+                      {" "}
+                      <span
+                        className="text-foreground font-medium"
+                        title={log.subjectDisplayName}
+                      >
+                        {formatSubjectLabel(
+                          log.subjectDisplayName,
+                          log.subjectType,
+                        )}
+                      </span>
+                    </>
+                  )}
+                </Text>
                 <Text
                   muted
                   small
@@ -946,7 +1019,7 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
           ))}
         </ol>
       )}
-    </section>
+    </Card.Dashboard>
   );
 }
 
@@ -969,17 +1042,25 @@ function RecentChallengesCompact() {
   if (isLoading) return null;
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <Heading variant="h4">Recent challenges</Heading>
-        <orgRoutes.access.challenges.Link className="text-primary text-sm font-medium hover:underline">
+    <Card.Dashboard
+      bodyClassName={buckets.length === 0 ? undefined : "p-0"}
+      title="Recent challenges"
+      tooltip="Authorization checks your team was denied recently, grouped by principal and scope."
+      action={
+        <orgRoutes.access.challenges.Link className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline">
           View all
+          <ChevronRight className="size-3" />
         </orgRoutes.access.challenges.Link>
-      </div>
+      }
+    >
       {buckets.length === 0 ? (
-        <ChallengesEmptyState outcomeFilter="deny" />
+        // Compact copy rather than the full-page ChallengesEmptyState — inside
+        // a rail card its illustration and framing box read as a second card.
+        <Text muted small>
+          No denied access attempts. Authorization checks are all passing.
+        </Text>
       ) : (
-        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
               <CompactChallengeRow bucket={bucket} />
@@ -987,7 +1068,7 @@ function RecentChallengesCompact() {
           ))}
         </ol>
       )}
-    </section>
+    </Card.Dashboard>
   );
 }
 
@@ -1009,33 +1090,30 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
   const count = Number(bucket.challengeCount);
 
   return (
-    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-2 px-3 py-3 text-xs no-underline transition-colors hover:no-underline">
-      <div className="bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-full">
+    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
+      {/* Sized to match the ActionIconTile in Recent activity below, so the two
+          rail cards line up row for row. */}
+      <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
         {isApiKey || !bucket.userEmail ? (
-          <KeyRound className="size-3" />
+          <KeyRound className="size-4" />
         ) : (
-          <Avatar className="size-6">
+          <Avatar className="size-8">
             {bucket.photoUrl ? (
               <AvatarImage src={bucket.photoUrl} alt={label} />
             ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-medium">
+            <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
               {getInitials(bucket.userEmail)}
             </AvatarFallback>
           </Avatar>
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-1.5">
-          <span className="bg-destructive/10 text-destructive shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium uppercase">
+        <Text small className="truncate leading-snug">
+          <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">
             deny
           </span>
-          <Text
-            small
-            className="text-foreground truncate text-xs leading-snug font-medium"
-          >
-            {label}
-          </Text>
-        </div>
+          <span className="text-foreground font-medium">{label}</span>
+        </Text>
         <Text muted small className="truncate text-[11px]">
           <span className="font-mono">{bucket.scope}</span>
           <span className="mx-1 opacity-60">·</span>

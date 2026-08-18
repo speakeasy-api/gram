@@ -38,6 +38,10 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("consecutive_failures", Int32, "The number of consecutive failed health checks")
+	Attribute("root_mcp_endpoint_id", String, "The MCP endpoint currently mapped to the domain root, if any", func() {
+		Format(FormatUUID)
+	})
+	Attribute("openai_apps_challenge_token", String, "The token served for OpenAI app-submission domain verification, if configured")
 
 	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
@@ -109,12 +113,12 @@ var _ = Service("domains", func() {
 	})
 
 	Method("updateDomain", func() {
-		Description("Update the IP allowlist for the organization's custom domain")
+		Description("Update settings for the organization's custom domain")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("ip_allowlist", ArrayOf(String), "Replacement IP allowlist. Pass an empty list to remove all restrictions.")
-			Required("ip_allowlist")
+			Attribute("openai_apps_challenge_token", String, "Replacement OpenAI app-submission verification token. Pass an empty string to clear it.")
 		})
 
 		Result(CustomDomain)
@@ -128,6 +132,33 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
+	})
+
+	Method("setRootMcpEndpoint", func() {
+		Description("Set or clear the MCP endpoint mapped to a custom domain's root")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("custom_domain_id", String, "The custom domain whose root mapping to change", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_endpoint_id", String, "The MCP endpoint to map to the domain root. Omit to clear the mapping.", func() {
+				Format(FormatUUID)
+			})
+			Required("custom_domain_id")
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.setRootMcpEndpoint")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setRootMcpEndpoint")
+		Meta("openapi:extension:x-speakeasy-name-override", "setRootMcpEndpoint")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRootMcpEndpoint"}`)
 	})
 
 	Method("checkHealth", func() {
@@ -206,8 +237,9 @@ var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
 	})
 	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
 	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+	Attribute("is_domain_root", Boolean, "Whether this endpoint is mapped to the custom-domain root")
 
-	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id")
+	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id", "is_domain_root")
 })
 
 var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {

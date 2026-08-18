@@ -26,10 +26,12 @@ export default function UploadOpenAPI(): JSX.Element {
             {/* Header */}
             <Stack gap={3} className="mb-8">
               <Stack direction="horizontal" gap={3} align="center">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                  <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="border-border bg-card flex h-10 w-10 shrink-0 items-center justify-center border">
+                  <FileTextIcon className="text-muted-foreground h-5 w-5" />
                 </div>
-                <Heading variant="h3">Import OpenAPI Specification</Heading>
+                <Heading variant="h3" className="text-display-sm font-thin">
+                  Import OpenAPI Specification
+                </Heading>
               </Stack>
               <Text muted>
                 Upload your OpenAPI spec to automatically generate tools for

@@ -35,10 +35,73 @@ const (
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+
+	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
+	// (CIMD) support on the user-session authorization server: URL-shaped
+	// client_id values on /mcp/{slug}/authorize are resolved by fetching the
+	// metadata document instead of requiring RFC 7591 DCR. Evaluated
+	// server-side per organization with distinctID = the issuer's org ID and
+	// no groups.
+	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
+
+	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
+	// durable platform_mcp product feature remains the organization-admin opt-in
+	// once this release flag permits access.
+	FlagPlatformMCP Flag = "platform-mcp"
+	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
+	// Platform MCP. It is presentation-only; runtime authorization requires
+	// FlagPlatformMCP and the durable organization product feature.
+	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+
+	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
+	// assistant the Platform MCP read toolset — the "platform" platform
+	// toolset re-serving the Platform MCP read tools over the assistant
+	// runtime channel. Targeted by PostHog organization group (org slug),
+	// like FlagBudgets. Evaluated server-side only; removed once the toolset
+	// is GA.
+	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
+	// FlagRiskListFromClickHouse serves the project-wide risk events listing
+	// (ListRiskResults without a chat_id) from ClickHouse risk_findings
+	// instead of Postgres risk_results. The chat-scoped listing stays on
+	// Postgres, which is the only store holding raw match content. Per-org
+	// rollout gate; removed once the ClickHouse read path is GA.
+	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
+	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
+	// Key matches the dashboard's page-level flag so a single PostHog flag
+	// controls both the UI and the API surface.
+	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+
+	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
+	// telemetry.listSessions) email filters and group-bys through the
+	// ClickHouse identity_map fold, so one employee's directory, personal,
+	// and case-variant emails read as one identity. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. Removed once the fold
+	// is GA (DNO-856).
+	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
+	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
+	// telemetry.query table read alongside the literal one — serving the
+	// literal result — and logs divergence, validating the fold on real
+	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
+	// when the fold flag is on. Same targeting; removed with the fold flag.
+	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
+
+	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
+	// Targeted by PostHog organization group (org slug) and removed once PAYG
+	// billing is generally available.
+	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
+
+	// FlagMCPApproval gates the MCP approval workflow end to end: the
+	// approval queue, evidence gathering, deciding, and the promotion of
+	// blocked-server redemptions into approval requests (orgs off the flag
+	// fall back to legacy bypass requests). Targeted by PostHog organization
+	// group (org slug), like FlagBudgets. A rollout gate while the workflow
+	// is dogfooded; if approval becomes a sold capability the durable
+	// entitlement returns through productfeatures alongside this flag.
+	FlagMCPApproval Flag = "gram-mcp-approval"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
@@ -52,3 +115,29 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 )
+
+// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — resolves
+// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
+// PostHog outage can never strip the managed assistant's tools.
+const (
+	// VariantAssistantToolsLegacy serves the managed assistant the
+	// "managed-assistant" platform toolset (logs, chats, users, risk,
+	// deployments, skills, plugins, docs, changelog).
+	VariantAssistantToolsLegacy Variant = "legacy"
+	// VariantAssistantToolsPlatformMCP serves the managed assistant the
+	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
+	// legacy toolset, not in addition to it.
+	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
+)
+
+// AssistantToolsVariant normalizes a resolved variant to one of the two known
+// keys, collapsing everything unrecognized onto the legacy default. Both the
+// attach path (assistants service) and the serve path (mcp service) must agree
+// on this mapping or a toolset would be attached and then 404 at request time.
+func AssistantToolsVariant(variant Variant) Variant {
+	if variant == VariantAssistantToolsPlatformMCP {
+		return VariantAssistantToolsPlatformMCP
+	}
+	return VariantAssistantToolsLegacy
+}

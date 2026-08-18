@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { MiniCard } from "@/components/ui/CardMini";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
@@ -39,9 +38,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/ContextMenu";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import {
@@ -50,7 +47,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { Editable } from "@/components/ui/Editable";
 import {
   Field,
   FieldDescription,
@@ -65,7 +61,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Icon } from "@/components/ui/Icon";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import {
   InputGroup,
@@ -115,7 +110,7 @@ import {
 } from "@/components/ui/Tabs";
 import { TextArea } from "@/components/ui/Textarea";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/ToggleGroup";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -149,7 +144,7 @@ export const Row = ({ name, origin, children }) => {
         <div className="flex flex-col gap-2 border-b py-6 last:border-b-0">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm">{name}</span>
-            <span className="text-muted-foreground rounded-xs border px-1 font-mono text-[10px] uppercase">
+            <span className="text-muted-foreground border px-1 font-mono text-[10px] uppercase">
               {origin}
             </span>
           </div>
@@ -207,15 +202,6 @@ export const Row = ({ name, origin, children }) => {
   <Button size="sm">sm</Button>
   <Button size="md">md</Button>
   <Button size="lg">lg</Button>
-</Row>
-
-<Row name="IconButton" origin="DS">
-  <IconButton icon="plus" aria-label="Add" />
-  <IconButton
-    icon="trash"
-    aria-label="Delete"
-    variant="destructive-secondary"
-  />
 </Row>
 
 <Row name="CopyButton" origin="Gram">
@@ -376,12 +362,6 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Editable" origin="Gram">
-  <Editable onClick={() => {}}>
-    <span className="text-lg font-medium">Petstore</span>
-  </Editable>
-</Row>
-
 ## Overlays
 
 <Row name="Tooltip" origin="DS">
@@ -422,7 +402,7 @@ export const Row = ({ name, origin, children }) => {
 
 <Row name="ContextMenu" origin="Gram">
   <ContextMenu>
-    <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center rounded-md border border-dashed text-sm">
+    <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center border border-dashed text-sm">
       Right-click here
     </ContextMenuTrigger>
     <ContextMenuContent>
@@ -502,28 +482,11 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="MiniCard" origin="Gram">
+<Row name="Card.Dashboard" origin="Gram">
   <div className="w-80">
-    <MiniCard>
-      <MiniCard.Title>Petstore</MiniCard.Title>
-      <MiniCard.Description>12 tools · 3 environments</MiniCard.Description>
-    </MiniCard>
-  </div>
-</Row>
-
-<Row name="DashboardCard" origin="Gram">
-  <div className="w-80">
-    <DashboardCard title="Tool calls">
+    <Card.Dashboard title="Tool calls">
       <div className="text-3xl font-semibold tabular-nums">12,480</div>
-    </DashboardCard>
-  </div>
-</Row>
-
-<Row name="DotCard" origin="Gram">
-  <div className="w-96">
-    <DotCard icon={<Icon name="server" className="size-6" />}>
-      <div className="p-4 text-sm">Petstore</div>
-    </DotCard>
+    </Card.Dashboard>
   </div>
 </Row>
 
@@ -566,7 +529,7 @@ export const Row = ({ name, origin, children }) => {
 </Row>
 
 <Row name="Command" origin="Gram">
-  <Command className="w-72 rounded-md border">
+  <Command className="w-72 border">
     <CommandInput placeholder="Search projects…" />
     <CommandList>
       <CommandGroup heading="Projects">
@@ -596,8 +559,8 @@ export const Row = ({ name, origin, children }) => {
 
 <Row name="Stack" origin="DS">
   <Stack direction="horizontal" gap={3}>
-    <div className="bg-card rounded-md border px-3 py-2 text-sm">One</div>
-    <div className="bg-card rounded-md border px-3 py-2 text-sm">Two</div>
+    <div className="bg-card border px-3 py-2 text-sm">One</div>
+    <div className="bg-card border px-3 py-2 text-sm">Two</div>
   </Stack>
 </Row>
 
@@ -606,7 +569,7 @@ export const Row = ({ name, origin, children }) => {
     <Grid columns={3} gap={3}>
       {[1, 2, 3].map((n) => (
         <Grid.Item key={n}>
-          <div className="bg-card rounded-md border px-3 py-2 text-sm">
+          <div className="bg-card border px-3 py-2 text-sm">
             Item {n}
           </div>
         </Grid.Item>
@@ -616,7 +579,7 @@ export const Row = ({ name, origin, children }) => {
 </Row>
 
 <Row name="ResizablePanel" origin="DS">
-  <div className="h-32 w-full rounded-md border">
+  <div className="h-32 w-full border">
     <ResizablePanel direction="horizontal">
       <ResizablePanel.Pane defaultSize={40}>
         <div className="h-full p-3 text-sm">Left</div>
@@ -629,7 +592,7 @@ export const Row = ({ name, origin, children }) => {
 </Row>
 
 <Row name="XYFade" origin="Gram">
-  <XYFade className="h-24 w-72 overflow-auto rounded-md border p-3">
+  <XYFade className="h-24 w-72 overflow-auto border p-3">
     <div className="flex flex-col gap-1 text-sm">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i}>Row {i + 1}</div>
@@ -638,5 +601,5 @@ export const Row = ({ name, origin, children }) => {
   </XYFade>
 </Row>
 
-Sidebar, Toolbar and Modal own the whole page frame, so they live in their own
+Sidebar and Toolbar own the whole page frame, so they live in their own
 stories rather than in this gallery.

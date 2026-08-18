@@ -380,7 +380,7 @@ function SavedManifestResult({
   if (noChanges) title = "No changes detected.";
   return (
     <div
-      className="border-border bg-muted/30 space-y-3 rounded-lg border p-4"
+      className="border-border bg-muted/30 space-y-3 border p-4"
       role="status"
     >
       <Text variant="subheading">{title}</Text>

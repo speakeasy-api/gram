@@ -236,7 +236,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("verifyOnboardingHooksSetup", func() {
-		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.")
+		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.")
 
 		Payload(func() {
 			Attribute("since_unix_nano", String, "Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.")

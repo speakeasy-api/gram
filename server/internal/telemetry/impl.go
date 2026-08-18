@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -25,12 +26,14 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -57,6 +60,10 @@ type Service struct {
 	logsEnabled           FeatureChecker
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
+	featureFlags          feature.Provider
+	// shadowFoldSem bounds concurrent identity-fold shadow queries; see
+	// maxConcurrentShadowCompares.
+	shadowFoldSem chan struct{}
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -74,6 +81,7 @@ func NewService(
 	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	authzEngine *authz.Engine,
+	featureFlags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
@@ -102,6 +110,8 @@ func NewService(
 		posthog:               posthogClient,
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
+		featureFlags:          featureFlags,
+		shadowFoldSem:         make(chan struct{}, maxConcurrentShadowCompares),
 	}
 }
 
@@ -430,24 +440,48 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		groupBy = "external_user_id"
 	}
 
-	items, err := s.chRepo.SearchUsers(ctx, repo.SearchUsersParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(filter.HookSource, ""),
-		AccountType:      conv.PtrValOr(filter.AccountType, ""),
-		ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-		GroupBy:          groupBy,
-		UserIDs:          filter.UserIds,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
-		MetricsDetail:    metricsDetailFromPayload(payload.Metrics),
-	})
+	// Internal grouping folds one employee's linked emails into one summary
+	// when the org is on the canonical fold; external ids never fold. A
+	// canonical cursor minted under the fold stops resolving if the flag
+	// flips off mid-pagination (short page, no error) — transient, inherent
+	// to per-request flag evaluation.
+	fold, shadow := false, false
+	if groupBy != "external_user_id" {
+		fold, shadow = s.canonicalIdentityMode(ctx, params.organizationID)
+	}
+	canonicalOrg := ""
+	if fold {
+		canonicalOrg = params.organizationID
+	}
+
+	searchParams := repo.SearchUsersParams{
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		GramDeploymentID:     deploymentID,
+		EventSource:          conv.PtrValOr(filter.EventSource, ""),
+		HookSource:           conv.PtrValOr(filter.HookSource, ""),
+		AccountType:          conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+		GroupBy:              groupBy,
+		UserIDs:              filter.UserIds,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		MetricsDetail:        metricsDetailFromPayload(payload.Metrics),
+		CanonicalIdentityOrg: canonicalOrg,
+	}
+	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
+	}
+
+	// List divergence is customer-visible in a way aggregate drift is not, so
+	// the employee list gets its own shadow: first pages only — under a cursor
+	// the literal and folded orderings paginate differently and a membership
+	// diff would be noise.
+	if shadow && params.cursor == "" {
+		s.shadowCompareSearchUsersFold(ctx, params.organizationID, searchParams, items)
 	}
 
 	var nextCursor *string
@@ -515,12 +549,17 @@ func validateAgentMetricsFilter(filter *telem_gen.SearchUsersFilter) error {
 func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType string, params *searchParams) (*telem_gen.SearchUsersResult, error) {
 	var agentItems, emaillessItems []repo.UserSummary
 	g, gctx := errgroup.WithContext(ctx)
+	// Fold the enrollment list's email keys to canonical identities when the
+	// org is on the fold, matching the employee detail pages it links to.
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			Limit:                agentMetricsDirectoryCap,
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error reading employee agent usage")
@@ -709,6 +748,183 @@ func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys
 	return ownerByKey
 }
 
+// resolveEmployeeIdentity expands the single identifier the employee views pass
+// — a gram user id, or an email when the person has no directory row — into the
+// repo.UserIdentity their telemetry rows can be attributed to (that type
+// documents why the two shapes exist).
+//
+// Personal accounts are the reason the linked-account lookup is here: their
+// provider email is usually not the directory email, so their usage only joins
+// to the employee through user_accounts.
+//
+// Ownership comes from the directory, never from telemetry row identity, which
+// is the same rule attachUserAccounts follows (DNO-509).
+//
+// Best effort: a directory lookup failure falls back to the identifier alone,
+// which is the behaviour that predates this expansion.
+func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier string) repo.UserIdentity {
+	identity := repo.UserIdentity{UserIDs: nil, Emails: nil}
+	if identifier == "" {
+		return identity
+	}
+
+	users := usersRepo.New(s.db)
+	if strings.Contains(identifier, "@") {
+		identity.Emails = append(identity.Emails, identifier, conv.NormalizeEmail(identifier))
+
+		// Usage from someone with no directory row still aggregates by email, so
+		// an email that resolves to nobody is not an error.
+		rows, err := users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
+			Emails:         identity.Emails,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve employee email to org user", attr.SlogError(err))
+		}
+		if len(rows) == 1 {
+			row := rows[0]
+			// These rows already carry the directory email, so no lookup by id.
+			identity.UserIDs = append(identity.UserIDs, row.ID)
+			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
+		}
+
+		// Directory ownership wins. Only reverse-resolve a provider account when
+		// the email has no directory row, and only when one owner claims it.
+		if err == nil && len(rows) == 0 {
+			accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
+				OrganizationID: orgID,
+				Emails:         identity.Emails,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve employee account email to org user", attr.SlogError(err))
+			}
+			owners := make([]string, 0, len(accounts))
+			for _, account := range accounts {
+				owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
+			}
+			owners = dedupeNonEmpty(owners)
+			if len(owners) == 1 {
+				identity.UserIDs = append(identity.UserIDs, owners[0])
+			}
+		}
+
+		// A linked account email resolves through user_accounts rather than users;
+		// add its owner's directory email before loading the rest of the accounts.
+		if len(identity.UserIDs) > 0 {
+			rows, err = users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+				Ids:            identity.UserIDs,
+				OrganizationID: orgID,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve employee account owner", attr.SlogError(err))
+			}
+			for _, row := range rows {
+				identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
+			}
+		}
+	} else {
+		identity.UserIDs = append(identity.UserIDs, identifier)
+
+		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+			Ids:            identity.UserIDs,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve employee user id to org user", attr.SlogError(err))
+		}
+		for _, row := range rows {
+			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
+		}
+	}
+
+	if len(identity.UserIDs) > 0 {
+		accounts, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
+			OrganizationID: orgID,
+			UserIds:        identity.UserIDs,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load linked accounts for employee identity", attr.SlogError(err))
+		}
+		for _, account := range accounts {
+			email := conv.FromPGTextOrEmpty[string](account.Email)
+			identity.Emails = append(identity.Emails, email, conv.NormalizeEmail(email))
+		}
+	}
+
+	identity.Emails = dedupeNonEmpty(identity.Emails)
+	identity.UserIDs = dedupeNonEmpty(identity.UserIDs)
+
+	return identity
+}
+
+// expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
+// the same employee identity fold as the dedicated employee endpoints. Values
+// without an @ are device-hostname buckets and retain literal filter semantics.
+func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, filters []repo.AttributeMetricsFilter) []repo.AttributeMetricsFilter {
+	resolved := make(map[string][]string)
+	for i := range filters {
+		if filters[i].Dimension != "email" {
+			continue
+		}
+
+		values := make([]string, 0, len(filters[i].Values))
+		for _, value := range filters[i].Values {
+			if !strings.Contains(value, "@") {
+				values = append(values, value)
+				continue
+			}
+			key := conv.NormalizeEmail(value)
+			emails, ok := resolved[key]
+			if !ok {
+				emails = s.resolveEmployeeIdentity(ctx, orgID, value).Emails
+				resolved[key] = emails
+			}
+			values = append(values, emails...)
+		}
+		filters[i].Values = dedupe(values)
+	}
+
+	return filters
+}
+
+func dedupe(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+// dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
+// Dropping blanks is the load-bearing half: a directory row with no email would
+// otherwise put "" in the identity, and matching lower(user_email) = ” would
+// sweep in every email-less row in the project — everyone else's hook rows.
+func dedupeNonEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+
+	return out
+}
+
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
 // directory. Ownership comes from the directory itself, never from telemetry
 // row identity: an account row attaches to the summary whose resolved owner
@@ -720,6 +936,12 @@ func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys
 // pairing one person's email with another person's user id hand the second
 // person's accounts to the first summary (DNO-509). Best-effort: a lookup
 // failure leaves accounts empty rather than failing the listing.
+//
+// Canonical-fold edge, accepted: if the fold's canonical key fails directory
+// resolution (owner deleted after the last identity-map sync), the email
+// fallback targets the folded-away personal-email summary and the chip
+// attaches nowhere for that page load. Transient — the next map sync drops
+// the deleted owner's entries and the rows return to literal keys.
 func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
 	if len(users) == 0 {
 		return
@@ -835,24 +1057,29 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	var items []repo.UserSummary
 	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
 
+	// Canonical keys also serve the role rollup: one employee aggregates once
+	// per role instead of splitting across their linked emails.
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
-			GramProjectID:    params.projectID,
-			TimeStart:        params.timeStart,
-			TimeEnd:          params.timeEnd,
-			GramDeploymentID: deploymentID,
-			EventSource:      conv.PtrValOr(filter.EventSource, ""),
-			HookSource:       conv.PtrValOr(filter.HookSource, ""),
-			AccountType:      conv.PtrValOr(filter.AccountType, ""),
-			ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-			GroupBy:          "user_id",
-			UserIDs:          filter.UserIds,
-			SortOrder:        "desc",
-			Cursor:           "",
-			Limit:            10001,                  // Upper bound; orgs rarely have >10k users
-			MetricsDetail:    repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			GramDeploymentID:     deploymentID,
+			EventSource:          conv.PtrValOr(filter.EventSource, ""),
+			HookSource:           conv.PtrValOr(filter.HookSource, ""),
+			AccountType:          conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+			GroupBy:              "user_id",
+			UserIDs:              filter.UserIds,
+			SortOrder:            "desc",
+			Cursor:               "",
+			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:        repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
@@ -1107,11 +1334,13 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		UserID:         userID,
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
@@ -1162,11 +1391,13 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	rows, err := s.chRepo.GetEmployeeDataFlowGraph(ctx, repo.GetEmployeeDataFlowGraphParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		UserID:         userID,
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
@@ -1643,6 +1874,11 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
 	}
 
+	// Resolved once and shared by every query below so the summary, its
+	// comparison period, the time series and the tool breakdowns all scope to
+	// the same set of identities.
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
+
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
 
@@ -1656,7 +1892,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1675,7 +1912,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         comparisonStart,
 		TimeEnd:           comparisonEnd,
-		UserID:            userID,
+		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1697,7 +1935,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeStart:         timeStart,
 			TimeEnd:           timeEnd,
 			IntervalSeconds:   intervalSeconds,
-			UserID:            userID,
+			User:              user,
+			CanonicalUser:     canonicalUser,
 			ExternalUserID:    externalUserID,
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
@@ -1717,7 +1956,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1738,7 +1978,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1763,6 +2004,252 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByCount:       toToolMetrics(toolsByCount),
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
+	}, nil
+}
+
+// GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
+// an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
+// (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
+// this data isn't written by Gram's own proxy — an unproxied server's traffic
+// never passes through Gram — so coverage depends entirely on whether any
+// hook-instrumented session in this project has called this exact URL.
+func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: []*telem_gen.UnproxiedMcpServerUsageBucket{}}, nil
+	}
+
+	rows, err := s.chRepo.GetUnproxiedMcpServerUsageTimeSeries(ctx, repo.GetUnproxiedMcpServerUsageTimeSeriesParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server usage").LogError(ctx, s.logger)
+	}
+
+	buckets := make([]*telem_gen.UnproxiedMcpServerUsageBucket, 0, len(rows))
+	for _, row := range rows {
+		buckets = append(buckets, &telem_gen.UnproxiedMcpServerUsageBucket{
+			Date:      row.BucketDate,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: buckets}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerToolUsagePayload) (*telem_gen.GetUnproxiedMcpServerToolUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerToolUsageResult{Tools: []*telem_gen.UnproxiedMcpServerToolUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerToolUsage(ctx, repo.GetUnproxiedMcpServerToolUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server tool usage").LogError(ctx, s.logger)
+	}
+
+	tools := make([]*telem_gen.UnproxiedMcpServerToolUsageRow, 0, len(rows))
+	for _, row := range rows {
+		tools = append(tools, &telem_gen.UnproxiedMcpServerToolUsageRow{
+			ToolName:     row.ToolName,
+			CallCount:    int(row.CallCount),    //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			FailureCount: int(row.FailureCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerToolUsageResult{
+		Tools:      tools,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUserUsagePayload) (*telem_gen.GetUnproxiedMcpServerUserUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUserUsageResult{Users: []*telem_gen.UnproxiedMcpServerUserUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
+		GramProjectID:        authCtx.ProjectID.String(),
+		CanonicalURL:         canonical.CanonicalURL,
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		Cursor:               cursor,
+		Limit:                payload.Limit,
+		CanonicalIdentityOrg: canonicalOrg,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server user usage").LogError(ctx, s.logger)
+	}
+
+	users := make([]*telem_gen.UnproxiedMcpServerUserUsageRow, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &telem_gen.UnproxiedMcpServerUserUsageRow{
+			UserEmail:    row.UserEmail,
+			CallCount:    int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+			LastCalledAt: row.LastCalledAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUserUsageResult{
+		Users:      users,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}, nil
+}
+
+func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerClientUsagePayload) (*telem_gen.GetUnproxiedMcpServerClientUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerClientUsageResult{Clients: []*telem_gen.UnproxiedMcpServerClientUsageRow{}, NextCursor: nil}, nil
+	}
+
+	cursor := ""
+	if payload.Cursor != nil {
+		cursor = *payload.Cursor
+	}
+	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerClientUsage(ctx, repo.GetUnproxiedMcpServerClientUsageParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+		Cursor:        cursor,
+		Limit:         payload.Limit,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server client usage").LogError(ctx, s.logger)
+	}
+
+	clients := make([]*telem_gen.UnproxiedMcpServerClientUsageRow, 0, len(rows))
+	for _, row := range rows {
+		clients = append(clients, &telem_gen.UnproxiedMcpServerClientUsageRow{
+			Client:    row.Client,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerClientUsageResult{
+		Clients:    clients,
+		NextCursor: conv.PtrEmpty(nextCursor),
 	}, nil
 }
 
@@ -2370,17 +2857,23 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
 		sessionCount          int64
 	)
+	// The user dimension folds one employee's linked emails into one bucket
+	// when the org is on the canonical fold; server/tool dimensions and the
+	// flag-off behavior are unchanged.
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
 
 	eg.Go(func() error {
 		var err error
 		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks server summary: %w", err)
@@ -2390,11 +2883,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks user summary: %w", err)
@@ -2404,11 +2898,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)
@@ -2418,10 +2913,11 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillBreakdownRows, err = s.chRepo.GetSkillBreakdown(egCtx, repo.GetSkillBreakdownParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill breakdown: %w", err)
@@ -2431,11 +2927,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks breakdown: %w", err)
@@ -2445,12 +2942,13 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			BucketSizeNs:   bucketSizeNs,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks time series: %w", err)
@@ -2460,11 +2958,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillTimeSeriesPoints, err = s.chRepo.GetSkillTimeSeries(egCtx, repo.GetSkillTimeSeriesParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			BucketSizeNs:  bucketSizeNs,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill time series: %w", err)
@@ -2474,11 +2973,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks session count: %w", err)
@@ -3459,15 +3959,17 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
-		GramProjectID:  params.projectID,
-		TimeStart:      params.timeStart,
-		TimeEnd:        params.timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: payload.TypesToInclude,
-		SortOrder:      params.sortOrder,
-		Cursor:         params.cursor,
-		Limit:          params.limit + 1,
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		Filters:              attributeFilters,
+		TypesToInclude:       payload.TypesToInclude,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))
@@ -3519,6 +4021,23 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetChatMetricsSummaryByIDs retrieves range-bounded token and cost totals for
+// a set of chats.
+func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.GetChatMetricsSummaryByIDsParams) (repo.ChatMetricsSummary, error) {
+	if s.chRepo == nil {
+		return repo.ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	result, err := s.chRepo.GetChatMetricsSummaryByIDs(ctx, params)
+	if err != nil {
+		return repo.ChatMetricsSummary{}, fmt.Errorf("get chat metrics summary by ids: %w", err)
 	}
 	return result, nil
 }

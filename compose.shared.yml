@@ -1,0 +1,49 @@
+# Shared infra — one copy across ALL git worktrees.
+#
+# The Presidio analyzer is a stateless /analyze HTTP service: it holds no
+# per-worktree state and loads a ~1 GB spaCy model, so running one copy per
+# worktree wasted the most memory of anything in the stack. It lives here under
+# a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
+# by compose.yml.
+#
+# (LGTM/OTel-collector are intentionally NOT shared: their signals
+# would collide across worktrees — same-commit worktrees emit identical
+# Prometheus series and intermixed traces — so they stay per-worktree in
+# compose.yml.)
+#
+# Always manage this file with an explicit fixed project so a worktree's
+# COMPOSE_PROJECT_NAME cannot fork it into a second copy:
+#
+#   docker compose -f compose.shared.yml -p gram-shared up -d
+#   docker compose -f compose.shared.yml -p gram-shared down
+#
+# The host port is a hardcoded literal, NOT ${PRESIDIO_PORT}. As a single
+# shared singleton it must land on the same fixed host port no matter which
+# worktree starts it — interpolating per-worktree env would let a worktree that
+# still carries a stale PRESIDIO_PORT remap (not yet cleaned by git:worksync)
+# recreate this container republished on a different port, fragmenting the
+# shared stack for everyone else. Keep this literal in sync with PRESIDIO_PORT's
+# default in mise.toml (5050), which is what every worktree's app connects to.
+#
+# Bound to 127.0.0.1: Presidio is an unauthenticated PII-analysis service and
+# only ever called by local host processes, so it must not be reachable on the
+# host's external interfaces.
+name: gram-shared
+
+services:
+  gram-presidio:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5050:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

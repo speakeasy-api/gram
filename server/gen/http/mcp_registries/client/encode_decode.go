@@ -976,6 +976,252 @@ func DecodeGetServerDetailsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildGetSetupDocsRequest instantiates a HTTP request object with method and
+// path set to call the "mcpRegistries" service "getSetupDocs" endpoint
+func (c *Client) BuildGetSetupDocsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSetupDocsMcpRegistriesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpRegistries", "getSetupDocs", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSetupDocsRequest returns an encoder for requests sent to the
+// mcpRegistries getSetupDocs server.
+func EncodeGetSetupDocsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpregistries.GetSetupDocsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpRegistries", "getSetupDocs", "*mcpregistries.GetSetupDocsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.ServerURL != nil {
+			values.Add("server_url", *p.ServerURL)
+		}
+		if p.RegistrySpecifier != nil {
+			values.Add("registry_specifier", *p.RegistrySpecifier)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSetupDocsResponse returns a decoder for responses returned by the
+// mcpRegistries getSetupDocs endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetSetupDocsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSetupDocsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSetupDocsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			res := NewGetSetupDocsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSetupDocsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSetupDocsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSetupDocsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSetupDocsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSetupDocsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSetupDocsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSetupDocsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSetupDocsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+				}
+				err = ValidateGetSetupDocsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+				}
+				return nil, NewGetSetupDocsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSetupDocsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+				}
+				err = ValidateGetSetupDocsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+				}
+				return nil, NewGetSetupDocsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getSetupDocs", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSetupDocsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpRegistries", "getSetupDocs", err)
+			}
+			err = ValidateGetSetupDocsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpRegistries", "getSetupDocs", err)
+			}
+			return nil, NewGetSetupDocsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpRegistries", "getSetupDocs", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalMCPRegistryResponseBodyToTypesMCPRegistry builds a value of type
 // *types.MCPRegistry from a value of type *MCPRegistryResponseBody.
 func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBody) *types.MCPRegistry {
@@ -1015,6 +1261,19 @@ func unmarshalExternalMCPServerEntryResponseBodyToTypesExternalMCPServerEntry(v 
 				continue
 			}
 			res.Remotes[i] = unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(val)
+		}
+	}
+	if v.Repository != nil {
+		res.Repository = unmarshalExternalMCPRepositoryResponseBodyToTypesExternalMCPRepository(v.Repository)
+	}
+	if v.Packages != nil {
+		res.Packages = make([]*types.ExternalMCPPackage, len(v.Packages))
+		for i, val := range v.Packages {
+			if val == nil {
+				res.Packages[i] = nil
+				continue
+			}
+			res.Packages[i] = unmarshalExternalMCPPackageResponseBodyToTypesExternalMCPPackage(val)
 		}
 	}
 
@@ -1098,6 +1357,69 @@ func unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVaria
 	return res
 }
 
+// unmarshalExternalMCPRepositoryResponseBodyToTypesExternalMCPRepository
+// builds a value of type *types.ExternalMCPRepository from a value of type
+// *ExternalMCPRepositoryResponseBody.
+func unmarshalExternalMCPRepositoryResponseBodyToTypesExternalMCPRepository(v *ExternalMCPRepositoryResponseBody) *types.ExternalMCPRepository {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRepository{
+		URL:       *v.URL,
+		Source:    v.Source,
+		Subfolder: v.Subfolder,
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPPackageResponseBodyToTypesExternalMCPPackage builds a
+// value of type *types.ExternalMCPPackage from a value of type
+// *ExternalMCPPackageResponseBody.
+func unmarshalExternalMCPPackageResponseBodyToTypesExternalMCPPackage(v *ExternalMCPPackageResponseBody) *types.ExternalMCPPackage {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPPackage{
+		RegistryType:    *v.RegistryType,
+		RegistryBaseURL: v.RegistryBaseURL,
+		Identifier:      *v.Identifier,
+		Version:         *v.Version,
+		RuntimeHint:     v.RuntimeHint,
+		TransportType:   v.TransportType,
+		FileSha256:      v.FileSha256,
+	}
+	if v.EnvironmentVariables != nil {
+		res.EnvironmentVariables = make([]*types.ExternalMCPPackageEnvironmentVariable, len(v.EnvironmentVariables))
+		for i, val := range v.EnvironmentVariables {
+			if val == nil {
+				res.EnvironmentVariables[i] = nil
+				continue
+			}
+			res.EnvironmentVariables[i] = unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable
+// builds a value of type *types.ExternalMCPPackageEnvironmentVariable from a
+// value of type *ExternalMCPPackageEnvironmentVariableResponseBody.
+func unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable(v *ExternalMCPPackageEnvironmentVariableResponseBody) *types.ExternalMCPPackageEnvironmentVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPPackageEnvironmentVariable{
+		Name:        *v.Name,
+		Description: v.Description,
+		IsSecret:    *v.IsSecret,
+		IsRequired:  *v.IsRequired,
+	}
+
+	return res
+}
+
 // unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool builds a value of
 // type *types.ExternalMCPTool from a value of type
 // *ExternalMCPToolResponseBody.
@@ -1110,6 +1432,49 @@ func unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(v *ExternalMCPTo
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+
+	return res
+}
+
+// unmarshalMCPSetupGuideResponseBodyToTypesMCPSetupGuide builds a value of
+// type *types.MCPSetupGuide from a value of type *MCPSetupGuideResponseBody.
+func unmarshalMCPSetupGuideResponseBodyToTypesMCPSetupGuide(v *MCPSetupGuideResponseBody) *types.MCPSetupGuide {
+	res := &types.MCPSetupGuide{
+		Slug:              *v.Slug,
+		Title:             *v.Title,
+		Summary:           *v.Summary,
+		AddServerFlow:     v.AddServerFlow,
+		MatchedRemoteID:   v.MatchedRemoteID,
+		MatchKind:         *v.MatchKind,
+		ExternalMarkdown:  *v.ExternalMarkdown,
+		SpeakeasyMarkdown: *v.SpeakeasyMarkdown,
+	}
+	res.Aliases = make([]string, len(v.Aliases))
+	for i, val := range v.Aliases {
+		res.Aliases[i] = val
+	}
+	res.Remotes = make([]*types.MCPSetupGuideRemote, len(v.Remotes))
+	for i, val := range v.Remotes {
+		if val == nil {
+			res.Remotes[i] = nil
+			continue
+		}
+		res.Remotes[i] = unmarshalMCPSetupGuideRemoteResponseBodyToTypesMCPSetupGuideRemote(val)
+	}
+
+	return res
+}
+
+// unmarshalMCPSetupGuideRemoteResponseBodyToTypesMCPSetupGuideRemote builds a
+// value of type *types.MCPSetupGuideRemote from a value of type
+// *MCPSetupGuideRemoteResponseBody.
+func unmarshalMCPSetupGuideRemoteResponseBodyToTypesMCPSetupGuideRemote(v *MCPSetupGuideRemoteResponseBody) *types.MCPSetupGuideRemote {
+	res := &types.MCPSetupGuideRemote{
+		ID:            *v.ID,
+		URL:           *v.URL,
+		TransportType: *v.TransportType,
+		Tenanted:      *v.Tenanted,
 	}
 
 	return res

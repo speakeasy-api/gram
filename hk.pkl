@@ -71,8 +71,8 @@ local linters = new Mapping<String, Step> {
     // pass an ignored file through `exclude`. Without the flag oxfmt would exit
     // non-zero on "all files excluded" and break the hook; with it, oxfmt simply
     // formats nothing and leaves the file untouched.
-    check = "pnpm oxfmt --check --no-error-on-unmatched-pattern {{files}}"
-    fix = "pnpm oxfmt --write --no-error-on-unmatched-pattern {{files}}"
+    check = "aube exec oxfmt -- --check --no-error-on-unmatched-pattern {{files}}"
+    fix = "aube exec oxfmt -- --write --no-error-on-unmatched-pattern {{files}}"
   }
   ["ruff-format"] = (Builtins.ruff_format) {
     batch = true

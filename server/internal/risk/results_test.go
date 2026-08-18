@@ -575,7 +575,7 @@ func TestDeleteRiskPolicy_Unauthorized(t *testing.T) {
 // seedRiskResultWith inserts a finding with caller-supplied source, rule_id,
 // and match so redaction-mode tests can vary inputs independently of the
 // gitleaks-flavoured default in seedRiskResult.
-func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) {
+func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) uuid.UUID {
 	t.Helper()
 	ctx := t.Context()
 
@@ -601,6 +601,7 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 		Tags:              nil,
 	}})
 	require.NoError(t, err)
+	return resultID
 }
 
 func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {

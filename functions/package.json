@@ -12,10 +12,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.19.0",
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "msw": "^2.14.6",
+    "msw": "^2.15.0",
     "typescript": "catalog:",
     "vitest": "^4.1.10"
   }

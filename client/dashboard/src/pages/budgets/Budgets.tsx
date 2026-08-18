@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -227,17 +227,19 @@ function StatusSummaryCards({
       : 0;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <MetricCard
+    <StatTileGroup className="flex-wrap">
+      <StatTile
         title="Spend vs budget"
         value={overview.totalSpendUsd}
+        tone="information"
         displayValue={`${compactUsd(overview.totalSpendUsd)} / ${compactUsd(overview.totalBudgetUsd)}`}
         format="number"
         subtext={`${spendPct}% of budgeted spend used across enabled rules`}
       />
-      <MetricCard
+      <StatTile
         title="Users over budget"
         value={overview.usersBreached}
+        tone={overview.usersBreached > 0 ? "destructive" : "neutral"}
         displayValue={`${overview.usersBreached} / ${overview.usersTotal}`}
         format="number"
         subtext={
@@ -246,9 +248,10 @@ function StatusSummaryCards({
             : "people at or past a per-person limit"
         }
       />
-      <MetricCard
+      <StatTile
         title="Rules needing attention"
         value={overview.rulesUnhealthy}
+        tone={overview.rulesUnhealthy > 0 ? "warning" : "neutral"}
         displayValue={`${overview.rulesUnhealthy} / ${overview.rulesTotal}`}
         format="number"
         subtext={
@@ -257,9 +260,10 @@ function StatusSummaryCards({
             : "rules approaching or over budget"
         }
       />
-      <MetricCard
+      <StatTile
         title="Spend over budget"
         value={overview.spendOverBudgetUsd}
+        tone={overview.spendOverBudgetUsd > 0 ? "destructive" : "neutral"}
         displayValue={formatUsd(overview.spendOverBudgetUsd)}
         format="number"
         tooltip="Current spend beyond planned budget, summed across people over their individual limits."
@@ -269,7 +273,7 @@ function StatusSummaryCards({
             : "overages across individual limits"
         }
       />
-    </div>
+    </StatTileGroup>
   );
 }
 

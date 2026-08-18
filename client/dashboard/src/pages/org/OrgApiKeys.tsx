@@ -1,11 +1,9 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import { Label } from "@/components/ui/Label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
@@ -18,7 +16,6 @@ import {
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
@@ -26,19 +23,13 @@ import { useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys(): JSX.Element {
-  // We need an outer component wrapping the inner as the key fetching request
-  // will return a forbidden error if the user does not have the org:admin scope
+  // The key fetching request returns a forbidden error without the org:admin
+  // scope; the outer RequireScope gates rendering (and the data hook) on that
+  // scope.
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <OrgApiKeysInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <OrgApiKeysInner />
+    </RequireScope>
   );
 }
 
@@ -187,65 +178,63 @@ function OrgApiKeysInner() {
     },
   ];
 
+  const newApiKeyButton = (
+    <RequireScope scope="org:admin" level="component">
+      <Button onClick={() => setIsCreateDialogOpen(true)}>New API Key</Button>
+    </RequireScope>
+  );
+
+  const createKeyButton = (
+    <RequireScope scope="org:admin" level="component">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => setIsCreateDialogOpen(true)}
+      >
+        <Button.LeftIcon>
+          <Icon name="key-round" className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Create Key</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
+  const hasNoKeys = (keysData?.keys ?? []).length === 0;
+
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        API Keys
-      </Heading>
-      <Text muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to
-        platform services, including MCP service deployments, tool management,
-        and other connections.
-      </Text>
-      <Stack
-        direction="horizontal"
-        justify="space-between"
-        align="center"
-        className="mb-4"
+      <ResourceListPage
+        title="API Keys"
+        description="Create and manage API keys to authenticate programmatic access to platform services, including MCP service deployments, tool management, and other connections."
+        primaryAction={newApiKeyButton}
+        search={{
+          value: apiKeySearch,
+          onChange: setApiKeySearch,
+          placeholder: "Search by key name",
+        }}
+        isEmpty={hasNoKeys}
+        empty={{
+          icon: "key-round",
+          heading: "No API keys yet",
+          action: createKeyButton,
+        }}
       >
-        <SearchBar
-          value={apiKeySearch}
-          onChange={setApiKeySearch}
-          placeholder="Search by key name"
-          className="w-64"
-        />
-        <RequireScope scope="org:admin" level="component">
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            New API Key
-          </Button>
-        </RequireScope>
-      </Stack>
-      {filteredKeys.length > 0 ? (
-        <Table
-          columns={apiKeyColumns}
-          data={filteredKeys}
-          rowKey={(row) => row.id}
-          className="max-h-[500px] overflow-y-auto"
-        />
-      ) : (
-        <div
-          role="status"
-          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 rounded-md border p-6"
-        >
-          <Text variant="body">
-            {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-          </Text>
-          {!apiKeySearch && (
-            <RequireScope scope="org:admin" level="component">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsCreateDialogOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="key-round" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Create Key</Button.Text>
-              </Button>
-            </RequireScope>
-          )}
-        </div>
-      )}
+        {filteredKeys.length > 0 ? (
+          <Table
+            columns={apiKeyColumns}
+            data={filteredKeys}
+            rowKey={(row) => row.id}
+            className="max-h-[500px] overflow-y-auto"
+          />
+        ) : (
+          <div
+            role="status"
+            className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
+          >
+            <Text variant="body">No matching API keys</Text>
+          </div>
+        )}
+      </ResourceListPage>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
         <Dialog.Content>
@@ -256,11 +245,11 @@ function OrgApiKeysInner() {
           </Dialog.Header>
           {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
-              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
                   aria-label={isCopied ? "API key copied" : "Copy API key"}
@@ -325,8 +314,8 @@ function OrgApiKeysInner() {
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="hooks" id="r4" />
                         <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
+                          Hooks: can ingest authenticated AI traffic, including
+                          hook events and OpenTelemetry data.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">

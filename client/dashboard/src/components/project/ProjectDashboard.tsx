@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "react-router";
-import { MetricCard } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -40,6 +40,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -486,70 +487,87 @@ export function ProjectDashboard(): JSX.Element {
           {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatTileGroup>
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
+                    tone="information"
                     icon="server"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
+                    tone="information"
                     icon="wrench"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
                 {modePending || (!hasHookData && mcpUsersPending) ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Total Spend"
                     value={totalSpend}
+                    tone="information"
                     format="currency"
                     icon="dollar-sign"
                     tooltip="Total LLM spend recorded for this project in the selected period. Matches the figure on the Costs page."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="End Users"
                     value={endUsersCount}
+                    tone="information"
                     icon="users"
                     tooltip="Distinct external end users that made MCP tool calls in the selected period."
                   />
                 )}
                 {modePending || isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Sessions"
                     value={totalSessions}
+                    tone="information"
                     icon="message-circle"
                     tooltip="Distinct agent sessions across project members in the selected period."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Failed Tool Calls"
                     value={overview?.summary.failedToolCalls ?? 0}
+                    tone={
+                      (overview?.summary.failedToolCalls ?? 0) > 0
+                        ? "destructive"
+                        : "neutral"
+                    }
                     icon="circle-alert"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
-              </div>
+              </StatTileGroup>
+
+              {isProjectEmpty && (
+                <PlatformMcpPromotion
+                  surface="project_overview_zero_data"
+                  projectSlug={projectSlug}
+                />
+              )}
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <DashboardCard
+                <Card.Dashboard
                   title={hasHookData ? "Top Users" : "Top End Users"}
                   tooltip={
                     hasHookData
@@ -590,9 +608,9 @@ export function ProjectDashboard(): JSX.Element {
                       items={hasHookData ? topUsersByTokens : topEndUsers}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
 
-                <DashboardCard
+                <Card.Dashboard
                   title="Top Servers"
                   tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
@@ -630,14 +648,14 @@ export function ProjectDashboard(): JSX.Element {
                         }))}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
               </div>
 
               {/* Row 2: Sessions (hook view) / Tools (MCP view) */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {hasHookData ? (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Agent Sessions by User"
                       tooltip="Employees ranked by the number of distinct agent sessions in the selected period."
                       action={
@@ -678,17 +696,15 @@ export function ProjectDashboard(): JSX.Element {
                         <EmptyState message="No session activity recorded" />
                       ) : (
                         <ul className="divide-border divide-y">
-                          {topUsersBySessions.map((user, i) => (
+                          {topUsersBySessions.map((user) => (
                             <li
                               key={user.userId}
                               className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                             >
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    avatarColor(i),
-                                  )}
+                                  className="text-xs font-medium"
+                                  style={getIdentityTint(user.initialsSource)}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
@@ -706,11 +722,11 @@ export function ProjectDashboard(): JSX.Element {
                           ))}
                         </ul>
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Agents"
-                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by token volume in the selected period, identified from client metadata sent with each call."
+                      tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
                         <CardActions>
                           <ExploreWithAIButton
@@ -738,11 +754,11 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedAgents} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 ) : (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Tools"
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
@@ -758,9 +774,9 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedTools} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Top Tools by Failure Rate"
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
@@ -776,7 +792,7 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={topToolsByFailureRate} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 )}
               </div>
@@ -818,7 +834,7 @@ function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
       aria-label="Explore with AI"
       title="Explore with AI"
       className={cn(
-        "text-muted-foreground inline-flex items-center justify-center rounded-md p-1 transition-colors",
+        "text-muted-foreground inline-flex items-center justify-center p-1 transition-colors",
         INSIGHTS_AI_RAINBOW_CLASS,
       )}
     >
@@ -863,18 +879,6 @@ function SkeletonList() {
 
 function EmptyState({ message }: { message: string }) {
   return <p className="text-muted-foreground text-sm">{message}</p>;
-}
-
-const AVATAR_COLORS = [
-  "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
-  "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
-  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300",
-] as const;
-
-function avatarColor(index: number): string {
-  return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
 }
 
 // A row "has usage" when any measure is nonzero — used to detect whether the

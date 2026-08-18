@@ -22,7 +22,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FooterSaveButton, SettingsSection } from "../SettingsSection";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 
 // Radix Select disallows an empty-string value, so the "Disabled" option needs
 // a sentinel that maps back to null (filtering off) when persisted.
@@ -74,6 +77,7 @@ export function ToolFilteringSection({
           remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
           toolsetId: mcpServer.toolsetId ?? undefined,
+          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
           environmentId: mcpServer.environmentId ?? undefined,
           visibility: mcpServer.visibility,
           toolVariationsGroupId: groupId ?? undefined,

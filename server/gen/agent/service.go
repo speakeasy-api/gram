@@ -17,20 +17,57 @@ import (
 // Endpoints consumed by the Speakeasy device agent running on developer
 // machines. Authenticates via an API key carrying the 'agent_user' scope — the
 // per-user credential minted by token-exchange. An org key with the broader
-// 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so
-// existing installs keep working during the transition.
+// 'agent' scope also satisfies most of these endpoints (it implies
+// 'agent_user'), so existing installs keep working during the transition. The
+// content-bearing session-portability endpoints — getSessionMeta and
+// createSessionHandoff — refuse it and require a per-user key.
 type Service interface {
-	// Resolve the marketplaces and plugins assigned to the enrolled user. The
-	// device agent reconciles these into whichever AI developer tools it manages
-	// (Claude Code today), so each tool's own plugin manager fetches and installs
-	// the bundles. The response is tool-agnostic: it names what to install, and
-	// each tool's syncer decides how to render it into that tool's native
-	// configuration.
+	// Resolve the marketplaces, plugins, and optional organization configuration
+	// assigned to the enrolled user. The device agent reconciles these into the AI
+	// developer tools it manages. Organization configuration is delivered on this
+	// existing poll so agents do not need a second control-plane request.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
 	ListSyncedUsers(context.Context, *ListSyncedUsersPayload) (res *ListSyncedUsersResult, err error)
+	// Get the organization-wide device-agent configuration for the dashboard.
+	// Requires a session with the org:admin scope. An unconfigured organization
+	// returns an empty document with is_configured=false; enrolled agents do not
+	// receive a remote layer until an administrator saves one.
+	GetConfiguration(context.Context, *GetConfigurationPayload) (res *DeviceAgentConfiguration, err error)
+	// Create or replace the organization-wide, non-secret device-agent
+	// configuration. Requires a session with the org:admin scope. Known settings
+	// are replaced wholesale — omitting one removes it — while stored keys this
+	// server does not recognize are preserved for forward compatibility; identity
+	// and credential keys are rejected.
+	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
+	// Resolve display metadata (Gram chat id, generated title, last activity) for
+	// captured agent sessions the calling user owns. Used by the device agent's
+	// session picker to overlay server-generated titles on locally discovered
+	// transcripts; unknown or non-owned session ids are silently omitted, so the
+	// picker degrades gracefully. Requires a per-user key: the fleet-shared org
+	// install key is refused because session metadata is per-user data.
+	GetSessionMeta(context.Context, *GetSessionMetaPayload) (res *GetSessionMetaResult, err error)
+	// Record that a captured agent session was moved to another harness on a
+	// device (session portability). Carries no session content — only the session
+	// identity, the target harness, and device attribution — and lands as a
+	// chat_session:move audit event so organizations retain governance visibility
+	// over local-first moves. Accepts both the per-user key and the org install
+	// key (with a vouched email), mirroring getPlugins, because fleet devices must
+	// be able to report moves. Fire-and-forget from the agent's perspective: the
+	// daemon must never fail a move because this call failed.
+	ReportSessionMoved(context.Context, *ReportSessionMovedPayload) (err error)
+	// Mint a short-lived capability URL for a rendered session-handoff document
+	// (session portability). The device agent uploads the handoff it rendered from
+	// the local transcript; the returned URL serves the markdown exactly once
+	// (burn-after-read) until expiry, so a cloud agent or another machine can
+	// continue the session. Content transits the server only for this purpose and
+	// stops being served at first read or expiry, whichever comes first. Requires
+	// a per-user key: the fleet-shared org install key is refused because minting
+	// a fetch-by-token URL for uploaded content is a per-user, content-bearing
+	// surface (the same DNO-383 blast-radius rule as getSessionMeta).
+	CreateSessionHandoff(context.Context, *CreateSessionHandoffPayload) (res *CreateSessionHandoffResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +90,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getPlugins", "listSyncedUsers"}
+var MethodNames = [7]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "createSessionHandoff"}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -75,6 +112,78 @@ type AgentPlugin struct {
 	MarketplaceName string
 }
 
+type AgentSessionMeta struct {
+	// The native harness session identifier this entry resolves, echoed from the
+	// request.
+	SessionID string
+	// Gram chat id for the captured session.
+	ChatID string
+	// Generated (or manually set) chat title. Absent when no title has been
+	// generated yet.
+	Title *string
+	// Last activity recorded for the captured session.
+	UpdatedAt string
+}
+
+// CreateSessionHandoffPayload is the payload type of the agent service
+// createSessionHandoff method.
+type CreateSessionHandoffPayload struct {
+	ApikeyToken *string
+	// Native harness session identifier the handoff was rendered from. Gram
+	// derives its chat id from this the same way hook ingest does; a
+	// not-yet-captured session can still mint a link.
+	SessionID string
+	// The rendered handoff document (markdown). Size-capped; the daemon renders
+	// deterministically from the local transcript.
+	Content string
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string
+	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
+	// when omitted.
+	TTLSeconds *int
+	// Hardware serial number of the machine minting the link, when the agent can
+	// read it.
+	SerialNumber *string
+	// Hostname of the machine minting the link, when the agent can read it.
+	Hostname *string
+}
+
+// CreateSessionHandoffResult is the result type of the agent service
+// createSessionHandoff method.
+type CreateSessionHandoffResult struct {
+	// Capability URL serving the uploaded handoff markdown. Unauthenticated by
+	// design — the unguessable token is the credential — and dead after the first
+	// read or expiry.
+	URL string
+	// When the link stops being served regardless of reads.
+	ExpiresAt string
+}
+
+// DeviceAgentConfiguration is the result type of the agent service
+// getConfiguration method.
+type DeviceAgentConfiguration struct {
+	// Schema version for this remote configuration envelope.
+	SchemaVersion int
+	// Forward-compatible non-secret settings document. Platform values use false,
+	// user, or managed enforcement layers.
+	Config map[string]any
+	// Whether an administrator has saved a remote configuration. False means
+	// agents should not add a remote resolver layer.
+	IsConfigured bool
+	// Opaque revision identifier for this configuration.
+	Etag string
+	// When this remote configuration was last saved. Absent when is_configured is
+	// false.
+	UpdatedAt *string
+}
+
+// GetConfigurationPayload is the payload type of the agent service
+// getConfiguration method.
+type GetConfigurationPayload struct {
+	SessionToken *string
+}
+
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
 	ApikeyToken *string
@@ -92,8 +201,9 @@ type GetPluginsPayload struct {
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace + plugin set. The agent
-	// stores this to detect changes between polls.
+	// Opaque revision identifier covering the marketplace, plugin, and
+	// remote-configuration set. The agent stores this to detect changes between
+	// polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -101,6 +211,28 @@ type GetPluginsResult struct {
 	// Plugins the agent should enable. Each entry references one of the
 	// marketplaces above by name.
 	Plugins []*AgentPlugin
+	// Organization-wide remote configuration. Absent until an administrator saves
+	// a configuration, allowing an agent with no cached remote layer to keep using
+	// its local configuration.
+	Configuration *DeviceAgentConfiguration
+}
+
+// GetSessionMetaPayload is the payload type of the agent service
+// getSessionMeta method.
+type GetSessionMetaPayload struct {
+	ApikeyToken *string
+	// Native harness session identifiers (e.g. Claude Code session UUIDs, Codex
+	// rollout ids) to resolve. Gram derives its chat ids from these the same way
+	// hook ingest does.
+	SessionIds []string
+}
+
+// GetSessionMetaResult is the result type of the agent service getSessionMeta
+// method.
+type GetSessionMetaResult struct {
+	// Metadata for the requested sessions that exist and are owned by the calling
+	// user. Requested ids with no captured chat or another owner are omitted.
+	Sessions []*AgentSessionMeta
 }
 
 // ListSyncedUsersPayload is the payload type of the agent service
@@ -116,6 +248,30 @@ type ListSyncedUsersResult struct {
 	Users []*SyncedAgentUser
 }
 
+// ReportSessionMovedPayload is the payload type of the agent service
+// reportSessionMoved method.
+type ReportSessionMovedPayload struct {
+	ApikeyToken *string
+	// Native harness session identifier of the moved session. Gram derives its
+	// chat id from this the same way hook ingest does; the move is recorded even
+	// if the session has not been captured yet.
+	SessionID string
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness string
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string
+	// Email of the enrolled user. Authoritative when authenticating with an
+	// org-scoped agent install key (the MDM zero-touch path); ignored for a
+	// per-user key, whose owner is the enrolled user.
+	Email *string
+	// Hardware serial number of the machine the move happened on, when the agent
+	// can read it.
+	SerialNumber *string
+	// Hostname of the machine the move happened on, when the agent can read it.
+	Hostname *string
+}
+
 type SyncedAgentUser struct {
 	// Email the device agent reported on sync. Resolve against org members for
 	// display.
@@ -124,6 +280,18 @@ type SyncedAgentUser struct {
 	FirstSeenAt string
 	// Most recent time this email was seen syncing the device agent.
 	LastSeenAt string
+}
+
+// UpdateConfigurationPayload is the payload type of the agent service
+// updateConfiguration method.
+type UpdateConfigurationPayload struct {
+	SessionToken *string
+	// Shareable device-agent settings. Supported keys include platforms,
+	// update_channel, auto_update, pinned_target, blocked_versions, and
+	// sync_interval_seconds. update_channel and blocked_versions can only be set
+	// by Speakeasy platform administrators; per-device identity and secret keys
+	// are forbidden.
+	Config map[string]any
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

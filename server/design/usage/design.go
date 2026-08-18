@@ -15,12 +15,12 @@ var PeriodUsage = Type("PeriodUsage", func() {
 	Attribute("included_servers", Int, "The number of servers included in the tier")
 	Attribute("actual_enabled_server_count", Int, "The number of servers enabled at the time of the request")
 
-	Attribute("credits", Int, "The number of credits used")
-	Attribute("included_credits", Int, "The number of credits included in the tier")
+	Attribute("credits", Int, "The number of credits used. Only populated for platform admins.")
+	Attribute("included_credits", Int, "The number of credits included in the tier. Only populated for platform admins.")
 
 	Attribute("has_active_subscription", Boolean, "Whether the project has an active subscription")
 
-	Required("tool_calls", "included_tool_calls", "servers", "included_servers", "actual_enabled_server_count", "credits", "included_credits", "has_active_subscription")
+	Required("tool_calls", "included_tool_calls", "servers", "included_servers", "actual_enabled_server_count", "has_active_subscription")
 })
 
 var TierLimits = Type("TierLimits", func() {
@@ -33,6 +33,7 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("feature_bullets", ArrayOf(String), "Key feature bullets of the tier")
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
+	Attribute("tum_price_per_million_usd", String, "Exact USD list price per million tokens under management (optional)")
 
 	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "feature_bullets", "included_bullets")
 })
@@ -40,9 +41,10 @@ var TierLimits = Type("TierLimits", func() {
 var UsageTiers = Type("UsageTiers", func() {
 	Attribute("free", TierLimits, "The limits for the free tier")
 	Attribute("pro", TierLimits, "The limits for the pro tier")
+	Attribute("payg", TierLimits, "The limits for the pay-as-you-go tier")
 	Attribute("enterprise", TierLimits, "The limits for the enterprise tier")
 
-	Required("free", "pro", "enterprise")
+	Required("free", "pro", "payg", "enterprise")
 })
 
 // TUMPeriodDay is one UTC day of tokens under management within a billing
@@ -87,6 +89,14 @@ var TokensUnderManagement = Type("TokensUnderManagement", func() {
 	Attribute("history", ArrayOf(TUMPeriod), "TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.")
 
 	Required("period_start", "period_end", "tokens", "billing_cycle_anchor_day", "history")
+})
+
+// BillingEmail is the optional billing notification address configured for a
+// PAYG organization.
+var BillingEmail = Type("BillingEmail", func() {
+	Attribute("email", String, "The configured billing notification email. Omitted when organization administrators receive billing notifications.", func() {
+		Format(FormatEmail)
+	})
 })
 
 var _ = Service("usage", func() {
@@ -169,6 +179,49 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingMetadata"}`)
 	})
 
+	Method("getBillingEmail", func() {
+		Description("Get the billing notification email for a PAYG organization")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(BillingEmail)
+
+		HTTP(func() {
+			GET("/rpc/usage.getBillingEmail")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getBillingEmail")
+		Meta("openapi:extension:x-speakeasy-name-override", "getBillingEmail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getBillingEmail"}`)
+	})
+
+	Method("setBillingEmail", func() {
+		Description("Set or clear the billing notification email for a PAYG organization")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("email", String, "The billing notification email. Omit to notify organization administrators.", func() {
+				Format(FormatEmail)
+			})
+		})
+
+		Result(BillingEmail)
+
+		HTTP(func() {
+			POST("/rpc/usage.setBillingEmail")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setBillingEmail")
+		Meta("openapi:extension:x-speakeasy-name-override", "setBillingEmail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingEmail"}`)
+	})
+
 	Method("getUsageTiers", func() {
 		Description("Get the usage tiers")
 
@@ -224,6 +277,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "createCheckout")
 		Meta("openapi:extension:x-speakeasy-name-override", "createCheckout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
+	})
+
+	Method("createStripeCheckout", func() {
+		Description("Create a Stripe Checkout link for starting PAYG billing")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createStripeCheckout")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
 	})
 
 	Method("createTopUpCheckout", func() {

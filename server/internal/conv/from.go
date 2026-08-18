@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -11,6 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// slugIDSuffixLen is how many hex characters from a resource ID
+// [URLBackedSlug] embeds as a uniqueness suffix. Sized to keep slugs short
+// while making suffix collisions across resources within a project rare
+// enough to surface as a 409 rather than be designed around.
+const slugIDSuffixLen = 4
 
 // PtrEmpty returns a pointer to the given value or nil if the value is equal
 // to the zero value of the same type. Example:
@@ -336,6 +343,31 @@ func URLToSlug(s string) string {
 	return strings.TrimRight(b.String(), "-")
 }
 
+// URLBackedSlug derives a slug for a URL-backed resource row from its URL and
+// ID. The transform takes the URL host plus path (scheme stripped), runs it
+// through [URLToSlug] so dots and slashes become hyphen boundaries, then
+// appends the last [slugIDSuffixLen] hex characters of the ID so two
+// resources in the same project with the same URL still land on distinct
+// slugs.
+func URLBackedSlug(rawURL string, id uuid.UUID) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parse url: %w", err)
+	}
+
+	idStr := id.String()
+	if len(idStr) < slugIDSuffixLen {
+		return "", fmt.Errorf("uuid string too short for slug suffix: %d", len(idStr))
+	}
+	suffix := idStr[len(idStr)-slugIDSuffixLen:]
+
+	base := URLToSlug(u.Host + u.Path)
+	if base == "" {
+		return suffix, nil
+	}
+	return base + "-" + suffix, nil
+}
+
 // GenerateRandomSlug generates a random slug of the given size using lowercase
 // letters and digits. It returns an error if it fails to generate random bytes.
 func GenerateRandomSlug(size int) (string, error) {
@@ -421,6 +453,26 @@ func ClampedIntToUint8(v int) (out uint8, clamped bool) {
 		return 0, true
 	}
 	return uint8(v), false
+}
+
+// ClampedUint64ToInt64 converts a uint64 to an int64, clamping the value to
+// math.MaxInt64 if it exceeds the maximum value for int64. The second return
+// value indicates whether clamping occurred.
+func ClampedUint64ToInt64(v uint64) (out int64, clamped bool) {
+	if v > math.MaxInt64 {
+		return math.MaxInt64, true
+	}
+	return int64(v), false
+}
+
+// ClampedUint64ToInt converts a uint64 to an int, clamping the value to
+// math.MaxInt if it exceeds the platform's maximum int value. The second
+// return value indicates whether clamping occurred.
+func ClampedUint64ToInt(v uint64) (out int, clamped bool) {
+	if v > uint64(math.MaxInt) {
+		return math.MaxInt, true
+	}
+	return int(v), false
 }
 
 // SafeInt converts int64 to int, clamping at the platform's int boundaries.

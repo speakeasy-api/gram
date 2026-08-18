@@ -4,7 +4,6 @@ import {
   Boxes,
   Check,
   Loader2,
-  Search,
   Server as ServerIcon,
 } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -53,6 +52,7 @@ interface DistributeServersStepProps {
   onComplete: () => void;
   onSkip: () => void;
   onBack: () => void;
+  onSetupPlatformMCP?: () => void;
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
@@ -66,6 +66,7 @@ export function DistributeServersStep({
   onComplete,
   onSkip,
   onBack,
+  onSetupPlatformMCP,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -362,7 +363,7 @@ export function DistributeServersStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Boxes className="text-foreground h-6 w-6" />
         </div>
       }
@@ -378,14 +379,36 @@ export function DistributeServersStep({
       onBack={onBack}
     >
       <div className="space-y-6">
+        {onSetupPlatformMCP && (
+          <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-foreground text-sm font-medium">
+                Set up with Platform MCP
+              </p>
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                Connect your AI agent to Speakeasy AICP Platform MCP to explore
+                reviewed MCP servers before setting them up for distribution in
+                the browser.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              onClick={onSetupPlatformMCP}
+            >
+              Set up with Platform MCP
+            </Button>
+          </div>
+        )}
+
         <div>
           <label className="text-foreground text-sm font-medium">
-            Select servers from the catalog
+            Set up in the browser
           </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
+          <div className="mt-3">
             <Input
               type="search"
+              icon="search"
               value={query}
               onChange={(value) => {
                 setQuery(value);
@@ -401,7 +424,6 @@ export function DistributeServersStep({
                 }
               }}
               placeholder="Search MCP servers"
-              className="pl-9"
             />
           </div>
 
@@ -433,19 +455,15 @@ export function DistributeServersStep({
                       }
                     }}
                     className={cn(
-                      "flex min-h-[118px] items-start gap-3 rounded-lg border p-4 text-left transition-all",
+                      "flex min-h-[118px] items-start gap-3 border p-4 text-left transition-all",
                       isSelected && !distributed
                         ? "border-foreground bg-secondary"
                         : "border-border bg-card hover:border-foreground/30",
                     )}
                   >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
                       {server.iconUrl ? (
-                        <img
-                          src={server.iconUrl}
-                          alt=""
-                          className="h-6 w-6 rounded"
-                        />
+                        <img src={server.iconUrl} alt="" className="h-6 w-6" />
                       ) : (
                         <ServerIcon className="h-5 w-5 text-neutral-600" />
                       )}
@@ -560,7 +578,7 @@ export function DistributeServersStep({
                   publishing them to your marketplace. This can take a moment.
                 </p>
                 {drawerError ? (
-                  <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-3 text-sm">
+                  <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 border p-3 text-sm">
                     <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                     <div>
                       <p className="font-medium">Couldn't add your servers</p>
@@ -600,7 +618,7 @@ export function DistributeServersStep({
                     <p className="text-muted-foreground text-xs">
                       Registers the marketplace for your own account.
                     </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 rounded-md border p-3">
+                    <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
                       <code className="text-foreground truncate text-xs">
                         {marketplaceCommand}
                       </code>
@@ -616,8 +634,8 @@ export function DistributeServersStep({
                     <p className="text-muted-foreground text-xs leading-relaxed">
                       Push the marketplace to every developer through Claude
                       Code Managed Settings — no per-user install command
-                      required. The full guide also covers Claude Cowork,
-                      Cursor, and Codex.
+                      required. The full guide also covers the other supported
+                      platforms.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}

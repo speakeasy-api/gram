@@ -95,6 +95,24 @@ func TestDeriveEventURN_ClassifiesKnownProducers(t *testing.T) {
 			want: "urn:telemetry:provider_otel:log:unknown",
 		},
 		{
+			name:      "it classifies codex OTEL logs by event name, like claude's",
+			legacyURN: "codex:otel:logs",
+			attrs: map[attr.Key]any{
+				attr.EventSourceKey: string(EventSourceHook),
+				rawEventNameKey:     "codex.sse_event",
+			},
+			want: "urn:telemetry:provider_otel:log:codex.sse_event",
+		},
+		{
+			name:      "it classifies codex OTEL metric points by metric name",
+			legacyURN: "codex:otel:metrics",
+			attrs: map[attr.Key]any{
+				attr.EventSourceKey: string(EventSourceHook),
+				attr.MetricNameKey:  "codex.tokens.used",
+			},
+			want: "urn:telemetry:provider_otel:metric:codex.tokens.used",
+		},
+		{
 			name:      "it classifies claude usage rows as provider_otel metrics",
 			legacyURN: "claude-code:usage:metrics",
 			attrs:     map[attr.Key]any{attr.EventSourceKey: string(EventSourceHook)},

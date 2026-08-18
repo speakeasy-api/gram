@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -25,10 +26,12 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
   useIdentifyUserForTelemetry,
+  useRegisterOrganizationForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 import {
@@ -46,25 +49,22 @@ import type { ProjectEntry } from "@gram/client/models/components/projectentry.j
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = [
-  "/login",
-  "/register",
-  "/invite",
-  "/book-demo",
-  "/shadow-mcp/request",
-  "/risk-policy-bypass/request",
-  "/blocks",
-  "/shared",
-];
-
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
+  "/explore-demo",
+  "/talk-to-us",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
   "/shared",
 ];
+
+// Exact match, with or without the trailing slash. A prefix match would let
+// deeper paths (e.g. /explore-demo/projects/x) through the gate.
+function isPath(pathname: string, path: string): boolean {
+  return pathname === path || pathname === `${path}/`;
+}
 
 export const AuthProvider = ({
   children,
@@ -88,6 +88,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
+  // Runs above every gate below, including the ones that return before
+  // ProjectProvider (and its own group registration) can mount, so
+  // organization-targeted feature flags resolve on the lockout pages too.
+  useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
@@ -101,12 +105,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // Don't show the authenticated app skeleton on routes that always redirect
     // (root "/" and unauthenticated pages like /login). This avoids a jarring
     // skeleton flash for logged-out users before the redirect to /login fires.
+    // A minimal centered pending state (not a blank viewport) covers the
+    // seconds the session check can take before login paints.
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
       location.pathname.endsWith("/setup")
     ) {
-      return null;
+      return <AuthPendingScreen />;
     }
     return <AppLoadingShell />;
   }
@@ -121,11 +127,29 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
+  // /explore-demo stays reachable: it's the gate page's own escape hatch into
+  // the shared demo org (which is whitelisted).
+  if (
+    session.activeOrganizationId &&
+    !session.whitelisted &&
+    !isPath(location.pathname, "/explore-demo")
+  ) {
+    // The switcher wins even on the upgrade gate's own route. Someone with a
+    // second organization has somewhere to go, and that page offers no way to
+    // reach it — landing there would strand them.
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    return <BookDemo />;
+    // Past this point the upgrade gate has to render, or the redirect below
+    // sends the user to a route that bounces them straight back to it.
+    if (!isPath(location.pathname, "/talk-to-us")) {
+      // An org that never trialed (or is still mid-trial) falls through to the
+      // cold-signup gate.
+      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
+        return <Navigate to="/talk-to-us" replace />;
+      }
+      return <BookDemo />;
+    }
   }
 
   if (!session.activeOrganizationId) {
@@ -168,8 +192,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. The param is attacker-controllable, so only
+  // same-origin paths are honored — a protocol-relative value would send the
+  // freshly authenticated user to a foreign origin.
+  const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
@@ -285,6 +311,18 @@ export const ProjectProvider = ({
     <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
 };
+
+/**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
+  </div>
+);
 
 /**
  * Lightweight shell that mirrors the real AppLayout structure,

@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-func TestWithExactGrantsDoesNotMutateCallerSlice(t *testing.T) {
+func TestWithExactGrantsLoadsCallerGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{})
@@ -20,11 +20,9 @@ func TestWithExactGrantsDoesNotMutateCallerSlice(t *testing.T) {
 
 	ctx = WithExactGrants(t, ctx, grants...)
 
-	require.Empty(t, grants[0].Effect)
-
 	loaded, ok := authz.GrantsFromContext(ctx)
 	require.True(t, ok)
-	require.Equal(t, authz.PolicyEffectAllow, loaded[0].Effect)
+	require.Equal(t, grants, loaded)
 }
 
 func TestWithAdminGrants(t *testing.T) {

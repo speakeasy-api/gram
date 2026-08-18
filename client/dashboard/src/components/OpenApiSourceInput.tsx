@@ -117,7 +117,7 @@ export function OpenApiSourceInput({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/openapi.yaml"
-              className="border-input bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+              className="border-input bg-background focus:ring-ring w-full border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
               disabled={fetchMutation.isPending}
               required
             />
@@ -144,10 +144,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Direct upload
             </p>
-            <CodeBlock
-              language="bash"
-              className="!bg-muted/50 !rounded-lg !border-0"
-            >
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
@@ -155,10 +152,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Or stage and push (useful for CI/CD)
             </p>
-            <CodeBlock
-              language="bash"
-              className="!bg-muted/50 !rounded-lg !border-0"
-            >
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
             </CodeBlock>
           </div>

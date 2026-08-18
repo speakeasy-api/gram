@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
@@ -135,14 +135,11 @@ function CatalogInner() {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>MCP Catalog</Page.Section.Title>
-          <Page.Section.Description>
+    <>
+      <ResourceListPage
+        title="MCP Catalog"
+        description={
+          <>
             Discover and import official third-party MCP servers to your
             project. Powered by the official{" "}
             <a
@@ -154,132 +151,117 @@ function CatalogInner() {
               MCP Registry
             </a>
             .
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Stack direction="vertical" gap={6}>
-              {/* Canonical toolbar: [search] [filters] [sort] … [count] [view]. */}
-              <Page.Toolbar>
-                <Page.Toolbar.Search
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  placeholder="Search MCP servers..."
-                />
-                <Page.Toolbar.Filters
-                  schema={CATALOG_FILTERS}
-                  values={dimensionFilters.values}
-                  optionsById={CATALOG_FILTER_OPTIONS}
-                  onChange={
-                    dimensionFilters.setValue as (
-                      id: string,
-                      value: FilterValue,
-                    ) => void
-                  }
-                  onClear={dimensionFilters.clearValue as (id: string) => void}
-                  onClearAll={dimensionFilters.clearAll}
-                />
-                <Page.Toolbar.SortBy
-                  value={pageState.sort}
-                  onChange={(v) => pageState.setSort(v as SortOption)}
-                  options={CATALOG_SORT_OPTIONS}
-                />
-                {!isLoading && (
-                  <Page.Toolbar.Count>
-                    {filteredServers.length === allServers.length
-                      ? `${allServers.length} servers`
-                      : `${filteredServers.length} of ${allServers.length} servers`}
-                  </Page.Toolbar.Count>
-                )}
-                <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
-                <Page.Toolbar.Refresh
-                  onRefresh={() => void refetchCatalog()}
-                  isRefreshing={isFetching}
-                />
-              </Page.Toolbar>
-
-              {/* Server grid / table */}
-              {isLoading ? (
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
-                    (id) => (
-                      <Skeleton key={id} className="h-[200px]" />
-                    ),
+          </>
+        }
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search MCP servers...",
+        }}
+        filters={{
+          schema: CATALOG_FILTERS,
+          values: dimensionFilters.values,
+          optionsById: CATALOG_FILTER_OPTIONS,
+          onChange: dimensionFilters.setValue as (
+            id: string,
+            value: FilterValue,
+          ) => void,
+          onClear: dimensionFilters.clearValue as (id: string) => void,
+          onClearAll: dimensionFilters.clearAll,
+        }}
+        sort={{
+          value: pageState.sort,
+          onChange: (v) => pageState.setSort(v as SortOption),
+          options: CATALOG_SORT_OPTIONS,
+        }}
+        count={
+          isLoading
+            ? undefined
+            : filteredServers.length === allServers.length
+              ? `${allServers.length} servers`
+              : `${filteredServers.length} of ${allServers.length} servers`
+        }
+        viewToggle={{ value: viewMode, onChange: setViewMode }}
+        onRefresh={() => void refetchCatalog()}
+        isRefreshing={isFetching}
+      >
+        {/* Server grid / table */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map((id) => (
+              <Skeleton key={id} className="h-[200px]" />
+            ))}
+          </div>
+        ) : viewMode === "grid" ? (
+          <div
+            ref={setGridElement}
+            className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+          >
+            {filteredServers.map((server) => {
+              const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+              return (
+                <ServerCard
+                  key={serverKey}
+                  server={server}
+                  detailHref={routes.catalog.detail.href(
+                    encodeURIComponent(server.registrySpecifier),
                   )}
-                </div>
-              ) : viewMode === "grid" ? (
-                <div
-                  ref={setGridElement}
-                  className="grid grid-cols-1 gap-6 xl:grid-cols-2"
-                >
-                  {filteredServers.map((server) => {
-                    const serverKey = `${server.registryId}-${server.registrySpecifier}`;
-                    return (
-                      <ServerCard
-                        key={serverKey}
-                        server={server}
-                        detailHref={routes.catalog.detail.href(
-                          encodeURIComponent(server.registrySpecifier),
-                        )}
-                        isAdded={isServerAdded(server)}
-                        isSelected={selectedServers.has(serverKey)}
-                        onToggleSelect={() => toggleServerSelection(serverKey)}
-                      />
-                    );
-                  })}
-                </div>
-              ) : (
-                <div ref={setGridElement}>
-                  <DotTable
-                    headers={[
-                      { label: "", className: "w-10" },
-                      { label: "Name" },
-                      { label: "Version" },
-                      { label: "Description" },
-                      { label: "Tools" },
-                      { label: "" },
-                    ]}
-                  >
-                    {filteredServers.map((server) => {
-                      const serverKey = `${server.registryId}-${server.registrySpecifier}`;
-                      return (
-                        <ServerTableRow
-                          key={serverKey}
-                          server={server}
-                          detailHref={routes.catalog.detail.href(
-                            encodeURIComponent(server.registrySpecifier),
-                          )}
-                          isAdded={isServerAdded(server)}
-                          isSelected={selectedServers.has(serverKey)}
-                          onToggleSelect={() =>
-                            toggleServerSelection(serverKey)
-                          }
-                        />
-                      );
-                    })}
-                  </DotTable>
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!isLoading && filteredServers.length === 0 && (
-                <EmptySearchResult
-                  hasFilters={
-                    hasActiveFilters ||
-                    filterState.category !== "all" ||
-                    searchQuery !== ""
-                  }
-                  onClear={() => {
-                    setSearchQuery("");
-                    // clearFilters resets category + sort + every filter param in
-                    // a single URL update (the unified state re-reads from it),
-                    // so a category-filtered empty state isn't left stuck.
-                    pageState.clearFilters();
-                  }}
+                  isAdded={isServerAdded(server)}
+                  isSelected={selectedServers.has(serverKey)}
+                  onToggleSelect={() => toggleServerSelection(serverKey)}
                 />
-              )}
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
+              );
+            })}
+          </div>
+        ) : (
+          <div ref={setGridElement}>
+            <DotTable
+              headers={[
+                { label: "", className: "w-10" },
+                { label: "Name" },
+                { label: "Version" },
+                { label: "Description" },
+                { label: "Tools" },
+                { label: "" },
+              ]}
+            >
+              {filteredServers.map((server) => {
+                const serverKey = `${server.registryId}-${server.registrySpecifier}`;
+                return (
+                  <ServerTableRow
+                    key={serverKey}
+                    server={server}
+                    detailHref={routes.catalog.detail.href(
+                      encodeURIComponent(server.registrySpecifier),
+                    )}
+                    isAdded={isServerAdded(server)}
+                    isSelected={selectedServers.has(serverKey)}
+                    onToggleSelect={() => toggleServerSelection(serverKey)}
+                  />
+                );
+              })}
+            </DotTable>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && filteredServers.length === 0 && (
+          <EmptySearchResult
+            hasFilters={
+              hasActiveFilters ||
+              filterState.category !== "all" ||
+              searchQuery !== ""
+            }
+            onClear={() => {
+              setSearchQuery("");
+              // clearFilters resets category + sort + every filter param in
+              // a single URL update (the unified state re-reads from it),
+              // so a category-filtered empty state isn't left stuck.
+              pageState.clearFilters();
+            }}
+          />
+        )}
+      </ResourceListPage>
 
       <AddServerDialog
         servers={addingServers}
@@ -298,7 +280,7 @@ function CatalogInner() {
         onClear={clearSelection}
         containerElement={gridElement}
       />
-    </Page>
+    </>
   );
 }
 
@@ -310,7 +292,7 @@ function EmptySearchResult({
   onClear: () => void;
 }) {
   return (
-    <div className="bg-background flex w-full items-center justify-center rounded-xl border py-8">
+    <div className="bg-background flex w-full items-center justify-center border py-8">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"

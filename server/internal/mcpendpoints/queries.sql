@@ -18,6 +18,12 @@ SELECT *
 FROM mcp_endpoints
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: LockMCPEndpointByID :one
+SELECT *
+FROM mcp_endpoints
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetMCPEndpointByProjectAndCustomDomainAndSlug :one
 -- Resolve an endpoint by its (project_id, custom_domain_id, slug) triple.
 -- This is intended for management use, to ensure the resolved endpoint belongs
@@ -62,6 +68,7 @@ SELECT
     e.project_id,
     e.mcp_server_id,
     e.slug,
+    e.is_domain_root,
     p.name AS project_name,
     p.slug AS project_slug,
     s.name AS mcp_server_name,
@@ -79,13 +86,16 @@ SET
     custom_domain_id = @custom_domain_id,
     mcp_server_id = @mcp_server_id,
     slug = @slug,
+    is_domain_root = @is_domain_root,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteMCPEndpoint :one
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
@@ -127,7 +137,9 @@ SELECT (
 -- deletes). Returns the affected rows so the caller can emit per-endpoint
 -- audit events for the cascade.
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
@@ -141,6 +153,60 @@ RETURNING *;
 -- caller must verify the custom_domain belongs to its organization before
 -- invoking this query.
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE custom_domain_id = @custom_domain_id::uuid AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListRootMCPEndpointsByMCPServerID :many
+SELECT *
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+ORDER BY custom_domain_id, id;
+
+-- name: ListCustomDomainIDsByMCPServerID :many
+SELECT DISTINCT custom_domain_id::uuid
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND custom_domain_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY custom_domain_id::uuid;
+
+-- name: LockRootMCPEndpointsByMCPServerID :many
+SELECT *
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
+-- name: LockMCPEndpointsByMCPServerID :many
+-- Lock every live endpoint (not only current roots) before the server row
+-- lock: root selection holds endpoint locks while waiting on the server row,
+-- so writing an unlocked endpoint after taking the server lock can deadlock.
+-- Re-run after the server lock for the authoritative pre-delete root set.
+SELECT *
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
+-- name: ClearRootMCPEndpointsByMCPServerID :many
+UPDATE mcp_endpoints
+SET
+    is_domain_root = NULL,
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
 RETURNING *;

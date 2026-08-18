@@ -51,7 +51,7 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "border-border bg-card my-3 max-w-2xl rounded-lg border shadow-sm",
+        "border-border bg-card my-4 max-w-2xl border shadow-sm",
         tone === "success" && "border-emerald-300/40 bg-emerald-50/30",
         tone === "info" && "border-sky-300/40 bg-sky-50/30",
       )}
@@ -136,7 +136,7 @@ export function RequestEnvironmentSecretsComponent({
             <em>no values provided; keys declared as empty.</em>
           ) : (
             savedKeys.map((k) => (
-              <code key={k} className="bg-muted mr-1 rounded px-1.5 py-0.5">
+              <code key={k} className="bg-muted mr-1 px-1.5 py-0.5">
                 {k}
               </code>
             ))
@@ -278,7 +278,7 @@ export function ShowWebhookUrlComponent({
           {a.instructions}
         </Text>
       )}
-      <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
+      <div className="border-border bg-muted/30 flex items-center gap-2 border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
         <Button size="sm" variant="tertiary" onClick={() => void copy()}>
           {copied ? (
@@ -507,7 +507,7 @@ export function ProposeNameComponent({
         icon={<Check className="text-emerald-600" size={16} />}
       >
         <Text small muted>
-          Name: <code className="bg-muted rounded px-1.5 py-0.5">{r.name}</code>
+          Name: <code className="bg-muted px-1.5 py-0.5">{r.name}</code>
         </Text>
       </ToolCard>
     );
@@ -700,7 +700,7 @@ export function ProposePersonalityComponent({
           onValueChange={(v) => setMode(v as PersonalityMode)}
           className="gap-2"
         >
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="prebuilt"
@@ -734,7 +734,7 @@ export function ProposePersonalityComponent({
                         type="button"
                         onClick={() => setPrebuiltSlug(p.slug)}
                         className={cn(
-                          "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
+                          "border-border hover:bg-muted border px-3 py-1.5 text-left transition-colors",
                           prebuiltSlug === p.slug &&
                             "border-primary bg-primary/5",
                         )}
@@ -763,7 +763,7 @@ export function ProposePersonalityComponent({
                       type="button"
                       onClick={() => setPrebuiltSlug(p.slug)}
                       className={cn(
-                        "border-border hover:bg-muted rounded-md border p-2 text-left transition-colors",
+                        "border-border hover:bg-muted border p-2 text-left transition-colors",
                         prebuiltSlug === p.slug &&
                           "border-primary bg-primary/5",
                       )}
@@ -781,7 +781,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="generate"
@@ -811,7 +811,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="custom"
@@ -841,7 +841,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="random"
@@ -1024,7 +1024,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1061,7 +1061,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1086,7 +1086,7 @@ export function ProposeSlackSetupComponent({
         </section>
 
         {anyEvent && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
+          <div className="flex items-start gap-2 border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div className="flex-1">
               <Text small className="font-medium">

@@ -13,10 +13,12 @@ import { externalKeysListAwsKms } from "../funcs/externalKeysListAwsKms.js";
 import { externalKeysListGcpKms } from "../funcs/externalKeysListGcpKms.js";
 import { externalKeysUpdateAwsKms } from "../funcs/externalKeysUpdateAwsKms.js";
 import { externalKeysUpdateGcpKms } from "../funcs/externalKeysUpdateGcpKms.js";
+import { externalKeysVerifyGcpKms } from "../funcs/externalKeysVerifyGcpKms.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AwsKmsKey } from "../models/components/awskmskey.js";
 import { GcpKmsKey } from "../models/components/gcpkmskey.js";
 import { ListExternalKeysResult } from "../models/components/listexternalkeysresult.js";
+import { VerifyKmsKeyResult } from "../models/components/verifykmskeyresult.js";
 import {
   CreateAwsKmsKeyRequest,
   CreateAwsKmsKeySecurity,
@@ -61,6 +63,10 @@ import {
   UpdateGcpKmsKeyRequest,
   UpdateGcpKmsKeySecurity,
 } from "../models/operations/updategcpkmskey.js";
+import {
+  VerifyGcpKmsKeyRequest,
+  VerifyGcpKmsKeySecurity,
+} from "../models/operations/verifygcpkmskey.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class ExternalKeys extends ClientSDK {
@@ -106,7 +112,7 @@ export class ExternalKeys extends ClientSDK {
    * deleteAwsKmsKey externalKeys
    *
    * @remarks
-   * Soft-delete an AWS KMS external key by ID. Requires org:admin.
+   * Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
    */
   async deleteAwsKms(
     request: DeleteAwsKmsKeyRequest,
@@ -125,7 +131,7 @@ export class ExternalKeys extends ClientSDK {
    * deleteGcpKmsKey externalKeys
    *
    * @remarks
-   * Soft-delete a GCP KMS external key by ID. Requires org:admin.
+   * Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
    */
   async deleteGcpKms(
     request: DeleteGcpKmsKeyRequest,
@@ -239,7 +245,7 @@ export class ExternalKeys extends ClientSDK {
    * updateAwsKmsKey externalKeys
    *
    * @remarks
-   * Replace an AWS KMS external key's configuration. Requires org:admin.
+   * Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
    */
   async updateAwsKms(
     request: UpdateAwsKmsKeyRequest,
@@ -258,7 +264,7 @@ export class ExternalKeys extends ClientSDK {
    * updateGcpKmsKey externalKeys
    *
    * @remarks
-   * Replace a GCP KMS external key's configuration. Requires org:admin.
+   * Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
    */
   async updateGcpKms(
     request: UpdateGcpKmsKeyRequest,
@@ -266,6 +272,25 @@ export class ExternalKeys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GcpKmsKey> {
     return unwrapAsync(externalKeysUpdateGcpKms(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpKmsKey externalKeys
+   *
+   * @remarks
+   * Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+   */
+  async verifyGcpKms(
+    request: VerifyGcpKmsKeyRequest,
+    security?: VerifyGcpKmsKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<VerifyKmsKeyResult> {
+    return unwrapAsync(externalKeysVerifyGcpKms(
       this,
       request,
       security,

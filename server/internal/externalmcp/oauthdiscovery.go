@@ -3,8 +3,10 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -27,10 +29,20 @@ const (
 // OAuthDiscoveryResult contains the OAuth metadata discovered for an external MCP server.
 type OAuthDiscoveryResult struct {
 	Version               string // "2.1", "2.0", or "none"
+	Issuer                string // Authorization server issuer from RFC 8414 metadata.
 	AuthorizationEndpoint string
 	TokenEndpoint         string
 	RegistrationEndpoint  string
 	ScopesSupported       []string
+
+	// ProbeIncomplete reports that at least one discovery request failed
+	// without the server cleanly saying the document is not there (only a
+	// 404 or 410 says that): unreachable host, TLS failure, auth or
+	// rate-limit refusal, 5xx, or invalid published metadata. A Version of
+	// "none" with ProbeIncomplete set means discovery could not run to
+	// completion — callers that treat "none" as "publishes no OAuth
+	// metadata" must keep that case distinct.
+	ProbeIncomplete bool
 }
 
 // ExternalMCPOAuthConfig contains OAuth configuration extracted from an external MCP tool
@@ -83,6 +95,11 @@ func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
 	return nil
 }
 
+// errWellKnownAbsent marks a well-known fetch the server answered with a
+// 404/410: the metadata is deliberately not served there, as opposed to a
+// transport failure or refusal that leaves publication unknown.
+var errWellKnownAbsent = errors.New("well-known metadata not published")
+
 // authServerMetadata represents the OAuth 2.0 Authorization Server Metadata (RFC 8414).
 type authServerMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -109,26 +126,35 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 	var resourceMeta *protectedResourceMetadata
 	var authServerMeta *authServerMetadata
 
+	// A failed probe that is not a clean 404/410 leaves publication unknown;
+	// carried out on ProbeIncomplete so a dead or refusing host never reads
+	// as "publishes no OAuth metadata".
+	probeFailed := false
+
 	// Strategy 1: Check for auth_server_metadata in header (direct AS metadata URL)
 	if asURL, ok := params["auth_server_metadata"]; ok && asURL != "" {
-		meta, err := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
-		if err == nil && meta != nil {
-			authServerMeta = meta
+		meta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, "")
+		if err != nil {
+			return nil, fmt.Errorf("fetch advertised authorization server metadata: %w", err)
 		}
+		authServerMeta = meta
 	}
 
 	// Strategy 2: Check for resource_metadata in header (Protected Resource metadata)
 	if rmURL, ok := params["resource_metadata"]; ok && rmURL != "" {
 		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, rmURL)
+		if err != nil && !errors.Is(err, errWellKnownAbsent) {
+			probeFailed = true
+		}
 		if err == nil && meta != nil {
 			resourceMeta = meta
 			// Follow the chain to get AS metadata
 			if len(meta.AuthorizationServers) > 0 {
-				asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-				asMeta, err := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
-				if err == nil && asMeta != nil {
-					authServerMeta = asMeta
+				asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
+				if err != nil {
+					return nil, fmt.Errorf("fetch protected resource authorization server metadata: %w", err)
 				}
+				authServerMeta = asMeta
 			}
 		}
 	}
@@ -138,22 +164,28 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		// Try OAuth Protected Resource metadata first
 		prURL := buildWellKnownResourceURL(remoteURL)
 		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+		if err != nil && !errors.Is(err, errWellKnownAbsent) {
+			probeFailed = true
+		}
 		if err == nil && meta != nil {
 			resourceMeta = meta
 			// Follow the chain
 			if len(meta.AuthorizationServers) > 0 {
-				asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
-				if asMeta != nil {
-					authServerMeta = asMeta
+				asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
+				if err != nil {
+					return nil, fmt.Errorf("fetch discovered authorization server metadata: %w", err)
 				}
+				authServerMeta = asMeta
 			}
 		}
 
 		// Try OAuth Authorization Server metadata directly
 		if authServerMeta == nil {
 			asURL := buildWellKnownURL(remoteURL)
-			asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+			asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, issuerFromWellKnownBase(remoteURL))
+			if err != nil && !errors.Is(err, errWellKnownAbsent) {
+				probeFailed = true
+			}
 			if asMeta != nil {
 				authServerMeta = asMeta
 			}
@@ -169,20 +201,26 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 
 			prURL := buildWellKnownResourceURL(rootURL)
 			meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+			if err != nil && !errors.Is(err, errWellKnownAbsent) {
+				probeFailed = true
+			}
 			if err == nil && meta != nil {
 				resourceMeta = meta
 				if len(meta.AuthorizationServers) > 0 {
-					asURL := buildWellKnownURL(meta.AuthorizationServers[0])
-					asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
-					if asMeta != nil {
-						authServerMeta = asMeta
+					asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
+					if err != nil {
+						return nil, fmt.Errorf("fetch origin authorization server metadata: %w", err)
 					}
+					authServerMeta = asMeta
 				}
 			}
 
 			if authServerMeta == nil {
 				asURL := buildWellKnownURL(rootURL)
-				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+				asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, rootURL)
+				if err != nil && !errors.Is(err, errWellKnownAbsent) {
+					probeFailed = true
+				}
 				if asMeta != nil {
 					authServerMeta = asMeta
 				}
@@ -193,13 +231,16 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 	// Determine the OAuth version based on what we found
 	result := &OAuthDiscoveryResult{
 		Version:               OAuthVersionNone,
+		Issuer:                "",
 		AuthorizationEndpoint: "",
 		TokenEndpoint:         "",
 		RegistrationEndpoint:  "",
 		ScopesSupported:       nil,
+		ProbeIncomplete:       probeFailed,
 	}
 
 	if authServerMeta != nil {
+		result.Issuer = authServerMeta.Issuer
 		result.AuthorizationEndpoint = authServerMeta.AuthorizationEndpoint
 		result.TokenEndpoint = authServerMeta.TokenEndpoint
 		result.RegistrationEndpoint = authServerMeta.RegistrationEndpoint
@@ -261,6 +302,14 @@ func buildWellKnownURL(baseURL string) string {
 	return buildWellKnownSuffixURL(baseURL, "oauth-authorization-server")
 }
 
+func issuerFromWellKnownBase(baseURL string) string {
+	u, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+}
+
 // buildWellKnownResourceURL constructs the well-known OAuth Protected Resource metadata URL.
 // Per RFC 9728, the well-known suffix is inserted between the host and the path.
 // e.g. https://example.com/path → https://example.com/.well-known/oauth-protected-resource/path
@@ -278,31 +327,160 @@ func buildWellKnownSuffixURL(baseURL, suffix string) string {
 }
 
 // fetchJSON fetches JSON from a URL and decodes it into the target.
-func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, url string) (*T, error) {
+func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, rawURL string) (*T, error) {
+	if err := validateOAuthEndpoint(rawURL); err != nil {
+		return nil, fmt.Errorf("invalid metadata URL: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := guardianPolicy.Client(guardian.WithDefaultRetryConfig())
+	client := guardianPolicy.Client()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		if err := validateOAuthEndpoint(req.URL.String()); err != nil {
+			return fmt.Errorf("invalid metadata redirect URL: %w", err)
+		}
+		return nil
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error { return resp.Body.Close() })
 
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		// The server deliberately answering that this well-known document is
+		// not served — not-published, not a failed probe. Deliberately only
+		// 404/410: a 401/403/429 is an auth or rate-limit refusal that leaves
+		// publication unknown.
+		return nil, fmt.Errorf("HTTP %d: %w", resp.StatusCode, errWellKnownAbsent)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	// Bounded read against a user-supplied host: an endless or oversized body
+	// must fail as a size error, not hold memory or masquerade as a decode
+	// failure on truncated JSON.
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 
 	return &result, nil
+}
+
+func fetchAuthServerMetadata(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	metadataURL string,
+	expectedIssuer string,
+) (*authServerMetadata, error) {
+	metadata, err := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, metadataURL)
+	if err != nil {
+		return nil, err
+	}
+	if metadata.Issuer == "" {
+		return nil, fmt.Errorf("authorization server metadata missing issuer")
+	}
+	if err := validateOAuthIssuer(metadata.Issuer); err != nil {
+		return nil, fmt.Errorf("invalid authorization server issuer: %w", err)
+	}
+	for name, endpoint := range map[string]string{
+		"authorization_endpoint": metadata.AuthorizationEndpoint,
+		"token_endpoint":         metadata.TokenEndpoint,
+		"registration_endpoint":  metadata.RegistrationEndpoint,
+	} {
+		if endpoint != "" {
+			if err := validateOAuthEndpoint(endpoint); err != nil {
+				return nil, fmt.Errorf("invalid %s: %w", name, err)
+			}
+		}
+	}
+	if expectedIssuer == "" {
+		if buildWellKnownURL(metadata.Issuer) != metadataURL {
+			return nil, fmt.Errorf("authorization server metadata issuer does not match metadata URL")
+		}
+		return metadata, nil
+	}
+	if metadata.Issuer != expectedIssuer {
+		return nil, fmt.Errorf("authorization server metadata issuer mismatch")
+	}
+	return metadata, nil
+}
+
+func fetchAdvertisedAuthServerMetadata(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	issuers []string,
+) (*authServerMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var errs []error
+	for _, issuer := range issuers {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("authorization server metadata discovery deadline: %w", errors.Join(append(errs, err)...))
+		}
+		metadata, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, buildWellKnownURL(issuer), issuer)
+		if err == nil {
+			return metadata, nil
+		}
+		errs = append(errs, fmt.Errorf("issuer %q: %w", issuer, err))
+	}
+
+	return nil, fmt.Errorf("no advertised authorization server metadata was usable: %w", errors.Join(errs...))
+}
+
+func validateOAuthIssuer(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse issuer URL: %w", err)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("must not contain a query or fragment")
+	}
+	return validateSecureOAuthURL(u)
+}
+
+func validateOAuthEndpoint(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse endpoint URL: %w", err)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("must not contain a fragment")
+	}
+	return validateSecureOAuthURL(u)
+}
+
+func validateSecureOAuthURL(u *url.URL) error {
+	if u.Host == "" || u.User != nil {
+		return fmt.Errorf("must be an absolute URL without userinfo")
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if u.Scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback()) {
+		return nil
+	}
+	return fmt.Errorf("must use HTTPS")
 }

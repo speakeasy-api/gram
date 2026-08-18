@@ -21,11 +21,15 @@ func NewDeleteChatResolutions(db *pgxpool.Pool) *DeleteChatResolutions {
 }
 
 type DeleteChatResolutionsArgs struct {
-	ChatID uuid.UUID
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
 }
 
 func (d *DeleteChatResolutions) Do(ctx context.Context, args DeleteChatResolutionsArgs) error {
-	if err := d.repo.DeleteChatResolutions(ctx, args.ChatID); err != nil {
+	if err := d.repo.DeleteChatResolutions(ctx, repo.DeleteChatResolutionsParams{
+		ChatID:    args.ChatID,
+		ProjectID: args.ProjectID,
+	}); err != nil {
 		return fmt.Errorf("failed to delete chat resolutions: %w", err)
 	}
 	return nil

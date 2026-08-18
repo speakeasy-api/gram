@@ -161,7 +161,8 @@ SELECT
   e.observed_at,
   e.reserved_on,
   e.created_at AS evaluation_created_at,
-  e.attempts
+  e.attempts,
+  COALESCE(NULLIF(c.external_user_id, ''), c.user_id, '') AS author_id
 FROM chat_analysis_evaluations e
 JOIN projects p
   ON p.id = e.project_id
@@ -191,6 +192,7 @@ type GetChatAnalysisJudgeInputsRow struct {
 	ReservedOn          pgtype.Date
 	EvaluationCreatedAt pgtype.Timestamptz
 	Attempts            int32
+	AuthorID            string
 }
 
 // evaluation_created_at is the row's birth stamp, which no transition rewrites.
@@ -220,6 +222,7 @@ func (q *Queries) GetChatAnalysisJudgeInputs(ctx context.Context, arg GetChatAna
 			&i.ReservedOn,
 			&i.EvaluationCreatedAt,
 			&i.Attempts,
+			&i.AuthorID,
 		); err != nil {
 			return nil, err
 		}

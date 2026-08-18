@@ -21,6 +21,13 @@ var sourceAliases = map[string][]string{
 	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
 	"cursor":              {"cursor", "Cursor"},
 	"codex":               {"codex", "Codex"},
+	// ChatGPT (web/desktop chat + Work mode) — rows arrive via the OpenAI
+	// compliance import pipelines under the chatgpt hook source.
+	"chatgpt": {"chatgpt", "ChatGPT"},
+	// Codex cloud web tasks — transcripts imported from the CODEX_LOG
+	// compliance feed, distinct from "codex" (live device sessions captured
+	// by hooks/OTEL).
+	"codex-web": {"codex-web", "CodexWeb", "Codex Web"},
 }
 
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value
@@ -35,10 +42,12 @@ var rawToCanonicalSource = func() map[string]string {
 	return m
 }()
 
-// canonicalSource returns the canonical source for a raw message source. Input
+// CanonicalSource returns the canonical source for a raw message source. Input
 // is trimmed; whitespace-only values return "" so callers can drop them. Values
-// without a known alias are returned trimmed and unchanged.
-func canonicalSource(raw string) string {
+// without a known alias are returned trimmed and unchanged. Exported for the
+// risk finding writer, which stamps the canonical slug onto ClickHouse rows so
+// the LowCardinality column stays clean and values match the agent-type filter.
+func CanonicalSource(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
@@ -56,7 +65,7 @@ func canonicalizeSources(raws []string) []string {
 	seen := make(map[string]struct{}, len(raws))
 	out := make([]string, 0, len(raws))
 	for _, raw := range raws {
-		s := canonicalSource(raw)
+		s := CanonicalSource(raw)
 		if s == "" {
 			continue
 		}

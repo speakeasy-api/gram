@@ -12,7 +12,11 @@ import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 
-export function SkillContentUploadSetting(): JSX.Element | null {
+export function SkillContentUploadSetting({
+  className,
+}: {
+  className?: string;
+} = {}): JSX.Element | null {
   const queryClient = useQueryClient();
   const { data: features } = useProductFeatures(undefined, undefined, {
     throwOnError: false,
@@ -26,10 +30,15 @@ export function SkillContentUploadSetting(): JSX.Element | null {
     },
   });
 
-  if (features?.skillsEnabled !== true) return null;
+  if (!features) return null;
 
   return (
-    <Stack direction="horizontal" justify="space-between" align="center">
+    <Stack
+      direction="horizontal"
+      justify="space-between"
+      align="center"
+      className={className}
+    >
       <Stack gap={1}>
         <Stack direction="horizontal" align="center" gap={2}>
           <FileText className="text-muted-foreground h-4 w-4" />

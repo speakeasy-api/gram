@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -46,16 +46,16 @@ function NewCostsPage(): JSX.Element {
   const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs substitutions={breadcrumbSubstitutions} />
-      </Page.Header>
-      <Page.Body noPadding fullWidth>
-        <RequireScope scope="org:admin" level="page">
-          <CostsExplorer />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <WorkbenchPage
+      scope="org:admin"
+      breadcrumbSubstitutions={breadcrumbSubstitutions}
+    >
+      {/* WorkbenchPage owns overflow-hidden; the explorer expects its container
+          to scroll (matching the Costs tab in TabbedCostsPage). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <CostsExplorer />
+      </div>
+    </WorkbenchPage>
   );
 }
 
@@ -81,54 +81,42 @@ function TabbedCostsPage({
     : "flex min-h-0 flex-col overflow-hidden";
 
   return (
-    <div className="flex h-full flex-col">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs
-            fullWidth
-            substitutions={breadcrumbSubstitutions}
-          />
-        </Page.Header>
-        <Page.Body noPadding fullWidth overflowHidden>
-          <Tabs
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value as CostsTab)}
-            className="min-h-0 flex-1 gap-0"
-          >
-            <div className="mx-auto w-full max-w-7xl px-8 pt-6">
-              <div className="border-b">
-                <PageTabsList>
-                  <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
-                  <PageTabsTrigger
-                    value="budgets"
-                    className="inline-flex items-center gap-2"
-                  >
-                    Budgets
-                    <ReleaseStageBadge stage="preview" noTooltip />
-                  </PageTabsTrigger>
-                </PageTabsList>
-              </div>
-            </div>
-            <TabsContent value="costs" className={costsTabClass}>
-              <RequireScope scope="org:admin" level="page">
-                {newCostsEnabled ? (
-                  <CostsExplorer />
-                ) : (
-                  <InsightsAgentsContent />
-                )}
-              </RequireScope>
-            </TabsContent>
-            <TabsContent value="budgets" className="min-h-0 overflow-y-auto">
-              <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pt-6 pb-24">
-                <RequireScope scope="org:admin" level="page">
-                  <BudgetsContent />
-                </RequireScope>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </Page.Body>
-      </Page>
-    </div>
+    <WorkbenchPage breadcrumbSubstitutions={breadcrumbSubstitutions}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as CostsTab)}
+        className="min-h-0 flex-1 gap-0"
+      >
+        {/* Full-bleed border so the hairline matches the full-width
+            explorer header below; tabs stay aligned to the content column. */}
+        <div className="border-border w-full border-b pt-6">
+          <div className="mx-auto w-full max-w-7xl px-8">
+            <PageTabsList>
+              <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
+              <PageTabsTrigger
+                value="budgets"
+                className="inline-flex items-center gap-2"
+              >
+                Budgets
+                <ReleaseStageBadge stage="preview" noTooltip />
+              </PageTabsTrigger>
+            </PageTabsList>
+          </div>
+        </div>
+        <TabsContent value="costs" className={costsTabClass}>
+          <RequireScope scope="org:admin" level="page">
+            {newCostsEnabled ? <CostsExplorer /> : <InsightsAgentsContent />}
+          </RequireScope>
+        </TabsContent>
+        <TabsContent value="budgets" className="min-h-0 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pt-6 pb-24">
+            <RequireScope scope="org:admin" level="page">
+              <BudgetsContent />
+            </RequireScope>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </WorkbenchPage>
   );
 }
 
