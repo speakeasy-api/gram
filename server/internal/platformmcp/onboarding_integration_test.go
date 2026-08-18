@@ -87,11 +87,27 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 
 	connectionID := connectionIDFromPrincipal(t, principal)
 	newGeneration := uuid.New()
+	now := time.Now().UTC()
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: newGeneration,
-		ReauthorizedAt:   timestamp(time.Now().UTC()),
-		ConnectionID:     connectionID,
-		OrganizationID:   principal.OrganizationID,
+		ActiveGeneration:       newGeneration,
+		ReauthorizedAt:         timestamp(now),
+		AuthorizationExpiresAt: timestamp(now.Add(90 * 24 * time.Hour)),
+		ConnectionID:           connectionID,
+		OrganizationID:         principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	currentConnection, err := platformrepo.New(conn).GetActivePlatformMCPConnectionByID(ctx, platformrepo.GetActivePlatformMCPConnectionByIDParams{ID: connectionID, OrganizationID: principal.OrganizationID})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID:                   uuid.New(),
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         connectionID,
+		OauthClientID:        currentConnection.OauthClientID,
+		ConnectionGeneration: newGeneration,
+		Jti:                  "jti-" + uuid.NewString(),
+		RefreshTokenHash:     "refresh-" + uuid.NewString(),
+		ExpiresAt:            timestamp(now.Add(time.Hour)),
+		RefreshExpiresAt:     timestamp(now.Add(30 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	principal.Generation = newGeneration.String()

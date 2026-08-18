@@ -86,6 +86,33 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 	return res, nil
 }
 
+// IsFeatureEnabledUncached reads the durable feature state directly. Security-
+// sensitive request gates use this when revocation must take effect faster than
+// the shared feature cache TTL. Unlike the cached lookup, cancellation remains
+// an error so callers can distinguish an incomplete live security check from a
+// durable disabled result.
+func (c *Client) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	if feature == FeatureSkills {
+		return true, nil
+	}
+	res, err := c.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+	switch {
+	case errors.Is(err, context.Canceled):
+		return false, fmt.Errorf("check uncached organization feature: %w", err)
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, oops.E(
+			oops.CodeUnexpected,
+			err,
+			"failed to get uncached organization feature flag %q",
+			string(feature),
+		).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+	default:
+		return res, nil
+	}
+}
+
 // PlatformFeatureCheck adapts IsFeatureEnabled to the
 // platformtools.FeatureChecker signature so it can gate platform-tool
 // dispatch. Errors degrade to "disabled" so a transient lookup failure does

@@ -18,6 +18,10 @@ import (
 const (
 	onboardingWorkflowLifetime = 24 * time.Hour
 	onboardingSourceDashboard  = "dashboard"
+
+	ConnectionAuthStateNotConnected            = "not_connected"
+	ConnectionAuthStateActive                  = "active"
+	ConnectionAuthStateReauthorizationRequired = "reauthorization_required"
 )
 
 type OnboardingStage string
@@ -63,6 +67,9 @@ type OnboardingConnection struct {
 type OnboardingProjection struct {
 	Workflow                  *OnboardingWorkflow
 	Connections               []OnboardingConnection
+	EvidenceConnection        *OnboardingConnection
+	ConnectionAuthState       string
+	ReauthorizationReason     string
 	SelectedProject           *ResolvedProject
 	CatalogExplored           bool
 	RegistrationSucceeded     bool
@@ -93,17 +100,31 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 	if err != nil {
 		return OnboardingProjection{}, err
 	}
+	now := s.now()
 	connections, err := q.ListPlatformMCPSubjectConnections(ctx, platformrepo.ListPlatformMCPSubjectConnectionsParams{
 		OrganizationID: organizationID,
 		SubjectUrn:     userSubjectURN(userID),
+		Now:            timestamp(now),
 	})
 	if err != nil {
 		return OnboardingProjection{}, fmt.Errorf("list platform mcp onboarding connections: %w", err)
 	}
 
 	projection := OnboardingProjection{
-		Workflow:    workflow,
-		Connections: onboardingConnectionsFromRows(connections),
+		Workflow:            workflow,
+		Connections:         onboardingConnectionsFromRows(connections),
+		ConnectionAuthState: ConnectionAuthStateNotConnected,
+	}
+	if len(projection.Connections) > 0 {
+		projection.ConnectionAuthState = ConnectionAuthStateActive
+	} else {
+		authState, authErr := q.GetPlatformMCPSubjectConnectionAuthState(ctx, platformrepo.GetPlatformMCPSubjectConnectionAuthStateParams{OrganizationID: organizationID, SubjectUrn: userSubjectURN(userID)})
+		if authErr == nil {
+			projection.ConnectionAuthState, projection.ReauthorizationReason = connectionAuthState(authState, now)
+			projection.EvidenceConnection = &OnboardingConnection{ID: authState.ID, Generation: authState.ActiveGeneration, AuthorizedAt: timePointer(authState.AuthorizedAt), ReauthorizedAt: timePointer(authState.ReauthorizedAt), Ready: authState.Ready}
+		} else if !errors.Is(authErr, pgx.ErrNoRows) {
+			return OnboardingProjection{}, fmt.Errorf("get platform mcp connection auth state: %w", authErr)
+		}
 	}
 	if workflow != nil && workflow.SelectedProjectID != uuid.Nil && workflow.SelectedRegistrationID != uuid.Nil {
 		project, err := q.GetPlatformMCPOnboardingSelectedProject(ctx, platformrepo.GetPlatformMCPOnboardingSelectedProjectParams{
@@ -119,8 +140,12 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 		}
 		projection.SelectedProject = &ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}
 	}
-	if workflow != nil && len(projection.Connections) > 0 {
-		connection := projection.Connections[0]
+	if workflow != nil {
+		connection, found := projection.connectionForEvidence()
+		if !found {
+			projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
+			return projection, nil
+		}
 		projection.CatalogExplored, err = q.HasPlatformMCPOnboardingCatalogExplored(ctx, platformrepo.HasPlatformMCPOnboardingCatalogExploredParams{
 			OrganizationID:       organizationID,
 			ConnectionID:         uuid.NullUUID{UUID: connection.ID, Valid: true},
@@ -157,7 +182,7 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 			return OnboardingProjection{}, fmt.Errorf("check platform mcp onboarding readiness verification: %w", err)
 		}
 	}
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -230,7 +255,7 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 	}
 
 	projection.Workflow = onboardingWorkflowFromRow(row)
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -365,7 +390,7 @@ func (s *OnboardingService) RecordAgentConfigurationCopied(ctx context.Context, 
 	}
 
 	projection.Workflow = onboardingWorkflowFromRow(row)
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -466,13 +491,58 @@ func (s *OnboardingService) activeWorkflow(ctx context.Context, q *platformrepo.
 	return onboardingWorkflowFromRow(row), nil
 }
 
-func deriveOnboardingStage(workflow *OnboardingWorkflow, connections []OnboardingConnection) OnboardingStage {
-	for _, connection := range connections {
-		if connection.Ready {
+func (p OnboardingProjection) connectionForEvidence() (OnboardingConnection, bool) {
+	if p.ConnectionAuthState != ConnectionAuthStateActive {
+		return OnboardingConnection{}, false
+	}
+	if len(p.Connections) > 0 {
+		return p.Connections[0], true
+	}
+	if p.EvidenceConnection != nil {
+		return *p.EvidenceConnection, true
+	}
+	return OnboardingConnection{}, false
+}
+
+func connectionAuthState(row platformrepo.GetPlatformMCPSubjectConnectionAuthStateRow, now time.Time) (string, string) {
+	switch row.ReauthorizationReason.String {
+	case "refresh_idle_expired":
+		return ConnectionAuthStateReauthorizationRequired, "idle_expired"
+	case "authorization_expired":
+		return ConnectionAuthStateReauthorizationRequired, "authorization_expired"
+	case "refresh_reuse":
+		return ConnectionAuthStateReauthorizationRequired, "refresh_invalidated"
+	case "authorization_lost":
+		return ConnectionAuthStateReauthorizationRequired, "authorization_changed"
+	case "connection_revoked", "client_revoked":
+		return ConnectionAuthStateReauthorizationRequired, "revoked"
+	case "security_reset":
+		return ConnectionAuthStateReauthorizationRequired, "security_reset"
+	}
+	if row.RevokedAt.Valid || row.ClientRevokedAt.Valid || row.LatestSessionRevokedAt.Valid {
+		return ConnectionAuthStateReauthorizationRequired, "revoked"
+	}
+	if !row.EffectiveAuthorizationExpiresAt.Valid || !now.Before(row.EffectiveAuthorizationExpiresAt.Time) {
+		return ConnectionAuthStateReauthorizationRequired, "authorization_expired"
+	}
+	if row.LatestRefreshExpiresAt.Valid && !now.Before(row.LatestRefreshExpiresAt.Time) {
+		return ConnectionAuthStateReauthorizationRequired, "idle_expired"
+	}
+	return ConnectionAuthStateNotConnected, ""
+}
+
+func deriveOnboardingStage(workflow *OnboardingWorkflow, connections []OnboardingConnection, evidence *OnboardingConnection, connectionAuthState string) OnboardingStage {
+	if connectionAuthState == ConnectionAuthStateActive {
+		for _, connection := range connections {
+			if connection.Ready {
+				return OnboardingStageConnectionReady
+			}
+		}
+		if evidence != nil && evidence.Ready {
 			return OnboardingStageConnectionReady
 		}
 	}
-	if len(connections) > 0 {
+	if len(connections) > 0 || evidence != nil {
 		return OnboardingStageAuthorized
 	}
 	if workflow != nil {

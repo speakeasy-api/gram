@@ -316,13 +316,13 @@ func (s *ManagementService) enabled(ctx context.Context, authCtx *contextvalues.
 }
 
 func (s *ManagementService) disabledState() *platformmcpgen.PlatformMCPOnboardingState {
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.mcpURL, WorkflowActive: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.mcpURL, WorkflowActive: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionAuthState: ConnectionAuthStateNotConnected, ReauthorizationReason: "", ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
 }
 
 func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection, enabled bool, readiness *Readiness, readinessFound bool) *platformmcpgen.PlatformMCPOnboardingState {
 	connectionReady := false
-	for _, connection := range projection.Connections {
-		connectionReady = connectionReady || connection.Ready
+	if connection, found := projection.connectionForEvidence(); found {
+		connectionReady = connection.Ready
 	}
 	clientFamily := ""
 	workflowActive := projection.Workflow != nil
@@ -363,6 +363,8 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 	switch {
 	case distributionAvailable && distributionPublicationState == publicationStateRepairRequired:
 		repairAction = repairActionPublication
+	case projection.ConnectionAuthState == ConnectionAuthStateReauthorizationRequired:
+		repairAction = repairActionAuthorizePlatformMCP
 	case workflowActive && !connectionReady:
 		repairAction = repairActionAuthorizePlatformMCP
 	case workflowActive && !registrationComplete:
@@ -381,13 +383,14 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 	case registrationComplete:
 		repairAction = repairActionStartSetup
 	}
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.mcpURL, WorkflowActive: workflowActive, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: len(projection.Connections) > 0, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.mcpURL, WorkflowActive: workflowActive, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive, ConnectionAuthState: projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
 }
 func agentConfigurationReady(projection OnboardingProjection) bool {
 	if projection.Workflow == nil {
 		return false
 	}
-	return projection.Workflow.AgentConfigurationCopiedAt != nil || len(projection.Connections) > 0 || projection.CatalogExplored || projection.RegistrationSucceeded || projection.DistributionToolSucceeded || projection.ReadinessVerified
+	_, hasConnectionEvidence := projection.connectionForEvidence()
+	return projection.Workflow.AgentConfigurationCopiedAt != nil || hasConnectionEvidence || projection.CatalogExplored || projection.RegistrationSucceeded || projection.DistributionToolSucceeded || projection.ReadinessVerified
 }
 func (s *ManagementService) hasSelectedUseEvidence(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection) bool {
 	if authCtx == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil || s.db == nil {

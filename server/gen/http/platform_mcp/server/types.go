@@ -67,6 +67,11 @@ type GetOnboardingResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -131,6 +136,11 @@ type StartOnboardingResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -195,6 +205,11 @@ type RecordInstallIntentResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -259,6 +274,11 @@ type RecordAgentConfigurationCopiedResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -333,6 +353,11 @@ type RecheckOnboardingReadinessResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -397,6 +422,11 @@ type DistributeOnboardingCandidateResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -461,6 +491,11 @@ type RemoveOnboardingDistributionResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -525,6 +560,11 @@ type RepairOnboardingPublicationResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool `form:"connection_authorized" json:"connection_authorized" xml:"connection_authorized"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string `form:"connection_auth_state" json:"connection_auth_state" xml:"connection_auth_state"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string `form:"reauthorization_reason" json:"reauthorization_reason" xml:"reauthorization_reason"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool `form:"connection_ready" json:"connection_ready" xml:"connection_ready"`
@@ -2470,6 +2510,8 @@ func NewGetOnboardingResponseBody(res *platformmcp.PlatformMCPOnboardingState) *
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2500,6 +2542,8 @@ func NewStartOnboardingResponseBody(res *platformmcp.PlatformMCPOnboardingState)
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2530,6 +2574,8 @@ func NewRecordInstallIntentResponseBody(res *platformmcp.PlatformMCPOnboardingSt
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2561,6 +2607,8 @@ func NewRecordAgentConfigurationCopiedResponseBody(res *platformmcp.PlatformMCPO
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2602,6 +2650,8 @@ func NewRecheckOnboardingReadinessResponseBody(res *platformmcp.PlatformMCPOnboa
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2633,6 +2683,8 @@ func NewDistributeOnboardingCandidateResponseBody(res *platformmcp.PlatformMCPOn
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2664,6 +2716,8 @@ func NewRemoveOnboardingDistributionResponseBody(res *platformmcp.PlatformMCPOnb
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,
@@ -2695,6 +2749,8 @@ func NewRepairOnboardingPublicationResponseBody(res *platformmcp.PlatformMCPOnbo
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
+		ConnectionAuthState:          res.ConnectionAuthState,
+		ReauthorizationReason:        res.ReauthorizationReason,
 		ConnectionReady:              res.ConnectionReady,
 		CatalogExplored:              res.CatalogExplored,
 		SelectedProjectName:          res.SelectedProjectName,

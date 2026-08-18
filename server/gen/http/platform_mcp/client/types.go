@@ -67,6 +67,11 @@ type GetOnboardingResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -131,6 +136,11 @@ type StartOnboardingResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -195,6 +205,11 @@ type RecordInstallIntentResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -259,6 +274,11 @@ type RecordAgentConfigurationCopiedResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -333,6 +353,11 @@ type RecheckOnboardingReadinessResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -397,6 +422,11 @@ type DistributeOnboardingCandidateResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -461,6 +491,11 @@ type RemoveOnboardingDistributionResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -525,6 +560,11 @@ type RepairOnboardingPublicationResponseBody struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized *bool `form:"connection_authorized,omitempty" json:"connection_authorized,omitempty" xml:"connection_authorized,omitempty"`
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState *string `form:"connection_auth_state,omitempty" json:"connection_auth_state,omitempty" xml:"connection_auth_state,omitempty"`
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason *string `form:"reauthorization_reason,omitempty" json:"reauthorization_reason,omitempty" xml:"reauthorization_reason,omitempty"`
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady *bool `form:"connection_ready,omitempty" json:"connection_ready,omitempty" xml:"connection_ready,omitempty"`
@@ -2512,6 +2552,8 @@ func NewGetOnboardingPlatformMCPOnboardingStateOK(body *GetOnboardingResponseBod
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -2693,6 +2735,8 @@ func NewStartOnboardingPlatformMCPOnboardingStateOK(body *StartOnboardingRespons
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -2874,6 +2918,8 @@ func NewRecordInstallIntentPlatformMCPOnboardingStateOK(body *RecordInstallInten
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -3056,6 +3102,8 @@ func NewRecordAgentConfigurationCopiedPlatformMCPOnboardingStateOK(body *RecordA
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -3400,6 +3448,8 @@ func NewRecheckOnboardingReadinessPlatformMCPOnboardingStateOK(body *RecheckOnbo
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -3582,6 +3632,8 @@ func NewDistributeOnboardingCandidatePlatformMCPOnboardingStateOK(body *Distribu
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -3764,6 +3816,8 @@ func NewRemoveOnboardingDistributionPlatformMCPOnboardingStateOK(body *RemoveOnb
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -3946,6 +4000,8 @@ func NewRepairOnboardingPublicationPlatformMCPOnboardingStateOK(body *RepairOnbo
 		ClientFamily:                 *body.ClientFamily,
 		AgentConfigurationCopied:     *body.AgentConfigurationCopied,
 		ConnectionAuthorized:         *body.ConnectionAuthorized,
+		ConnectionAuthState:          *body.ConnectionAuthState,
+		ReauthorizationReason:        *body.ReauthorizationReason,
 		ConnectionReady:              *body.ConnectionReady,
 		CatalogExplored:              *body.CatalogExplored,
 		SelectedProjectName:          *body.SelectedProjectName,
@@ -4290,6 +4346,12 @@ func ValidateGetOnboardingResponseBody(body *GetOnboardingResponseBody) (err err
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4338,6 +4400,16 @@ func ValidateGetOnboardingResponseBody(body *GetOnboardingResponseBody) (err err
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4392,6 +4464,12 @@ func ValidateStartOnboardingResponseBody(body *StartOnboardingResponseBody) (err
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4440,6 +4518,16 @@ func ValidateStartOnboardingResponseBody(body *StartOnboardingResponseBody) (err
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4494,6 +4582,12 @@ func ValidateRecordInstallIntentResponseBody(body *RecordInstallIntentResponseBo
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4542,6 +4636,16 @@ func ValidateRecordInstallIntentResponseBody(body *RecordInstallIntentResponseBo
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4596,6 +4700,12 @@ func ValidateRecordAgentConfigurationCopiedResponseBody(body *RecordAgentConfigu
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4644,6 +4754,16 @@ func ValidateRecordAgentConfigurationCopiedResponseBody(body *RecordAgentConfigu
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4698,6 +4818,12 @@ func ValidateRecheckOnboardingReadinessResponseBody(body *RecheckOnboardingReadi
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4746,6 +4872,16 @@ func ValidateRecheckOnboardingReadinessResponseBody(body *RecheckOnboardingReadi
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4800,6 +4936,12 @@ func ValidateDistributeOnboardingCandidateResponseBody(body *DistributeOnboardin
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4848,6 +4990,16 @@ func ValidateDistributeOnboardingCandidateResponseBody(body *DistributeOnboardin
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -4902,6 +5054,12 @@ func ValidateRemoveOnboardingDistributionResponseBody(body *RemoveOnboardingDist
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -4950,6 +5108,16 @@ func ValidateRemoveOnboardingDistributionResponseBody(body *RemoveOnboardingDist
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {
@@ -5004,6 +5172,12 @@ func ValidateRepairOnboardingPublicationResponseBody(body *RepairOnboardingPubli
 	if body.ConnectionAuthorized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_authorized", "body"))
 	}
+	if body.ConnectionAuthState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connection_auth_state", "body"))
+	}
+	if body.ReauthorizationReason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_reason", "body"))
+	}
 	if body.ConnectionReady == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_ready", "body"))
 	}
@@ -5052,6 +5226,16 @@ func ValidateRepairOnboardingPublicationResponseBody(body *RepairOnboardingPubli
 	if body.Stage != nil {
 		if !(*body.Stage == "not_started" || *body.Stage == "install_instructions" || *body.Stage == "authorized" || *body.Stage == "connection_ready") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"not_started", "install_instructions", "authorized", "connection_ready"}))
+		}
+	}
+	if body.ConnectionAuthState != nil {
+		if !(*body.ConnectionAuthState == "not_connected" || *body.ConnectionAuthState == "active" || *body.ConnectionAuthState == "reauthorization_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.connection_auth_state", *body.ConnectionAuthState, []any{"not_connected", "active", "reauthorization_required"}))
+		}
+	}
+	if body.ReauthorizationReason != nil {
+		if !(*body.ReauthorizationReason == "" || *body.ReauthorizationReason == "idle_expired" || *body.ReauthorizationReason == "authorization_expired" || *body.ReauthorizationReason == "refresh_invalidated" || *body.ReauthorizationReason == "authorization_changed" || *body.ReauthorizationReason == "revoked" || *body.ReauthorizationReason == "security_reset") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reauthorization_reason", *body.ReauthorizationReason, []any{"", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset"}))
 		}
 	}
 	if body.ReadinessState != nil {

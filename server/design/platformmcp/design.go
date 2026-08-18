@@ -18,6 +18,12 @@ var OnboardingState = Type("PlatformMCPOnboardingState", func() {
 	Attribute("client_family", String, "Selected manual-install client family when a workflow is active.")
 	Attribute("agent_configuration_copied", Boolean, "Whether the user copied Platform MCP configuration or completed an equivalent supported agent-setup action in this workflow.")
 	Attribute("connection_authorized", Boolean, "Whether the authenticated user has a current authorized Platform MCP connection.")
+	Attribute("connection_auth_state", String, "Bounded authorization state for the authenticated user's latest Platform MCP connection.", func() {
+		Enum("not_connected", "active", "reauthorization_required")
+	})
+	Attribute("reauthorization_reason", String, "Bounded reason why interactive Platform MCP authorization is required again.", func() {
+		Enum("", "idle_expired", "authorization_expired", "refresh_invalidated", "authorization_changed", "revoked", "security_reset")
+	})
 	Attribute("connection_ready", Boolean, "Whether the authenticated user's current connection has completed authenticated discovery.")
 	Attribute("catalog_explored", Boolean, "Whether the active workflow observed a successful reviewed MCP Catalog search through Platform MCP.")
 	Attribute("selected_project_name", String, "Display name of the workflow-bound project, when one has been selected.")
@@ -43,7 +49,7 @@ var OnboardingState = Type("PlatformMCPOnboardingState", func() {
 	Attribute("repair_action", String, "A bounded next action when the workflow cannot progress.", func() {
 		Enum("", "enable_platform_mcp", "authorize_platform_mcp", "select_project", "start_setup", "continue_dashboard_setup", "retry_readiness", "retry_registration", "contact_support", "distribute_to_default_plugin", "repair_publication")
 	})
-	Required("enabled", "stage", "mcp_url", "workflow_active", "client_family", "agent_configuration_copied", "connection_authorized", "connection_ready", "catalog_explored", "selected_project_name", "selected_project_slug", "registration_complete", "readiness_state", "readiness_freshness", "distribution_state", "distribution_attached", "distribution_tool_succeeded", "readiness_verified", "distribution_publication_state", "selected_use_verified", "distribution_expected_version", "repair_action")
+	Required("enabled", "stage", "mcp_url", "workflow_active", "client_family", "agent_configuration_copied", "connection_authorized", "connection_auth_state", "reauthorization_reason", "connection_ready", "catalog_explored", "selected_project_name", "selected_project_slug", "registration_complete", "readiness_state", "readiness_freshness", "distribution_state", "distribution_attached", "distribution_tool_succeeded", "readiness_verified", "distribution_publication_state", "selected_use_verified", "distribution_expected_version", "repair_action")
 })
 
 var OnboardingSetupHandoff = Type("PlatformMCPOnboardingSetupHandoff", func() {
