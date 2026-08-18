@@ -59,6 +59,12 @@ type Service interface {
 	// List the distinct agent sources present in this project's chats, for
 	// populating the agent-type filter on the Agent Sessions page.
 	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
+	// List session-lineage links touching the given chats (session portability). A
+	// link records that a session was moved to another harness; the child side is
+	// present when the continuation's session id was known at move time. Returns
+	// every link where a requested chat is either the parent or the child,
+	// honoring the same visibility scoping as listChats.
+	ListSessionLinks(context.Context, *ListSessionLinksPayload) (res *ListSessionLinksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -83,7 +89,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources"}
+var MethodNames = [13]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -316,6 +322,33 @@ type ChatOverview struct {
 	SummaryGeneratedAt *string
 }
 
+type ChatSessionLink struct {
+	// Chat id of the session the move originated from.
+	ParentChatID string
+	// Chat id derived for the continuation. Absent when the continuation's session
+	// id was unknowable at move time (e.g. Cursor mints ids server-side).
+	ChildChatID *string
+	// Title of the parent chat, when it has been captured and titled.
+	ParentTitle *string
+	// Title of the child chat, when it has been captured and titled.
+	ChildTitle *string
+	// Whether the continuation exists as a captured chat, i.e. whether the child
+	// side is navigable.
+	ChildCaptured bool
+	// Link kind. Currently always 'move'.
+	Kind string
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness string
+	// Harness the session originated in, when known.
+	SourceSurface *string
+	// Email of the person who initiated the move, when known.
+	ActorEmail *string
+	// Hostname of the machine the move happened on, when known.
+	DeviceHostname *string
+	// When the move was recorded.
+	CreatedAt string
+}
+
 // Trace-entry counts across the entire returned generation, independent of
 // pagination. Each message maps to exactly one entry: a message carrying tool
 // calls counts as a tool call regardless of role, otherwise the role decides.
@@ -508,6 +541,23 @@ type ListChatsResult struct {
 	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
+}
+
+// ListSessionLinksPayload is the payload type of the chat service
+// listSessionLinks method.
+type ListSessionLinksPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Chat ids to resolve links for.
+	ChatIds []string
+}
+
+// ListSessionLinksResult is the result type of the chat service
+// listSessionLinks method.
+type ListSessionLinksResult struct {
+	// Links touching the requested chats, newest first.
+	Links []*ChatSessionLink
 }
 
 // ListSourcesPayload is the payload type of the chat service listSources

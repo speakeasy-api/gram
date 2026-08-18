@@ -32,6 +32,11 @@ type ReportSessionMovedRequestBody struct {
 	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string `form:"target_harness" json:"target_harness" xml:"target_harness"`
+	// Native session id minted for the continuation, when the daemon knows it at
+	// launch time (claude-code targets today; Cursor mints ids server-side so
+	// moves there omit it). Lets Gram link the original session and its
+	// continuation.
+	TargetSessionID *string `form:"target_session_id,omitempty" json:"target_session_id,omitempty" xml:"target_session_id,omitempty"`
 	// Harness the session originated in, as detected by the agent (e.g.
 	// claude-code, codex).
 	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
@@ -1505,10 +1510,11 @@ func NewUpdateConfigurationRequestBody(p *agent.UpdateConfigurationPayload) *Upd
 // payload of the "reportSessionMoved" endpoint of the "agent" service.
 func NewReportSessionMovedRequestBody(p *agent.ReportSessionMovedPayload) *ReportSessionMovedRequestBody {
 	body := &ReportSessionMovedRequestBody{
-		SessionID:     p.SessionID,
-		TargetHarness: p.TargetHarness,
-		SourceSurface: p.SourceSurface,
-		Email:         p.Email,
+		SessionID:       p.SessionID,
+		TargetHarness:   p.TargetHarness,
+		TargetSessionID: p.TargetSessionID,
+		SourceSurface:   p.SourceSurface,
+		Email:           p.Email,
 	}
 	return body
 }

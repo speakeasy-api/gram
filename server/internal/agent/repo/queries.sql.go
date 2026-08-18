@@ -285,6 +285,56 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 	return i, err
 }
 
+const insertChatSessionLink = `-- name: InsertChatSessionLink :exec
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, 'move', $7, $8,
+  $9, $10, $11
+)
+ON CONFLICT (parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+`
+
+type InsertChatSessionLinkParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+}
+
+// One lineage edge per reported session move. Both chat ids are DERIVED
+// (chat.SessionIDToChatID), so the edge is recordable before either chat is
+// captured; the composite (organization_id, project_id) foreign key pins
+// tenancy at insert time. ON CONFLICT makes daemon retries of the same
+// known-continuation move idempotent; NULL-child edges (unknowable
+// continuations, e.g. Cursor) may repeat because each is a distinct move.
+func (q *Queries) InsertChatSessionLink(ctx context.Context, arg InsertChatSessionLinkParams) error {
+	_, err := q.db.Exec(ctx, insertChatSessionLink,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ParentChatID,
+		arg.ChildChatID,
+		arg.ParentSessionID,
+		arg.ChildSessionID,
+		arg.TargetHarness,
+		arg.SourceSurface,
+		arg.ActorEmail,
+		arg.DeviceSerial,
+		arg.DeviceHostname,
+	)
+	return err
+}
+
 const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
 INSERT INTO session_handoff_links (
   project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at

@@ -454,6 +454,38 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listSources")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
 	})
+
+	Method("listSessionLinks", func() {
+		Description("List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			Attribute("chat_ids", ArrayOf(String, func() {
+				Format(FormatUUID)
+			}), "Chat ids to resolve links for.", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Required("chat_ids")
+		})
+
+		Result(ListSessionLinksResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.listSessionLinks")
+			Param("chat_ids")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChatSessionLinks")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionLinks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSessionLinks", "type": "query"}`)
+	})
 })
 
 var WorkUnitsTrendBucket = Type("WorkUnitsTrendBucket", func() {
@@ -476,6 +508,33 @@ var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
 	Attribute("buckets", ArrayOf(WorkUnitsTrendBucket), "One bucket per UTC day in the window, oldest first, zero-filled for days without scores.")
 
 	Required("scores_available", "buckets")
+})
+
+var ChatSessionLink = Type("ChatSessionLink", func() {
+	Attribute("parent_chat_id", String, "Chat id of the session the move originated from.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled.")
+	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled.")
+	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat, i.e. whether the child side is navigable.")
+	Attribute("kind", String, "Link kind. Currently always 'move'.")
+	Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).")
+	Attribute("source_surface", String, "Harness the session originated in, when known.")
+	Attribute("actor_email", String, "Email of the person who initiated the move, when known.")
+	Attribute("device_hostname", String, "Hostname of the machine the move happened on, when known.")
+	Attribute("created_at", String, func() {
+		Description("When the move was recorded.")
+		Format(FormatDateTime)
+	})
+	Required("parent_chat_id", "child_captured", "kind", "target_harness", "created_at")
+})
+
+var ListSessionLinksResult = Type("ListSessionLinksResult", func() {
+	Attribute("links", ArrayOf(ChatSessionLink), "Links touching the requested chats, newest first.")
+	Required("links")
 })
 
 var ListSourcesResult = Type("ListSourcesResult", func() {

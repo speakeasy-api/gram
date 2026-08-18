@@ -708,6 +708,64 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
+// ListSessionLinks resolves session-lineage edges (session portability moves)
+// touching the requested chats, in either direction. Dangling edges — a
+// continuation whose session id was unknowable at move time — come back with
+// no child side, and render as "moved to <harness>" only.
+func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSessionLinksPayload) (*gen.ListSessionLinksResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(payload.ChatIds))
+	for _, raw := range payload.ChatIds {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id")
+		}
+		chatIDs = append(chatIDs, id)
+	}
+
+	rows, err := s.repo.ListChatSessionLinks(ctx, repo.ListChatSessionLinksParams{
+		ProjectID:      *authCtx.ProjectID,
+		ChatIds:        chatIDs,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list session links").LogError(ctx, s.logger)
+	}
+
+	links := make([]*gen.ChatSessionLink, 0, len(rows))
+	for _, row := range rows {
+		link := &gen.ChatSessionLink{
+			ParentChatID:   row.ParentChatID.String(),
+			ChildChatID:    nil,
+			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
+			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
+			ChildCaptured:  row.ChildCaptured,
+			Kind:           row.Kind,
+			TargetHarness:  row.TargetHarness,
+			SourceSurface:  conv.FromPGText[string](row.SourceSurface),
+			ActorEmail:     conv.FromPGText[string](row.ActorEmail),
+			DeviceHostname: conv.FromPGText[string](row.DeviceHostname),
+			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		}
+		if row.ChildChatID.Valid {
+			link.ChildChatID = conv.PtrEmpty(row.ChildChatID.UUID.String())
+		}
+		links = append(links, link)
+	}
+
+	return &gen.ListSessionLinksResult{Links: links}, nil
+}
+
 // parseSourceFilter splits the comma-separated `source` filter into the list of
 // source strings matched against each chat's inferred source. Selected values
 // are canonical (as returned by ListSources), so each is expanded back into its

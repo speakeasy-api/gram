@@ -247,6 +247,13 @@ type ListSourcesResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 }
 
+// ListSessionLinksResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body.
+type ListSessionLinksResponseBody struct {
+	// Links touching the requested chats, newest first.
+	Links []*ChatSessionLinkResponseBody `form:"links" json:"links" xml:"links"`
+}
+
 // ListChatsUnauthorizedResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "unauthorized" error.
 type ListChatsUnauthorizedResponseBody struct {
@@ -2429,6 +2436,188 @@ type ListSourcesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSessionLinksUnauthorizedResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "unauthorized" error.
+type ListSessionLinksUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksForbiddenResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "forbidden" error.
+type ListSessionLinksForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksBadRequestResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "bad_request" error.
+type ListSessionLinksBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksNotFoundResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "not_found" error.
+type ListSessionLinksNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksConflictResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "conflict" error.
+type ListSessionLinksConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksUnsupportedMediaResponseBody is the type of the "chat"
+// service "listSessionLinks" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSessionLinksUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksInvalidResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "invalid" error.
+type ListSessionLinksInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksInvariantViolationResponseBody is the type of the "chat"
+// service "listSessionLinks" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSessionLinksInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksUnexpectedResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "unexpected" error.
+type ListSessionLinksUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionLinksGatewayErrorResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "gateway_error" error.
+type ListSessionLinksGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
 	// The ID of the chat
@@ -2659,6 +2848,34 @@ type ChatTotalsResponseBody struct {
 	RiskOnly int64 `form:"risk_only" json:"risk_only" xml:"risk_only"`
 }
 
+// ChatSessionLinkResponseBody is used to define fields on response body types.
+type ChatSessionLinkResponseBody struct {
+	// Chat id of the session the move originated from.
+	ParentChatID string `form:"parent_chat_id" json:"parent_chat_id" xml:"parent_chat_id"`
+	// Chat id derived for the continuation. Absent when the continuation's session
+	// id was unknowable at move time (e.g. Cursor mints ids server-side).
+	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
+	// Title of the parent chat, when it has been captured and titled.
+	ParentTitle *string `form:"parent_title,omitempty" json:"parent_title,omitempty" xml:"parent_title,omitempty"`
+	// Title of the child chat, when it has been captured and titled.
+	ChildTitle *string `form:"child_title,omitempty" json:"child_title,omitempty" xml:"child_title,omitempty"`
+	// Whether the continuation exists as a captured chat, i.e. whether the child
+	// side is navigable.
+	ChildCaptured bool `form:"child_captured" json:"child_captured" xml:"child_captured"`
+	// Link kind. Currently always 'move'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness string `form:"target_harness" json:"target_harness" xml:"target_harness"`
+	// Harness the session originated in, when known.
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+	// Email of the person who initiated the move, when known.
+	ActorEmail *string `form:"actor_email,omitempty" json:"actor_email,omitempty" xml:"actor_email,omitempty"`
+	// Hostname of the machine the move happened on, when known.
+	DeviceHostname *string `form:"device_hostname,omitempty" json:"device_hostname,omitempty" xml:"device_hostname,omitempty"`
+	// When the move was recorded.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // NewListChatsResponseBody builds the HTTP response body from the result of
 // the "listChats" endpoint of the "chat" service.
 func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody {
@@ -2862,6 +3079,25 @@ func NewListSourcesResponseBody(res *chat.ListSourcesResult) *ListSourcesRespons
 		}
 	} else {
 		body.Sources = []string{}
+	}
+	return body
+}
+
+// NewListSessionLinksResponseBody builds the HTTP response body from the
+// result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksResponseBody(res *chat.ListSessionLinksResult) *ListSessionLinksResponseBody {
+	body := &ListSessionLinksResponseBody{}
+	if res.Links != nil {
+		body.Links = make([]*ChatSessionLinkResponseBody, len(res.Links))
+		for i, val := range res.Links {
+			if val == nil {
+				body.Links[i] = nil
+				continue
+			}
+			body.Links[i] = marshalChatChatSessionLinkToChatSessionLinkResponseBody(val)
+		}
+	} else {
+		body.Links = []*ChatSessionLinkResponseBody{}
 	}
 	return body
 }
@@ -4560,6 +4796,148 @@ func NewListSourcesGatewayErrorResponseBody(res *goa.ServiceError) *ListSourcesG
 	return body
 }
 
+// NewListSessionLinksUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksUnauthorizedResponseBody(res *goa.ServiceError) *ListSessionLinksUnauthorizedResponseBody {
+	body := &ListSessionLinksUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksForbiddenResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksForbiddenResponseBody(res *goa.ServiceError) *ListSessionLinksForbiddenResponseBody {
+	body := &ListSessionLinksForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksBadRequestResponseBody(res *goa.ServiceError) *ListSessionLinksBadRequestResponseBody {
+	body := &ListSessionLinksBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksNotFoundResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksNotFoundResponseBody(res *goa.ServiceError) *ListSessionLinksNotFoundResponseBody {
+	body := &ListSessionLinksNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksConflictResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksConflictResponseBody(res *goa.ServiceError) *ListSessionLinksConflictResponseBody {
+	body := &ListSessionLinksConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listSessionLinks" endpoint of the "chat"
+// service.
+func NewListSessionLinksUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSessionLinksUnsupportedMediaResponseBody {
+	body := &ListSessionLinksUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksInvalidResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksInvalidResponseBody(res *goa.ServiceError) *ListSessionLinksInvalidResponseBody {
+	body := &ListSessionLinksInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listSessionLinks" endpoint of the "chat"
+// service.
+func NewListSessionLinksInvariantViolationResponseBody(res *goa.ServiceError) *ListSessionLinksInvariantViolationResponseBody {
+	body := &ListSessionLinksInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksUnexpectedResponseBody(res *goa.ServiceError) *ListSessionLinksUnexpectedResponseBody {
+	body := &ListSessionLinksUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionLinksGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listSessionLinks" endpoint of the "chat" service.
+func NewListSessionLinksGatewayErrorResponseBody(res *goa.ServiceError) *ListSessionLinksGatewayErrorResponseBody {
+	body := &ListSessionLinksGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListChatsPayload builds a chat service listChats endpoint payload.
 func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
@@ -4722,6 +5100,18 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 // NewListSourcesPayload builds a chat service listSources endpoint payload.
 func NewListSourcesPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListSourcesPayload {
 	v := &chat.ListSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
+// NewListSessionLinksPayload builds a chat service listSessionLinks endpoint
+// payload.
+func NewListSessionLinksPayload(chatIds []string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListSessionLinksPayload {
+	v := &chat.ListSessionLinksPayload{}
+	v.ChatIds = chatIds
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

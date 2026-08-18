@@ -193,6 +193,9 @@ var _ = Service("agent", func() {
 			Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).", func() {
 				MaxLength(64)
 			})
+			Attribute("target_session_id", String, "Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.", func() {
+				MaxLength(256)
+			})
 			Attribute("source_surface", String, "Harness the session originated in, as detected by the agent (e.g. claude-code, codex).", func() {
 				MaxLength(64)
 			})

@@ -246,6 +246,13 @@ type ListSourcesResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 }
 
+// ListSessionLinksResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body.
+type ListSessionLinksResponseBody struct {
+	// Links touching the requested chats, newest first.
+	Links []*ChatSessionLinkResponseBody `form:"links,omitempty" json:"links,omitempty" xml:"links,omitempty"`
+}
+
 // ListChatsUnauthorizedResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "unauthorized" error.
 type ListChatsUnauthorizedResponseBody struct {
@@ -2428,6 +2435,188 @@ type ListSourcesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSessionLinksUnauthorizedResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "unauthorized" error.
+type ListSessionLinksUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksForbiddenResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "forbidden" error.
+type ListSessionLinksForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksBadRequestResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "bad_request" error.
+type ListSessionLinksBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksNotFoundResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "not_found" error.
+type ListSessionLinksNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksConflictResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "conflict" error.
+type ListSessionLinksConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksUnsupportedMediaResponseBody is the type of the "chat"
+// service "listSessionLinks" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSessionLinksUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksInvalidResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "invalid" error.
+type ListSessionLinksInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksInvariantViolationResponseBody is the type of the "chat"
+// service "listSessionLinks" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSessionLinksInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksUnexpectedResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "unexpected" error.
+type ListSessionLinksUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionLinksGatewayErrorResponseBody is the type of the "chat" service
+// "listSessionLinks" endpoint HTTP response body for the "gateway_error" error.
+type ListSessionLinksGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
 	// The ID of the chat
@@ -2656,6 +2845,34 @@ type ChatTotalsResponseBody struct {
 	// Number of messages with an active (found, non-suppressed) risk finding in
 	// the generation.
 	RiskOnly *int64 `form:"risk_only,omitempty" json:"risk_only,omitempty" xml:"risk_only,omitempty"`
+}
+
+// ChatSessionLinkResponseBody is used to define fields on response body types.
+type ChatSessionLinkResponseBody struct {
+	// Chat id of the session the move originated from.
+	ParentChatID *string `form:"parent_chat_id,omitempty" json:"parent_chat_id,omitempty" xml:"parent_chat_id,omitempty"`
+	// Chat id derived for the continuation. Absent when the continuation's session
+	// id was unknowable at move time (e.g. Cursor mints ids server-side).
+	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
+	// Title of the parent chat, when it has been captured and titled.
+	ParentTitle *string `form:"parent_title,omitempty" json:"parent_title,omitempty" xml:"parent_title,omitempty"`
+	// Title of the child chat, when it has been captured and titled.
+	ChildTitle *string `form:"child_title,omitempty" json:"child_title,omitempty" xml:"child_title,omitempty"`
+	// Whether the continuation exists as a captured chat, i.e. whether the child
+	// side is navigable.
+	ChildCaptured *bool `form:"child_captured,omitempty" json:"child_captured,omitempty" xml:"child_captured,omitempty"`
+	// Link kind. Currently always 'move'.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness *string `form:"target_harness,omitempty" json:"target_harness,omitempty" xml:"target_harness,omitempty"`
+	// Harness the session originated in, when known.
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+	// Email of the person who initiated the move, when known.
+	ActorEmail *string `form:"actor_email,omitempty" json:"actor_email,omitempty" xml:"actor_email,omitempty"`
+	// Hostname of the machine the move happened on, when known.
+	DeviceHostname *string `form:"device_hostname,omitempty" json:"device_hostname,omitempty" xml:"device_hostname,omitempty"`
+	// When the move was recorded.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
@@ -4701,6 +4918,172 @@ func NewListSourcesGatewayError(body *ListSourcesGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewListSessionLinksResultOK builds a "chat" service "listSessionLinks"
+// endpoint result from a HTTP "OK" response.
+func NewListSessionLinksResultOK(body *ListSessionLinksResponseBody) *chat.ListSessionLinksResult {
+	v := &chat.ListSessionLinksResult{}
+	v.Links = make([]*chat.ChatSessionLink, len(body.Links))
+	for i, val := range body.Links {
+		if val == nil {
+			v.Links[i] = nil
+			continue
+		}
+		v.Links[i] = unmarshalChatSessionLinkResponseBodyToChatChatSessionLink(val)
+	}
+
+	return v
+}
+
+// NewListSessionLinksUnauthorized builds a chat service listSessionLinks
+// endpoint unauthorized error.
+func NewListSessionLinksUnauthorized(body *ListSessionLinksUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksForbidden builds a chat service listSessionLinks endpoint
+// forbidden error.
+func NewListSessionLinksForbidden(body *ListSessionLinksForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksBadRequest builds a chat service listSessionLinks
+// endpoint bad_request error.
+func NewListSessionLinksBadRequest(body *ListSessionLinksBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksNotFound builds a chat service listSessionLinks endpoint
+// not_found error.
+func NewListSessionLinksNotFound(body *ListSessionLinksNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksConflict builds a chat service listSessionLinks endpoint
+// conflict error.
+func NewListSessionLinksConflict(body *ListSessionLinksConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksUnsupportedMedia builds a chat service listSessionLinks
+// endpoint unsupported_media error.
+func NewListSessionLinksUnsupportedMedia(body *ListSessionLinksUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksInvalid builds a chat service listSessionLinks endpoint
+// invalid error.
+func NewListSessionLinksInvalid(body *ListSessionLinksInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksInvariantViolation builds a chat service listSessionLinks
+// endpoint invariant_violation error.
+func NewListSessionLinksInvariantViolation(body *ListSessionLinksInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksUnexpected builds a chat service listSessionLinks
+// endpoint unexpected error.
+func NewListSessionLinksUnexpected(body *ListSessionLinksUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionLinksGatewayError builds a chat service listSessionLinks
+// endpoint gateway_error error.
+func NewListSessionLinksGatewayError(body *ListSessionLinksGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListChatsResponseBody runs the validations defined on
 // ListChatsResponseBody
 func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
@@ -4922,6 +5305,22 @@ func ValidateSubmitFeedbackResponseBody(body *SubmitFeedbackResponseBody) (err e
 func ValidateListSourcesResponseBody(body *ListSourcesResponseBody) (err error) {
 	if body.Sources == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sources", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksResponseBody runs the validations defined on
+// ListSessionLinksResponseBody
+func ValidateListSessionLinksResponseBody(body *ListSessionLinksResponseBody) (err error) {
+	if body.Links == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("links", "body"))
+	}
+	for _, e := range body.Links {
+		if e != nil {
+			if err2 := ValidateChatSessionLinkResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -7808,6 +8207,246 @@ func ValidateListSourcesGatewayErrorResponseBody(body *ListSourcesGatewayErrorRe
 	return
 }
 
+// ValidateListSessionLinksUnauthorizedResponseBody runs the validations
+// defined on listSessionLinks_unauthorized_response_body
+func ValidateListSessionLinksUnauthorizedResponseBody(body *ListSessionLinksUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksForbiddenResponseBody runs the validations defined
+// on listSessionLinks_forbidden_response_body
+func ValidateListSessionLinksForbiddenResponseBody(body *ListSessionLinksForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksBadRequestResponseBody runs the validations defined
+// on listSessionLinks_bad_request_response_body
+func ValidateListSessionLinksBadRequestResponseBody(body *ListSessionLinksBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksNotFoundResponseBody runs the validations defined on
+// listSessionLinks_not_found_response_body
+func ValidateListSessionLinksNotFoundResponseBody(body *ListSessionLinksNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksConflictResponseBody runs the validations defined on
+// listSessionLinks_conflict_response_body
+func ValidateListSessionLinksConflictResponseBody(body *ListSessionLinksConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksUnsupportedMediaResponseBody runs the validations
+// defined on listSessionLinks_unsupported_media_response_body
+func ValidateListSessionLinksUnsupportedMediaResponseBody(body *ListSessionLinksUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksInvalidResponseBody runs the validations defined on
+// listSessionLinks_invalid_response_body
+func ValidateListSessionLinksInvalidResponseBody(body *ListSessionLinksInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksInvariantViolationResponseBody runs the validations
+// defined on listSessionLinks_invariant_violation_response_body
+func ValidateListSessionLinksInvariantViolationResponseBody(body *ListSessionLinksInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksUnexpectedResponseBody runs the validations defined
+// on listSessionLinks_unexpected_response_body
+func ValidateListSessionLinksUnexpectedResponseBody(body *ListSessionLinksUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionLinksGatewayErrorResponseBody runs the validations
+// defined on listSessionLinks_gateway_error_response_body
+func ValidateListSessionLinksGatewayErrorResponseBody(body *ListSessionLinksGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateChatOverviewResponseBody runs the validations defined on
 // ChatOverviewResponseBody
 func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error) {
@@ -8068,6 +8707,36 @@ func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
 	}
 	if body.RiskOnly == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
+	}
+	return
+}
+
+// ValidateChatSessionLinkResponseBody runs the validations defined on
+// ChatSessionLinkResponseBody
+func ValidateChatSessionLinkResponseBody(body *ChatSessionLinkResponseBody) (err error) {
+	if body.ParentChatID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("parent_chat_id", "body"))
+	}
+	if body.ChildCaptured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("child_captured", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.TargetHarness == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_harness", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ParentChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.parent_chat_id", *body.ParentChatID, goa.FormatUUID))
+	}
+	if body.ChildChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.child_chat_id", *body.ChildChatID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

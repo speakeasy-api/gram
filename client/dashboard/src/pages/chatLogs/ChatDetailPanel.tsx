@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronsDown,
   ChevronUp,
+  GitBranch,
   Info,
   Loader2,
   Pin,
@@ -38,6 +39,7 @@ import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -123,6 +125,9 @@ interface ChatDetailPanelProps {
   /** Dim non-flagged rows to spotlight findings, without the risk windowing.
    * Use from risk-filtered lists (e.g. Agent Sessions filtered to has_risk). */
   dimNonRisk?: boolean;
+  /** Open a different chat in the panel — used by the Linked-sessions section
+   * to hop to a move's other end. Omitted, linked sessions render unlinked. */
+  onOpenChat?: (chatId: string) => void;
 }
 
 interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
@@ -204,6 +209,7 @@ export function ChatDetailSheet({
   focusedMessageTurn,
   riskFocus,
   dimNonRisk,
+  onOpenChat,
 }: ChatDetailSheetProps): JSX.Element {
   return (
     <Sheet
@@ -230,6 +236,7 @@ export function ChatDetailSheet({
                   focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
+                  onOpenChat={onOpenChat}
                 />
               </ErrorBoundary>
             )}
@@ -786,6 +793,108 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+// harnessLabel renders a wire-format harness value ("claude-code") as its
+// display name. Unknown values pass through raw rather than guessing.
+function harnessLabel(harness: string): string {
+  switch (harness) {
+    case "claude-code":
+      return "Claude Code";
+    case "cursor":
+    case "cursor-app":
+      return "Cursor";
+    case "codex":
+      return "Codex";
+    default:
+      return harness;
+  }
+}
+
+// SessionLinksSection lists session-lineage edges touching this chat: moves
+// out of it ("Moved to …") and moves that produced it ("Derived from …").
+// Presence-gated — chats with no edges render nothing, so there is no feature
+// flag and no empty state.
+function SessionLinksSection({
+  chatId,
+  onOpenChat,
+}: {
+  chatId: string;
+  onOpenChat?: (chatId: string) => void;
+}) {
+  const { data } = useListChatSessionLinks({ chatIds: [chatId] });
+  const links = data?.links ?? [];
+  if (links.length === 0) {
+    return null;
+  }
+
+  const outbound = links.filter((l) => l.parentChatId === chatId);
+  const inbound = links.filter((l) => l.childChatId === chatId);
+
+  const hop = (target: string | undefined, navigable: boolean) =>
+    onOpenChat && navigable && target ? () => onOpenChat(target) : undefined;
+
+  const row = (
+    key: string,
+    label: ReactNode,
+    when: Date,
+    onHop: (() => void) | undefined,
+    detail?: string,
+  ) => (
+    <div key={key} className="flex items-baseline justify-between gap-3 py-1">
+      <span className="min-w-0 truncate text-xs">
+        {onHop ? (
+          <button
+            type="button"
+            onClick={onHop}
+            className="text-foreground cursor-pointer font-medium underline-offset-2 hover:underline"
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="text-foreground font-medium">{label}</span>
+        )}
+        {detail && <span className="text-muted-foreground"> · {detail}</span>}
+      </span>
+      <span
+        className="text-muted-foreground shrink-0 text-xs"
+        title={format(when, "PPpp")}
+      >
+        {formatDistanceToNow(when, { addSuffix: true })}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium">
+        <GitBranch className="size-3.5" aria-hidden />
+        Linked sessions
+      </div>
+      <div className="mt-1">
+        {inbound.map((link) =>
+          row(
+            `in-${link.parentChatId}-${link.createdAt.toISOString()}`,
+            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            link.createdAt,
+            hop(link.parentChatId, true),
+            link.actorEmail ?? undefined,
+          ),
+        )}
+        {outbound.map((link) =>
+          row(
+            `out-${link.childChatId ?? "pending"}-${link.createdAt.toISOString()}`,
+            <>Moved to {harnessLabel(link.targetHarness)}</>,
+            link.createdAt,
+            hop(link.childChatId, link.childCaptured),
+            link.childCaptured
+              ? (link.childTitle ?? undefined)
+              : "not yet captured",
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SessionSummarySection({
   chatId,
   summary,
@@ -914,6 +1023,7 @@ function ChatDetailPanel({
   focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
+  onOpenChat,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
   const { user } = useSession();
@@ -1519,6 +1629,12 @@ function ChatDetailPanel({
           setLocalSummary(nextSummary);
           setLocalSummaryGeneratedAt(generatedAt);
         }}
+      />
+
+      <SessionLinksSection
+        key={`links-${chatId}`}
+        chatId={chatId}
+        onOpenChat={onOpenChat}
       />
 
       {chatLoadHasErrors && (
