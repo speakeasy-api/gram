@@ -113,18 +113,8 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
 		ActionURL:        s.siteURL.JoinPath(organization.Slug, "billing").String(),
 	}
-	sendErrors := make([]error, 0, len(recipients)+1)
-	if resolutionErr != nil {
-		sendErrors = append(sendErrors, resolutionErr)
-	}
-	for _, recipient := range recipients {
-		key := RecipientIdempotencyKey(recipient, "trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
-		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
-			s.logger.ErrorContext(ctx, "send trial ending soon email", attr.SlogOrganizationID(input.OrganizationID), attr.SlogError(err))
-			sendErrors = append(sendErrors, err)
-		}
-	}
-	return SendTrialEndingSoonResult{}, errors.Join(sendErrors...)
+	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
+		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
 }
 
 type AccessPausedKind string
@@ -197,18 +187,7 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 		OrganizationName: organization.Name,
 		ActionURL:        s.siteURL.JoinPath(organization.Slug).String(),
 	}
-	sendErrors := make([]error, 0, len(recipients)+1)
-	if resolutionErr != nil {
-		sendErrors = append(sendErrors, resolutionErr)
-	}
-	for _, recipient := range recipients {
-		key := RecipientIdempotencyKey(recipient, "access-paused", input.EventID)
-		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
-			s.logger.ErrorContext(ctx, "send access paused email", attr.SlogOrganizationID(input.OrganizationID), attr.SlogOutboxPublicID(input.EventID), attr.SlogError(err))
-			sendErrors = append(sendErrors, err)
-		}
-	}
-	return errors.Join(sendErrors...)
+	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "access-paused", input.EventID)
 }
 
 type SendPaygActivatedInput struct {
@@ -250,14 +229,29 @@ func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivated
 		TumPricePerMillionUsd: billing.TUMPricePerMillionUSD,
 		ActionURL:             s.siteURL.JoinPath(organization.Slug, "billing").String(),
 	}
+	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "payg-activated", input.EventID)
+}
+
+// deliver sends one template to every resolved recipient. A recipient
+// resolution failure never skips the addresses that did resolve: the send
+// happens first and the failure joins the per-recipient errors.
+func (s *Service) deliver(ctx context.Context, organizationID, eventID string, recipients []string, resolutionErr error, template email.Template, keyParts ...string) error {
 	sendErrors := make([]error, 0, len(recipients)+1)
 	if resolutionErr != nil {
 		sendErrors = append(sendErrors, resolutionErr)
 	}
 	for _, recipient := range recipients {
-		key := RecipientIdempotencyKey(recipient, "payg-activated", input.EventID)
+		key := RecipientIdempotencyKey(recipient, keyParts...)
 		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
-			s.logger.ErrorContext(ctx, "send PAYG activation email", attr.SlogOrganizationID(input.OrganizationID), attr.SlogOutboxPublicID(input.EventID), attr.SlogError(err))
+			logAttrs := []any{
+				attr.SlogOrganizationID(organizationID),
+				attr.SlogEvent(string(template.Key())),
+				attr.SlogError(err),
+			}
+			if eventID != "" {
+				logAttrs = append(logAttrs, attr.SlogOutboxPublicID(eventID))
+			}
+			s.logger.ErrorContext(ctx, "send billing notification email", logAttrs...)
 			sendErrors = append(sendErrors, err)
 		}
 	}
