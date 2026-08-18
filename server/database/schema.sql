@@ -1300,6 +1300,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_project_id_deleted_idx ON http_tool_definitions (project_id, deleted);
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
