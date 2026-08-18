@@ -9,6 +9,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 
 import { Badge } from "@/components/ui/Badge";
+import { useOrganization } from "@/contexts/Auth";
 import { Button } from "@/components/ui/Button";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -221,6 +222,7 @@ const WORK_UNITS_MAX_CAP = 10_000;
 const WORK_UNITS_SUGGESTED_CAP = 100;
 
 function RunChatAnalysisNow(): JSX.Element {
+  const organization = useOrganization();
   const trigger = useTriggerChatAnalysisMutation({
     onSuccess: (data) => {
       toast.success(
@@ -243,7 +245,15 @@ function RunChatAnalysisNow(): JSX.Element {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => trigger.mutate({})}
+        onClick={() =>
+          trigger.mutate({
+            request: {
+              triggerAnalysisRequestBody: {
+                organizationId: organization.id,
+              },
+            },
+          })
+        }
         disabled={trigger.isPending}
       >
         {trigger.isPending ? "Running…" : "Run now"}
@@ -257,14 +267,16 @@ function RunChatAnalysisNow(): JSX.Element {
 // reservation spends against, so they get their own section beside the
 // entitlement toggles rather than rows among them.
 function ChatAnalysisSection(): JSX.Element {
+  const organization = useOrganization();
+
   return (
     <AdminSection
       title="Chat analysis"
       description="Caps are evaluations per UTC day; a cap of 0 disables the pipeline."
     >
       <div className="divide-border divide-y">
-        <WorkUnitsAnalysisRow />
-        <BusinessMemoryAnalysisRow />
+        <WorkUnitsAnalysisRow key={`work-units-${organization.id}`} />
+        <BusinessMemoryAnalysisRow key={`business-memory-${organization.id}`} />
       </div>
     </AdminSection>
   );
@@ -389,10 +401,15 @@ function AnalysisRow({
 }
 
 function WorkUnitsAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertChatAnalysisSettingsMutation();
 
   return (
@@ -415,6 +432,7 @@ function WorkUnitsAnalysisRow(): JSX.Element {
           {
             request: {
               upsertWorkUnitsSettingsRequestBody: {
+                organizationId: organization.id,
                 workUnitsEnabled: enabled,
                 workUnitsDailyCap: dailyCap,
               },
@@ -433,10 +451,15 @@ function WorkUnitsAnalysisRow(): JSX.Element {
 }
 
 function BusinessMemoryAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertBusinessMemoryAnalysisSettingsMutation();
 
   return (
@@ -459,6 +482,7 @@ function BusinessMemoryAnalysisRow(): JSX.Element {
           {
             request: {
               upsertBusinessMemorySettingsRequestBody: {
+                organizationId: organization.id,
                 businessMemoryEnabled: enabled,
                 businessMemoryDailyCap: dailyCap,
               },
