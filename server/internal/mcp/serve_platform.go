@@ -208,7 +208,7 @@ func (s *Service) handlePlatformToolsetRequest(
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
 	case "notifications/initialized", "notifications/cancelled":
@@ -245,12 +245,10 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram Platform Toolset",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoPlatformToolset,
 			Instructions: "",
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -288,8 +286,9 @@ func (s *Service) listPlatformToolsetTools(
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
-		ID:     req.ID,
-		Result: toolsListResultTools{Tools: tools},
+		ID:             req.ID,
+		Result:         toolsListResultTools{Tools: tools},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
@@ -482,6 +481,7 @@ func (s *Service) callPlatformToolsetTool(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))

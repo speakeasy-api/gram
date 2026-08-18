@@ -97,7 +97,8 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *metri
 	instructions := fetchInstructions(ctx, logger, toolsetsRepoParam, metadataRepoParam, payload.toolset, payload.projectID)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
+		ID:             req.ID,
+		serverIdentity: serverInfoHostedToolset,
 		Result: initializeResult{
 			ProtocolVersion: mcpversions.ServedHostedToolset,
 			Capabilities: map[string]json.RawMessage{
@@ -105,10 +106,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *metri
 				"prompts":   json.RawMessage("{}"),
 				"resources": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoHostedToolset,
 			Instructions: instructions,
 		},
 	}
