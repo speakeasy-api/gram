@@ -252,7 +252,10 @@ ORDER BY created_at ASC, id ASC;
 -- column to NULL, any other value sets it. Operators need the clear path
 -- to disable DCR or remove stale discovery results on already-saved
 -- issuers. slug and issuer are NOT NULL; the handler rejects an explicit
--- empty for those before reaching this query.
+-- empty for those before reaching this query. logo_asset_id gets the same
+-- three states through a text parameter cast to uuid in the set arm; the
+-- handler validates the uuid before reaching this query so a malformed
+-- value cannot surface as a Postgres cast error.
 UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
@@ -261,7 +264,11 @@ SET
         WHEN sqlc.narg('name')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
-    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    logo_asset_id = CASE
+        WHEN sqlc.narg('logo_asset_id')::text = '' THEN NULL
+        WHEN sqlc.narg('logo_asset_id')::text IS NULL THEN logo_asset_id
+        ELSE (sqlc.narg('logo_asset_id')::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
@@ -837,6 +844,8 @@ SELECT
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.logo_asset_id                        AS issuer_logo_asset_id,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
@@ -1292,7 +1301,11 @@ SET
         WHEN sqlc.narg('name')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
-    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    logo_asset_id = CASE
+        WHEN sqlc.narg('logo_asset_id')::text = '' THEN NULL
+        WHEN sqlc.narg('logo_asset_id')::text IS NULL THEN logo_asset_id
+        ELSE (sqlc.narg('logo_asset_id')::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
@@ -1787,7 +1800,11 @@ SET
         WHEN sqlc.narg('name')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
-    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    logo_asset_id = CASE
+        WHEN sqlc.narg('logo_asset_id')::text = '' THEN NULL
+        WHEN sqlc.narg('logo_asset_id')::text IS NULL THEN logo_asset_id
+        ELSE (sqlc.narg('logo_asset_id')::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)

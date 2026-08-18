@@ -3347,6 +3347,8 @@ SELECT
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.logo_asset_id                        AS issuer_logo_asset_id,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
@@ -3382,6 +3384,8 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	IssuerSlug              string
+	IssuerName              pgtype.Text
+	IssuerLogoAssetID       uuid.NullUUID
 	IssuerUrl               string
 	AuthorizationEndpoint   pgtype.Text
 	TokenEndpoint           pgtype.Text
@@ -3415,6 +3419,8 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.LegacyCallbackUrl,
 			&i.RemoteSessionIssuerID,
 			&i.IssuerSlug,
+			&i.IssuerName,
+			&i.IssuerLogoAssetID,
 			&i.IssuerUrl,
 			&i.AuthorizationEndpoint,
 			&i.TokenEndpoint,
@@ -4491,7 +4497,11 @@ SET
         WHEN $3::text = '' THEN NULL
         ELSE COALESCE($3, name)
     END,
-    logo_asset_id = COALESCE($4, logo_asset_id),
+    logo_asset_id = CASE
+        WHEN $4::text = '' THEN NULL
+        WHEN $4::text IS NULL THEN logo_asset_id
+        ELSE ($4::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
@@ -4544,7 +4554,7 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	Slug                              pgtype.Text
 	Issuer                            pgtype.Text
 	Name                              pgtype.Text
-	LogoAssetID                       uuid.NullUUID
+	LogoAssetID                       pgtype.Text
 	ClientSetupDocumentationUrl       pgtype.Text
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
@@ -4698,7 +4708,11 @@ SET
         WHEN $3::text = '' THEN NULL
         ELSE COALESCE($3, name)
     END,
-    logo_asset_id = COALESCE($4, logo_asset_id),
+    logo_asset_id = CASE
+        WHEN $4::text = '' THEN NULL
+        WHEN $4::text IS NULL THEN logo_asset_id
+        ELSE ($4::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
@@ -4751,7 +4765,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	Slug                              pgtype.Text
 	Issuer                            pgtype.Text
 	Name                              pgtype.Text
-	LogoAssetID                       uuid.NullUUID
+	LogoAssetID                       pgtype.Text
 	ClientSetupDocumentationUrl       pgtype.Text
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
@@ -4936,7 +4950,11 @@ SET
         WHEN $3::text = '' THEN NULL
         ELSE COALESCE($3, name)
     END,
-    logo_asset_id = COALESCE($4, logo_asset_id),
+    logo_asset_id = CASE
+        WHEN $4::text = '' THEN NULL
+        WHEN $4::text IS NULL THEN logo_asset_id
+        ELSE ($4::text)::uuid
+    END,
     client_setup_documentation_url = CASE
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
@@ -4989,7 +5007,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	Slug                              pgtype.Text
 	Issuer                            pgtype.Text
 	Name                              pgtype.Text
-	LogoAssetID                       uuid.NullUUID
+	LogoAssetID                       pgtype.Text
 	ClientSetupDocumentationUrl       pgtype.Text
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
@@ -5015,7 +5033,10 @@ type UpdateRemoteSessionIssuerParams struct {
 // column to NULL, any other value sets it. Operators need the clear path
 // to disable DCR or remove stale discovery results on already-saved
 // issuers. slug and issuer are NOT NULL; the handler rejects an explicit
-// empty for those before reaching this query.
+// empty for those before reaching this query. logo_asset_id gets the same
+// three states through a text parameter cast to uuid in the set arm; the
+// handler validates the uuid before reaching this query so a malformed
+// value cannot surface as a Postgres cast error.
 func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionIssuer,
 		arg.Slug,
