@@ -477,6 +477,24 @@ type ChatResolutionMessage struct {
 	MessageID        uuid.UUID
 }
 
+type ChatSessionLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	Kind            string
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ChatUserFeedback struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID

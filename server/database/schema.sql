@@ -7132,6 +7132,63 @@ ON session_handoff_links (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
 
+CREATE TABLE IF NOT EXISTS chat_session_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- Both ends are DERIVED chat ids (chat.SessionIDToChatID over the native
+  -- harness session id), recorded at move-report time — usually before either
+  -- chat is captured. No FK to chats: the far end may never get a chat row at
+  -- all (a Cursor continuation is never captured), matching how chats.user_id
+  -- trusts ingest for integrity.
+  parent_chat_id uuid NOT NULL,
+  -- NULL when the continuation's session id is unknowable at move time
+  -- (Cursor mints ids server-side). The edge still renders as "moved to".
+  child_chat_id uuid,
+  -- Raw native harness session ids, kept for debugging and for retroactively
+  -- closing NULL-child edges if such a continuation is captured later.
+  parent_session_id TEXT NOT NULL,
+  child_session_id TEXT,
+  -- Edge kind. Only 'move' is written today; reserved for future
+  -- evidence-based kinds (e.g. a proven handoff-URL continuation).
+  kind TEXT NOT NULL DEFAULT 'move',
+  target_harness TEXT NOT NULL,
+  source_surface TEXT,
+  -- Display attribution mirrored from the move report (the same values the
+  -- chat_session:move audit event records). Email rather than a user id
+  -- because MDM installs report moves with a vouched email and no user.
+  actor_email TEXT,
+  device_serial TEXT,
+  device_hostname TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_session_links_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_session_links_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite tenancy pin: the database guarantees organization_id agrees
+  -- with the project's real owner, same as session_handoff_links.
+  CONSTRAINT chat_session_links_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- The Agent Sessions detail panel fetches edges for a chat from either end.
+CREATE INDEX IF NOT EXISTS chat_session_links_project_parent_idx
+ON chat_session_links (project_id, parent_chat_id);
+
+CREATE INDEX IF NOT EXISTS chat_session_links_project_child_idx
+ON chat_session_links (project_id, child_chat_id) WHERE child_chat_id IS NOT NULL;
+
+-- Daemon retries of the same move must not double-edge. NULL-child edges may
+-- repeat freely: each unknowable-continuation move is a distinct event.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_session_links_parent_child_key
+ON chat_session_links (parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL;
+
+-- Serves both cascade paths, mirroring session_handoff_links: organization
+-- deletes scan the leading column, project deletes the full pair.
+CREATE INDEX IF NOT EXISTS chat_session_links_organization_project_idx
+ON chat_session_links (organization_id, project_id);
+
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_workflows (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
