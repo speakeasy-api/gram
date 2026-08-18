@@ -386,15 +386,18 @@ function ResearchReports({
         <Heading variant="h3" className="text-lg font-thin">
           Web research
         </Heading>
-        {/* Display only — the endpoint enforces the same flag, and any
-            non-disabled state (loading, missing, error) falls through to the
-            button so a PostHog hiccup never hides a working control. */}
-        {researchFlag.status === "disabled" ? (
+        {/* Display only — the endpoint enforces the same flag, and it fails
+            closed on an unreadable flag, so anything but a confirmed enabled
+            renders no button: a control the server would 403 is the breakage
+            this section exists to remove. Only a confirmed disabled shows the
+            plan message; loading/missing/error resolve to nothing. */}
+        {researchFlag.status === "disabled" && (
           <p className="text-muted-foreground max-w-72 text-right text-xs">
             Web research isn't included in your organization's plan yet —
             contact your Speakeasy representative to enable it.
           </p>
-        ) : (
+        )}
+        {researchFlag.status === "enabled" && (
           // The same org-admin gate as the endpoint behind it: research
           // spends the org's money, so a non-admin must not see a button
           // whose click comes back 403.
