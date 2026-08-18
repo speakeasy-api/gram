@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgerrcode"
@@ -45,6 +44,6 @@ func TestAllocationIndexNameMatchesSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(schema), stripeAllocationIdempotencyKeyIndex,
 		"index renamed in schema.sql without updating stripeAllocationIdempotencyKeyIndex")
-	require.True(t, strings.Contains(string(schema), "CREATE UNIQUE INDEX IF NOT EXISTS "+stripeAllocationIdempotencyKeyIndex),
+	require.Contains(t, string(schema), "CREATE UNIQUE INDEX IF NOT EXISTS "+stripeAllocationIdempotencyKeyIndex,
 		"index is no longer unique, so it can no longer signal a lost race")
 }
