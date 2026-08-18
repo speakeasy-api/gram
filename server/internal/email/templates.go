@@ -38,6 +38,7 @@ const (
 	TemplateKeyAccessRequest             TemplateKey = "access_request"
 	TemplateKeyTrialEndingSoon           TemplateKey = "trial_ending_soon"
 	TemplateKeyAccessPaused              TemplateKey = "access_paused"
+	TemplateKeyPaygActivated             TemplateKey = "payg_activated"
 )
 
 var (
@@ -124,4 +125,5 @@ var RegisteredTemplates = []Template{
 	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: ""},
 	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},
+	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},
 }

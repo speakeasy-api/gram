@@ -13,26 +13,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 )
 
-func TestAccessPausedEmailWorkflowStopsAfterBoundedRetries(t *testing.T) {
+func TestPaygActivatedEmailWorkflowStopsAfterBoundedRetries(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	var attempts atomic.Int32
 	env.RegisterActivityWithOptions(
-		func(context.Context, billingnotifications.SendAccessPausedInput) error {
+		func(context.Context, billingnotifications.SendPaygActivatedInput) error {
 			attempts.Add(1)
 			return errors.New("email service unavailable")
 		},
-		activity.RegisterOptions{Name: "SendAccessPausedEmail"},
+		activity.RegisterOptions{Name: "SendPaygActivatedEmail"},
 	)
 
-	env.ExecuteWorkflow(AccessPausedEmailWorkflow, billingnotifications.SendAccessPausedInput{
+	env.ExecuteWorkflow(PaygActivatedEmailWorkflow, billingnotifications.SendPaygActivatedInput{
 		EventID:        "<EVENT_ID>",
 		OrganizationID: "<ORGANIZATION_ID>",
-		Kind:           billingnotifications.AccessPausedSubscriptionLoss,
 	})
 
-	require.ErrorContains(t, env.GetWorkflowError(), "send access paused email")
+	require.ErrorContains(t, env.GetWorkflowError(), "send PAYG activated email")
 	require.Equal(t, billingEmailRetryMaximumAttempts, attempts.Load())
 }

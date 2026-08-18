@@ -48,6 +48,17 @@
       "source": "openrouter_internal_credits_threshold.lmx",
       "variables": ["organization_name", "threshold_percent", "exhausted"]
     },
+    "payg_activated": {
+      "managed_name": "gram.transactional.v2.payg_activated",
+      "subject": "Pay as you go is active for {data.organization_name}",
+      "preview_text": "Review your rates and manage billing.",
+      "source": "payg_activated.lmx",
+      "variables": [
+        "organization_name",
+        "tum_price_per_million_usd",
+        "action_url"
+      ]
+    },
     "team_invite": {
       "managed_name": "gram.transactional.v2.team_invite",
       "subject": "Join {data.organization_name} on Gram",

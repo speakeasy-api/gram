@@ -13,6 +13,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -105,25 +106,15 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 	if err != nil {
 		return SendTrialEndingSoonResult{}, err
 	}
-	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
+	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
 
 	template := email.TrialEndingSoon{
 		OrganizationName: organization.Name,
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
 		ActionURL:        s.siteURL.JoinPath(organization.Slug, "billing").String(),
 	}
-	sendErrors := make([]error, 0, len(recipients)+1)
-	if resolutionErr != nil {
-		sendErrors = append(sendErrors, resolutionErr)
-	}
-	for _, recipient := range recipients {
-		key := RecipientIdempotencyKey(recipient, "trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
-		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
-			s.logger.ErrorContext(ctx, "send trial ending soon email", attr.SlogOrganizationID(input.OrganizationID), attr.SlogError(err))
-			sendErrors = append(sendErrors, err)
-		}
-	}
-	return SendTrialEndingSoonResult{}, errors.Join(sendErrors...)
+	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
+		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
 }
 
 type AccessPausedKind string
@@ -155,15 +146,15 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 	if err != nil {
 		return fmt.Errorf("get organization: %w", err)
 	}
-	if organization.GramAccountType != "free" || organization.Whitelisted {
+	if billing.Tier(organization.GramAccountType) != billing.TierBase || organization.Whitelisted {
 		return nil
 	}
 
-	metadata, err := usagerepo.New(s.db).GetBillingMetadata(ctx, input.OrganizationID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get billing metadata: %w", err)
+	metadata, metadataErr := usagerepo.New(s.db).GetBillingMetadata(ctx, input.OrganizationID)
+	if metadataErr != nil && !errors.Is(metadataErr, pgx.ErrNoRows) {
+		return fmt.Errorf("get billing metadata: %w", metadataErr)
 	}
-	if err == nil && metadata.StripeSubscriptionID.Valid {
+	if metadataErr == nil && metadata.StripeSubscriptionID.Valid {
 		return nil
 	}
 
@@ -187,23 +178,80 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 		}
 	}
 
-	configuredEmail, err := s.configuredEmail(ctx, input.OrganizationID)
-	if err != nil {
-		return err
+	var configuredEmail *string
+	if metadataErr == nil && metadata.AlertEmail.Valid {
+		configuredEmail = &metadata.AlertEmail.String
 	}
-	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
+	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
 	template := email.AccessPaused{
 		OrganizationName: organization.Name,
 		ActionURL:        s.siteURL.JoinPath(organization.Slug).String(),
 	}
+	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "access-paused", input.EventID)
+}
+
+type SendPaygActivatedInput struct {
+	EventID        string
+	OrganizationID string
+}
+
+func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivatedInput) error {
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, input.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get organization: %w", err)
+	}
+	if billing.Tier(organization.GramAccountType) != billing.TierPayg {
+		return nil
+	}
+
+	metadata, err := usagerepo.New(s.db).GetBillingMetadata(ctx, input.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get billing metadata: %w", err)
+	}
+	if !metadata.StripeSubscriptionID.Valid {
+		return nil
+	}
+
+	var configuredEmail *string
+	if metadata.AlertEmail.Valid {
+		configuredEmail = &metadata.AlertEmail.String
+	}
+	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
+
+	template := email.PaygActivated{
+		OrganizationName:      organization.Name,
+		TumPricePerMillionUsd: billing.TUMPricePerMillionUSD,
+		ActionURL:             s.siteURL.JoinPath(organization.Slug, "billing").String(),
+	}
+	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "payg-activated", input.EventID)
+}
+
+// deliver sends one template to every resolved recipient. A recipient
+// resolution failure never skips the addresses that did resolve: the send
+// happens first and the failure joins the per-recipient errors.
+func (s *Service) deliver(ctx context.Context, organizationID, eventID string, recipients []string, resolutionErr error, template email.Template, keyParts ...string) error {
 	sendErrors := make([]error, 0, len(recipients)+1)
 	if resolutionErr != nil {
 		sendErrors = append(sendErrors, resolutionErr)
 	}
 	for _, recipient := range recipients {
-		key := RecipientIdempotencyKey(recipient, "access-paused", input.EventID)
+		key := RecipientIdempotencyKey(recipient, keyParts...)
 		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
-			s.logger.ErrorContext(ctx, "send access paused email", attr.SlogOrganizationID(input.OrganizationID), attr.SlogOutboxPublicID(input.EventID), attr.SlogError(err))
+			logAttrs := []any{
+				attr.SlogOrganizationID(organizationID),
+				attr.SlogEvent(string(template.Key())),
+				attr.SlogError(err),
+			}
+			if eventID != "" {
+				logAttrs = append(logAttrs, attr.SlogOutboxPublicID(eventID))
+			}
+			s.logger.ErrorContext(ctx, "send billing notification email", logAttrs...)
 			sendErrors = append(sendErrors, err)
 		}
 	}
