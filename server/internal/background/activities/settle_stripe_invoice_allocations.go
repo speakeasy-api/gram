@@ -8,7 +8,9 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -198,7 +200,7 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 				invoice.StripeInvoiceID,
 				destination,
 				now,
-			)); err != nil {
+			)); err != nil && !allocationAlreadyClaimed(err) {
 				return fmt.Errorf("freeze baseline for %s: %w", day.SourceDay.Time.Format(time.DateOnly), err)
 			}
 		}
@@ -286,12 +288,27 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 			invoice.StripeInvoiceID,
 			destination,
 			now,
-		)); err != nil {
+		)); err != nil && !allocationAlreadyClaimed(err) {
 			return fmt.Errorf("freeze carry for %s: %w", baseline.SourceKey, err)
 		}
 	}
 
 	return nil
+}
+
+// allocationAlreadyClaimed reports whether a failed allocation insert lost a
+// race to a concurrent settle rather than hitting a real fault.
+//
+// stripe_invoice_allocations carries two unique indexes that both derive from
+// the same (organization, source day, seq) tuple: the idempotency key and
+// (organization_id, source_kind, source_key, seq). ON CONFLICT DO NOTHING only
+// swallows conflicts on the index it names as the arbiter, so a racing insert
+// that reaches the idempotency-key index first still raises a unique violation.
+// Either conflict means the row this run wanted is already stored, and these
+// rows are immutable once written, so the loser has nothing left to do.
+func allocationAlreadyClaimed(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 func openRouterAllocationParams(
