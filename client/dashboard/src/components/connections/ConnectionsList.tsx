@@ -316,7 +316,19 @@ function ConnectionGroupRow({
   ];
 
   const attention = groupAttentionState(group, now);
-  const attentionTone = attention
+
+  // The accent flags the group on its worst connection, but the word only
+  // appears when every connection agrees. A person with one dead credential and
+  // two healthy ones is not "Needs re-auth" — stating it for the whole row
+  // reads as a claim about all three. The accent still says look here, and
+  // opening the row says which one.
+  const unanimous =
+    attention !== null &&
+    group.sessions.length > 0 &&
+    group.sessions.every(
+      (session) => connectionState(session, now) === attention,
+    );
+  const attentionTone = unanimous
     ? CONNECTION_STATE_PRESENTATION[attention]
     : null;
 

@@ -268,21 +268,3 @@ export function connectionDeadlineLabel(
   });
   return soonest <= 0 ? `expired ${relative}` : `expires ${relative}`;
 }
-
-/**
- * Plain-language status for a single upstream, for the detail view where each
- * provider is listed on its own rather than folded into a connection's state.
- */
-export function upstreamStateLabel(
-  upstream: UserSessionUpstream,
-  now: number = Date.now(),
-): string {
-  if (upstreamNeedsReauth(upstream, now)) return "needs re-authorization";
-
-  const remaining = upstreamDeadline(upstream, now);
-  if (remaining === null) return "connected";
-  if (remaining <= EXPIRING_WINDOW_MS) {
-    return `expires ${formatDistanceToNow(new Date(now + remaining), { addSuffix: true })}`;
-  }
-  return "connected";
-}
