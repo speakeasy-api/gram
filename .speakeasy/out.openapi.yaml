@@ -1933,9 +1933,17 @@ paths:
         name: UploadPlatformImage
   /rpc/adminChatAnalysis.getSettings:
     get:
-      description: Get the active organization's chat analysis settings. Requires platform admin.
+      description: Get the named organization's chat analysis settings. Requires platform admin.
       operationId: getChatAnalysisSettings
       parameters:
+        - allowEmptyValue: true
+          description: Organization whose settings to read.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization whose settings to read.
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -2015,7 +2023,7 @@ paths:
         name: ChatAnalysisSettings
   /rpc/adminChatAnalysis.triggerAnalysis:
     post:
-      description: Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+      description: Wake the chat analysis coordinator for every project in the named organization, instead of waiting for the periodic sweep. Requires platform admin.
       operationId: triggerChatAnalysis
       parameters:
         - allowEmptyValue: true
@@ -2025,6 +2033,12 @@ paths:
           schema:
             description: Session header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerAnalysisRequestBody'
+        required: true
       responses:
         "200":
           content:
@@ -2097,7 +2111,7 @@ paths:
         name: TriggerChatAnalysis
   /rpc/adminChatAnalysis.upsertBusinessMemorySettings:
     post:
-      description: Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+      description: Create or replace the named organization's business-memory extraction settings. Requires platform admin.
       operationId: upsertBusinessMemoryAnalysisSettings
       parameters:
         - allowEmptyValue: true
@@ -2185,7 +2199,7 @@ paths:
         name: UpsertBusinessMemoryAnalysisSettings
   /rpc/adminChatAnalysis.upsertWorkUnitsSettings:
     post:
-      description: Create or replace the active organization's chat analysis settings. Requires platform admin.
+      description: Create or replace the named organization's chat analysis settings. Requires platform admin.
       operationId: upsertChatAnalysisSettings
       parameters:
         - allowEmptyValue: true
@@ -78121,6 +78135,14 @@ components:
       required:
         - started_at
         - ends_at
+    TriggerAnalysisRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Organization whose projects to signal.
+      required:
+        - organization_id
     TriggerAnalysisResponseBody:
       type: object
       properties:
@@ -80193,7 +80215,11 @@ components:
         business_memory_enabled:
           type: boolean
           description: Whether completed sessions are mined for business memories.
+        organization_id:
+          type: string
+          description: Organization whose settings to replace.
       required:
+        - organization_id
         - business_memory_enabled
         - business_memory_daily_cap
     UpsertConfigRequestBody:
@@ -80382,6 +80408,9 @@ components:
     UpsertWorkUnitsSettingsRequestBody:
       type: object
       properties:
+        organization_id:
+          type: string
+          description: Organization whose settings to replace.
         work_units_daily_cap:
           type: integer
           description: Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
@@ -80392,6 +80421,7 @@ components:
           type: boolean
           description: Whether work-units chat analysis is enabled.
       required:
+        - organization_id
         - work_units_enabled
         - work_units_daily_cap
     UsageTiers:

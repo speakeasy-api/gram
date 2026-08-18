@@ -1331,6 +1331,7 @@ trackedFiles:
   src/models/components/toolvariationgroupresult.ts: {}
   src/models/components/topserver.ts: {}
   src/models/components/topuser.ts: {}
+  src/models/components/triggeranalysisrequestbody.ts: {}
   src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
   src/models/components/triggerenvrequirement.ts: {}
@@ -4836,6 +4837,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getChatAnalysisSettings:
     speakeasy-default-get-chat-analysis-settings:
+      parameters:
+        query:
+          organization_id: "<id>"
       responses:
         "200":
           application/json: {"business_memory_daily_cap": 486441, "business_memory_enabled": false, "is_default": true, "organization_id": "<id>", "work_units_daily_cap": 705479, "work_units_enabled": true}
@@ -8570,6 +8574,8 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   triggerChatAnalysis:
     speakeasy-default-trigger-chat-analysis:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
       responses:
         "200":
           application/json: {"projects_signaled": 455547}
@@ -9222,7 +9228,7 @@ examples:
   upsertBusinessMemoryAnalysisSettings:
     speakeasy-default-upsert-business-memory-analysis-settings:
       requestBody:
-        application/json: {"business_memory_daily_cap": 175017, "business_memory_enabled": false}
+        application/json: {"business_memory_daily_cap": 175017, "business_memory_enabled": false, "organization_id": "<id>"}
       responses:
         "200":
           application/json: {"business_memory_daily_cap": 583342, "business_memory_enabled": false, "is_default": false, "organization_id": "<id>", "work_units_daily_cap": 583125, "work_units_enabled": false}
@@ -9233,7 +9239,7 @@ examples:
   upsertChatAnalysisSettings:
     speakeasy-default-upsert-chat-analysis-settings:
       requestBody:
-        application/json: {"work_units_daily_cap": 17855, "work_units_enabled": true}
+        application/json: {"organization_id": "<id>", "work_units_daily_cap": 17855, "work_units_enabled": true}
       responses:
         "200":
           application/json: {"business_memory_daily_cap": 17855, "business_memory_enabled": true, "is_default": false, "organization_id": "<id>", "work_units_daily_cap": 697103, "work_units_enabled": false}

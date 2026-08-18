@@ -156,6 +156,52 @@ func TestInMemoryStore_RefreshReuseRevokesGeneration(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
+func TestInMemoryStore_DetectRefreshReuseTerminalizesConnectionOnce(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-old")
+	now := time.Now().UTC()
+	session.RevokedAt = &now
+	require.NoError(t, store.CreateSession(t.Context(), session))
+
+	reused, err := store.DetectRefreshReuse(t.Context(), grant.Connection.OrganizationID, session.RefreshHash, now)
+	require.NoError(t, err)
+	require.True(t, reused)
+
+	_, err = store.PrepareRefresh(t.Context(), platformoauth.PrepareRefreshInput{
+		OrganizationID: grant.Connection.OrganizationID,
+		RefreshHash:    session.RefreshHash,
+		ClientID:       grant.ClientID,
+		Now:            now.Add(time.Minute),
+	})
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+	require.ErrorIs(t, store.CreateSession(t.Context(), sessionFor(grant.Connection, grant.ClientID, "refresh-blocked")), platformoauth.ErrRevoked)
+
+	reused, err = store.DetectRefreshReuse(t.Context(), grant.Connection.OrganizationID, session.RefreshHash, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.True(t, reused)
+	require.ErrorIs(t, store.CreateSession(t.Context(), sessionFor(grant.Connection, grant.ClientID, "refresh-still-blocked")), platformoauth.ErrRevoked)
+}
+
+func TestInMemoryStore_DetectRefreshReuseDoesNotTerminalizeNewGeneration(t *testing.T) {
+	t.Parallel()
+
+	store, grant := consumedGrant(t)
+	session := sessionFor(grant.Connection, grant.ClientID, "refresh-old")
+	now := time.Now().UTC()
+	session.RevokedAt = &now
+	require.NoError(t, store.CreateSession(t.Context(), session))
+
+	updated, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, "generation-next", now.Add(time.Minute))
+	require.NoError(t, err)
+
+	reused, err := store.DetectRefreshReuse(t.Context(), grant.Connection.OrganizationID, session.RefreshHash, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.True(t, reused)
+	require.NoError(t, store.CreateSession(t.Context(), sessionFor(updated, grant.ClientID, "refresh-new-generation")))
+}
+
 func TestInMemoryStore_RefreshRaceHasOneWinner(t *testing.T) {
 	t.Parallel()
 

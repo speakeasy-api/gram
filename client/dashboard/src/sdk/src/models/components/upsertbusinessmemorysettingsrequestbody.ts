@@ -14,12 +14,17 @@ export type UpsertBusinessMemorySettingsRequestBody = {
    * Whether completed sessions are mined for business memories.
    */
   businessMemoryEnabled: boolean;
+  /**
+   * Organization whose settings to replace.
+   */
+  organizationId: string;
 };
 
 /** @internal */
 export type UpsertBusinessMemorySettingsRequestBody$Outbound = {
   business_memory_daily_cap: number;
   business_memory_enabled: boolean;
+  organization_id: string;
 };
 
 /** @internal */
@@ -31,11 +36,13 @@ export const UpsertBusinessMemorySettingsRequestBody$outboundSchema:
     z.object({
       businessMemoryDailyCap: z.int(),
       businessMemoryEnabled: z.boolean(),
+      organizationId: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         businessMemoryDailyCap: "business_memory_daily_cap",
         businessMemoryEnabled: "business_memory_enabled",
+        organizationId: "organization_id",
       });
     }),
   );

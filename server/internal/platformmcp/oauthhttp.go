@@ -108,6 +108,7 @@ type OAuthHTTP struct {
 	credentials   *CredentialCodec
 	issuer        string
 	audience      string
+	telemetry     OAuthTelemetry
 	now           func() time.Time
 }
 
@@ -122,6 +123,7 @@ type OAuthHTTPConfig struct {
 	Organizations OrganizationSelector
 	Signer        *sessiontokens.Signer
 	Encryption    *encryption.Client
+	Telemetry     OAuthTelemetry
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -150,8 +152,16 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		credentials:   credentials,
 		issuer:        issuer,
 		audience:      issuer,
+		telemetry:     config.Telemetry,
 		now:           time.Now,
 	}, nil
+}
+
+func (s *OAuthHTTP) oauthTelemetry() OAuthTelemetry {
+	if s.telemetry == nil {
+		return noopOAuthTelemetry{}
+	}
+	return s.telemetry
 }
 
 func (s *OAuthHTTP) Attach(mux interface {
@@ -482,6 +492,16 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
+	recorded := &oauthResponseRecorder{ResponseWriter: w}
+	w = recorded
+	defer func() {
+		s.oauthTelemetry().Record(r.Context(), OAuthEvent{
+			Operation: "interactive_authorization",
+			Outcome:   recorded.outcome(),
+			Reason:    recorded.reason,
+		})
+	}()
+
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
@@ -497,6 +517,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
+		setOAuthTelemetryReason(w, "authorization_denied")
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "user denied authorization"})
 		return
 	}
@@ -540,15 +561,24 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
 	}
+	recorded.setOAuthOutcome("succeeded")
 	http.Redirect(w, r, redirectURL(challenge.RedirectURI, code, challenge.State, "", ""), http.StatusSeeOther)
 }
 
 func (s *OAuthHTTP) TokenHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorded := &oauthResponseRecorder{ResponseWriter: w}
+		w = recorded
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		if err := r.ParseForm(); err != nil {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
+		}
+		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
+		if ok {
+			defer func() {
+				s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
+			}()
 		}
 		now := s.now()
 		clientID, clientSecret := clientCredentials(r)
@@ -718,6 +748,8 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		writeTokenStateError(w, err, "refresh token")
 		return
 	}
+	generationAuthorizedAt := old.Connection.AuthorizationExpiresAt.Add(-platformoauth.AuthorizationLifetime)
+	s.oauthTelemetry().RecordRefreshSuccess(r.Context(), s.now().Sub(now), now.Sub(generationAuthorizedAt))
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(accessExpiresAt.Sub(now).Seconds()), "refresh_token": refreshToken})
 }
 
@@ -769,6 +801,7 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 }
 
 func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, err error) {
+	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
@@ -777,6 +810,7 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 }
 
 func writeTokenStateError(w http.ResponseWriter, err error, credential string) {
+	setOAuthTelemetryReason(w, oauthStateFailureReason(err))
 	switch {
 	case errors.Is(err, platformoauth.ErrNotFound), errors.Is(err, platformoauth.ErrRevoked), errors.Is(err, platformoauth.ErrExpired), errors.Is(err, platformoauth.ErrAlreadyUsed), errors.Is(err, platformoauth.ErrClientMismatch), errors.Is(err, platformoauth.ErrGeneration), errors.Is(err, platformoauth.ErrRedirectURI), errors.Is(err, platformoauth.ErrPKCE):
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", credential+" is invalid")
@@ -785,7 +819,100 @@ func writeTokenStateError(w http.ResponseWriter, err error, credential string) {
 	}
 }
 
+func tokenOperation(grantType string) (string, bool) {
+	switch grantType {
+	case "authorization_code":
+		return "code_exchange", true
+	case "refresh_token":
+		return "refresh", true
+	default:
+		return "", false
+	}
+}
+
+type oauthResponseRecorder struct {
+	http.ResponseWriter
+	status       int
+	oauthOutcome string
+	reason       string
+}
+
+func (w *oauthResponseRecorder) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *oauthResponseRecorder) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	written, err := w.ResponseWriter.Write(body)
+	if err != nil {
+		return written, fmt.Errorf("write OAuth response: %w", err)
+	}
+	return written, nil
+}
+
+func (w *oauthResponseRecorder) outcome() string {
+	if validOAuthOutcome(w.oauthOutcome) {
+		return w.oauthOutcome
+	}
+	if w.status >= http.StatusOK && w.status < http.StatusMultipleChoices {
+		return "succeeded"
+	}
+	return "server_error"
+}
+
+func (w *oauthResponseRecorder) setOAuthOutcome(outcome string) {
+	if validOAuthOutcome(outcome) {
+		w.oauthOutcome = outcome
+	}
+}
+
+func (w *oauthResponseRecorder) setOAuthReason(reason string) {
+	if validOAuthReason(reason) {
+		w.reason = reason
+	}
+}
+
+func setOAuthTelemetryOutcome(w http.ResponseWriter, outcome string) {
+	if recorder, ok := w.(*oauthResponseRecorder); ok {
+		recorder.setOAuthOutcome(outcome)
+	}
+}
+
+func setOAuthTelemetryReason(w http.ResponseWriter, reason string) {
+	if recorder, ok := w.(*oauthResponseRecorder); ok {
+		recorder.setOAuthReason(reason)
+	}
+}
+
+func validOAuthOutcome(outcome string) bool {
+	switch outcome {
+	case "succeeded", "invalid_grant", "access_denied", "temporarily_unavailable", "invalid_client", "invalid_request", "server_error", "unsupported_grant_type":
+		return true
+	default:
+		return false
+	}
+}
+
+func oauthGateReason(err error) string {
+	if errors.Is(err, errPlatformMCPDisabled) {
+		return "platform_disabled"
+	}
+	if errors.Is(err, ErrForbidden) {
+		return "authorization_denied"
+	}
+	if errors.Is(err, ErrUnavailable) {
+		return "authorization_unavailable"
+	}
+	return ""
+}
+
 func writeTokenGateError(w http.ResponseWriter, err error) {
+	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
 		return
@@ -878,6 +1005,7 @@ func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
+	setOAuthTelemetryOutcome(w, code)
 	writeJSON(w, status, map[string]string{"error": code, "error_description": description})
 }
 
@@ -895,6 +1023,7 @@ func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, sta
 	if !errors.As(err, &oauthError) {
 		oauthError = &oauthwire.Error{Code: "invalid_request", Description: "invalid request"}
 	}
+	setOAuthTelemetryOutcome(w, oauthError.Code)
 	http.Redirect(w, r, redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description), http.StatusFound)
 }
 
