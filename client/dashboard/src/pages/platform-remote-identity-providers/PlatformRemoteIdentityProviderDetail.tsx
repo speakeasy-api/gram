@@ -15,7 +15,7 @@ import { useGlobalRemoteSessionIssuer } from "@gram/client/react-query/globalRem
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "../remote-identity-providers/ScopeBadge";
 import { issuerDisplayName } from "../remote-identity-providers/issuerDisplay";
-import { activeDetailTab } from "../remote-identity-providers/tabs";
+import { activeDetailTab } from "@/lib/detail-tabs";
 import { OverviewTab } from "../remote-identity-providers/tabs/issuer/OverviewTab";
 import { PlatformAdminOnly } from "./PlatformAdminOnly";
 import { PlatformConvergenceTab } from "./PlatformConvergenceTab";

@@ -7,13 +7,16 @@ import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
+import { pluginsDownloadPlatformMCPPlugin } from "../funcs/pluginsDownloadPlatformMCPPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSettings.js";
+import { pluginsGetPlatformMCPPackageStatus } from "../funcs/pluginsGetPlatformMCPPackageStatus.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
+import { pluginsRepairPlatformMCPPackage } from "../funcs/pluginsRepairPlatformMCPPackage.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
 import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
@@ -21,6 +24,7 @@ import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListPluginsResult } from "../models/components/listpluginsresult.js";
 import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
+import { PlatformMCPPackageStatusResult } from "../models/components/platformmcppackagestatusresult.js";
 import { Plugin } from "../models/components/plugin.js";
 import { PluginServer } from "../models/components/pluginserver.js";
 import { PublishPluginsResult } from "../models/components/publishpluginsresult.js";
@@ -50,6 +54,11 @@ import {
   DownloadObservabilityPluginSecurity,
 } from "../models/operations/downloadobservabilityplugin.js";
 import {
+  DownloadPlatformMCPPluginRequest,
+  DownloadPlatformMCPPluginResponse,
+  DownloadPlatformMCPPluginSecurity,
+} from "../models/operations/downloadplatformmcpplugin.js";
+import {
   DownloadPluginPackageRequest,
   DownloadPluginPackageResponse,
   DownloadPluginPackageSecurity,
@@ -58,6 +67,10 @@ import {
   GetMarketplaceSettingsRequest,
   GetMarketplaceSettingsSecurity,
 } from "../models/operations/getmarketplacesettings.js";
+import {
+  GetPlatformMCPPackageStatusRequest,
+  GetPlatformMCPPackageStatusSecurity,
+} from "../models/operations/getplatformmcppackagestatus.js";
 import {
   GetPluginRequest,
   GetPluginSecurity,
@@ -78,6 +91,10 @@ import {
   RemovePluginServerRequest,
   RemovePluginServerSecurity,
 } from "../models/operations/removepluginserver.js";
+import {
+  RepairPlatformMCPPackageRequest,
+  RepairPlatformMCPPackageSecurity,
+} from "../models/operations/repairplatformmcppackage.js";
 import {
   SetPluginAssignmentsRequest,
   SetPluginAssignmentsSecurity,
@@ -193,6 +210,25 @@ export class Plugins extends ClientSDK {
   }
 
   /**
+   * downloadPlatformMCPPlugin plugins
+   *
+   * @remarks
+   * Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.
+   */
+  async downloadPlatformMCPPlugin(
+    request: DownloadPlatformMCPPluginRequest,
+    security?: DownloadPlatformMCPPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DownloadPlatformMCPPluginResponse> {
+    return unwrapAsync(pluginsDownloadPlatformMCPPlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * downloadPluginPackage plugins
    *
    * @remarks
@@ -223,6 +259,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<MarketplaceSettingsResult> {
     return unwrapAsync(pluginsGetMarketplaceSettings(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPlatformMCPPackageStatus plugins
+   *
+   * @remarks
+   * Get the organization-scoped Platform MCP package and canonical default-project marketplace status.
+   */
+  async getPlatformMCPPackageStatus(
+    request?: GetPlatformMCPPackageStatusRequest | undefined,
+    security?: GetPlatformMCPPackageStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PlatformMCPPackageStatusResult> {
+    return unwrapAsync(pluginsGetPlatformMCPPackageStatus(
       this,
       request,
       security,
@@ -318,6 +373,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsRemovePluginServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * repairPlatformMCPPackage plugins
+   *
+   * @remarks
+   * Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.
+   */
+  async repairPlatformMCPPackage(
+    request?: RepairPlatformMCPPackageRequest | undefined,
+    security?: RepairPlatformMCPPackageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PlatformMCPPackageStatusResult> {
+    return unwrapAsync(pluginsRepairPlatformMCPPackage(
       this,
       request,
       security,

@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                         []*MountPoint
 	GetOnboarding                  http.Handler
 	StartOnboarding                http.Handler
+	RecordDashboardCtaEvent        http.Handler
 	RecordInstallIntent            http.Handler
 	RecordAgentConfigurationCopied http.Handler
 	StartOnboardingSetup           http.Handler
@@ -60,6 +61,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetOnboarding", "GET", "/rpc/platformMcp.getOnboarding"},
 			{"StartOnboarding", "POST", "/rpc/platformMcp.startOnboarding"},
+			{"RecordDashboardCtaEvent", "POST", "/rpc/platformMcp.recordDashboardCtaEvent"},
 			{"RecordInstallIntent", "POST", "/rpc/platformMcp.recordInstallIntent"},
 			{"RecordAgentConfigurationCopied", "POST", "/rpc/platformMcp.recordAgentConfigurationCopied"},
 			{"StartOnboardingSetup", "POST", "/rpc/platformMcp.startOnboardingSetup"},
@@ -71,6 +73,7 @@ func New(
 		},
 		GetOnboarding:                  NewGetOnboardingHandler(e.GetOnboarding, mux, decoder, encoder, errhandler, formatter),
 		StartOnboarding:                NewStartOnboardingHandler(e.StartOnboarding, mux, decoder, encoder, errhandler, formatter),
+		RecordDashboardCtaEvent:        NewRecordDashboardCtaEventHandler(e.RecordDashboardCtaEvent, mux, decoder, encoder, errhandler, formatter),
 		RecordInstallIntent:            NewRecordInstallIntentHandler(e.RecordInstallIntent, mux, decoder, encoder, errhandler, formatter),
 		RecordAgentConfigurationCopied: NewRecordAgentConfigurationCopiedHandler(e.RecordAgentConfigurationCopied, mux, decoder, encoder, errhandler, formatter),
 		StartOnboardingSetup:           NewStartOnboardingSetupHandler(e.StartOnboardingSetup, mux, decoder, encoder, errhandler, formatter),
@@ -89,6 +92,7 @@ func (s *Server) Service() string { return "platformMcp" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOnboarding = m(s.GetOnboarding)
 	s.StartOnboarding = m(s.StartOnboarding)
+	s.RecordDashboardCtaEvent = m(s.RecordDashboardCtaEvent)
 	s.RecordInstallIntent = m(s.RecordInstallIntent)
 	s.RecordAgentConfigurationCopied = m(s.RecordAgentConfigurationCopied)
 	s.StartOnboardingSetup = m(s.StartOnboardingSetup)
@@ -106,6 +110,7 @@ func (s *Server) MethodNames() []string { return platformmcp.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOnboardingHandler(mux, h.GetOnboarding)
 	MountStartOnboardingHandler(mux, h.StartOnboarding)
+	MountRecordDashboardCtaEventHandler(mux, h.RecordDashboardCtaEvent)
 	MountRecordInstallIntentHandler(mux, h.RecordInstallIntent)
 	MountRecordAgentConfigurationCopiedHandler(mux, h.RecordAgentConfigurationCopied)
 	MountStartOnboardingSetupHandler(mux, h.StartOnboardingSetup)
@@ -204,6 +209,60 @@ func NewStartOnboardingHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "startOnboarding")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "platformMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRecordDashboardCtaEventHandler configures the mux to serve the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint.
+func MountRecordDashboardCtaEventHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/platformMcp.recordDashboardCtaEvent", f)
+}
+
+// NewRecordDashboardCtaEventHandler creates a HTTP handler which loads the
+// HTTP request and calls the "platformMcp" service "recordDashboardCtaEvent"
+// endpoint.
+func NewRecordDashboardCtaEventHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRecordDashboardCtaEventRequest(mux, decoder)
+		encodeResponse = EncodeRecordDashboardCtaEventResponse(encoder)
+		encodeError    = EncodeRecordDashboardCtaEventError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "recordDashboardCtaEvent")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "platformMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

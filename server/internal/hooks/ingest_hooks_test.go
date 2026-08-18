@@ -24,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -2378,4 +2380,56 @@ func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "deny", result.Decision,
 		"the session reported a successful read, so the guard must enforce on its meta-tool calls")
+}
+
+// Canonical events carry the session working directory (hook.ingest.v1
+// session.cwd); the chat row must persist it so session portability can
+// materialize a moved session into the right project directory. Later events
+// without a cwd must never null out a previously recorded one.
+func TestIngest_PersistsSessionCwd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// Chat rows are only written when session capture is enabled for the org.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-session-cwd"
+	chatID := sessionIDToUUID(sessionID)
+	cwd := "/Users/test/code/api"
+
+	prompt := "add a --verbose flag"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.Cwd = &cwd
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid, "chat must persist the session cwd")
+	require.Equal(t, cwd, chat.Cwd.String)
+
+	// An ordinary follow-up event finds the chat already there and never
+	// reaches the upsert, so drive the conflict directly: a racing insert for
+	// the same chat carrying no cwd must not null out the recorded one.
+	_, err = repo.New(ti.conn).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty("employee@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("racing insert"),
+		Cwd:            conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid, "a later write without a cwd must not erase the recorded one")
+	require.Equal(t, cwd, chat.Cwd.String)
 }

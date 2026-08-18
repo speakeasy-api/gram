@@ -118,7 +118,7 @@ export class ExternalCredentials extends ClientSDK {
    * deleteAwsIamCredential externalCredentials
    *
    * @remarks
-   * Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+   * Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
    */
   async deleteAwsIam(
     request: DeleteAwsIamCredentialRequest,
@@ -137,7 +137,7 @@ export class ExternalCredentials extends ClientSDK {
    * deleteGcpIamCredential externalCredentials
    *
    * @remarks
-   * Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+   * Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
    */
   async deleteGcpIam(
     request: DeleteGcpIamCredentialRequest,

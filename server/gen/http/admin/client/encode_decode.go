@@ -780,6 +780,9 @@ func EncodeGetProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		values := req.URL.Query()
 		values.Add("id_or_slug", p.IDOrSlug)
+		if p.OrganizationIDOrSlug != nil {
+			values.Add("organization_id_or_slug", *p.OrganizationIDOrSlug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

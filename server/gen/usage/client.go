@@ -18,21 +18,27 @@ type Client struct {
 	GetPeriodUsageEndpoint           goa.Endpoint
 	GetTokensUnderManagementEndpoint goa.Endpoint
 	SetBillingMetadataEndpoint       goa.Endpoint
+	GetBillingEmailEndpoint          goa.Endpoint
+	SetBillingEmailEndpoint          goa.Endpoint
 	GetUsageTiersEndpoint            goa.Endpoint
 	CreateCustomerSessionEndpoint    goa.Endpoint
 	CreateCheckoutEndpoint           goa.Endpoint
+	CreateStripeCheckoutEndpoint     goa.Endpoint
 	CreateTopUpCheckoutEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getUsageTiers, createCustomerSession, createCheckout, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:           getPeriodUsage,
 		GetTokensUnderManagementEndpoint: getTokensUnderManagement,
 		SetBillingMetadataEndpoint:       setBillingMetadata,
+		GetBillingEmailEndpoint:          getBillingEmail,
+		SetBillingEmailEndpoint:          setBillingEmail,
 		GetUsageTiersEndpoint:            getUsageTiers,
 		CreateCustomerSessionEndpoint:    createCustomerSession,
 		CreateCheckoutEndpoint:           createCheckout,
+		CreateStripeCheckoutEndpoint:     createStripeCheckout,
 		CreateTopUpCheckoutEndpoint:      createTopUpCheckout,
 	}
 }
@@ -105,6 +111,50 @@ func (c *Client) SetBillingMetadata(ctx context.Context, p *SetBillingMetadataPa
 	return ires.(*TokensUnderManagement), nil
 }
 
+// GetBillingEmail calls the "getBillingEmail" endpoint of the "usage" service.
+// GetBillingEmail may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetBillingEmail(ctx context.Context, p *GetBillingEmailPayload) (res *BillingEmail, err error) {
+	var ires any
+	ires, err = c.GetBillingEmailEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BillingEmail), nil
+}
+
+// SetBillingEmail calls the "setBillingEmail" endpoint of the "usage" service.
+// SetBillingEmail may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetBillingEmail(ctx context.Context, p *SetBillingEmailPayload) (res *BillingEmail, err error) {
+	var ires any
+	ires, err = c.SetBillingEmailEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BillingEmail), nil
+}
+
 // GetUsageTiers calls the "getUsageTiers" endpoint of the "usage" service.
 // GetUsageTiers may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -166,6 +216,29 @@ func (c *Client) CreateCustomerSession(ctx context.Context, p *CreateCustomerSes
 func (c *Client) CreateCheckout(ctx context.Context, p *CreateCheckoutPayload) (res string, err error) {
 	var ires any
 	ires, err = c.CreateCheckoutEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(string), nil
+}
+
+// CreateStripeCheckout calls the "createStripeCheckout" endpoint of the
+// "usage" service.
+// CreateStripeCheckout may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res string, err error) {
+	var ires any
+	ires, err = c.CreateStripeCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

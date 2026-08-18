@@ -18,7 +18,7 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
 	Attribute("slug", String, "The slug of the organization")
-	Attribute("account_type", String, "Gram account type (e.g. free, pro, enterprise).")
+	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
@@ -254,6 +254,7 @@ var _ = Service("admin", func() {
 			Required("id_or_slug")
 
 			Attribute("id_or_slug", String, "Project ID or slug.")
+			Attribute("organization_id_or_slug", String, "Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.")
 		})
 
 		Result(AdminProjectDetail)
@@ -262,6 +263,7 @@ var _ = Service("admin", func() {
 			GET("/admin/project.get")
 
 			Param("id_or_slug")
+			Param("organization_id_or_slug")
 			Response(StatusOK)
 		})
 
@@ -276,7 +278,7 @@ var _ = Service("admin", func() {
 			Required("id")
 
 			Attribute("id", String, "Organization ID.")
-			Attribute("account_type", String, "New gram_account_type.", func() {
+			Attribute("account_type", String, "New gram_account_type (free, pro, payg, or enterprise).", func() {
 				Enum(accountTypes...)
 			})
 			Attribute("whitelisted", Boolean, "New whitelisted flag.")
@@ -445,7 +447,7 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 
 			Attribute("q", String, "Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.")
-			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
+			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
 			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_states", ArrayOf(String), "Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.")

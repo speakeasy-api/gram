@@ -202,6 +202,35 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
 
+// userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
+// at most one write per window regardless of request volume. Every other
+// request matches no rows and costs one index probe. The window is therefore
+// also the resolution of the liveness readout — "used 4m ago" is accurate to
+// within this much.
+const userSessionLastUsedCutoff = 5 * time.Minute
+
+// touchUserSessionLastUsed records that a validated session just carried a
+// request. Best-effort by design: this runs on the per-request MCP auth path,
+// where a bookkeeping write must never turn a good credential into a failed
+// call, so a failure is logged and swallowed.
+func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) {
+	if jti == "" {
+		return
+	}
+
+	now := time.Now()
+	err := usersessions_repo.New(s.db).TouchUserSessionLastUsed(ctx, usersessions_repo.TouchUserSessionLastUsedParams{
+		NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		ProjectID:           endpoint.ProjectID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Jti:                 jti,
+		UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-userSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to stamp user session last_used_at", attr.SlogError(err))
+	}
+}
+
 // validateUserSessionToken delegates the JWT verify + revocation check to
 // usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
 // stamps a contextvalues.AuthContext scoped to the endpoint's org/project.

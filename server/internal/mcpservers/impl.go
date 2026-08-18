@@ -793,10 +793,11 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
+		ProjectID:              *authCtx.ProjectID,
+		CreatedByUserID:        authCtx.UserID,
+		CommitMessage:          "Initial marketplace publish",
+		ForcePlatformMCPRepair: false,
+		SkipIfUnchanged:        false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}

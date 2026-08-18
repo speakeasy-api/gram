@@ -48,7 +48,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 		return Principal{}, ErrUnavailable
 	}
 
-	claims, err := a.signer.Validate(token, a.audience)
+	claims, err := a.signer.ValidateExactAudience(token, a.audience)
 	if err != nil || claims.Issuer != a.issuer {
 		return Principal{}, ErrUnauthorized
 	}
@@ -76,6 +76,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	}
 
 	return Principal{
+		Surface:        SurfacePlatformMCP,
 		UserID:         subject.ID,
 		OrganizationID: session.OrganizationID,
 		ConnectionID:   session.ConnectionID.String(),
@@ -114,7 +115,7 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 	}
 	options := make([]OrganizationOption, 0, len(organizations))
 	for _, organization := range organizations {
-		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: ""}); err != nil {
+		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}); err != nil {
 			if isAuthorizationDenied(err) {
 				continue
 			}

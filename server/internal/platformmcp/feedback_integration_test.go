@@ -65,7 +65,7 @@ WHERE id = $1`, created.TrackingID).Scan(
 		&stored.ExpiresAt,
 	)
 	require.NoError(t, err)
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	require.NoError(t, err)
 	require.Equal(t, principal.OrganizationID, stored.OrganizationID)
 	require.Equal(t, connectionID, stored.ConnectionID)
@@ -104,13 +104,14 @@ func TestFeedbackServiceEnforcesConnectionLimitAndRejectsReplacedGeneration(t *t
 	require.ErrorIs(t, err, ErrFeedbackRateLimited)
 
 	freshPrincipal, _ := seedRegistrationLifecycle(t, ctx, conn)
-	connectionID, _, err := principalConnection(freshPrincipal)
+	connectionID, _, err := parseConnection(freshPrincipal)
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: uuid.New(),
-		ReauthorizedAt:   pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-		ConnectionID:     connectionID,
-		OrganizationID:   freshPrincipal.OrganizationID,
+		ActiveGeneration:       uuid.New(),
+		ReauthorizedAt:         pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		AuthorizationExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(90 * 24 * time.Hour), Valid: true},
+		ConnectionID:           connectionID,
+		OrganizationID:         freshPrincipal.OrganizationID,
 	})
 	require.NoError(t, err)
 	_, err = service.Submit(ctx, freshPrincipal, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "feedback-revoked-generation"})

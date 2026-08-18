@@ -23,12 +23,18 @@ type Service interface {
 	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
 	// Set an organization's billing contract terms. Restricted to platform admins.
 	SetBillingMetadata(context.Context, *SetBillingMetadataPayload) (res *TokensUnderManagement, err error)
+	// Get the billing notification email for a PAYG organization
+	GetBillingEmail(context.Context, *GetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set or clear the billing notification email for a PAYG organization
+	SetBillingEmail(context.Context, *SetBillingEmailPayload) (res *BillingEmail, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
+	// Create a Stripe Checkout link for starting PAYG billing
+	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
 	// Create a checkout link for a one-time credit top-up purchase
 	CreateTopUpCheckout(context.Context, *CreateTopUpCheckoutPayload) (res string, err error)
 }
@@ -53,7 +59,14 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
+var MethodNames = [10]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+
+// BillingEmail is the result type of the usage service getBillingEmail method.
+type BillingEmail struct {
+	// The configured billing notification email. Omitted when organization
+	// administrators receive billing notifications.
+	Email *string
+}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -67,9 +80,21 @@ type CreateCustomerSessionPayload struct {
 	SessionToken *string
 }
 
+// CreateStripeCheckoutPayload is the payload type of the usage service
+// createStripeCheckout method.
+type CreateStripeCheckoutPayload struct {
+	SessionToken *string
+}
+
 // CreateTopUpCheckoutPayload is the payload type of the usage service
 // createTopUpCheckout method.
 type CreateTopUpCheckoutPayload struct {
+	SessionToken *string
+}
+
+// GetBillingEmailPayload is the payload type of the usage service
+// getBillingEmail method.
+type GetBillingEmailPayload struct {
 	SessionToken *string
 }
 
@@ -97,12 +122,21 @@ type PeriodUsage struct {
 	IncludedServers int
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount int
-	// The number of credits used
-	Credits int
-	// The number of credits included in the tier
-	IncludedCredits int
+	// The number of credits used. Only populated for platform admins.
+	Credits *int
+	// The number of credits included in the tier. Only populated for platform
+	// admins.
+	IncludedCredits *int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
+}
+
+// SetBillingEmailPayload is the payload type of the usage service
+// setBillingEmail method.
+type SetBillingEmailPayload struct {
+	SessionToken *string
+	// The billing notification email. Omit to notify organization administrators.
+	Email *string
 }
 
 // SetBillingMetadataPayload is the payload type of the usage service
@@ -158,6 +192,8 @@ type TierLimits struct {
 	IncludedBullets []string
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service
@@ -190,6 +226,8 @@ type UsageTiers struct {
 	Free *TierLimits
 	// The limits for the pro tier
 	Pro *TierLimits
+	// The limits for the pay-as-you-go tier
+	Payg *TierLimits
 	// The limits for the enterprise tier
 	Enterprise *TierLimits
 }

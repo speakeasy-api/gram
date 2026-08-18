@@ -120,6 +120,21 @@ func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType 
 	return dst, &url.URL{Scheme: "file", Path: fspath}, nil
 }
 
+// Delete removes the file; an already-absent file is success, matching the
+// BlobStore burn-after-read semantics.
+func (fbs *FSBlobStore) Delete(ctx context.Context, u *url.URL) error {
+	filename, err := fbs.getPath(u)
+	if err != nil {
+		return fmt.Errorf("generate asset path: %w", err)
+	}
+	fbs.mut.Lock()
+	defer fbs.mut.Unlock()
+	if err := fbs.Root.Remove(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove file: %w", err)
+	}
+	return nil
+}
+
 func (fbs *FSBlobStore) mkdirAll(filename string) error {
 	dir := filepath.Dir(filepath.Clean(filename))
 	if dir == "" || dir == "." || dir == string(filepath.Separator) {

@@ -12,6 +12,7 @@ import (
 
 	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
@@ -26,25 +27,6 @@ import (
 // organization. No project/org exists to scope an RBAC grant, so each handler
 // gates inline on the platform-admin flag; audit is structured-logs only
 // (audit_log.organization_id is NOT NULL).
-
-// requirePlatformAdmin extracts the auth context and enforces the platform-admin
-// flag. The returned logger is pre-tagged with the actor for audit/error lines.
-// It is the single choke-point every adminExternalCredentials handler routes
-// through, so a handler cannot accidentally skip the gate.
-func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, *slog.Logger, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, s.logger, oops.C(oops.CodeUnauthorized)
-	}
-
-	logger := s.logger.With(attr.SlogUserID(authCtx.UserID))
-
-	if !authCtx.IsAdmin {
-		return nil, logger, oops.E(oops.CodeForbidden, nil, "platform admin required").LogError(ctx, logger)
-	}
-
-	return authCtx, logger, nil
-}
 
 // logPlatformMutation records a structured-log audit line (actor, action,
 // subject) for a platform credential mutation, standing in for the auditlogs
@@ -66,7 +48,7 @@ func logPlatformMutation(ctx context.Context, logger *slog.Logger, authCtx *cont
 var platformOrganizationID = pgtype.Text{String: "", Valid: false}
 
 func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +110,7 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 // UpdateGcpIamPlatformCredential replaces a platform GCP credential's name and
 // auth configuration (full replace, like the organization update).
 func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.UpdateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +188,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 }
 
 func (s *Service) ListPlatformExternalCredentials(ctx context.Context, payload *adminecgen.ListPlatformExternalCredentialsPayload) (*adminecgen.ListExternalCredentialsResult, error) {
-	_, logger, err := s.requirePlatformAdmin(ctx)
+	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +212,7 @@ func (s *Service) ListPlatformExternalCredentials(ctx context.Context, payload *
 }
 
 func (s *Service) GetGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.GetGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	_, logger, err := s.requirePlatformAdmin(ctx)
+	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +238,7 @@ func (s *Service) GetGcpIamPlatformCredential(ctx context.Context, payload *admi
 // The probe is ephemeral: nothing is persisted. A resolution failure is a
 // normal, reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.VerifyGcpIamPlatformCredentialPayload) (*adminecgen.VerifyPlatformCredentialResult, error) {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +256,7 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading platform gcp iam credential").LogError(ctx, logger)
 	}
 
-	principal, resolveErr := s.gcpResolver.ResolvePrincipal(ctx, gcpauth.Credential{
+	principal, resolveErr := s.gcpIdentity.ResolvePrincipal(ctx, gcpauth.Credential{
 		ImpersonateServiceAccount: row.GcpIamCredential.ImpersonateServiceAccount.String,
 		WifPoolID:                 row.GcpIamCredential.WifPoolID.String,
 		WifProviderID:             row.GcpIamCredential.WifProviderID.String,
@@ -311,7 +293,7 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 }
 
 func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.DeleteGcpIamPlatformCredentialPayload) error {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
 	if err != nil {
 		return err
 	}
