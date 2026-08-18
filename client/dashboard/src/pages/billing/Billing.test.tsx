@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +53,21 @@ vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
   useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
 }));
+// The billing email section renders for real here — which tiers reach it is
+// exactly what these tests are about — so only its own endpoints are stubbed.
+vi.mock("@gram/client/react-query/getBillingEmail.js", () => ({
+  useGetBillingEmail: () => ({ data: { email: undefined }, isError: false }),
+  invalidateAllGetBillingEmail: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
+  useSetBillingEmailMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/components/billing/tum-section", () => ({
   TumUsageSection: () => <div>tum usage</div>,
 }));
@@ -89,6 +105,21 @@ import Billing from "./Billing";
 const DAY = 24 * 60 * 60 * 1000;
 
 const cta = () => screen.queryByRole("button", { name: /add payment method/i });
+
+const billingEmailField = () =>
+  screen.queryByLabelText(/billing notification email/i);
+
+/** The billing email section invalidates its query through the client. */
+function renderBilling() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <Billing />
+    </QueryClientProvider>,
+  );
+}
 
 describe("Billing", () => {
   beforeEach(() => {
@@ -163,6 +194,27 @@ describe("Billing", () => {
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).toBeNull();
   });
+
+  // Billing notifications are a pay-as-you-go concern: enterprise orgs are
+  // billed through their contract, and the pre-checkout tiers have no bill.
+  it("offers billing notification settings on the pay as you go view", () => {
+    mocks.productTier.mockReturnValue("payg");
+
+    renderBilling();
+
+    expect(billingEmailField()).not.toBeNull();
+  });
+
+  it.each<ProductTier>(["base", "enterprise"])(
+    "shows no billing notification settings on the %s view",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+
+      renderBilling();
+
+      expect(billingEmailField()).toBeNull();
+    },
+  );
 
   it("shows no checkout CTA once the trial has ended", () => {
     mocks.session.mockReturnValue({

@@ -29,6 +29,14 @@ type Client struct {
 	// setBillingMetadata endpoint.
 	SetBillingMetadataDoer goahttp.Doer
 
+	// GetBillingEmail Doer is the HTTP client used to make requests to the
+	// getBillingEmail endpoint.
+	GetBillingEmailDoer goahttp.Doer
+
+	// SetBillingEmail Doer is the HTTP client used to make requests to the
+	// setBillingEmail endpoint.
+	SetBillingEmailDoer goahttp.Doer
+
 	// GetUsageTiers Doer is the HTTP client used to make requests to the
 	// getUsageTiers endpoint.
 	GetUsageTiersDoer goahttp.Doer
@@ -72,6 +80,8 @@ func NewClient(
 		GetPeriodUsageDoer:           doer,
 		GetTokensUnderManagementDoer: doer,
 		SetBillingMetadataDoer:       doer,
+		GetBillingEmailDoer:          doer,
+		SetBillingEmailDoer:          doer,
 		GetUsageTiersDoer:            doer,
 		CreateCustomerSessionDoer:    doer,
 		CreateCheckoutDoer:           doer,
@@ -152,6 +162,54 @@ func (c *Client) SetBillingMetadata() goa.Endpoint {
 		resp, err := c.SetBillingMetadataDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "setBillingMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetBillingEmail returns an endpoint that makes HTTP requests to the usage
+// service getBillingEmail server.
+func (c *Client) GetBillingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetBillingEmailRequest(c.encoder)
+		decodeResponse = DecodeGetBillingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetBillingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetBillingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getBillingEmail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetBillingEmail returns an endpoint that makes HTTP requests to the usage
+// service setBillingEmail server.
+func (c *Client) SetBillingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetBillingEmailRequest(c.encoder)
+		decodeResponse = DecodeSetBillingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetBillingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetBillingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "setBillingEmail", err)
 		}
 		return decodeResponse(resp)
 	}

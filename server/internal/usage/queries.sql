@@ -10,6 +10,24 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: LockBillingMetadata :one
+SELECT *
+FROM billing_metadata
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- name: LockBillingMetadataOrganization :exec
+-- Serializes absent-row first writes and all billing metadata updates.
+SELECT pg_advisory_xact_lock(hashtextextended('billing-email:' || @organization_id::text, 0));
+
+-- name: UpsertBillingEmail :one
+INSERT INTO billing_metadata (organization_id, alert_email)
+VALUES (@organization_id, sqlc.narg(alert_email))
+ON CONFLICT (organization_id) DO UPDATE SET
+    alert_email = EXCLUDED.alert_email
+  , updated_at = clock_timestamp()
+RETURNING *;
+
 -- name: StoreStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id)
@@ -295,6 +313,11 @@ RETURNING *;
 
 -- name: GetOrganizationName :one
 SELECT name
+FROM organization_metadata
+WHERE id = @organization_id;
+
+-- name: GetBillingOrganizationAccountType :one
+SELECT gram_account_type
 FROM organization_metadata
 WHERE id = @organization_id;
 

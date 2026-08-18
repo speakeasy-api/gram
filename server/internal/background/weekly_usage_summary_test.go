@@ -16,9 +16,9 @@ import (
 
 func weeklyUsageSummaryTestTargets() []activities.WeeklyUsageSummaryTarget {
 	return []activities.WeeklyUsageSummaryTarget{
-		{OrganizationID: "org-a", OrganizationName: "Org A", OrganizationSlug: "org-a", AlertEmail: "a@example.com", AnchorDay: 1},
-		{OrganizationID: "org-b", OrganizationName: "Org B", OrganizationSlug: "org-b", AlertEmail: "b@example.com", AnchorDay: 1},
-		{OrganizationID: "org-c", OrganizationName: "Org C", OrganizationSlug: "org-c", AlertEmail: "c@example.com", AnchorDay: 15},
+		{OrganizationID: "org-a", OrganizationName: "Org A", OrganizationSlug: "org-a", AccountType: "enterprise", AlertEmail: "a@example.com", AnchorDay: 1},
+		{OrganizationID: "org-b", OrganizationName: "Org B", OrganizationSlug: "org-b", AccountType: "enterprise", AlertEmail: "b@example.com", AnchorDay: 1},
+		{OrganizationID: "org-c", OrganizationName: "Org C", OrganizationSlug: "org-c", AccountType: "payg", AlertEmail: "", AnchorDay: 15},
 	}
 }
 

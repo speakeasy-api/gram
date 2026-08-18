@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3255,6 +3255,13 @@ func ParseEndpoint(
 		usageSetBillingMetadataBodyFlag         = usageSetBillingMetadataFlags.String("body", "REQUIRED", "")
 		usageSetBillingMetadataSessionTokenFlag = usageSetBillingMetadataFlags.String("session-token", "", "")
 
+		usageGetBillingEmailFlags            = flag.NewFlagSet("get-billing-email", flag.ExitOnError)
+		usageGetBillingEmailSessionTokenFlag = usageGetBillingEmailFlags.String("session-token", "", "")
+
+		usageSetBillingEmailFlags            = flag.NewFlagSet("set-billing-email", flag.ExitOnError)
+		usageSetBillingEmailBodyFlag         = usageSetBillingEmailFlags.String("body", "REQUIRED", "")
+		usageSetBillingEmailSessionTokenFlag = usageSetBillingEmailFlags.String("session-token", "", "")
+
 		usageGetUsageTiersFlags = flag.NewFlagSet("get-usage-tiers", flag.ExitOnError)
 
 		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
@@ -4124,6 +4131,8 @@ func ParseEndpoint(
 	usageGetPeriodUsageFlags.Usage = usageGetPeriodUsageUsage
 	usageGetTokensUnderManagementFlags.Usage = usageGetTokensUnderManagementUsage
 	usageSetBillingMetadataFlags.Usage = usageSetBillingMetadataUsage
+	usageGetBillingEmailFlags.Usage = usageGetBillingEmailUsage
+	usageSetBillingEmailFlags.Usage = usageSetBillingEmailUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
@@ -6245,6 +6254,12 @@ func ParseEndpoint(
 			case "set-billing-metadata":
 				epf = usageSetBillingMetadataFlags
 
+			case "get-billing-email":
+				epf = usageGetBillingEmailFlags
+
+			case "set-billing-email":
+				epf = usageSetBillingEmailFlags
+
 			case "get-usage-tiers":
 				epf = usageGetUsageTiersFlags
 
@@ -8302,6 +8317,12 @@ func ParseEndpoint(
 			case "set-billing-metadata":
 				endpoint = c.SetBillingMetadata()
 				data, err = usagec.BuildSetBillingMetadataPayload(*usageSetBillingMetadataBodyFlag, *usageSetBillingMetadataSessionTokenFlag)
+			case "get-billing-email":
+				endpoint = c.GetBillingEmail()
+				data, err = usagec.BuildGetBillingEmailPayload(*usageGetBillingEmailSessionTokenFlag)
+			case "set-billing-email":
+				endpoint = c.SetBillingEmail()
+				data, err = usagec.BuildSetBillingEmailPayload(*usageSetBillingEmailBodyFlag, *usageSetBillingEmailSessionTokenFlag)
 			case "get-usage-tiers":
 				endpoint = c.GetUsageTiers()
 			case "create-customer-session":
@@ -21944,6 +21965,8 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-period-usage: Get the usage for an organization for a given period`)
 	fmt.Fprintln(os.Stderr, `    get-tokens-under-management: Get tokens under management for the active billing cycle alongside the contracted terms`)
 	fmt.Fprintln(os.Stderr, `    set-billing-metadata: Set an organization's billing contract terms. Restricted to platform admins.`)
+	fmt.Fprintln(os.Stderr, `    get-billing-email: Get the billing notification email for a PAYG organization`)
+	fmt.Fprintln(os.Stderr, `    set-billing-email: Set or clear the billing notification email for a PAYG organization`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
@@ -22007,6 +22030,44 @@ func usageSetBillingMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-billing-metadata --body '{\n      \"alert_email\": \"alice@example.com\",\n      \"billing_cycle_anchor_day\": 2,\n      \"monthly_token_limit\": 1,\n      \"tunneled_mcp_server_limit\": 1\n   }' --session-token \"abc123\"")
+}
+
+func usageGetBillingEmailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-billing-email", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the billing notification email for a PAYG organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-billing-email --session-token \"abc123\"")
+}
+
+func usageSetBillingEmailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage set-billing-email", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set or clear the billing notification email for a PAYG organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-billing-email --body '{\n      \"email\": \"alice@example.com\"\n   }' --session-token \"abc123\"")
 }
 
 func usageGetUsageTiersUsage() {

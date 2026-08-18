@@ -26,6 +26,13 @@ type SetBillingMetadataRequestBody struct {
 	BillingCycleAnchorDay *int `form:"billing_cycle_anchor_day,omitempty" json:"billing_cycle_anchor_day,omitempty" xml:"billing_cycle_anchor_day,omitempty"`
 }
 
+// SetBillingEmailRequestBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP request body.
+type SetBillingEmailRequestBody struct {
+	// The billing notification email. Omit to notify organization administrators.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+}
+
 // GetPeriodUsageResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body.
 type GetPeriodUsageResponseBody struct {
@@ -94,6 +101,22 @@ type SetBillingMetadataResponseBody struct {
 	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
 	// entry is the active cycle.
 	History []*TUMPeriodResponseBody `form:"history" json:"history" xml:"history"`
+}
+
+// GetBillingEmailResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body.
+type GetBillingEmailResponseBody struct {
+	// The configured billing notification email. Omitted when organization
+	// administrators receive billing notifications.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+}
+
+// SetBillingEmailResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body.
+type SetBillingEmailResponseBody struct {
+	// The configured billing notification email. Omitted when organization
+	// administrators receive billing notifications.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -650,6 +673,370 @@ type SetBillingMetadataUnexpectedResponseBody struct {
 // service "setBillingMetadata" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetBillingMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailUnauthorizedResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "unauthorized" error.
+type GetBillingEmailUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailForbiddenResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "forbidden" error.
+type GetBillingEmailForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailBadRequestResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "bad_request" error.
+type GetBillingEmailBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailNotFoundResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "not_found" error.
+type GetBillingEmailNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailConflictResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "conflict" error.
+type GetBillingEmailConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailUnsupportedMediaResponseBody is the type of the "usage"
+// service "getBillingEmail" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetBillingEmailUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailInvalidResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "invalid" error.
+type GetBillingEmailInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailInvariantViolationResponseBody is the type of the "usage"
+// service "getBillingEmail" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetBillingEmailInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailUnexpectedResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "unexpected" error.
+type GetBillingEmailUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBillingEmailGatewayErrorResponseBody is the type of the "usage" service
+// "getBillingEmail" endpoint HTTP response body for the "gateway_error" error.
+type GetBillingEmailGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailUnauthorizedResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "unauthorized" error.
+type SetBillingEmailUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailForbiddenResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "forbidden" error.
+type SetBillingEmailForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailBadRequestResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "bad_request" error.
+type SetBillingEmailBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailNotFoundResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "not_found" error.
+type SetBillingEmailNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailConflictResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "conflict" error.
+type SetBillingEmailConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailUnsupportedMediaResponseBody is the type of the "usage"
+// service "setBillingEmail" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetBillingEmailUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailInvalidResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "invalid" error.
+type SetBillingEmailInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailInvariantViolationResponseBody is the type of the "usage"
+// service "setBillingEmail" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetBillingEmailInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailUnexpectedResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "unexpected" error.
+type SetBillingEmailUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingEmailGatewayErrorResponseBody is the type of the "usage" service
+// "setBillingEmail" endpoint HTTP response body for the "gateway_error" error.
+type SetBillingEmailGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1703,6 +2090,24 @@ func NewSetBillingMetadataResponseBody(res *usage.TokensUnderManagement) *SetBil
 	return body
 }
 
+// NewGetBillingEmailResponseBody builds the HTTP response body from the result
+// of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailResponseBody(res *usage.BillingEmail) *GetBillingEmailResponseBody {
+	body := &GetBillingEmailResponseBody{
+		Email: res.Email,
+	}
+	return body
+}
+
+// NewSetBillingEmailResponseBody builds the HTTP response body from the result
+// of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailResponseBody(res *usage.BillingEmail) *SetBillingEmailResponseBody {
+	body := &SetBillingEmailResponseBody{
+		Email: res.Email,
+	}
+	return body
+}
+
 // NewGetUsageTiersResponseBody builds the HTTP response body from the result
 // of the "getUsageTiers" endpoint of the "usage" service.
 func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseBody {
@@ -2144,6 +2549,288 @@ func NewSetBillingMetadataUnexpectedResponseBody(res *goa.ServiceError) *SetBill
 // from the result of the "setBillingMetadata" endpoint of the "usage" service.
 func NewSetBillingMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetBillingMetadataGatewayErrorResponseBody {
 	body := &SetBillingMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailUnauthorizedResponseBody(res *goa.ServiceError) *GetBillingEmailUnauthorizedResponseBody {
+	body := &GetBillingEmailUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailForbiddenResponseBody builds the HTTP response body from
+// the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailForbiddenResponseBody(res *goa.ServiceError) *GetBillingEmailForbiddenResponseBody {
+	body := &GetBillingEmailForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailBadRequestResponseBody builds the HTTP response body from
+// the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailBadRequestResponseBody(res *goa.ServiceError) *GetBillingEmailBadRequestResponseBody {
+	body := &GetBillingEmailBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailNotFoundResponseBody builds the HTTP response body from
+// the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailNotFoundResponseBody(res *goa.ServiceError) *GetBillingEmailNotFoundResponseBody {
+	body := &GetBillingEmailNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailConflictResponseBody builds the HTTP response body from
+// the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailConflictResponseBody(res *goa.ServiceError) *GetBillingEmailConflictResponseBody {
+	body := &GetBillingEmailConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailUnsupportedMediaResponseBody(res *goa.ServiceError) *GetBillingEmailUnsupportedMediaResponseBody {
+	body := &GetBillingEmailUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailInvalidResponseBody builds the HTTP response body from the
+// result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailInvalidResponseBody(res *goa.ServiceError) *GetBillingEmailInvalidResponseBody {
+	body := &GetBillingEmailInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getBillingEmail" endpoint of the "usage"
+// service.
+func NewGetBillingEmailInvariantViolationResponseBody(res *goa.ServiceError) *GetBillingEmailInvariantViolationResponseBody {
+	body := &GetBillingEmailInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailUnexpectedResponseBody(res *goa.ServiceError) *GetBillingEmailUnexpectedResponseBody {
+	body := &GetBillingEmailUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBillingEmailGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getBillingEmail" endpoint of the "usage" service.
+func NewGetBillingEmailGatewayErrorResponseBody(res *goa.ServiceError) *GetBillingEmailGatewayErrorResponseBody {
+	body := &GetBillingEmailGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailUnauthorizedResponseBody(res *goa.ServiceError) *SetBillingEmailUnauthorizedResponseBody {
+	body := &SetBillingEmailUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailForbiddenResponseBody builds the HTTP response body from
+// the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailForbiddenResponseBody(res *goa.ServiceError) *SetBillingEmailForbiddenResponseBody {
+	body := &SetBillingEmailForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailBadRequestResponseBody builds the HTTP response body from
+// the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailBadRequestResponseBody(res *goa.ServiceError) *SetBillingEmailBadRequestResponseBody {
+	body := &SetBillingEmailBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailNotFoundResponseBody builds the HTTP response body from
+// the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailNotFoundResponseBody(res *goa.ServiceError) *SetBillingEmailNotFoundResponseBody {
+	body := &SetBillingEmailNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailConflictResponseBody builds the HTTP response body from
+// the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailConflictResponseBody(res *goa.ServiceError) *SetBillingEmailConflictResponseBody {
+	body := &SetBillingEmailConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailUnsupportedMediaResponseBody(res *goa.ServiceError) *SetBillingEmailUnsupportedMediaResponseBody {
+	body := &SetBillingEmailUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailInvalidResponseBody builds the HTTP response body from the
+// result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailInvalidResponseBody(res *goa.ServiceError) *SetBillingEmailInvalidResponseBody {
+	body := &SetBillingEmailInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setBillingEmail" endpoint of the "usage"
+// service.
+func NewSetBillingEmailInvariantViolationResponseBody(res *goa.ServiceError) *SetBillingEmailInvariantViolationResponseBody {
+	body := &SetBillingEmailInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailUnexpectedResponseBody builds the HTTP response body from
+// the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailUnexpectedResponseBody(res *goa.ServiceError) *SetBillingEmailUnexpectedResponseBody {
+	body := &SetBillingEmailUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingEmailGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setBillingEmail" endpoint of the "usage" service.
+func NewSetBillingEmailGatewayErrorResponseBody(res *goa.ServiceError) *SetBillingEmailGatewayErrorResponseBody {
+	body := &SetBillingEmailGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2908,6 +3595,26 @@ func NewSetBillingMetadataPayload(body *SetBillingMetadataRequestBody, sessionTo
 	return v
 }
 
+// NewGetBillingEmailPayload builds a usage service getBillingEmail endpoint
+// payload.
+func NewGetBillingEmailPayload(sessionToken *string) *usage.GetBillingEmailPayload {
+	v := &usage.GetBillingEmailPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetBillingEmailPayload builds a usage service setBillingEmail endpoint
+// payload.
+func NewSetBillingEmailPayload(body *SetBillingEmailRequestBody, sessionToken *string) *usage.SetBillingEmailPayload {
+	v := &usage.SetBillingEmailPayload{
+		Email: body.Email,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateCustomerSessionPayload builds a usage service createCustomerSession
 // endpoint payload.
 func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomerSessionPayload {
@@ -2972,6 +3679,15 @@ func ValidateSetBillingMetadataRequestBody(body *SetBillingMetadataRequestBody) 
 		if *body.BillingCycleAnchorDay > 31 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.billing_cycle_anchor_day", *body.BillingCycleAnchorDay, 31, false))
 		}
+	}
+	return
+}
+
+// ValidateSetBillingEmailRequestBody runs the validations defined on
+// SetBillingEmailRequestBody
+func ValidateSetBillingEmailRequestBody(body *SetBillingEmailRequestBody) (err error) {
+	if body.Email != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", *body.Email, goa.FormatEmail))
 	}
 	return
 }

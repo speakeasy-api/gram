@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))
+`
+
+type AcquireOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Billing transitions take the matching transaction lock before changing an
+// organization's projection. Holding this session lock through the final
+// eligibility read and delivery makes either the old or new tier win cleanly.
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquirePaygOpenRouterChatKeyLock = `-- name: AcquirePaygOpenRouterChatKeyLock :exec
 SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
 `
@@ -900,6 +917,7 @@ const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertR
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
+    om.gram_account_type,
     bm.alert_email,
     EXISTS (
         SELECT 1
@@ -913,7 +931,10 @@ FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY($2::text[])
   AND om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  )
 `
 
 type GetOpenRouterCreditsAlertRecipientsParams struct {
@@ -924,6 +945,7 @@ type GetOpenRouterCreditsAlertRecipientsParams struct {
 type GetOpenRouterCreditsAlertRecipientsRow struct {
 	OrganizationID   string
 	OrganizationName string
+	GramAccountType  string
 	AlertEmail       pgtype.Text
 	ChatByok         bool
 }
@@ -952,6 +974,7 @@ func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, arg G
 		if err := rows.Scan(
 			&i.OrganizationID,
 			&i.OrganizationName,
+			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.ChatByok,
 		); err != nil {
@@ -1903,12 +1926,16 @@ SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  )
 ORDER BY om.slug
 `
 
@@ -1916,15 +1943,16 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	OrganizationID        string
 	OrganizationName      string
 	OrganizationSlug      string
+	GramAccountType       string
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
 }
 
 // Organizations that receive the weekly tokens-under-management usage
-// summary email: not disabled, with a billing alert email configured (the
-// address set on the billing page). The anchor day determines the billing
-// cycle window the summary reports on; the slug builds the billing page
-// link.
+// summary email: enabled enterprise organizations with an explicit billing
+// alert email and enabled PAYG organizations (whose fallback audience is
+// resolved by the activity). The anchor day determines the billing cycle
+// window; the slug builds the billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {
@@ -1938,6 +1966,7 @@ func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeek
 			&i.OrganizationID,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.BillingCycleAnchorDay,
 		); err != nil {
@@ -2120,6 +2149,22 @@ func (q *Queries) ReconcileAndRotateStripeInvoiceAllocation(ctx context.Context,
 	var idempotency_key string
 	err := row.Scan(&idempotency_key)
 	return idempotency_key, err
+}
+
+const releaseOpenRouterKeyBillingLock = `-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const releasePaygOpenRouterChatKeyLock = `-- name: ReleasePaygOpenRouterChatKeyLock :one

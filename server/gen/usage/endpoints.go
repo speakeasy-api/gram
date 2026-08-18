@@ -19,6 +19,8 @@ type Endpoints struct {
 	GetPeriodUsage           goa.Endpoint
 	GetTokensUnderManagement goa.Endpoint
 	SetBillingMetadata       goa.Endpoint
+	GetBillingEmail          goa.Endpoint
+	SetBillingEmail          goa.Endpoint
 	GetUsageTiers            goa.Endpoint
 	CreateCustomerSession    goa.Endpoint
 	CreateCheckout           goa.Endpoint
@@ -34,6 +36,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetPeriodUsage:           NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
 		GetTokensUnderManagement: NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
 		SetBillingMetadata:       NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
+		GetBillingEmail:          NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetBillingEmail:          NewSetBillingEmailEndpoint(s, a.APIKeyAuth),
 		GetUsageTiers:            NewGetUsageTiersEndpoint(s),
 		CreateCustomerSession:    NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
 		CreateCheckout:           NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
@@ -47,6 +51,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
 	e.GetTokensUnderManagement = m(e.GetTokensUnderManagement)
 	e.SetBillingMetadata = m(e.SetBillingMetadata)
+	e.GetBillingEmail = m(e.GetBillingEmail)
+	e.SetBillingEmail = m(e.SetBillingEmail)
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
@@ -120,6 +126,52 @@ func NewSetBillingMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.SetBillingMetadata(ctx, p)
+	}
+}
+
+// NewGetBillingEmailEndpoint returns an endpoint function that calls the
+// method "getBillingEmail" of service "usage".
+func NewGetBillingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetBillingEmailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetBillingEmail(ctx, p)
+	}
+}
+
+// NewSetBillingEmailEndpoint returns an endpoint function that calls the
+// method "setBillingEmail" of service "usage".
+func NewSetBillingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetBillingEmailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetBillingEmail(ctx, p)
 	}
 }
 

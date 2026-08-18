@@ -37,6 +37,15 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
+-- name: AcquireOpenRouterKeyBillingLock :exec
+-- Billing transitions take the matching transaction lock before changing an
+-- organization's projection. Holding this session lock through the final
+-- eligibility read and delivery makes either the old or new tier win cleanly.
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
+
+-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
+
 -- name: GetAllOrganizationsWithToolsets :many
 SELECT
     organization_metadata.id,
@@ -747,6 +756,7 @@ ORDER BY source_key, seq;
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
+    om.gram_account_type,
     bm.alert_email,
     EXISTS (
         SELECT 1
@@ -760,24 +770,31 @@ FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY(@organization_ids::text[])
   AND om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL;
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  );
 
 -- name: ListWeeklyUsageSummaryTargets :many
 -- Organizations that receive the weekly tokens-under-management usage
--- summary email: not disabled, with a billing alert email configured (the
--- address set on the billing page). The anchor day determines the billing
--- cycle window the summary reports on; the slug builds the billing page
--- link.
+-- summary email: enabled enterprise organizations with an explicit billing
+-- alert email and enabled PAYG organizations (whose fallback audience is
+-- resolved by the activity). The anchor day determines the billing cycle
+-- window; the slug builds the billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  )
 ORDER BY om.slug;
 
 -- name: GetUserEmailsByOrgIDs :many

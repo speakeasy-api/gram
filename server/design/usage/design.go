@@ -91,6 +91,14 @@ var TokensUnderManagement = Type("TokensUnderManagement", func() {
 	Required("period_start", "period_end", "tokens", "billing_cycle_anchor_day", "history")
 })
 
+// BillingEmail is the optional billing notification address configured for a
+// PAYG organization.
+var BillingEmail = Type("BillingEmail", func() {
+	Attribute("email", String, "The configured billing notification email. Omitted when organization administrators receive billing notifications.", func() {
+		Format(FormatEmail)
+	})
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -169,6 +177,49 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "setBillingMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "setBillingMetadata")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingMetadata"}`)
+	})
+
+	Method("getBillingEmail", func() {
+		Description("Get the billing notification email for a PAYG organization")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(BillingEmail)
+
+		HTTP(func() {
+			GET("/rpc/usage.getBillingEmail")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getBillingEmail")
+		Meta("openapi:extension:x-speakeasy-name-override", "getBillingEmail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getBillingEmail"}`)
+	})
+
+	Method("setBillingEmail", func() {
+		Description("Set or clear the billing notification email for a PAYG organization")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("email", String, "The billing notification email. Omit to notify organization administrators.", func() {
+				Format(FormatEmail)
+			})
+		})
+
+		Result(BillingEmail)
+
+		HTTP(func() {
+			POST("/rpc/usage.setBillingEmail")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setBillingEmail")
+		Meta("openapi:extension:x-speakeasy-name-override", "setBillingEmail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingEmail"}`)
 	})
 
 	Method("getUsageTiers", func() {
