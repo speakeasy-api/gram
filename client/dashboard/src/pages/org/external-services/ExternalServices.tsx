@@ -42,7 +42,7 @@ function verifiedMessage(principal: string | undefined): string {
   if (!principal) {
     return "Verified.";
   }
-  return `Gram can impersonate ${principal}.`;
+  return `Speakeasy can impersonate ${principal}.`;
 }
 
 export function ExternalServicesPage(): JSX.Element {
@@ -134,7 +134,7 @@ function ExternalServicesOverview(): JSX.Element {
     <>
       <ResourceListPage
         title="External Services"
-        description="How Gram authenticates into your cloud account to reach the keys you manage there. Gram impersonates a service account you nominate, so it never holds long-lived credentials of your own."
+        description="How Speakeasy authenticates into your cloud account to reach the keys you manage there. Speakeasy impersonates a service account you nominate, so it never holds long-lived credentials of your own."
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>

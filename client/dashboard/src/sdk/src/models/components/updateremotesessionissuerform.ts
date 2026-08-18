@@ -35,7 +35,7 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   jwksUri?: string | undefined;
   /**
-   * Set the logo asset id.
+   * Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.
    */
   logoAssetId?: string | undefined;
   /**

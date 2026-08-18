@@ -31,6 +31,13 @@ func NewDBResolver(db *pgxpool.Pool, tokens InstallationTokenSource) *DBResolver
 	return &DBResolver{queries: pluginsrepo.New(db), tokens: tokens}
 }
 
+// NewLocalDBResolver resolves the same opaque marketplace tokens as production
+// without minting a GitHub installation token. It is used only with LocalServer,
+// which reads from the standard local in-memory publisher rather than GitHub.
+func NewLocalDBResolver(db *pgxpool.Pool) *DBResolver {
+	return &DBResolver{queries: pluginsrepo.New(db), tokens: nil}
+}
+
 func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error) {
 	if token == "" {
 		return Upstream{}, ErrNotFound
@@ -44,9 +51,12 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 		return Upstream{}, fmt.Errorf("lookup connection by marketplace token: %w", err)
 	}
 
-	instToken, err := r.tokens.InstallationToken(ctx, conn.InstallationID)
-	if err != nil {
-		return Upstream{}, fmt.Errorf("mint installation token (installation %d): %w", conn.InstallationID, err)
+	instToken := ""
+	if r.tokens != nil {
+		instToken, err = r.tokens.InstallationToken(ctx, conn.InstallationID)
+		if err != nil {
+			return Upstream{}, fmt.Errorf("mint installation token (installation %d): %w", conn.InstallationID, err)
+		}
 	}
 
 	return Upstream{

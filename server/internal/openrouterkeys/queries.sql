@@ -1,7 +1,7 @@
 -- name: ListOpenRouterAPIKeysForAdmin :many
 -- Platform-admin inventory of every organization's platform OpenRouter keys.
 -- Key material is deliberately absent from the select list: this feeds an API
--- response and only needs the encryption state, not the secrets themselves.
+-- response that never carries the secrets themselves.
 SELECT
     k.organization_id,
     om.name AS organization_name,
@@ -10,8 +10,6 @@ SELECT
     k.key_type,
     k.monthly_credits,
     k.disabled,
-    (k.key IS NOT NULL)::boolean AS has_plaintext,
-    (k.key_encrypted IS NOT NULL)::boolean AS has_encrypted,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -28,8 +26,6 @@ SELECT
     k.key_type,
     k.monthly_credits,
     k.disabled,
-    (k.key IS NOT NULL)::boolean AS has_plaintext,
-    (k.key_encrypted IS NOT NULL)::boolean AS has_encrypted,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k

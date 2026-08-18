@@ -293,10 +293,18 @@ func normalizedProbeFailure(err error, authRT *authorizationRoundTripper) (platf
 }
 
 func validateSetupRequest(request platformmcp.ProviderSetupRequest) error {
-	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.MCPSlug == "" || request.ConnectionID == uuid.Nil || request.Generation == uuid.Nil {
+	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.MCPSlug == "" || !validConnectionPair(request.ConnectionID, request.Generation) {
 		return platformmcp.ErrSetupHandoffInvalid
 	}
 	return nil
+}
+
+// validConnectionPair accepts a complete connection pair or none at all. A
+// connection-less caller is identified by its user, which every request already
+// carries; a half-populated pair is an incomplete identity, matching the
+// all-or-nothing CHECK the connection columns carry.
+func validConnectionPair(connectionID, generation uuid.UUID) bool {
+	return (connectionID == uuid.Nil) == (generation == uuid.Nil)
 }
 
 func validateReadinessRequest(request platformmcp.ProviderReadinessProbeRequest) error {

@@ -122,6 +122,20 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 	return &claims, nil
 }
 
+// ValidateExactAudience parses and verifies a signed token whose audience must
+// be exactly the expected singleton. Use this for resource servers that must not
+// accept a token broadened to additional audiences.
+func (s *Signer) ValidateExactAudience(token, expectedAudience string) (*SessionClaims, error) {
+	claims, err := s.Validate(token, expectedAudience)
+	if err != nil {
+		return nil, err
+	}
+	if len(claims.Audience) != 1 || claims.Audience[0] != expectedAudience {
+		return nil, errors.New("validate token: audience must exactly match the resource")
+	}
+	return claims, nil
+}
+
 // ValidatedSession is a verified token's caller identity.
 type ValidatedSession struct {
 	Subject  urn.SessionSubject

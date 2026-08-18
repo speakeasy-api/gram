@@ -4,10 +4,58 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 const testRedirectIssuer = "https://app.example.com/mcp/my-server"
+
+// A trimmed non-empty issuer name wins the card label; a set logo asset id
+// resolves to a serveImage URL on the platform origin.
+func TestIssuerCardBranding_NameAndLogo(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	assetID := uuid.New()
+	name := "  Corporate Okta  "
+	display, logoURL := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:        "corp-okta",
+		IssuerName:        &name,
+		IssuerLogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
+	}, serverURL)
+	require.Equal(t, "Corporate Okta", display)
+	require.Equal(t, "https://app.getgram.ai/rpc/assets.serveImage?id="+assetID.String(), logoURL)
+}
+
+// An unset or whitespace-only name falls back to the slug, and no logo
+// asset means no logo URL.
+func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	display, logoURL := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:        "corp-okta",
+		IssuerName:        nil,
+		IssuerLogoAssetID: uuid.NullUUID{},
+	}, serverURL)
+	require.Equal(t, "corp-okta", display)
+	require.Empty(t, logoURL)
+
+	blank := "   "
+	display, logoURL = issuerCardBranding(remotesessions.Client{
+		IssuerSlug:        "corp-okta",
+		IssuerName:        &blank,
+		IssuerLogoAssetID: uuid.NullUUID{},
+	}, serverURL)
+	require.Equal(t, "corp-okta", display)
+	require.Empty(t, logoURL)
+}
 
 func TestBuildClientRedirect_SuccessCarriesIss(t *testing.T) {
 	t.Parallel()

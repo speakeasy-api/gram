@@ -355,7 +355,7 @@ Run repository tooling, never bare `go`, `npm`, or `npx`:
 
 ```bash
 mise exec -- go run ./server/cmd/sync-loops-email-templates --validate-only
-mise exec -- go test ./server/internal/email/... ./server/cmd/sync-loops-email-templates
+mise run test:server ./internal/email/... ./cmd/sync-loops-email-templates
 mise lint:server
 git diff --check
 ```

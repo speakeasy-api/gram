@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -39,6 +40,12 @@ type ProxyManager struct {
 
 	proxyMetrics *proxy.Metrics
 	mcpMetrics   *ProxyMetrics
+
+	// requestOTELCounterInterceptor emits the shared per-request census
+	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
+	// which never reaches the mcp package's dispatch where the hosted and
+	// platform surfaces emit it.
+	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
 
 	toolDispositions ToolDispositionResolver
 
@@ -78,6 +85,7 @@ func NewProxyManager(
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            NewProxyMetrics(meter, logger),
+		requestOTELCounterInterceptor:         NewRequestOTELCounterInterceptor(mcpmetrics.NewRequestCounter(meter, logger)),
 		toolDispositions:                      toolDispositions,
 		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
 		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
@@ -218,7 +226,11 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		WWWAuthenticate:             wwwAuthenticate,
+		// The census runs first so every parsed request is counted, including
+		// those a later interceptor rejects — matching the hosted dispatch,
+		// which records before the method switch can refuse a request.
 		UserRequestInterceptors: []proxy.UserRequestInterceptor{
+			f.requestOTELCounterInterceptor,
 			interceptors.NewFigma(upstreamURL, logger),
 		},
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{

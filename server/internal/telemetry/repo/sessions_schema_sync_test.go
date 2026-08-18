@@ -9,14 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The session classification logic lives in several places that must never
-// drift: the session* constants in this package (the raw ListSessions path),
-// the chat_session_summaries_mv definition in schema.sql (ingest for the
-// summary ListSessions path), and the backfill/seed SQL derived from the MV.
-// This test pins the shared SQL fragments on both sides — editing the Go
-// constants or the MV without moving the other breaks it, forcing the change
-// to be applied everywhere (including a MODIFY QUERY migration + backfill for
-// the MV; see the clickhouse skill).
+// The session classification logic lives in two places that must never drift:
+// the session* constants in this package (the raw ListSessions path) and the
+// chat_session_summaries_mv definition in schema.sql (ingest for the summary
+// ListSessions path). This test pins the shared SQL fragments on both sides —
+// editing the Go constants or the MV without moving the other breaks it,
+// forcing the change to be applied everywhere (including a MODIFY QUERY
+// migration + backfill for the MV; see the clickhouse skill).
+//
+// There used to be a third copy, in the local seed script's
+// chatSessionBackfillSQL, with its own test. The seed no longer re-derives
+// summaries: it writes now()-relative rows that are always past the MV's date
+// cutoff, so the MV populates chat_session_summaries on INSERT and the seed
+// only has to delete its own rows. No copy, nothing to pin.
 var sessionSharedPredicateFragments = []string{
 	// Claude OTEL provenance URN.
 	"(gram_urn = 'claude-code:otel:logs')",
@@ -88,31 +93,6 @@ func TestSessionPredicates_SchemaMVStaysInSync(t *testing.T) {
 			"chat_session_summaries_mv drifted from the pinned session predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
 		require.Contains(t, goConstants, normalized,
 			"session* Go constants drifted from the pinned predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
-	}
-}
-
-// TestSessionPredicates_SeedBackfillStaysInSync covers the third live copy of
-// the session predicates: chatSessionBackfillSQL in the local seed, which
-// re-derives chat_session_summaries for pre-cutoff seeded rows. (The prod
-// backfill runbook under clickhouse/local/backfill/ is a one-time executed
-// artifact and is deliberately not covered — drift after its execution is
-// inert.)
-func TestSessionPredicates_SeedBackfillStaysInSync(t *testing.T) {
-	t.Parallel()
-
-	seed, err := os.ReadFile("../../../../.mise-tasks/seed.mts")
-	require.NoError(t, err)
-
-	seedText := string(seed)
-	start := strings.Index(seedText, "function chatSessionBackfillSQL")
-	require.GreaterOrEqual(t, start, 0, "chatSessionBackfillSQL not found in seed.mts")
-	end := strings.Index(seedText[start:], "\nfunction ")
-	require.Positive(t, end, "expected a declaration after chatSessionBackfillSQL")
-	backfillSQL := normalizeSQL(seedText[start : start+end])
-
-	for _, fragment := range sessionSharedPredicateFragments {
-		require.Contains(t, backfillSQL, normalizeSQL(fragment),
-			"seed.mts chatSessionBackfillSQL drifted from the pinned session predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
 	}
 }
 

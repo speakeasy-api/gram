@@ -192,6 +192,14 @@ type Client struct {
 	ExternalClientID      string
 	ClientSecretEncrypted *string
 	IssuerSlug            string
+
+	// IssuerName is the issuer's operator-set display name, nil when unset.
+	IssuerName *string
+
+	// IssuerLogoAssetID references the issuer's logo image in the assets
+	// store, invalid when the issuer has no logo.
+	IssuerLogoAssetID uuid.NullUUID
+
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
@@ -236,6 +244,8 @@ func (m *ChallengeManager) ListClients(
 			ExternalClientID:      r.ExternalClientID,
 			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
 			IssuerSlug:            r.IssuerSlug,
+			IssuerName:            conv.FromPGText[string](r.IssuerName),
+			IssuerLogoAssetID:     r.IssuerLogoAssetID,
 			IssuerURL:             r.IssuerUrl,
 			AuthorizationEndpoint: conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),

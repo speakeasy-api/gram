@@ -39,3 +39,52 @@ func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 		require.Truef(t, enabled, "feature %s should remain enabled after a replayed seed", feature)
 	}
 }
+
+func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	enabled, err := productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.NotContains(t, enabled, productfeatures.FeatureSSO)
+
+	ssoEnabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	require.False(t, ssoEnabled)
+
+	for _, feature := range slices.Concat(
+		[]productfeatures.Feature{productfeatures.FeaturePlatformMCP},
+		productfeatures.EnterpriseTrialBundle,
+		[]productfeatures.Feature{productfeatures.FeatureSkills},
+	) {
+		if feature == productfeatures.FeatureSSO {
+			continue
+		}
+		featureEnabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, featureEnabled, "feature %s should be enabled", feature)
+	}
+}

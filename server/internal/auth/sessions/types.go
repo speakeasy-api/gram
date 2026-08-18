@@ -18,6 +18,7 @@ type Session struct {
 	ActiveOrganizationID string
 	UserID               string
 	WorkOSSessionID      string
+	ImpersonatorEmail    string
 }
 
 func SessionCacheKey(sessionID string) string {

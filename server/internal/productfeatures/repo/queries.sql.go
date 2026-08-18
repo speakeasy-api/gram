@@ -64,6 +64,37 @@ func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (i
 	return result.RowsAffected(), nil
 }
 
+const enableFeatureIfNeverConfigured = `-- name: EnableFeatureIfNeverConfigured :execrows
+INSERT INTO organization_features (
+    organization_id,
+    feature_name
+)
+SELECT $1, $2
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM organization_features
+    WHERE organization_id = $1
+      AND feature_name = $2
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO NOTHING
+`
+
+type EnableFeatureIfNeverConfiguredParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// PAYG activation grants purchased capabilities to legacy organizations while
+// preserving a soft-deleted row as an explicit administrator choice.
+func (q *Queries) EnableFeatureIfNeverConfigured(ctx context.Context, arg EnableFeatureIfNeverConfiguredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enableFeatureIfNeverConfigured, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const hasDeviceAgentSync = `-- name: HasDeviceAgentSync :one
 SELECT EXISTS (
         SELECT 1

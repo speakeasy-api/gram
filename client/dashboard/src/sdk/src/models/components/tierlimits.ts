@@ -45,6 +45,10 @@ export type TierLimits = {
    * The price per additional tool call
    */
   pricePerAdditionalToolCall: number;
+  /**
+   * Exact USD list price per million tokens under management (optional)
+   */
+  tumPricePerMillionUsd?: string | undefined;
 };
 
 /** @internal */
@@ -60,6 +64,7 @@ export const TierLimits$inboundSchema: z.ZodMiniType<TierLimits, unknown> = z
       included_tool_calls: z.int(),
       price_per_additional_server: z.number(),
       price_per_additional_tool_call: z.number(),
+      tum_price_per_million_usd: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -72,6 +77,7 @@ export const TierLimits$inboundSchema: z.ZodMiniType<TierLimits, unknown> = z
         "included_tool_calls": "includedToolCalls",
         "price_per_additional_server": "pricePerAdditionalServer",
         "price_per_additional_tool_call": "pricePerAdditionalToolCall",
+        "tum_price_per_million_usd": "tumPricePerMillionUsd",
       });
     }),
   );

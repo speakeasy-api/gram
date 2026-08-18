@@ -30,6 +30,15 @@ SET gram_account_type = @gram_account_type,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: SetAccountTypeIfUnchanged :one
+UPDATE organization_metadata
+SET gram_account_type = @gram_account_type,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND gram_account_type = @previous_account_type
+  AND gram_account_type NOT IN ('payg', 'enterprise')
+RETURNING *;
+
 -- name: GetOrganizationMetadata :one
 SELECT *
 FROM organization_metadata

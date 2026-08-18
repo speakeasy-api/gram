@@ -66,6 +66,7 @@ const (
 	RPCContextKey               contextKey = "rpcContextKey"
 	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
 	oauthClientIDContextKey     contextKey = "oauthClientIDKey"
+	actingSurfaceContextKey     contextKey = "actingSurfaceKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -158,6 +159,29 @@ func SetOAuthClientID(ctx context.Context, value string) context.Context {
 // `client_id` claim existed.
 func GetOAuthClientID(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(oauthClientIDContextKey).(string)
+	return value, ok && value != ""
+}
+
+// SetActingSurface marks the surface a request arrives through, for surfaces
+// that cannot be told apart from the auth context alone.
+//
+// Audit derives most surfaces from signals it can already see — a session, an
+// API key, an assistant principal. A surface that authenticates its own way,
+// such as Platform MCP, has no such signal and says so explicitly here.
+//
+// The value is a plain string so that packages carrying a surface do not have
+// to depend on the audit package. Audit accepts only the values on its own
+// allowlist, so an unrecognized one records an unknown surface rather than
+// widening what the column can hold.
+func SetActingSurface(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, actingSurfaceContextKey, value)
+}
+
+// GetActingSurface returns the explicitly marked acting surface. The second
+// result is false when nothing marked one, which is the ordinary case for
+// requests whose surface audit can derive on its own.
+func GetActingSurface(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(actingSurfaceContextKey).(string)
 	return value, ok && value != ""
 }
 

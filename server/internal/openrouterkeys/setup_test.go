@@ -128,7 +128,7 @@ func (s *stubProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return s.usage, s.usageLimit, nil
 }
 
-func (s *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (s *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 
@@ -142,6 +142,13 @@ func (s *stubProvisioner) UsageCalls() []string {
 	out := make([]string, len(s.usageCalls))
 	copy(out, s.usageCalls)
 	return out
+}
+
+func (s *stubProvisioner) RefreshCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.refreshCalls...)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -179,9 +186,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-// seedKey inserts an organization and one OpenRouter key row. plaintext and
-// ciphertext control the two storage columns: pass "" to leave a column NULL.
-func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix string, keyType string, plaintext string, ciphertext string) string {
+// seedKey inserts an organization and one OpenRouter key row storing the
+// given key material encrypted. Pass "" as the key to leave the encrypted
+// column NULL, seeding a row that holds no key material.
+func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix string, keyType string, key string) string {
 	t.Helper()
 
 	orgID := "org-" + orgSuffix + "-" + uuid.NewString()[:8]
@@ -191,10 +199,16 @@ func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix stri
 		Slug: orgID,
 	}))
 
+	var ciphertext string
+	if key != "" {
+		var err error
+		ciphertext, err = ti.enc.Encrypt([]byte(key))
+		require.NoError(t, err)
+	}
+
 	_, err := orgrepo.New(ti.conn).CreateOpenRouterAPIKey(ctx, orgrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        keyType,
-		Key:            conv.ToPGTextEmpty(plaintext),
 		KeyEncrypted:   conv.ToPGTextEmpty(ciphertext),
 		KeyHash:        "hash-" + orgSuffix,
 		MonthlyCredits: 5,

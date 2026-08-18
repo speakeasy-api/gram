@@ -75,12 +75,17 @@ function getAdminOverrideCookie(): string | null {
 // the admin override cookie or session-side via auth.enterDemo (any user),
 // so demo detection keys off the active org slug, not the cookie.
 
-/** Banner shows for admin cookie-impersonation or any session in the demo org. */
+/** Banner shows for WorkOS impersonation, admin override, or the demo org. */
 const useShowsImpersonationBanner = (): boolean => {
   const isAdmin = useIsPlatformAdmin();
   const organization = useOrganization();
+  const session = useSession();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  return (isAdmin && !!overrideSlug) || organization.slug === DEMO_ORG_SLUG;
+  return (
+    organization.slug === DEMO_ORG_SLUG ||
+    !!session.impersonatorEmail ||
+    (isAdmin && !!overrideSlug)
+  );
 };
 
 const ImpersonationBanner = () => {
@@ -88,6 +93,17 @@ const ImpersonationBanner = () => {
   const session = useSession();
   const client = useSdkClient();
   const isDemo = organization.slug === DEMO_ORG_SLUG;
+  const isWorkOSImpersonation = !!session.impersonatorEmail;
+  const organizationLabel = organization.name || organization.slug;
+
+  let label = `Impersonating ${organization.slug}`;
+  let actionLabel = "Stop impersonating";
+  if (isDemo) {
+    label = "Demo org — sample data";
+    actionLabel = "Exit demo";
+  } else if (isWorkOSImpersonation) {
+    label = `WorkOS impersonation active — signed in as ${session.user.email} in ${organizationLabel}`;
+  }
 
   const exit = () => {
     void (async () => {
@@ -126,21 +142,20 @@ const ImpersonationBanner = () => {
         "flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,
       )}
+      role="alert"
     >
       <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
       {/* Plain concatenation: tailwind-merge would treat text-eyebrow and the
           text-default-* tone as conflicting text-* utilities and drop one. */}
-      <span className={`text-eyebrow ${labelTone}`}>
-        {isDemo
-          ? "Demo org — sample data"
-          : `Impersonating ${organization.slug}`}
+      <span className={`text-eyebrow min-w-0 truncate ${labelTone}`}>
+        {label}
       </span>
       <button
         type="button"
         onClick={exit}
-        className="border-neutral-softest text-default-fixed-light ml-2 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase hover:bg-white/10"
+        className="border-neutral-softest text-default-fixed-light ml-2 shrink-0 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase hover:bg-white/10"
       >
-        {isDemo ? "Exit demo" : "Stop impersonating"}
+        {actionLabel}
       </button>
     </div>
   );
@@ -155,7 +170,9 @@ const AppLayoutContent = ({
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <div className="flex w-full flex-1 overflow-hidden">
-        <AppSidebar variant="inset" />
+        {/* Default (non-inset) variant: flat panes divided by a hairline
+            instead of a floating bordered card. */}
+        <AppSidebar />
         <SidebarInset>
           <GlobalInsightsWrapper>
             <MembershipSyncGuard>
@@ -253,7 +270,7 @@ export const OrgLayout = (): JSX.Element => {
       <div className="flex h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
         <div className="flex w-full flex-1 overflow-hidden">
-          <OrgSidebar variant="inset" />
+          <OrgSidebar />
           <SidebarInset>
             <MembershipSyncGuard>
               <Outlet />
