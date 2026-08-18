@@ -1696,6 +1696,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
