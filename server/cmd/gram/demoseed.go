@@ -2,6 +2,7 @@ package gram
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
@@ -107,9 +108,18 @@ func newDemoSeedCommand() *cli.Command {
 				defer o11y.NoLogDefer(redisClient.Close)
 			}
 
+			// The fixtures warn when a stale mise.local.toml is shadowing the
+			// values they provision; environment access belongs here, not in
+			// the package.
+			observed := make(map[string]string, len(demoseed.StaleOverrideVars()))
+			for _, name := range demoseed.StaleOverrideVars() {
+				observed[name] = os.Getenv(name)
+			}
+
 			return demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				Environment:    c.String("environment"),
+				ObservedEnv:    observed,
 			})
 		},
 	}

@@ -32,6 +32,7 @@ var otherTenantSpec = Spec{
 	EmailDomain: "@othr.getgram.ai",
 	NameSeed:    "gram-othr-",
 	GroupPrefix: "othr_grp_",
+	WorkOSOrgID: "workos_gram_othr_unlinked",
 	Marker:      "othr-seed",
 }
 

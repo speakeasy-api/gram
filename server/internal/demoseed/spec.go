@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 )
 
 // Spec names the tenant a seed run provisions. The embedded SQL is written
@@ -43,6 +44,11 @@ type Spec struct {
 	// GroupPrefix prefixes workos_directory_group_id, which is globally
 	// unique.
 	GroupPrefix string
+	// WorkOSOrgID is the WorkOS organization this tenant's org is the Gram
+	// side of, and which OrgID is derived from. The shared demo org has no
+	// WorkOS counterpart, so its value is an inert placeholder that exists
+	// only to give the preflight assert something to rewrite.
+	WorkOSOrgID string
 	// Marker is the gram.deployment.id stamped on every telemetry row, which
 	// the ClickHouse postflight leak-checks.
 	Marker string
@@ -64,6 +70,7 @@ func DefaultSpec() Spec {
 		EmailDomain: "@demo.getgram.ai",
 		NameSeed:    "gram-demo-",
 		GroupPrefix: "demo_grp_",
+		WorkOSOrgID: "workos_gram_demo_unlinked",
 		Marker:      "demo-seed",
 	}
 }
@@ -73,11 +80,20 @@ func DefaultSpec() Spec {
 // inside the seeded data as a first-class member rather than as a read-only
 // impersonator.
 //
+// OrgID is DERIVED from the WorkOS org id, not equal to it: for every
+// organization that came from WorkOS, organization_metadata.id is
+// orgid.FromWorkOSID(workos_id), and the auth callback recomputes it on
+// login. Seeding under the raw WorkOS id would leave the callback deriving a
+// different id, inserting a SECOND organization, and dropping you into an
+// empty org next to the seeded one. The demo org is the exception that makes
+// this easy to get wrong — its id is hand-written and never came from WorkOS.
+//
 // Unlike DefaultSpec this tenant is writable: none of the demo carve-outs in
 // authz.Engine or middleware.DemoOrgWriteGuard key off it.
 func LocalSpec() Spec {
 	return Spec{
-		OrgID:       devidentity.DefaultOrgWorkosID,
+		OrgID:       orgid.FromWorkOSID(devidentity.DefaultOrgWorkosID),
+		WorkOSOrgID: devidentity.DefaultOrgWorkosID,
 		OrgSlug:     devidentity.DefaultOrgSlug,
 		OrgName:     devidentity.DefaultOrgName,
 		UUIDPrefix:  "10ca1000",
@@ -125,6 +141,7 @@ func (s Spec) fields() []string {
 		s.EmailDomain,
 		s.OrgSlug,
 		s.GroupPrefix,
+		s.WorkOSOrgID,
 		s.Marker,
 		s.OrgName,
 	}

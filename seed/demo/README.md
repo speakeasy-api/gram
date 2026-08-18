@@ -52,11 +52,19 @@ is NOT rewritten, and the local and test tenants write it into the demo org's
 scope. `TestLocalSpecRewritesEveryDefaultIdentifier` catches that without
 needing a database.
 
-`LocalSpec` takes its org id and slug from `dev-idp/pkg/devidentity`, the same
-package the dev-idp bootstraps its default org from, so logging in locally
-lands you inside the seeded data. Unlike the demo org it is a perfectly
-ordinary writable org: none of the demo carve-outs in `authz.Engine` or
+`LocalSpec` identifies the dev-idp's default org, so logging in locally lands
+you inside the seeded data. Unlike the demo org it is a perfectly ordinary
+writable org: none of the demo carve-outs in `authz.Engine` or
 `middleware.DemoOrgWriteGuard` key off it.
+
+Its `OrgID` is **derived**, not equal to the WorkOS org id:
+`organization_metadata.id` for any organization that came from WorkOS is
+`orgid.FromWorkOSID(workos_id)` — a UUIDv5 — and the auth callback recomputes
+it on every login. The demo org is the exception that makes this easy to get
+wrong: its id is hand-written and never came from WorkOS. Seed under the raw
+WorkOS id and the callback derives a different id, inserts a SECOND
+organization, and drops you into an empty org next to the seeded one, with a
+suffixed slug because the seeded row already holds `speakeasy`.
 
 ## Running
 

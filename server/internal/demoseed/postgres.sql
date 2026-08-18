@@ -86,6 +86,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   demo_org  CONSTANT text := 'org_gram_demo_workspace';
+  -- The WorkOS organization this tenant mirrors. For the demo org there is
+  -- none: the value is a placeholder no real row can carry.
+  demo_workos CONSTANT text := 'workos_gram_demo_unlinked';
   proj_a    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000001';
   policy_a  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f001';
   policy_pi CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f002';
@@ -228,14 +231,16 @@ BEGIN
   -- it. A WorkOS link or a foreign slug, however, means this id belongs to a
   -- real org — abort.
   ------------------------------------------------------------------
-  -- workos_id is compared rather than merely tested for NULL: the shared demo
-  -- org never links to WorkOS, but the local development tenant is a real
-  -- dev-idp org whose auth callback stamps its own id here. A DIFFERENT
-  -- workos_id still means this id belongs to somebody else — abort.
+  -- workos_id is compared against this tenant's expected link rather than
+  -- merely tested for NULL: the shared demo org never links to WorkOS (its
+  -- constant below is an inert placeholder that matches nothing), but the
+  -- local development tenant IS a real dev-idp org, and its auth callback
+  -- stamps that link here on first login. Any OTHER workos_id means this id
+  -- belongs to somebody else — abort.
   IF EXISTS (
     SELECT 1 FROM organization_metadata
     WHERE id = demo_org
-      AND ((workos_id IS NOT NULL AND workos_id <> demo_org) OR slug <> 'acme-demo')
+      AND ((workos_id IS NOT NULL AND workos_id <> demo_workos) OR slug <> 'acme-demo')
   ) THEN
     RAISE EXCEPTION 'demo seed aborted: org % exists but is not the demo org', demo_org;
   END IF;

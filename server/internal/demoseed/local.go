@@ -70,6 +70,9 @@ type LocalFixturesOptions struct {
 	DeveloperEmail string
 	// Environment decides the API key prefix (auth.APIKeyPrefix).
 	Environment string
+	// ObservedEnv holds the current values of StaleOverrideVars, so the
+	// fixtures can warn when mise.local.toml is shadowing them.
+	ObservedEnv map[string]string
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -141,6 +144,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		sql  string
 		args []any
 	}{
+		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
 		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, dev.Email, dev.Name}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
@@ -172,8 +176,47 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	logger.InfoContext(ctx, "local fixtures applied")
 
+	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
 	return nil
+}
+
+// warnOnStaleOverrides catches the one way this seed can leave a developer
+// stranded. The values below used to be GENERATED per machine and written into
+// mise.local.toml by the old seed script; they are now fixed and ship in
+// mise.toml. mise.local.toml wins over mise.toml, so a worktree that predates
+// this change keeps serving the old values — an API key that no longer exists
+// and a tunnel endpoint on a project that no longer exists — with nothing to
+// explain why.
+//
+// The observed environment is passed in rather than read here: the caller in
+// cmd/ owns environment access.
+func warnOnStaleOverrides(ctx context.Context, logger *slog.Logger, env map[string]string, apiKey string) {
+	for _, v := range []struct{ name, want string }{
+		{"GRAM_API_KEY", apiKey},
+		{"TUNNEL_LOCAL_KEY", LocalTunnelKey},
+		{"TUNNEL_LOCAL_ID", localTunnelSourceID()},
+		{"TUNNEL_LOCAL_MCP_SERVER_ID", localMCPServerID()},
+		{"TUNNEL_LOCAL_MCP_ENDPOINT_SLUG", LocalTunnelEndpointSlug},
+	} {
+		if got := env[v.name]; got != "" && got != v.want {
+			logger.WarnContext(ctx, fmt.Sprintf(
+				"%s holds a stale value from a previous seed and is overriding this one; delete the line from mise.local.toml (it is a checked-in default in mise.toml now)",
+				v.name))
+		}
+	}
+}
+
+// StaleOverrideVars names the environment variables RunLocalFixtures checks
+// for stale values left behind by the seed script this one replaced.
+func StaleOverrideVars() []string {
+	return []string{
+		"GRAM_API_KEY",
+		"TUNNEL_LOCAL_KEY",
+		"TUNNEL_LOCAL_ID",
+		"TUNNEL_LOCAL_MCP_SERVER_ID",
+		"TUNNEL_LOCAL_MCP_ENDPOINT_SLUG",
+	}
 }
 
 // developer is the local user the fixtures adopt into the org.
@@ -229,6 +272,17 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
 }
+
+// Stamp the WorkOS link the auth callback would otherwise add on first login.
+// Setting it up front means org lookups by workos_id resolve before anyone has
+// logged in, and the callback finds an already-linked row to update rather
+// than a bare one. It is local-only because the shared demo org has no WorkOS
+// counterpart at all.
+const localLinkWorkOSOrgSQL = `
+UPDATE organization_metadata
+SET workos_id = $2, updated_at = clock_timestamp()
+WHERE id = $1 AND workos_id IS DISTINCT FROM $2
+`
 
 // You, as a real member. users.workos_id doubles as the WorkOS subject the
 // dev-idp will present at login, and the dev-idp uses the same user id there,
