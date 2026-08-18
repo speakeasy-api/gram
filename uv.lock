@@ -430,7 +430,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiocop", specifier = ">=1.1.4" },
-    { name = "anyio", extras = ["trio"], specifier = ">=4.14.0" },
+    { name = "anyio", extras = ["trio"], specifier = ">=4.14.2" },
     { name = "pyrefly", specifier = ">=1.1.1" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
