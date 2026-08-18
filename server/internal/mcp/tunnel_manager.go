@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -62,7 +63,14 @@ func (m *tunnelManager) buildProxy(
 	}
 	addr, ok := tunnelrouting.SelectRoute(clientAffinityKey, candidates, nil)
 	if !ok {
-		return nil, oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogWarn(ctx, logger)
+		// Nowhere to route the request. Tunnel outages are likely customer-side
+		// rather than something the platform administrators can control. While
+		// tunnel route selection may be a platform issue, this is not a great
+		// place to signal that class of issue, especially to a MCP Client user.
+		// If necessary, use another observability solution if this requires
+		// explicit monitoring, ideally alerting the customer instead of using
+		// the platform 5xx error budget which alerts platform administrators.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
 	}
 
 	gatewayURL, err := tunnelrouting.GatewayURL(addr)
