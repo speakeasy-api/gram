@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,7 +39,7 @@ type stripeWebhookResult struct {
 	newlyEnabledFeatures []productfeatures.Feature
 }
 
-type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error)
+type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -85,11 +86,28 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.InfoContext(ctx, "skipping duplicate Stripe webhook event")
 		return nil
 	}
+	if event.Type == "invoice.created" {
+		_, err := repo.New(s.db).GetBillingMetadataOrganizationByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			logger.WarnContext(ctx, "skipping Stripe webhook event for an unknown customer")
+			return nil
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
+		}
+	}
 
 	var checkoutState *stripeclient.CheckoutSessionState
+	var invoiceState *stripeclient.InvoiceState
 	checkoutEligible := true
 	if event.Type == "checkout.session.completed" {
 		checkoutState, checkoutEligible, err = s.currentCheckoutSession(ctx, event)
+		if err != nil {
+			return err
+		}
+	}
+	if event.Type == "invoice.created" {
+		invoiceState, err = s.currentStripeInvoice(ctx, event)
 		if err != nil {
 			return err
 		}
@@ -139,7 +157,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return nil
 	}
 
-	result, err := s.stripeHandler(ctx, logger, tx, organizationID, event, checkoutState)
+	result, err := s.stripeHandler(ctx, logger, tx, organizationID, event, checkoutState, invoiceState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to handle Stripe webhook event").LogError(ctx, logger)
 	}
@@ -153,6 +171,28 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	}
 
 	return nil
+}
+
+func (s *Service) currentStripeInvoice(ctx context.Context, event *stripeclient.WebhookEvent) (*stripeclient.InvoiceState, error) {
+	if event.ObjectID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid Stripe invoice identifier").LogWarn(ctx, s.logger)
+	}
+	state, err := s.stripeClient.GetInvoice(ctx, event.ObjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "failed to retrieve current Stripe invoice").LogWarn(ctx, s.logger)
+	}
+	if state == nil || state.ID != event.ObjectID || state.CustomerID == "" || state.CustomerID != event.CustomerID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "Stripe invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+	}
+	if state.BillingReason == "subscription_create" || state.BillingReason == "subscription_cycle" {
+		if state.SubscriptionID == "" || state.ServicePeriodStart.IsZero() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Stripe subscription invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+		}
+		if state.BillingReason == "subscription_cycle" && !state.ServicePeriodEnd.After(state.ServicePeriodStart) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Stripe subscription invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+		}
+	}
+	return state, nil
 }
 
 func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclient.WebhookEvent) (*stripeclient.CheckoutSessionState, bool, error) {
@@ -186,18 +226,86 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 	}
 }
 
-func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 	switch event.Type {
 	case "checkout.session.completed":
 		return s.activatePaygCheckout(ctx, tx, organizationID, event, checkout)
 	case "invoice.created":
-		logger.InfoContext(ctx, "received Stripe invoice creation")
+		recorded, err := s.recordStripeInvoice(ctx, tx, organizationID, event, invoice)
+		if err != nil {
+			return stripeWebhookResult{}, err
+		}
+		if recorded {
+			logger.InfoContext(ctx, "recorded Stripe invoice creation")
+		} else {
+			logger.InfoContext(ctx, "skipped non-billable Stripe invoice creation")
+		}
 	case "invoice.payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
 	case "customer.subscription.deleted":
 		logger.InfoContext(ctx, "received Stripe subscription deletion")
 	}
 	return stripeWebhookResult{newlyEnabledFeatures: nil}, nil
+}
+
+func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, invoice *stripeclient.InvoiceState) (bool, error) {
+	if invoice == nil {
+		return false, errors.New("missing current Stripe invoice state")
+	}
+	switch invoice.BillingReason {
+	case "subscription_create", "subscription_cycle":
+	default:
+		return false, nil
+	}
+
+	q := repo.New(tx)
+	identity, err := q.GetPaygInvoiceIdentity(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read PAYG invoice identity: %w", err)
+	}
+	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID {
+		return false, errors.New("stripe invoice customer does not belong to the organization")
+	}
+	if identity.GramAccountType != "payg" {
+		if identity.StripeCheckoutSessionID.Valid {
+			return false, errors.New("PAYG Checkout activation has not committed")
+		}
+		return false, nil
+	}
+	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
+		return false, errors.New("stripe invoice does not belong to active PAYG billing")
+	}
+	if invoice.BillingReason == "subscription_create" && !invoice.ServicePeriodEnd.After(invoice.ServicePeriodStart) {
+		// Stripe's immediate first subscription invoice has no prior service
+		// period. It carries no usage and must not enter pass-through billing.
+		return false, nil
+	}
+	if invoice.ServicePeriodStart.Before(identity.StripeBillingCycleAnchor.Time.UTC()) {
+		// Checkout can create a zero-dollar free stub before the first paid
+		// midnight. It is intentionally outside pass-through billing.
+		return false, nil
+	}
+	if invoice.Currency != "usd" {
+		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
+	}
+	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
+		return false, errors.New("stripe invoice service period is not UTC-day aligned")
+	}
+
+	_, err = q.UpsertStripeInvoice(ctx, repo.UpsertStripeInvoiceParams{
+		StripeInvoiceID:      invoice.ID,
+		OrganizationID:       pgtype.Text{String: organizationID, Valid: true},
+		StripeCustomerID:     invoice.CustomerID,
+		StripeSubscriptionID: invoice.SubscriptionID,
+		ServicePeriodStart:   pgtype.Timestamptz{Time: invoice.ServicePeriodStart.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+		ServicePeriodEnd:     pgtype.Timestamptz{Time: invoice.ServicePeriodEnd.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+		InvoiceState:         invoice.Status,
+		FinalizedAt:          pgtype.Timestamptz{Time: invoice.FinalizedAt.UTC(), InfinityModifier: pgtype.Finite, Valid: !invoice.FinalizedAt.IsZero()},
+	})
+	if err != nil {
+		return false, fmt.Errorf("record Stripe invoice: %w", err)
+	}
+	return true, nil
 }
 
 func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {

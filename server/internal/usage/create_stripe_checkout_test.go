@@ -118,6 +118,26 @@ func (c *checkoutStripeClient) GetMeterEventSummary(context.Context, stripeclien
 	return 0, errors.New("not implemented")
 }
 
+func (c *checkoutStripeClient) GetInvoice(context.Context, string) (*stripeclient.InvoiceState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *checkoutStripeClient) CreateInvoiceItem(context.Context, stripeclient.CreateInvoiceItemInput) (*stripeclient.InvoiceItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *checkoutStripeClient) CreateCreditNote(context.Context, stripeclient.CreateCreditNoteInput) (*stripeclient.CreditNote, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *checkoutStripeClient) FindInvoiceItem(context.Context, stripeclient.FindInvoiceAllocationInput) (*stripeclient.InvoiceItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *checkoutStripeClient) FindCreditNote(context.Context, stripeclient.FindInvoiceAllocationInput) (*stripeclient.CreditNote, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.WebhookEvent, error) {
 	return nil, errors.New("not implemented")
 }

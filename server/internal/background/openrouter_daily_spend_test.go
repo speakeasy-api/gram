@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
-func TestCollectOpenRouterDailySpendWorkflowCollectsLastThreeCompletedUTCDays(t *testing.T) {
+func TestCollectOpenRouterDailySpendWorkflowCollectsLastFourCompletedUTCDays(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -24,20 +24,31 @@ func TestCollectOpenRouterDailySpendWorkflowCollectsLastThreeCompletedUTCDays(t 
 	env.SetStartTime(time.Date(2026, time.August, 14, 23, 30, 0, 0, time.FixedZone("UTC-7", -7*60*60)))
 
 	var received activities.CollectOpenRouterDailySpendArgs
+	var settled activities.SettleStripeInvoiceAllocationsArgs
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, args activities.CollectOpenRouterDailySpendArgs) error {
+		func(_ context.Context, args activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
 			received = args
-			return nil
+			return activities.CollectOpenRouterDailySpendResult{ReadyOrganizationIDs: []string{"org-ready"}}, nil
 		},
 		activity.RegisterOptions{Name: "CollectOpenRouterDailySpend"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args activities.SettleStripeInvoiceAllocationsArgs) error {
+			settled = args
+			return nil
+		},
+		activity.RegisterOptions{Name: "SettleStripeInvoiceAllocations"},
 	)
 
 	env.ExecuteWorkflow(CollectOpenRouterDailySpendWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, time.Date(2026, time.August, 12, 0, 0, 0, 0, time.UTC), received.StartDay)
+	require.Equal(t, time.Date(2026, time.August, 11, 0, 0, 0, 0, time.UTC), received.StartDay)
 	require.Equal(t, time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC), received.EndDay)
+	require.Equal(t, time.Date(2026, time.August, 15, 6, 30, 0, 0, time.UTC), settled.Now)
+	require.True(t, settled.RestrictOpenRouterToReadyOrganizations)
+	require.Equal(t, []string{"org-ready"}, settled.OpenRouterReadyOrganizationIDs)
 }
 
 func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *testing.T) {
@@ -46,12 +57,22 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	var attempts atomic.Int32
+	var settlementAttempts atomic.Int32
+	var settled activities.SettleStripeInvoiceAllocationsArgs
 	env.RegisterActivityWithOptions(
-		func(context.Context, activities.CollectOpenRouterDailySpendArgs) error {
+		func(context.Context, activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
 			attempts.Add(1)
-			return errors.New("OpenRouter unavailable")
+			return activities.CollectOpenRouterDailySpendResult{}, errors.New("OpenRouter unavailable")
 		},
 		activity.RegisterOptions{Name: "CollectOpenRouterDailySpend"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args activities.SettleStripeInvoiceAllocationsArgs) error {
+			settlementAttempts.Add(1)
+			settled = args
+			return nil
+		},
+		activity.RegisterOptions{Name: "SettleStripeInvoiceAllocations"},
 	)
 
 	env.ExecuteWorkflow(CollectOpenRouterDailySpendWorkflow)
@@ -59,6 +80,9 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 	require.True(t, env.IsWorkflowCompleted())
 	require.ErrorContains(t, env.GetWorkflowError(), "collect openrouter daily spend")
 	require.EqualValues(t, openRouterDailySpendActivityMaxAttempts, attempts.Load())
+	require.EqualValues(t, 1, settlementAttempts.Load(), "failed collection must still route independent TUM carries")
+	require.True(t, settled.RestrictOpenRouterToReadyOrganizations)
+	require.Empty(t, settled.OpenRouterReadyOrganizationIDs)
 }
 
 func TestOpenRouterDailySpendScheduleOptions(t *testing.T) {
@@ -76,5 +100,5 @@ func TestOpenRouterDailySpendScheduleOptions(t *testing.T) {
 	require.Equal(t, openRouterDailySpendScheduledWorkflowID, action.ID)
 	require.Equal(t, "test-task-queue", action.TaskQueue)
 	require.Equal(t, openRouterDailySpendWorkflowRunTimeout, action.WorkflowRunTimeout)
-	require.Greater(t, openRouterDailySpendWorkflowRunTimeout, openRouterDailySpendActivityScheduleToCloseTimeout)
+	require.Greater(t, openRouterDailySpendWorkflowRunTimeout, 2*openRouterDailySpendActivityScheduleToCloseTimeout)
 }
