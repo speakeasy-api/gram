@@ -60539,14 +60539,14 @@ components:
                     description: Email of the person who initiated the move, when known.
                 child_captured:
                     type: boolean
-                    description: Whether the continuation exists as a captured chat, i.e. whether the child side is navigable.
+                    description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
                 child_chat_id:
                     type: string
                     description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).
                     format: uuid
                 child_title:
                     type: string
-                    description: Title of the child chat, when it has been captured and titled.
+                    description: Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.
                 created_at:
                     type: string
                     description: When the move was recorded.
@@ -60557,13 +60557,16 @@ components:
                 kind:
                     type: string
                     description: Link kind. Currently always 'move'.
+                parent_captured:
+                    type: boolean
+                    description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
                 parent_chat_id:
                     type: string
                     description: Chat id of the session the move originated from.
                     format: uuid
                 parent_title:
                     type: string
-                    description: Title of the parent chat, when it has been captured and titled.
+                    description: Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.
                 source_surface:
                     type: string
                     description: Harness the session originated in, when known.
@@ -60572,6 +60575,7 @@ components:
                     description: Harness the session was moved to (e.g. cursor, codex, claude-code).
             required:
                 - parent_chat_id
+                - parent_captured
                 - child_captured
                 - kind
                 - target_harness

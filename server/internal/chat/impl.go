@@ -749,6 +749,7 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 			ChildChatID:    nil,
 			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
 			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
+			ParentCaptured: row.ParentCaptured,
 			ChildCaptured:  row.ChildCaptured,
 			Kind:           row.Kind,
 			TargetHarness:  row.TargetHarness,

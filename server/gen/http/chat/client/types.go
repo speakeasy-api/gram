@@ -2854,12 +2854,17 @@ type ChatSessionLinkResponseBody struct {
 	// Chat id derived for the continuation. Absent when the continuation's session
 	// id was unknowable at move time (e.g. Cursor mints ids server-side).
 	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
-	// Title of the parent chat, when it has been captured and titled.
+	// Title of the parent chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
 	ParentTitle *string `form:"parent_title,omitempty" json:"parent_title,omitempty" xml:"parent_title,omitempty"`
-	// Title of the child chat, when it has been captured and titled.
+	// Title of the child chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
 	ChildTitle *string `form:"child_title,omitempty" json:"child_title,omitempty" xml:"child_title,omitempty"`
-	// Whether the continuation exists as a captured chat, i.e. whether the child
-	// side is navigable.
+	// Whether the parent exists as a captured chat the caller can read, i.e.
+	// whether the parent side is navigable.
+	ParentCaptured *bool `form:"parent_captured,omitempty" json:"parent_captured,omitempty" xml:"parent_captured,omitempty"`
+	// Whether the continuation exists as a captured chat the caller can read, i.e.
+	// whether the child side is navigable.
 	ChildCaptured *bool `form:"child_captured,omitempty" json:"child_captured,omitempty" xml:"child_captured,omitempty"`
 	// Link kind. Currently always 'move'.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
@@ -8716,6 +8721,9 @@ func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
 func ValidateChatSessionLinkResponseBody(body *ChatSessionLinkResponseBody) (err error) {
 	if body.ParentChatID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("parent_chat_id", "body"))
+	}
+	if body.ParentCaptured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("parent_captured", "body"))
 	}
 	if body.ChildCaptured == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("child_captured", "body"))

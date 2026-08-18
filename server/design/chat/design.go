@@ -517,9 +517,10 @@ var ChatSessionLink = Type("ChatSessionLink", func() {
 	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side).", func() {
 		Format(FormatUUID)
 	})
-	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled.")
-	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled.")
-	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat, i.e. whether the child side is navigable.")
+	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.")
+	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.")
+	Attribute("parent_captured", Boolean, "Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.")
+	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.")
 	Attribute("kind", String, "Link kind. Currently always 'move'.")
 	Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).")
 	Attribute("source_surface", String, "Harness the session originated in, when known.")
@@ -529,7 +530,7 @@ var ChatSessionLink = Type("ChatSessionLink", func() {
 		Description("When the move was recorded.")
 		Format(FormatDateTime)
 	})
-	Required("parent_chat_id", "child_captured", "kind", "target_harness", "created_at")
+	Required("parent_chat_id", "parent_captured", "child_captured", "kind", "target_harness", "created_at")
 })
 
 var ListSessionLinksResult = Type("ListSessionLinksResult", func() {

@@ -3381,6 +3381,7 @@ func unmarshalChatSessionLinkResponseBodyToChatChatSessionLink(v *ChatSessionLin
 		ChildChatID:    v.ChildChatID,
 		ParentTitle:    v.ParentTitle,
 		ChildTitle:     v.ChildTitle,
+		ParentCaptured: *v.ParentCaptured,
 		ChildCaptured:  *v.ChildCaptured,
 		Kind:           *v.Kind,
 		TargetHarness:  *v.TargetHarness,

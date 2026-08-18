@@ -274,4 +274,4 @@ INSERT INTO chat_session_links (
   @parent_session_id, @child_session_id, 'move', @target_harness, @source_surface,
   @actor_email, @device_serial, @device_hostname
 )
-ON CONFLICT (parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;

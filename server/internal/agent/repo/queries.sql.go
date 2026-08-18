@@ -295,7 +295,7 @@ INSERT INTO chat_session_links (
   $5, $6, 'move', $7, $8,
   $9, $10, $11
 )
-ON CONFLICT (parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
 `
 
 type InsertChatSessionLinkParams struct {

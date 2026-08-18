@@ -70,6 +70,7 @@ func TestListSessionLinks_ParentAndChildDirections(t *testing.T) {
 	require.Equal(t, "original session", *link.ParentTitle)
 	require.NotNil(t, link.ChildTitle)
 	require.Equal(t, "continued session", *link.ChildTitle)
+	require.True(t, link.ParentCaptured)
 	require.Equal(t, "claude-code", link.TargetHarness)
 	require.Equal(t, "move", link.Kind)
 
@@ -127,6 +128,11 @@ func TestListSessionLinks_MemberVisibilityScoped(t *testing.T) {
 	memberCtx, memberUserID := memberSessionCtx(t, ti)
 	mineParent := seedChat(t, memberCtx, ti, memberUserID, "", "my session")
 	seedSessionLink(t, memberCtx, ti, mineParent, nil, "cursor")
+	// An edge from the member's chat into another member's chat is visible
+	// (the member owns one end) but the foreign end's title and captured
+	// state must be masked.
+	crossChild := seedChat(t, adminCtx, ti, "user-someone-else", "", "their other continuation")
+	seedSessionLink(t, memberCtx, ti, mineParent, &crossChild, "claude-code")
 
 	res, err := ti.service.ListSessionLinks(memberCtx, &gen.ListSessionLinksPayload{
 		SessionToken:      nil,
@@ -135,8 +141,13 @@ func TestListSessionLinks_MemberVisibilityScoped(t *testing.T) {
 		ChatIds:           []string{otherParent.String(), mineParent.String()},
 	})
 	require.NoError(t, err)
-	require.Len(t, res.Links, 1, "only the member's own edge is visible")
-	require.Equal(t, mineParent.String(), res.Links[0].ParentChatID)
+	require.Len(t, res.Links, 2, "only edges touching the member's own chats are visible")
+	for _, link := range res.Links {
+		require.Equal(t, mineParent.String(), link.ParentChatID)
+		require.True(t, link.ParentCaptured)
+		require.Nil(t, link.ChildTitle, "foreign child titles stay masked")
+		require.False(t, link.ChildCaptured, "foreign children read as not navigable")
+	}
 
 	adminRes, err := ti.service.ListSessionLinks(adminCtx, &gen.ListSessionLinksPayload{
 		SessionToken:      nil,
@@ -145,5 +156,11 @@ func TestListSessionLinks_MemberVisibilityScoped(t *testing.T) {
 		ChatIds:           []string{otherParent.String(), mineParent.String()},
 	})
 	require.NoError(t, err)
-	require.Len(t, adminRes.Links, 2, "chat:read holders see every edge")
+	require.Len(t, adminRes.Links, 3, "chat:read holders see every edge")
+	for _, link := range adminRes.Links {
+		if link.ChildChatID != nil && *link.ChildChatID == crossChild.String() {
+			require.NotNil(t, link.ChildTitle, "unrestricted callers see the real title")
+			require.True(t, link.ChildCaptured)
+		}
+	}
 }

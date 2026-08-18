@@ -820,7 +820,11 @@ function SessionLinksSection({
   chatId: string;
   onOpenChat?: (chatId: string) => void;
 }) {
-  const { data } = useListChatSessionLinks({ chatIds: [chatId] });
+  // throwOnError stays off: this section is optional, and a lineage-endpoint
+  // failure must not take down the whole transcript panel's error boundary.
+  const { data } = useListChatSessionLinks({ chatIds: [chatId] }, undefined, {
+    throwOnError: false,
+  });
   const links = data?.links ?? [];
   if (links.length === 0) {
     return null;
@@ -875,8 +879,10 @@ function SessionLinksSection({
             `in-${link.parentChatId}-${link.createdAt.toISOString()}`,
             <>Derived from {link.parentTitle ?? "an earlier session"}</>,
             link.createdAt,
-            hop(link.parentChatId, true),
-            link.actorEmail ?? undefined,
+            hop(link.parentChatId, link.parentCaptured),
+            link.parentCaptured
+              ? (link.actorEmail ?? undefined)
+              : "not yet captured",
           ),
         )}
         {outbound.map((link) =>

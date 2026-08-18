@@ -6243,7 +6243,7 @@ examples:
           chat_ids: []
       responses:
         "200":
-          application/json: {"links": [{"child_captured": true, "created_at": "2024-08-10T22:28:06.238Z", "kind": "<value>", "parent_chat_id": "15b5d33d-1e55-46b4-9fa9-07041dd071cb", "target_harness": "<value>"}]}
+          application/json: {"links": [{"child_captured": true, "created_at": "2024-08-10T22:28:06.238Z", "kind": "<value>", "parent_captured": true, "parent_chat_id": "15b5d33d-1e55-46b4-9fa9-07041dd071cb", "target_harness": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

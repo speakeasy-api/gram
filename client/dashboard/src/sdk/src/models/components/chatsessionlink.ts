@@ -14,7 +14,7 @@ export type ChatSessionLink = {
    */
   actorEmail?: string | undefined;
   /**
-   * Whether the continuation exists as a captured chat, i.e. whether the child side is navigable.
+   * Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
    */
   childCaptured: boolean;
   /**
@@ -22,7 +22,7 @@ export type ChatSessionLink = {
    */
   childChatId?: string | undefined;
   /**
-   * Title of the child chat, when it has been captured and titled.
+   * Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.
    */
   childTitle?: string | undefined;
   /**
@@ -38,11 +38,15 @@ export type ChatSessionLink = {
    */
   kind: string;
   /**
+   * Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
+   */
+  parentCaptured: boolean;
+  /**
    * Chat id of the session the move originated from.
    */
   parentChatId: string;
   /**
-   * Title of the parent chat, when it has been captured and titled.
+   * Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.
    */
   parentTitle?: string | undefined;
   /**
@@ -71,6 +75,7 @@ export const ChatSessionLink$inboundSchema: z.ZodMiniType<
     ),
     device_hostname: z.optional(z.string()),
     kind: z.string(),
+    parent_captured: z.boolean(),
     parent_chat_id: z.string(),
     parent_title: z.optional(z.string()),
     source_surface: z.optional(z.string()),
@@ -84,6 +89,7 @@ export const ChatSessionLink$inboundSchema: z.ZodMiniType<
       "child_title": "childTitle",
       "created_at": "createdAt",
       "device_hostname": "deviceHostname",
+      "parent_captured": "parentCaptured",
       "parent_chat_id": "parentChatId",
       "parent_title": "parentTitle",
       "source_surface": "sourceSurface",

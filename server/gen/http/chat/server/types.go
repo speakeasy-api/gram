@@ -2855,12 +2855,17 @@ type ChatSessionLinkResponseBody struct {
 	// Chat id derived for the continuation. Absent when the continuation's session
 	// id was unknowable at move time (e.g. Cursor mints ids server-side).
 	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
-	// Title of the parent chat, when it has been captured and titled.
+	// Title of the parent chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
 	ParentTitle *string `form:"parent_title,omitempty" json:"parent_title,omitempty" xml:"parent_title,omitempty"`
-	// Title of the child chat, when it has been captured and titled.
+	// Title of the child chat, when it has been captured and titled and the
+	// caller's visibility scope can read it.
 	ChildTitle *string `form:"child_title,omitempty" json:"child_title,omitempty" xml:"child_title,omitempty"`
-	// Whether the continuation exists as a captured chat, i.e. whether the child
-	// side is navigable.
+	// Whether the parent exists as a captured chat the caller can read, i.e.
+	// whether the parent side is navigable.
+	ParentCaptured bool `form:"parent_captured" json:"parent_captured" xml:"parent_captured"`
+	// Whether the continuation exists as a captured chat the caller can read, i.e.
+	// whether the child side is navigable.
 	ChildCaptured bool `form:"child_captured" json:"child_captured" xml:"child_captured"`
 	// Link kind. Currently always 'move'.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
