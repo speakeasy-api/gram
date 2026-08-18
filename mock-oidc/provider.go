@@ -53,14 +53,16 @@ type tokenEntry struct {
 }
 
 type refreshTokenEntry struct {
-	clientID string
-	user     User
-	scope    string
+	clientID  string
+	user      User
+	scope     string
+	expiresAt time.Time
 }
 
 const (
-	codeTTL  = 60 * time.Second
-	tokenTTL = time.Hour
+	codeTTL         = 60 * time.Second
+	tokenTTL        = time.Hour
+	refreshTokenTTL = 24 * time.Hour
 )
 
 func NewProvider(cfg *Config, logger *slog.Logger, issuer string, privateKey *rsa.PrivateKey) (*Provider, error) {
@@ -235,7 +237,12 @@ func (p *Provider) MintRefreshToken(clientID string, user User, scope string) (s
 		return "", err
 	}
 	p.mu.Lock()
-	p.refreshTokens[tok] = &refreshTokenEntry{clientID: clientID, user: user, scope: scope}
+	p.refreshTokens[tok] = &refreshTokenEntry{
+		clientID:  clientID,
+		user:      user,
+		scope:     scope,
+		expiresAt: time.Now().Add(refreshTokenTTL),
+	}
 	p.mu.Unlock()
 	return tok, nil
 }
@@ -245,6 +252,10 @@ func (p *Provider) LookupRefreshToken(tok, clientID string) (*refreshTokenEntry,
 	defer p.mu.Unlock()
 	entry, ok := p.refreshTokens[tok]
 	if !ok || entry.clientID != clientID {
+		return nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(p.refreshTokens, tok)
 		return nil, false
 	}
 	return entry, true
@@ -294,6 +305,11 @@ func (p *Provider) Sweep() {
 	for k, v := range p.accessTokens {
 		if now.After(v.expiresAt) {
 			delete(p.accessTokens, k)
+		}
+	}
+	for k, v := range p.refreshTokens {
+		if now.After(v.expiresAt) {
+			delete(p.refreshTokens, k)
 		}
 	}
 }

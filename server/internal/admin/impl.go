@@ -116,10 +116,11 @@ func NewService(
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
 	sessionStore := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
 			logger.With(attr.SlogCacheNamespace("admin_session")),
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
 		encryptionClient,
@@ -131,14 +132,14 @@ func NewService(
 		db:             db,
 		oidc:           oidcClient,
 		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient),
+		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
 		allowedOrigins: allowedOrigins,
 		workos:         workosClient,
 		openRouter:     openRouter,
 		audit:          audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
 		trial: trialNotifier,

@@ -80,9 +80,11 @@ func (g *OIDCClient) AuthCodeURL(state, pkceChallenge, prompt string) string {
 	// Google generally issues a refresh token only when consent is explicit.
 	// Silent re-authentication must remain silent, but every interactive flow
 	// should obtain a refresh token so the one-hour access token can be renewed.
-	if prompt != "none" && !strings.Contains(prompt, "consent") {
-		prompt = strings.TrimSpace(prompt + " consent")
+	promptTokens := strings.Fields(prompt)
+	if !slices.Contains(promptTokens, "none") && !slices.Contains(promptTokens, "consent") {
+		promptTokens = append(promptTokens, "consent")
 	}
+	prompt = strings.Join(promptTokens, " ")
 	if prompt != "" {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", prompt))
 	}

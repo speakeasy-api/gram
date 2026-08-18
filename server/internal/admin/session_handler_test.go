@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -97,10 +100,11 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
 	sessions := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
 			logger,
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
 		enc,
@@ -110,7 +114,7 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 		logger:   logger,
 		oidc:     oidcClient,
 		sessions: sessions,
-		verifier: NewVerifier(logger, sessions, oidcClient),
+		verifier: NewVerifier(logger, sessions, oidcClient, adminCache),
 		trial:    trialemails.NoopNotifier{},
 	}
 }
@@ -184,9 +188,9 @@ func TestHandleGetSession_RefreshesExpiredTokens(t *testing.T) {
 		t,
 		userinfoOK("sub-refresh", "operator@example.com"),
 		func(w http.ResponseWriter, r *http.Request) {
-			require.NoError(t, r.ParseForm())
-			require.Equal(t, "refresh_token", r.PostForm.Get("grant_type"))
-			require.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
+			assert.NoError(t, r.ParseForm())
+			assert.Equal(t, "refresh_token", r.PostForm.Get("grant_type"))
+			assert.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  "new-access-token",
@@ -221,6 +225,66 @@ func TestHandleGetSession_RefreshesExpiredTokens(t *testing.T) {
 	require.True(t, session.AccessTokenExpiresAt.After(time.Now()))
 }
 
+func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	var refreshes atomic.Int32
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		userinfoOK("sub-concurrent-refresh", "operator@example.com"),
+		func(w http.ResponseWriter, r *http.Request) {
+			refreshes.Add(1)
+			assert.NoError(t, r.ParseForm())
+			assert.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
+			time.Sleep(100 * time.Millisecond)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "new-access-token",
+				"refresh_token": "new-refresh-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		},
+	)
+	svc := newTestSessionService(t, oidcClient)
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-concurrent-refresh",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	const requests = 5
+	start := make(chan struct{})
+	codes := make(chan int, requests)
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+			codes <- rec.Code
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(codes)
+
+	for code := range codes {
+		require.Equal(t, http.StatusOK, code)
+	}
+	require.EqualValues(t, 1, refreshes.Load())
+}
+
 func TestAuthCodeURLRequestsConsentForInteractiveLogin(t *testing.T) {
 	t.Parallel()
 
@@ -229,7 +293,7 @@ func TestAuthCodeURLRequestsConsentForInteractiveLogin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "consent", interactive.Query().Get("prompt"))
 
-	silent, err := url.Parse(client.AuthCodeURL("state", "challenge", "none"))
+	silent, err := url.Parse(client.AuthCodeURL("state", "challenge", "  none  "))
 	require.NoError(t, err)
 	require.Equal(t, "none", silent.Query().Get("prompt"))
 }
