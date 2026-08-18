@@ -30,6 +30,8 @@ type ListFacetsResponseBody struct {
 	Actors []*AuditLogFacetOptionResponseBody `form:"actors" json:"actors" xml:"actors"`
 	// Available action facets
 	Actions []*AuditLogFacetOptionResponseBody `form:"actions" json:"actions" xml:"actions"`
+	// Available acting surface facets
+	Surfaces []*AuditLogFacetOptionResponseBody `form:"surfaces" json:"surfaces" xml:"surfaces"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "auditlogs" service "list"
@@ -396,14 +398,21 @@ type ListFacetsGatewayErrorResponseBody struct {
 
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
-	ID                 string          `form:"id" json:"id" xml:"id"`
-	ProjectID          *string         `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	ProjectSlug        *string         `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	ActorID            string          `form:"actor_id" json:"actor_id" xml:"actor_id"`
-	ActorType          string          `form:"actor_type" json:"actor_type" xml:"actor_type"`
-	ActorDisplayName   *string         `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
-	ActorSlug          *string         `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
-	Action             string          `form:"action" json:"action" xml:"action"`
+	ID               string  `form:"id" json:"id" xml:"id"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	ActorID          string  `form:"actor_id" json:"actor_id" xml:"actor_id"`
+	ActorType        string  `form:"actor_type" json:"actor_type" xml:"actor_type"`
+	ActorDisplayName *string `form:"actor_display_name,omitempty" json:"actor_display_name,omitempty" xml:"actor_display_name,omitempty"`
+	ActorSlug        *string `form:"actor_slug,omitempty" json:"actor_slug,omitempty" xml:"actor_slug,omitempty"`
+	Action           string  `form:"action" json:"action" xml:"action"`
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -474,6 +483,18 @@ func NewListFacetsResponseBody(res *auditlogs.ListAuditLogFacetsResult) *ListFac
 		}
 	} else {
 		body.Actions = []*AuditLogFacetOptionResponseBody{}
+	}
+	if res.Surfaces != nil {
+		body.Surfaces = make([]*AuditLogFacetOptionResponseBody, len(res.Surfaces))
+		for i, val := range res.Surfaces {
+			if val == nil {
+				body.Surfaces[i] = nil
+				continue
+			}
+			body.Surfaces[i] = marshalAuditlogsAuditLogFacetOptionToAuditLogFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Surfaces = []*AuditLogFacetOptionResponseBody{}
 	}
 	return body
 }
@@ -759,7 +780,7 @@ func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGat
 }
 
 // NewListPayload builds a auditlogs service list endpoint payload.
-func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, actingSurface *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
@@ -767,6 +788,7 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 	v.Action = action
 	v.SubjectType = subjectType
 	v.SubjectID = subjectID
+	v.ActingSurface = actingSurface
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

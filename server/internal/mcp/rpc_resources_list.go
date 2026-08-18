@@ -54,6 +54,7 @@ func handleResourcesList(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		Result: resourcesListResult{
 			Resources: resources,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	}
 
 	bs, err := json.Marshal(result)

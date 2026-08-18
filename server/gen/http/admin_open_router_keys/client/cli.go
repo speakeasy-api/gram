@@ -62,38 +62,6 @@ func BuildGetKeyUsagePayload(adminOpenRouterKeysGetKeyUsageOrganizationID string
 	return v, nil
 }
 
-// BuildEncryptKeyPayload builds the payload for the adminOpenRouterKeys
-// encryptKey endpoint from CLI flags.
-func BuildEncryptKeyPayload(adminOpenRouterKeysEncryptKeyBody string, adminOpenRouterKeysEncryptKeySessionToken string) (*adminopenrouterkeys.EncryptKeyPayload, error) {
-	var err error
-	var body EncryptKeyRequestBody
-	{
-		err = json.Unmarshal([]byte(adminOpenRouterKeysEncryptKeyBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }'")
-		}
-		if !(body.KeyType == "chat" || body.KeyType == "internal") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", body.KeyType, []any{"chat", "internal"}))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if adminOpenRouterKeysEncryptKeySessionToken != "" {
-			sessionToken = &adminOpenRouterKeysEncryptKeySessionToken
-		}
-	}
-	v := &adminopenrouterkeys.EncryptKeyPayload{
-		OrganizationID: body.OrganizationID,
-		KeyType:        body.KeyType,
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildDisableKeyPayload builds the payload for the adminOpenRouterKeys
 // disableKey endpoint from CLI flags.
 func BuildDisableKeyPayload(adminOpenRouterKeysDisableKeyBody string, adminOpenRouterKeysDisableKeySessionToken string) (*adminopenrouterkeys.DisableKeyPayload, error) {

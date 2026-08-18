@@ -1,6 +1,6 @@
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
-import { PageHeader } from "@/components/page-header";
+import { HatchRule } from "@/components/hatch-rule";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import {
   Sidebar,
@@ -31,6 +31,7 @@ import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
   useIdentifyUserForTelemetry,
+  useRegisterOrganizationForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 import {
@@ -87,6 +88,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
+  // Runs above every gate below, including the ones that return before
+  // ProjectProvider (and its own group registration) can mount, so
+  // organization-targeted feature flags resolve on the lockout pages too.
+  useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
@@ -334,16 +339,24 @@ const AppLoadingShell = () => (
   >
     <div className="flex h-screen w-full flex-col">
       <div className="flex w-full flex-1 overflow-hidden">
-        <Sidebar collapsible="icon" variant="inset">
-          <SidebarHeader className="gap-3 pb-3">
-            <div className="flex h-(--header-height) items-center px-1">
-              <GramLogo className="w-28" />
+        <Sidebar collapsible="icon">
+          {/* Logo row + crosshatch rule, exactly as AppSidebar renders it —
+              the switcher lives in the page header now, so no placeholder
+              for it here. */}
+          <SidebarHeader className="gap-0 p-0">
+            <div className="flex h-(--header-height) items-center px-2">
+              <div className="flex h-full items-center px-1">
+                <GramLogo className="w-28" />
+              </div>
             </div>
-            {/* Workspace switcher */}
-            <Skeleton className="h-8 w-full" />
+            <HatchRule />
           </SidebarHeader>
           <SidebarContent className="pt-2">
-            <SidebarNavSkeleton />
+            <SidebarNavSkeleton
+              rows={8}
+              divideAfter={3}
+              className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+            />
           </SidebarContent>
           <SidebarFooter className="border-t">
             <div className="flex items-center gap-2 py-2">
@@ -353,10 +366,14 @@ const AppLoadingShell = () => (
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
-          <PageHeader>
-            <PageHeader.Breadcrumbs />
+          {/* Mirrors PageHeader's own geometry (h-(--header-height), px-8,
+              hatch rule) without mounting it: the switcher inside needs the
+              auth context this shell is still waiting on. */}
+          <header className="flex h-(--header-height) shrink-0 items-center gap-3 px-8">
+            <Skeleton className="h-6 w-40" />
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-          </PageHeader>
+          </header>
+          <HatchRule />
         </SidebarInset>
       </div>
     </div>

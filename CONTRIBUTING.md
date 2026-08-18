@@ -12,7 +12,11 @@ Once `./zero` succeeds and all services are running, seed the local database wit
 mise seed
 ```
 
-This populates the database with projects, deployments, API keys, and other resources so you have something to work with in the dashboard. The seed script authenticates against the running server, so make sure the services are up before running it.
+This fills your organization with a realistic working environment: a project with a deployed API and toolsets, ~180 agent sessions with full transcripts and cost telemetry, risk findings and policies, teammates, budgets, skills, and an API key. It also makes you an admin of that org.
+
+It writes directly to Postgres and ClickHouse, so it needs the infra containers but not the server — you can run it before or after `mise run start`, and re-run it any time. It is idempotent: every run wipes the seeded data and lays it down fresh, so it is also how you reset a database you have made a mess of.
+
+The data is the same data the public demo organization is built from, retargeted at your local org. See [seed/demo/README.md](./seed/demo/README.md) for how that works and what is local-only.
 
 ### Local auth and identity (dev-idp)
 

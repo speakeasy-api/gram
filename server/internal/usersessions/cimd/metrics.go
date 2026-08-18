@@ -22,6 +22,13 @@ const (
 // metrics. Every Resolve call records exactly one cimd.fetch.attempts point;
 // cimd.fetch.duration_seconds is recorded only for results where an upstream
 // fetch actually ran, so short-circuit results never skew latency percentiles.
+//
+// An admission_denied result is deliberately absent from this vocabulary.
+// Admission control records to its own cimd.admission.decisions counter
+// (internal/usersessions/cimd/admission): a denial means no fetch ran at all,
+// so counting it under fetch.attempts would break this instrument's
+// one-point-per-Resolve invariant and quietly change the denominator of every
+// fetch-success chart.
 type fetchResult string
 
 const (
@@ -38,20 +45,6 @@ const (
 	// the fetch-bearing outcomes rather than against every attempt.
 	fetchResultCached                 fetchResult = "cached"
 	fetchResultConditionalNotModified fetchResult = "conditional_not_modified"
-
-	// rate_limited is PROVISIONAL: it labels the per-origin rate limiting
-	// AIS-215 adds inside this package. It is declared now so the label
-	// vocabulary is stable for dashboards, but nothing records it yet and
-	// its exact semantics may still shift when the emitting code lands — do
-	// not build monitors on it until then.
-	//
-	// An admission_denied result was formerly reserved here for AIS-371.
-	// Admission control instead records to its own cimd.admission.decisions
-	// counter (internal/usersessions/cimd/admission): a denial means no
-	// fetch ran at all, so counting it under fetch.attempts would break this
-	// instrument's one-point-per-Resolve invariant and quietly change the
-	// denominator of every fetch-success chart.
-	fetchResultRateLimited fetchResult = "rate_limited"
 )
 
 // validationReason is the machine-readable label recorded on

@@ -36,6 +36,7 @@ func TestService_EnterDemo(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -76,6 +77,7 @@ func TestService_EnterDemo(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 

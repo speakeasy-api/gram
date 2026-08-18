@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -31,19 +33,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// ProductFeaturesClient is the slice of the product-features client the agent
+// service needs; declared here (mirroring hooks.ProductFeaturesClient) so
+// tests can stub feature state without a database round-trip.
+type ProductFeaturesClient interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	repo      *repo.Queries
-	auth      *auth.Auth
-	authz     *authz.Engine
-	audit     *audit.Logger
-	serverURL string
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures ProductFeaturesClient
+	serverURL       string
+	blobStore       assets.BlobStore
 }
 
 var (
@@ -59,18 +71,22 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	productFeatures ProductFeaturesClient,
 	serverURL string,
+	blobStore assets.BlobStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		audit:     auditLogger,
-		serverURL: serverURL,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		productFeatures: productFeatures,
+		serverURL:       serverURL,
+		blobStore:       blobStore,
 	}
 }
 
@@ -82,6 +98,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public capability-URL route for minted session handoffs (see
+	// handoffs.go): unauthenticated by design, the token is the credential.
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

@@ -780,6 +780,9 @@ func EncodeGetProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		values := req.URL.Query()
 		values.Add("id_or_slug", p.IDOrSlug)
+		if p.OrganizationIDOrSlug != nil {
+			values.Add("organization_id_or_slug", *p.OrganizationIDOrSlug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3841,11 +3844,12 @@ func unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember(
 // *admin.AdminProject from a value of type *AdminProjectResponseBody.
 func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectResponseBody) *admin.AdminProject {
 	res := &admin.AdminProject{
-		ID:        *v.ID,
-		Name:      *v.Name,
-		Slug:      *v.Slug,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+		ID:             *v.ID,
+		Name:           *v.Name,
+		Slug:           *v.Slug,
+		McpServerCount: *v.McpServerCount,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
 	}
 
 	return res

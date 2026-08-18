@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -62,18 +61,9 @@ type Service struct {
 	auth            *auth.Auth
 	authz           *authz.Engine
 	audit           *audit.Logger
-	gcpResolver     gcpauth.Resolver
+	gcpIdentity     *gcpauth.Identity
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
-
-	// gramPrincipal memoizes Gram's own resolved GCP identity. It is fixed for
-	// the process lifetime, so re-probing would add an outbound round trip to
-	// every setup-info read and credential write for no new information. Only
-	// successful resolutions are cached, so a transient failure (or an
-	// environment that has not yet been granted credentials) retries.
-	gramPrincipalMu sync.Mutex
-	gramPrincipal   string
-	gramPrincipalOK bool
 }
 
 var (
@@ -91,7 +81,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	gcpResolver gcpauth.Resolver,
+	gcpIdentity *gcpauth.Identity,
 	productFeatures *productfeatures.Client,
 	verifyStore ratelimit.Store,
 ) *Service {
@@ -104,14 +94,11 @@ func NewService(
 		auth:            auth.New(logger, db, sessions, authzEngine),
 		authz:           authzEngine,
 		audit:           auditLogger,
-		gcpResolver:     gcpResolver,
+		gcpIdentity:     gcpIdentity,
 		productFeatures: productFeatures,
 		verifyLimiter: ratelimit.New(verifyStore, "external-credential-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		gramPrincipalMu: sync.Mutex{},
-		gramPrincipal:   "",
-		gramPrincipalOK: false,
 	}
 }
 
@@ -142,43 +129,6 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 	return authCtx, logger, nil
 }
 
-// resolveGramPrincipal reports Gram's own service account: the identity a
-// customer grants impersonation rights to. An empty email with a nil error is a
-// successful resolve against a source that carries no service-account email
-// (local development backed by a user login), not a failure.
-func (s *Service) resolveGramPrincipal(ctx context.Context) (string, error) {
-	s.gramPrincipalMu.Lock()
-	cached, ok := s.gramPrincipal, s.gramPrincipalOK
-	s.gramPrincipalMu.Unlock()
-
-	if ok {
-		return cached, nil
-	}
-
-	// Resolve outside the lock. The probe mints a token and can hit the metadata
-	// server, so it takes seconds when the environment is unhealthy — and since
-	// failures are not cached, holding the lock across it would serialize every
-	// setup-info read and credential write in the process behind one slow call
-	// for the whole duration of an outage. Concurrent callers racing to resolve
-	// is harmless: they compute the same value.
-	principal, err := s.gcpResolver.ResolvePrincipal(ctx, gcpauth.Credential{
-		ImpersonateServiceAccount: "",
-		WifPoolID:                 "",
-		WifProviderID:             "",
-		WifProjectNumber:          "",
-	})
-	if err != nil {
-		return "", fmt.Errorf("resolve gram's own gcp identity: %w", err)
-	}
-
-	s.gramPrincipalMu.Lock()
-	s.gramPrincipal = principal.Email
-	s.gramPrincipalOK = true
-	s.gramPrincipalMu.Unlock()
-
-	return principal.Email, nil
-}
-
 // resolveOrgImpersonationTarget validates the service account an organization
 // credential wants Gram to impersonate, returning the trimmed target.
 func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string) (string, error) {
@@ -187,7 +137,7 @@ func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slo
 		return "", oops.E(oops.CodeBadRequest, nil, "impersonate_service_account is required").LogError(ctx, logger)
 	}
 
-	reason, err := s.impersonationTargetProblem(ctx, logger, target)
+	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
 	}
@@ -198,84 +148,9 @@ func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slo
 	return target, nil
 }
 
-// impersonationTargetProblem reports why a target must not be impersonated, or
-// "" when it is acceptable. A non-nil error means the policy could not be
-// evaluated at all, which callers must never treat as acceptance: the screening
-// exists because getGcpSetupInfo publishes Gram's own service account by design,
-// so without it an organization member could name an internal service account
-// and use verify to discover which ones Gram holds impersonation rights on.
-//
-// Both sides of the comparison have to be a user-managed address for it to mean
-// anything. Google's default compute and App Engine service accounts identify
-// their project by number, or by an id that cannot be compared against one, so
-// they are refused rather than compared unreliably.
-func (s *Service) impersonationTargetProblem(ctx context.Context, logger *slog.Logger, target string) (string, error) {
-	if serviceAccountProject(target) == "" {
-		return "impersonate_service_account must be a user-managed service account (name@PROJECT_ID.iam.gserviceaccount.com)", nil
-	}
-
-	gramSA, err := s.resolveGramPrincipal(ctx)
-	if err != nil {
-		return "", fmt.Errorf("resolve gram's own gcp identity to screen impersonation target: %w", err)
-	}
-
-	gramProject := serviceAccountProject(gramSA)
-	if gramProject == "" {
-		// Gram is running as something this cannot place in a project — most
-		// likely a default compute service account. Refusing is deliberate: the
-		// alternative is comparing against nothing and silently accepting every
-		// target, and a loud failure here is a deployment problem to fix (give
-		// Gram a dedicated service account) rather than a hole to leave open.
-		logger.ErrorContext(ctx, "gram's own gcp identity is not a user-managed service account, cannot screen impersonation targets",
-			attr.SlogError(errors.New("unrecognized service account form")))
-		return "", fmt.Errorf("gram's own gcp identity %q is not a user-managed service account", gramSA)
-	}
-
-	if serviceAccountProject(target) == gramProject {
-		return "impersonate_service_account must be a service account in your own GCP project", nil
-	}
-
-	return "", nil
-}
-
-// verifyDetailMaxLen bounds the provider text echoed back from a failed probe.
-// The provider's own message is the whole value of verify — it names the missing
-// grant — so it is surfaced rather than replaced with something generic. Bounding
-// it keeps an unexpectedly chatty SDK error from turning the field into a channel
-// for arbitrary internal detail; the untruncated error is always in the log.
+// verifyDetailMaxLen bounds the provider text a failed probe echoes back. The
+// untruncated error is always in the log.
 const verifyDetailMaxLen = 300
-
-// verifyFailureDetail renders a failed probe for the caller.
-func verifyFailureDetail(err error) string {
-	detail := err.Error()
-	if len(detail) <= verifyDetailMaxLen {
-		return detail
-	}
-
-	return detail[:verifyDetailMaxLen] + "… (truncated, see Gram logs for the full error)"
-}
-
-// serviceAccountProject extracts the project id from a user-managed GCP service
-// account email of the form name@PROJECT_ID.iam.gserviceaccount.com.
-//
-// Returns "" for every other address, including user accounts and Google's
-// default compute (PROJECT_NUMBER-compute@developer.gserviceaccount.com) and App
-// Engine (PROJECT_ID@appspot.gserviceaccount.com) service accounts. Callers
-// treat "" as "cannot be placed in a project" and refuse it, so a project number
-// is never compared against a project id.
-func serviceAccountProject(email string) string {
-	_, domain, found := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
-	if !found {
-		return ""
-	}
-
-	project, ok := strings.CutSuffix(domain, ".iam.gserviceaccount.com")
-	if !ok {
-		return ""
-	}
-
-	return project
-}
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	mw := []func(goa.Endpoint) goa.Endpoint{
@@ -770,7 +645,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 	// can impersonate. A screening the server cannot evaluate is an error rather
 	// than an unverified result: reporting "not verified" would blame the
 	// customer's configuration for a fault on Gram's side.
-	reason, err := s.impersonationTargetProblem(ctx, logger, target)
+	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "cannot verify this credential right now, try again shortly").LogError(ctx, logger)
 	}
@@ -782,7 +657,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 		}, nil
 	}
 
-	principal, resolveErr := s.gcpResolver.ResolvePrincipal(ctx, gcpauth.Credential{
+	principal, resolveErr := s.gcpIdentity.ResolvePrincipal(ctx, gcpauth.Credential{
 		ImpersonateServiceAccount: target,
 		WifPoolID:                 "",
 		WifProviderID:             "",
@@ -793,7 +668,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 		return &gen.VerifyCredentialResult{
 			Verified:  false,
 			Principal: conv.PtrEmpty(target),
-			Detail:    conv.PtrEmpty(verifyFailureDetail(resolveErr)),
+			Detail:    conv.PtrEmpty(conv.TruncateDetail(resolveErr.Error(), verifyDetailMaxLen)),
 		}, nil
 	}
 
@@ -816,7 +691,7 @@ func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupI
 	// An unresolvable identity is reported as an absent email rather than an
 	// error: the role to grant is still useful, and the page can explain the gap
 	// instead of failing to render.
-	gramSA, err := s.resolveGramPrincipal(ctx)
+	gramSA, err := s.gcpIdentity.GramPrincipal(ctx)
 	if err != nil {
 		logger.WarnContext(ctx, "could not resolve gram's own gcp identity for setup info", attr.SlogError(err))
 	}
@@ -838,6 +713,20 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // deleteExternalCredential soft-deletes a credential scoped to the given
 // provider and emits the provider-specific audit event. A missing (or
 // wrong-provider) id is a no-op so deletes stay idempotent.
+//
+// Delete is refused while a live external key still names the credential.
+// Nothing in the database enforces that: `deleted` is a generated column, so the
+// soft delete is an UPDATE and external_keys_external_credential_id_fkey never
+// fires. Without the guard, deleting a credential leaves every key behind it
+// pointing at a tombstone — the key still lists and still looks healthy, but
+// nothing can reach it, and the failure only surfaces at signing time.
+//
+// The platform tier has its own delete path in adminhandlers.go and no such
+// guard. That is sound rather than an oversight: an external key is written with
+// a non-NULL organization_id and validated against a credential in that same
+// organization, while platform credentials carry organization_id IS NULL, so no
+// key can name one. Giving the platform tier keys of its own (AGE-3069) would
+// end that, and would need this guard mirrored there.
 func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -856,6 +745,28 @@ func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID 
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	q := repo.New(dbtx)
+
+	// Lock the credential before the preflight so a concurrent key write cannot
+	// commit between it and the delete.
+	_, err = q.LockExternalCredentialForUpdate(ctx, repo.LockExternalCredentialForUpdateParams{
+		ID:             id,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		Provider:       provider,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error deleting external credential").LogError(ctx, logger)
+	}
+
+	referenced, err := q.SoftDeleteExternalCredentialPreflight(ctx, id)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking external credential references").LogError(ctx, logger)
+	}
+	if referenced {
+		return oops.E(oops.CodeConflict, nil, "external credential is still in use by an external key")
+	}
 
 	deleted, err := q.SoftDeleteExternalCredential(ctx, repo.SoftDeleteExternalCredentialParams{
 		ID:             id,

@@ -2,7 +2,7 @@
 // policy deciding WHICH Client ID Metadata Document URLs a Gram user-session
 // authorization server will accept, evaluated before any document is
 // fetched. A denied client_id costs a map lookup — no outbound request, no
-// rate-limiter token, no timeout.
+// timeout.
 //
 // It is deliberately a leaf: it imports nothing from usersessions and
 // touches no database. It has to be, because the dependency runs the other

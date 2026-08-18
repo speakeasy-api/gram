@@ -11,9 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// CapabilityChecker is the durable organization capability boundary.
+// CapabilityChecker is the durable organization capability boundary. Platform
+// MCP checks bypass the shared 15-minute product-feature cache so revocation is
+// visible on the next request, comfortably within the 60-second requirement.
 type CapabilityChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 type OrganizationSlugResolver interface {
@@ -77,7 +80,7 @@ func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (
 		return false, nil
 	}
 
-	capable, err := g.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeaturePlatformMCP)
+	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
 	if err != nil {
 		return false, fmt.Errorf("check platform mcp capability: %w", err)
 	}

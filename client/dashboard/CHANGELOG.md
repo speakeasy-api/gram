@@ -1,5 +1,98 @@
 # dashboard
 
+## 0.109.1
+
+### Patch Changes
+
+- d1e0a84: Activate pay-as-you-go billing atomically when Stripe confirms a completed checkout, including replay-safe webhook processing, subscription ownership validation, trial conversion, and entitlement setup for organizations without a prior trial.
+- e635665: Offer the self-serve pay-as-you-go checkout above the booking calendar on both dashboard lockout gates, so an organization admin whose organization never trialed or whose trial expired can unlock the workspace with a card instead of only booking a call. Members, organizations that are not walled off, and every unresolved state of the rollout flag keep the booking-only gate.
+- e935bdb: Two refinements to the PAYG rate adjustment in the TUM contract price estimator: a cheaper-than-committed PAYG outcome is only attributed to the adjustment when it is a discount — under an uplift the modelling-error warning ("check the platform fee against the baseline") is kept, since an uplift only raises PAYG above list rates; and adjustments at or past -100% are now ignored (list rates) at every layer instead of pricing PAYG as free.
+- 3a8f15f: Add pay-as-you-go as a first-class billing tier across server entitlements, management API tier data, and dashboard and admin tier controls. PAYG organizations receive enterprise feature access with capped PAYG billing behavior, and Stripe-authoritative tier state cannot be overwritten by stale Polar data.
+- b938a56: Allow eligible organization admins to start a self-serve pay-as-you-go Stripe checkout from the billing page. The server reuses a stable Stripe customer, preserves active trials, and records the checkout request in the audit log.
+
+## 0.109.0
+
+### Minor Changes
+
+- 340f6f3: Add a client detail sheet for user-session clients with a CIMD metadata
+  refresh. The per-client view now exposes the metadata document's cache state
+  (source URL, last successful read, cache expiry, ETag), and a new
+  `userSessionClients.refreshCIMD` endpoint forces a re-read: it purges the
+  stored validators before fetching, so a host answering 304 Not Modified cannot
+  re-confirm the copy being discarded, and it carries a 30s per-client
+  server-side cooldown because purge-then-fetch deliberately bypasses the
+  document cache. The dashboard's Clients listing opens the sheet from each row;
+  DCR clients show the base detail without the CIMD panel.
+- 0e5a8f7: Add an Encryption Keys page where organization admins register the keys in
+  their own cloud KMS that Gram signs with. Keys list with their provider and
+  algorithm, and each has a detail page with a Verify action that proves Gram can
+  reach the key and sign with it, reporting what to fix when it cannot. Editing
+  covers the name, the backing credential, and the granted identity; the resource
+  name and algorithm are shown read-only, because a key record names one key
+  permanently. The page sits behind the same `customer_managed_encryption_keys`
+  entitlement as External Services.
+
+  External credential detail pages gain a KMS Keys tab listing the keys that
+  credential reaches, which is also where a refused credential delete explains
+  itself.
+
+### Patch Changes
+
+- 18ab66a: Extending an enterprise trial now writes an entry to the organization's audit
+  feed, so it is no longer the one trial lifecycle event that leaves no trace
+  alongside a trial being armed, demoted and re-armed. The entry names the
+  Speakeasy team rather than the operator who acted, and carries the end date the
+  trial held before the extension, the end date it holds now, and the number of
+  days applied. The write and the entry commit together, so an extension can never
+  land silently.
+
+  The activity log reads the new entry as "extended enterprise trial", alongside
+  the "started", "ended" and "restarted" entries it already gives the rest of the
+  trial lifecycle.
+
+- 61d4baa: Fleet configuration now reports a managed tool that is absent from the
+  `platforms` map as `User` rather than `Off`. The device agent's `platforms`
+  map is opt-out — a tool with no entry is managed at the user layer, and only
+  an explicit `false` disables it — but this page defaulted three of the four
+  tools to `Off`, so an organization whose configuration predated a tool being
+  added here saw it reported as unmanaged while every enrolled device was
+  enforcing it. Saving the page then wrote that incorrect reading back, turning
+  the tool off for the fleet as a side effect of editing an unrelated field.
+  The per-tool default is now a single constant that mirrors the agent's own
+  resolution, so a tool added to this list later cannot reintroduce the skew.
+- 0e5a8f7: Address review feedback on the organization Encryption Keys page. User-facing
+  copy now says Speakeasy rather than Gram, matching the branding convention the
+  dashboard already follows, and External Services and Encryption Keys sit
+  together directly under API Keys in the Settings nav.
+
+  Overview tabs lay short fields out in columns instead of giving each one a
+  full-width stacked block, which had turned a handful of scalar values into a
+  long scroll. Long machine values such as a crypto key version path stay full
+  width, where they read on one line rather than wrapping in a narrow column.
+
+  An external credential can now be created from the key form itself. A key is
+  unusable without one, so an organization's first key previously dead-ended on an
+  empty picker linking to another page, losing whatever had been filled in.
+
+- 92cef9b: MCP approval surfaces are now gated on `org:admin`, the same authorization as the Observe pages and the policies that do the blocking. The dedicated `mcp_approval:read`/`mcp_approval:decide` scope family is retired: it required per-organization grant provisioning that existing organizations never received, leaving every approval surface answering 403 in production. Org admins now work on deploy with nothing to provision. Delegable reviewer scopes can return additively if a customer ever needs non-admin reviewers.
+- 95177df: Improve org home banner copy after enterprise setup has been started.
+- 92cef9b: Clicking a user in the Shadow MCP server page's Top users table now opens their employee detail page instead of the costs explorer.
+- 048e1b6: Watchdog signal drawer evidence rows now offer a single action each. Judge
+  findings keep the False positive button — they cannot be excluded, since their
+  rule id covers the whole detector. Every other detector's rows now show only
+  Exclude, where they previously offered both actions side by side, which made
+  one-off false-positive dismissal the path of least resistance over creating a
+  reviewed exclusion rule.
+- 60f8609: The Watchdog findings KPI now follows the selected time range. The tile was
+  hardwired to the trailing 24 hours ending at the window's edge, so picking a
+  different range with the date picker left the number unchanged while every
+  other tile updated. The riskSignals result now reports window-scoped
+  `findings` / `previous_findings` (replacing `findings_24h` /
+  `previous_findings_24h`), computed from the same deduplicated window counts
+  the risk score already used, and the tile compares against the equal-length
+  previous period like its neighbors.
+- a268d10: Withhold Polar `credits` and `included_credits` from non-platform-admin callers of `usage.getPeriodUsage`. The fields are now optional and omitted unless `authCtx.IsAdmin` is set, matching the existing admin-only billing meter in the dashboard.
+
 ## 0.108.0
 
 ### Minor Changes

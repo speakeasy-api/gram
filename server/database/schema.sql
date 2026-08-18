@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS trials (
   CONSTRAINT trials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+-- Matches ListExpiredTrials: a row leaves the index as soon as it converts or
+-- demotes, so the hourly sweep stays proportional to live trials.
+CREATE INDEX IF NOT EXISTS trials_ends_at_idx
+ON trials (ends_at)
+WHERE converted_at IS NULL AND demoted_at IS NULL;
+
 -- Billing contract metadata for an organization. Currently holds the
 -- "tokens under management" (TUM) contract terms for enterprise accounts.
 CREATE TABLE IF NOT EXISTS billing_metadata (
@@ -114,6 +120,21 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   -- Current Stripe subscription. NULL after cancellation and replaced when
   -- the organization subscribes again.
   stripe_subscription_id TEXT,
+  -- Exact UTC billing-cycle anchor for the current Stripe subscription. This
+  -- is the first paid-period boundary after any trial or free checkout stub.
+  -- NULL until Stripe confirms a subscription and cleared on subscription loss.
+  stripe_billing_cycle_anchor timestamptz,
+
+  -- Durable inputs for one pending Stripe Checkout intent. Retries reuse these
+  -- values until the session expires; a replacement intent clears or replaces
+  -- them together so sessions with different anchors cannot overlap.
+  stripe_checkout_idempotency_key TEXT,
+  stripe_checkout_billing_cycle_anchor timestamptz,
+  -- Stripe-side aligned trial end captured when Checkout starts during an
+  -- active product trial. NULL for immediate, non-prorated checkout.
+  stripe_checkout_trial_end timestamptz,
+  stripe_checkout_expires_at timestamptz,
+  stripe_checkout_session_id TEXT,
 
   -- Contracted monthly "tokens under management" allowance. NULL means no
   -- contracted limit has been configured.
@@ -143,6 +164,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_customer_id_key
 ON billing_metadata (stripe_customer_id)
 WHERE stripe_customer_id IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_checkout_session_id_key
+ON billing_metadata (stripe_checkout_session_id)
+WHERE stripe_checkout_session_id IS NOT NULL;
+
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
 -- Durable completion receipts for accepted Stripe webhooks. A row commits
@@ -167,59 +192,112 @@ ON stripe_webhook_receipts (organization_id);
 -- of each cycle's usage for billing, overage math, and admin reporting.
 CREATE TABLE IF NOT EXISTS billing_cycle_usage (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  -- Nullable so the permanent billing record survives organization deletion.
+  organization_id TEXT,
 
   -- [cycle_start, cycle_end) boundaries computed from
   -- billing_metadata.billing_cycle_anchor_day at snapshot time.
   cycle_start timestamptz NOT NULL,
   cycle_end timestamptz NOT NULL,
 
-  -- Total tokens under management observed for the cycle.
+  -- Latest tokens under management observed for the cycle. This may continue
+  -- changing during the late-arrival window after the billed baseline freezes.
   tum_tokens BIGINT NOT NULL DEFAULT 0,
 
-  -- Set once the cycle has closed plus an ingest grace period, after which the
-  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  -- Immutable billing baseline captured after the cycle's 48-hour ingest grace
+  -- period. NULL until the cycle is ready to bill.
+  billed_tum_tokens BIGINT,
+  billed_frozen_at timestamptz,
+
+  -- Set after the final 72-hour observation cutoff, after which tum_tokens is
+  -- no longer refreshed. NULL while late telemetry is still being observed.
   finalized_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
-  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
   CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
   -- Token counts originate from client-supplied OTEL attributes; a negative
   -- sum must never become part of the permanent billing record.
-  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0),
+  CONSTRAINT billing_cycle_usage_billed_tum_tokens_check CHECK (billed_tum_tokens IS NULL OR billed_tum_tokens >= 0),
+  CONSTRAINT billing_cycle_usage_billed_frozen_at_check CHECK (billed_frozen_at IS NULL OR billed_tum_tokens IS NOT NULL)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
 ON billing_cycle_usage (organization_id, cycle_start);
 
--- Append-only mirror of TUM meter events reported to Stripe Billing. The
--- upstream event identifier derives from the organization, cycle start, and
--- sequence number, making sends idempotent and the ledger exactly replayable.
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_id_key
+ON billing_cycle_usage (organization_id, id);
+
+-- Durable TUM meter-event intents and their Stripe delivery state. Each row
+-- retains the complete intended event so pending and ambiguous deliveries can
+-- be reconciled without rebuilding payloads from mutable billing metadata.
 CREATE TABLE IF NOT EXISTS stripe_meter_reports (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  -- Nullable so intended-delivery history survives organization deletion.
+  organization_id TEXT,
 
-  -- Cycle boundary from billing_cycle_usage at report time.
+  -- Intended-event fields added during the migration-first rollout remain
+  -- nullable so existing reports migrate without DML. New reports bind directly
+  -- to the durable cycle row and persist every field required for replay.
+  billing_cycle_usage_id uuid,
   cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz,
   -- Monotonic sequence within an organization's billing cycle.
   seq INT NOT NULL,
-  -- Tokens added by this report. The cycle's reported total is the sum of
-  -- these deltas.
+  -- Immutable Stripe routing data needed to replay the intended meter event
+  -- without reading mutable organization billing metadata.
+  stripe_customer_id TEXT,
+  stripe_meter_event_name TEXT,
+  -- Stable identifier supplied to Stripe for idempotent meter-event delivery.
+  stripe_identifier TEXT,
+  -- Signed correction to the cycle's previously reported total.
   delta_tokens BIGINT NOT NULL,
+  -- Timestamp assigned to the Stripe meter event. It remains inside the
+  -- service period even when delivery or reconciliation happens later.
+  event_timestamp timestamptz,
+
+  -- Allowed values (pending, confirmed, ambiguous) live in application code.
+  -- The confirmed default preserves the meaning of legacy sent-report rows;
+  -- new intended deliveries explicitly write pending.
+  delivery_state TEXT NOT NULL DEFAULT 'confirmed',
+  first_attempted_at timestamptz,
+  last_attempted_at timestamptz,
+  confirmed_at timestamptz,
+  ambiguous_at timestamptz,
+  reconciled_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT stripe_meter_reports_pkey PRIMARY KEY (id),
-  CONSTRAINT stripe_meter_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT stripe_meter_reports_delta_tokens_check CHECK (delta_tokens >= 0)
+  CONSTRAINT stripe_meter_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_meter_reports_org_billing_cycle_usage_fkey FOREIGN KEY (organization_id, billing_cycle_usage_id) REFERENCES billing_cycle_usage (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT stripe_meter_reports_cycle_bounds_check CHECK (cycle_end IS NULL OR cycle_end > cycle_start),
+  CONSTRAINT stripe_meter_reports_event_timestamp_check CHECK (
+    event_timestamp IS NULL
+    OR (cycle_end IS NOT NULL AND event_timestamp >= cycle_start AND event_timestamp < cycle_end)
+  )
 );
 
+-- Retained during the migration-first rollout so the deployed writer, which
+-- does not populate cycle_end yet, keeps its existing uniqueness guarantee.
 CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_organization_id_cycle_start_seq_key
 ON stripe_meter_reports (organization_id, cycle_start, seq);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_org_cycle_bounds_seq_key
+ON stripe_meter_reports (organization_id, cycle_start, cycle_end, seq);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_stripe_identifier_key
+ON stripe_meter_reports (stripe_identifier)
+WHERE stripe_identifier IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS stripe_meter_reports_billing_cycle_usage_id_idx
+ON stripe_meter_reports (billing_cycle_usage_id)
+WHERE billing_cycle_usage_id IS NOT NULL;
 
 -- Durable per-day OpenRouter spend per platform-managed key. Upstream history
 -- expires, so these rows are the permanent billing-grade record. key_type
@@ -247,6 +325,104 @@ CREATE TABLE IF NOT EXISTS openrouter_spend_daily (
 
 CREATE UNIQUE INDEX IF NOT EXISTS openrouter_spend_daily_organization_id_key_type_day_key
 ON openrouter_spend_daily (organization_id, key_type, day);
+
+-- Stripe invoice identity and its UTC service period. Status values are
+-- validated by the application so Stripe can add states without a migration.
+-- Rows survive organization deletion because invoices remain an external
+-- financial record.
+CREATE TABLE IF NOT EXISTS stripe_invoices (
+  stripe_invoice_id TEXT NOT NULL,
+  organization_id TEXT,
+  stripe_customer_id TEXT NOT NULL,
+  stripe_subscription_id TEXT NOT NULL,
+  service_period_start timestamptz NOT NULL,
+  service_period_end timestamptz NOT NULL,
+  invoice_state TEXT NOT NULL,
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_invoices_pkey PRIMARY KEY (stripe_invoice_id),
+  CONSTRAINT stripe_invoices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoices_service_period_bounds_check CHECK (service_period_end > service_period_start)
+);
+
+CREATE INDEX IF NOT EXISTS stripe_invoices_organization_id_service_period_start_idx
+ON stripe_invoices (organization_id, service_period_start)
+WHERE organization_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoices_organization_id_stripe_invoice_id_key
+ON stripe_invoices (organization_id, stripe_invoice_id);
+
+-- Append-only settlements of cumulative source charges to Stripe invoices.
+-- source_kind and source_key form an application-defined logical identity so a
+-- missing OpenRouter day can be allocated before a source row exists. The source
+-- bounds and cumulative USD snapshot preserve the financial record independently
+-- of source-row lifecycle. The sum of confirmed signed amount_usd rows for a
+-- source is its billed baseline; a restatement or carry-forward uses the next seq.
+CREATE TABLE IF NOT EXISTS stripe_invoice_allocations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  source_kind TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  seq INT NOT NULL,
+  source_day DATE,
+  source_period_start timestamptz,
+  source_period_end timestamptz,
+  source_snapshot_usd NUMERIC(14, 6),
+
+  -- TUM settlements retain their signed token delta and USD price per token for
+  -- invoice reconstruction. Both are NULL for non-TUM sources.
+  delta_tokens BIGINT,
+  original_tum_unit_price_usd NUMERIC(14, 12),
+  -- Positive values bill; negative values credit. Six decimal places retain
+  -- sub-cent amounts until a later allocation can be represented in Stripe.
+  -- NULL represents a planned missing-day settlement awaiting source data.
+  amount_usd NUMERIC(14, 6),
+
+  original_invoice_id TEXT,
+  destination_invoice_id TEXT,
+  stripe_invoice_item_id TEXT,
+  stripe_credit_note_id TEXT,
+  idempotency_key TEXT NOT NULL,
+
+  -- Allowed values (pending, confirmed, ambiguous) live in application code.
+  delivery_state TEXT NOT NULL DEFAULT 'pending',
+  first_attempted_at timestamptz,
+  last_attempted_at timestamptz,
+  confirmed_at timestamptz,
+  ambiguous_at timestamptz,
+  reconciled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_invoice_allocations_pkey PRIMARY KEY (id),
+  CONSTRAINT stripe_invoice_allocations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_org_original_invoice_fkey FOREIGN KEY (organization_id, original_invoice_id) REFERENCES stripe_invoices (organization_id, stripe_invoice_id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_org_destination_invoice_fkey FOREIGN KEY (organization_id, destination_invoice_id) REFERENCES stripe_invoices (organization_id, stripe_invoice_id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_source_period_bounds_check CHECK (
+    (source_day IS NOT NULL AND source_period_start IS NULL AND source_period_end IS NULL)
+    OR
+    (source_day IS NULL AND source_period_start IS NOT NULL AND source_period_end IS NOT NULL AND source_period_end > source_period_start)
+  ),
+  CONSTRAINT stripe_invoice_allocations_source_snapshot_usd_check CHECK (source_snapshot_usd IS NULL OR source_snapshot_usd >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoice_allocations_idempotency_key_key
+ON stripe_invoice_allocations (idempotency_key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoice_allocations_org_source_seq_key
+ON stripe_invoice_allocations (organization_id, source_kind, source_key, seq);
+
+CREATE INDEX IF NOT EXISTS stripe_invoice_allocations_original_invoice_id_idx
+ON stripe_invoice_allocations (original_invoice_id)
+WHERE original_invoice_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS stripe_invoice_allocations_destination_invoice_id_idx
+ON stripe_invoice_allocations (destination_invoice_id)
+WHERE destination_invoice_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
@@ -1124,6 +1300,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_project_id_deleted_idx ON http_tool_definitions (project_id, deleted);
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1736,6 +1913,14 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Deliberately nullable with no default, unlike the capability arrays
+  -- above: MCP requires refusing authorization when the upstream advertises
+  -- no PKCE methods, so an empty array is a load-bearing "refuse" signal.
+  -- NULL means discovery has not captured the field for this row yet (the
+  -- row predates capture or has not refreshed since), which must stay
+  -- distinct from "the upstream advertised nothing". Do not "fix" this into
+  -- consistency with the siblings.
+  code_challenge_methods_supported TEXT[],
   -- Unlike the fields above, this comes from the OAuth CIMD draft
   -- (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414. It
   -- marks whether the issuer accepts a Client ID Metadata Document URL as
@@ -2136,6 +2321,13 @@ CREATE TABLE IF NOT EXISTS chats (
   -- stream suppress their proxied rows as duplicates, so message sources
   -- alone cannot tell that the session was routed through LiteLLM.
   litellm_proxied boolean NOT NULL DEFAULT false,
+
+  -- Working directory of the captured agent session, as reported by the
+  -- device-side hook adapter (hook.ingest.v1 session.cwd). Enables
+  -- session-portability targeting (materialize a moved session into the right
+  -- project directory). NULL for non-agent chats and rows ingested before
+  -- capture began.
+  cwd TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3963,6 +4155,28 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- arbitrary bag of additional metadata that doesn't fit into the above
   -- fields.
   metadata JSONB,
+
+  -- acting_surface and acting_client_id record how a change was made, which
+  -- the actor fields alone cannot express: the same user acting through the
+  -- dashboard and through an agent over Platform MCP is indistinguishable
+  -- without them. Reviewing a runaway agent's burst of activity depends on
+  -- telling the two apart.
+  --
+  -- The surface is a low-cardinality value drawn from a server-side allowlist,
+  -- never a client-supplied string.
+  --
+  -- Nullable, and left that way deliberately. Rows written before this column
+  -- existed have no recorded surface, and no backfill invents one for them;
+  -- the application reads NULL as an unknown surface, so the distinction is
+  -- explicit where it is displayed rather than written into every historic
+  -- row. Every row written from here on carries a value.
+  acting_surface TEXT,
+
+  -- The registered OAuth client the call authenticated as, when it had one.
+  -- Sourced from the token's client record rather than a request header, so a
+  -- caller cannot name itself. NULL means the call carried no OAuth client,
+  -- which is not the same as an unrecognized one.
+  acting_client_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -6342,6 +6556,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
   active_generation uuid NOT NULL DEFAULT generate_uuidv7(),
   authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   reauthorized_at timestamptz,
+  authorization_expires_at timestamptz,
+  reauthorization_required_at timestamptz,
+  reauthorization_reason TEXT,
   revoked_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -6349,6 +6566,22 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
 
   CONSTRAINT platform_mcp_connections_pkey PRIMARY KEY (id),
   CONSTRAINT platform_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT platform_mcp_connections_reauthorization_state_check CHECK (
+    (reauthorization_required_at IS NULL AND reauthorization_reason IS NULL)
+    OR (
+      reauthorization_required_at IS NOT NULL
+      AND reauthorization_reason IS NOT NULL
+      AND reauthorization_reason IN (
+        'refresh_idle_expired',
+        'authorization_expired',
+        'refresh_reuse',
+        'connection_revoked',
+        'client_revoked',
+        'authorization_lost',
+        'security_reset'
+      )
+    )
+  ),
   CONSTRAINT platform_mcp_connections_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_connections_oauth_client_id_fkey
@@ -6477,6 +6710,12 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
   milestone TEXT NOT NULL,
   connection_id uuid,
   connection_generation uuid,
+  -- The real user the milestone is attributed to, and the surface that recorded
+  -- it. A surface acting under assistant identity holds no OAuth connection, so
+  -- its evidence is keyed by user instead. Values are validated in application
+  -- code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   project_id uuid,
   mcp_key TEXT NOT NULL DEFAULT '',
   attempt_id uuid,
@@ -6506,6 +6745,10 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
       'read_only_cohort'
     )
     OR (connection_id IS NOT NULL AND connection_generation IS NOT NULL)
+    -- A connection-less surface records the same evidence against its user, and
+    -- is connection-free on both columns: a row with a half-set pair would fall
+    -- between the two unique indexes below and have no idempotency grain.
+    OR (user_id IS NOT NULL AND connection_id IS NULL AND connection_generation IS NULL)
   ),
   CONSTRAINT platform_mcp_onboarding_milestones_first_value_target_check CHECK (
     milestone <> 'first_value_achieved'
@@ -6523,6 +6766,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_connection_
 ON platform_mcp_onboarding_milestones (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
   AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'catalog_explored',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+  );
+
+-- The same evidence recorded by a connection-less surface has no generation to
+-- key on, so its grain is the acting user. Without this a surface acting under
+-- assistant identity would append a new row on every catalogue search.
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_user_key
+ON platform_mcp_onboarding_milestones (organization_id, milestone, user_id)
+WHERE connection_id IS NULL
+  AND connection_generation IS NULL
+  AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
     'authorization_failed',
@@ -6722,8 +6983,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and setup handoffs must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_key TEXT NOT NULL,
   intent TEXT NOT NULL,
   handoff_hash TEXT NOT NULL,
@@ -6734,6 +7002,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_setup_handoffs_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_setup_handoffs_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_setup_handoffs_provider_key_check CHECK (provider_key <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_intent_check CHECK (intent <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_handoff_hash_check CHECK (handoff_hash <> ''),
@@ -6752,8 +7022,13 @@ ON platform_mcp_setup_handoffs (handoff_hash);
 
 -- Issuers must invalidate an expired unredeemed handoff before issuing its
 -- replacement; a partial-index predicate cannot depend on clock time.
+-- NULLS NOT DISTINCT so the one-active-handoff invariant survives a
+-- connection-less issuer: with the default NULLS DISTINCT, two rows whose
+-- connection columns are both NULL would not collide and a surface acting
+-- under assistant identity could hold several active handoffs at once.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_active_binding_key
 ON platform_mcp_setup_handoffs (registration_id, connection_id, connection_generation, intent)
+NULLS NOT DISTINCT
 WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
@@ -6775,8 +7050,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and readiness evidence must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_authorization_fingerprint TEXT NOT NULL,
   state TEXT NOT NULL,
   evidence_code TEXT,
@@ -6786,6 +7068,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_readiness_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_readiness_provider_authorization_fingerprint_check CHECK (provider_authorization_fingerprint <> ''),
   CONSTRAINT platform_mcp_readiness_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_readiness_organization_id_fkey
@@ -6798,8 +7082,13 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
 
+-- NULLS NOT DISTINCT so readiness evidence stays one row per registration and
+-- fingerprint for a connection-less writer too. Otherwise the upsert never
+-- matches an existing NULL-connection row and each probe appends new evidence
+-- instead of refreshing the current row.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
-ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint);
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+NULLS NOT DISTINCT;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
 ON platform_mcp_readiness (registration_id, checked_at DESC);
@@ -6813,6 +7102,53 @@ ON platform_mcp_readiness (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_connection_idx
 ON platform_mcp_readiness (organization_id, connection_id);
+
+-- Session handoff links: short-lived capability URLs through which a rendered
+-- session-handoff document can be fetched by a cloud agent or another machine
+-- (session portability). The unguessable token IS the capability: the serving
+-- route is unauthenticated by design. Rows expire minutes after minting and
+-- are consumed on first read (burn-after-read), so a leaked link's exposure
+-- window is a single fetch or the TTL, whichever ends first.
+CREATE TABLE IF NOT EXISTS session_handoff_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- The harness session id the handoff was rendered from (matches
+  -- chats.external_chat_id semantics for captured coding-agent sessions).
+  session_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  -- Object-store URL of the rendered handoff document (Tigris via the assets
+  -- abstraction). The document itself never lands in Postgres: this row holds
+  -- the capability token, tenancy, and the atomic consume claim; the blob is
+  -- deleted on first read (bucket lifecycle policies are the backstop).
+  blob_url TEXT NOT NULL,
+  created_by_email TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  -- Set on the first successful read; once set, the link serves 404.
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT session_handoff_links_pkey PRIMARY KEY (id),
+  CONSTRAINT session_handoff_links_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite tenancy pin: the database, not the application, guarantees the
+  -- organization_id agrees with the project's real owner. Matters here because
+  -- the serving route is unauthenticated and scopes solely on these columns.
+  CONSTRAINT session_handoff_links_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
+
+-- Serves both cascade paths: an organization delete scans by the leading
+-- organization_id, a project delete by the full (organization_id, project_id)
+-- pair. Nothing reads this table by project_id alone -- links are fetched by
+-- token -- so a standalone project_id index would only cost write throughput.
+CREATE INDEX IF NOT EXISTS session_handoff_links_organization_project_idx
+ON session_handoff_links (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
 
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_workflows (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -6861,11 +7197,20 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   attachment_was_created boolean NOT NULL,
   publication_state TEXT NOT NULL DEFAULT 'pending',
   publication_updated_at timestamptz,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and distributions must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT platform_mcp_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_distributions_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_distributions_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_distributions_version_check CHECK (version > 0),
   CONSTRAINT platform_mcp_distributions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
