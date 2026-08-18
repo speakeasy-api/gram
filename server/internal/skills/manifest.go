@@ -65,6 +65,22 @@ type ValidatedSkillSuggestion struct {
 	CanonicalSHA256 string
 }
 
+// ValidateSkillManifest applies the canonical SKILL.md parser and spec
+// validation, and verifies that the frontmatter name matches expectedName.
+func ValidateSkillManifest(content, expectedName string) error {
+	manifest, err := parseSkillManifest(content)
+	if err != nil {
+		return fmt.Errorf("validate skill manifest: %w", err)
+	}
+	if !manifest.SpecValid {
+		return fmt.Errorf("validate skill manifest: manifest is not spec-valid: %s", formatSkillValidationErrors(manifest.ValidationErrors))
+	}
+	if manifest.Name != expectedName {
+		return fmt.Errorf("validate skill manifest: name %q does not match skill %q", manifest.Name, expectedName)
+	}
+	return nil
+}
+
 // ValidateSkillSuggestion applies the SKILL.md parser and spec validation used
 // by skill versions, verifies the target skill, and rejects canonical no-ops.
 func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) (ValidatedSkillSuggestion, error) {

@@ -11,11 +11,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -113,6 +115,7 @@ import (
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -160,6 +163,65 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
+
+// restoreLocalPluginRepositories repairs marketplace rows created before the
+// persistent local publisher existed. Current snapshots survive restarts and
+// are left untouched, preserving their embedded local API keys.
+func restoreLocalPluginRepositories(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	localPublisher *localfixture.InMemoryGitHubPublisher,
+	pluginPublisher *plugins.Service,
+) error {
+	queries := pluginsrepo.New(db)
+	after := uuid.Nil
+	for {
+		candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+			AfterProjectID: after,
+			ResultLimit:    100,
+		})
+		if err != nil {
+			return fmt.Errorf("list plugin publish candidates: %w", err)
+		}
+		if len(candidates) == 0 {
+			return nil
+		}
+
+		for _, candidate := range candidates {
+			connection, err := queries.GetGitHubConnection(ctx, candidate.ProjectID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("get plugin connection for project %s: %w", candidate.ProjectID, err)
+			}
+			if files, err := localPublisher.MainBranchFiles(ctx, connection.RepoOwner, connection.RepoName); err == nil && len(files) > 0 {
+				continue
+			} else if err != nil && !errors.Is(err, ghclient.ErrRepoNotFound) {
+				return fmt.Errorf("read local plugin repository for project %s: %w", candidate.ProjectID, err)
+			}
+
+			if _, err := pluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{
+				ProjectID:              candidate.ProjectID,
+				CreatedByUserID:        candidate.CreatedByUserID,
+				CommitMessage:          "Restore local plugin marketplace",
+				ForcePlatformMCPRepair: false,
+				SkipIfUnchanged:        false,
+			}); err != nil {
+				logger.WarnContext(ctx, "restore local plugin repository",
+					attr.SlogProjectID(candidate.ProjectID.String()),
+					attr.SlogError(err),
+				)
+			}
+		}
+
+		after = candidates[len(candidates)-1].ProjectID
+		if len(candidates) < 100 {
+			return nil
+		}
+	}
+}
 
 // shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
 // to complete on SIGTERM before the process exits. It must cover the slowest
@@ -361,12 +423,6 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
-		&cli.BoolFlag{
-			Name:    platformMCPLocalFixtureFlag,
-			Usage:   "Enable the synthetic local-only Platform MCP reviewed-provider fixture",
-			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
-			Value:   false,
-		},
 
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -532,7 +588,7 @@ func newStartCommand() *cli.Command {
 			)
 			slog.SetDefault(logger)
 
-			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.Bool(platformMCPLocalFixtureFlag), c.String("server-url"))
+			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("invalid Platform MCP local fixture configuration: %w", err)
 			}
@@ -1103,8 +1159,9 @@ func newStartCommand() *cli.Command {
 			// marketplace handler (or the DB resolver) would crash the
 			// server process.
 			var (
-				marketplaceServer *marketplace.Server
-				marketplaceRoutes http.Handler
+				marketplaceServer      *marketplace.Server
+				localMarketplaceServer *marketplace.LocalServer
+				marketplaceRoutes      http.Handler
 			)
 			if ghClient != nil {
 				marketplaceServer = marketplace.NewServer(
@@ -1116,7 +1173,7 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: enabled",
 					attr.SlogServerAddress(c.String("address")),
 				)
-			} else {
+			} else if platformFixture == nil {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
 			}
 
@@ -1137,6 +1194,10 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
+						marketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
+					if localMarketplaceServer != nil && localMarketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
@@ -1327,13 +1388,34 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
-			if platformFixture != nil && pluginsGitHub == nil {
+			var localPublisher *localfixture.InMemoryGitHubPublisher
+			if c.String("environment") == "local" && pluginsGitHub == nil {
+				localPublisher, err = localfixture.NewPersistentGitHubPublisher(filepath.Join(c.String("assets-uri"), "local-plugin-marketplaces"))
+				if err != nil {
+					return fmt.Errorf("create local plugin publisher: %w", err)
+				}
 				pluginsGitHub = &plugins.GitHubConfig{
-					Client:         localfixture.NewInMemoryGitHubPublisher(),
+					Client:         localPublisher,
 					Org:            "local-fixture",
 					InstallationID: 1,
 				}
+				localMarketplaceServer = marketplace.NewLocalServer(
+					marketplace.NewLocalDBResolver(db),
+					func(ctx context.Context, owner, repo string) (map[string][]byte, error) {
+						files, err := localPublisher.MainBranchFiles(ctx, owner, repo)
+						if errors.Is(err, ghclient.ErrRepoNotFound) {
+							return nil, marketplace.ErrNotFound
+						}
+						if err != nil {
+							return nil, fmt.Errorf("read local marketplace main branch: %w", err)
+						}
+						return files, nil
+					},
+					logger,
+				)
+				marketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
+				logger.InfoContext(ctx, "marketplace proxy: using local fixture repository")
 			}
 
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
@@ -1348,6 +1430,11 @@ func newStartCommand() *cli.Command {
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
+				if localPublisher != nil {
+					if err := restoreLocalPluginRepositories(ctx, logger, db, localPublisher, pluginPublisher); err != nil {
+						return fmt.Errorf("restore local plugin repositories: %w", err)
+					}
+				}
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}

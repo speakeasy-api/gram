@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -454,6 +456,18 @@ func newWorkerCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
+			}
+			if c.String("environment") == "local" && pluginsGitHub == nil {
+				localPublisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(c.String("assets-uri"), "local-plugin-marketplaces"))
+				if err != nil {
+					return fmt.Errorf("create local plugin publisher: %w", err)
+				}
+				pluginsGitHub = &plugins.GitHubConfig{
+					Client:         localPublisher,
+					Org:            "local-fixture",
+					InstallationID: 1,
+				}
+				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 			}
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var featureFlags feature.Provider = posthogClient

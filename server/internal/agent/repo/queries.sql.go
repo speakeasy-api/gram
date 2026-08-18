@@ -77,8 +77,9 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
-  -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
-  -- not just published ones) keeps the bare org-derived marketplace name; others
+  -- The org's default project (oldest by created_at, then id, over ALL
+  -- non-deleted projects, not just published ones) keeps the bare org-derived
+  -- marketplace name; others
   -- are project-scoped. Resolved the same way the publish path does so the names
   -- match. The subquery spans unpublished projects too, so an unpublished default
   -- doesn't hand the bare name to a different project.
@@ -90,7 +91,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = $1
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project,
   p.id AS plugin_id,
@@ -116,7 +117,7 @@ LEFT JOIN plugins p
 WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
   AND (
-    -- The org's default project (oldest, by id ASC) is the org-wide baseline:
+    -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
     -- always surface its marketplace + observability, even when the caller has no
     -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
@@ -125,7 +126,7 @@ WHERE pr.organization_id = $1
       FROM projects p2
       WHERE p2.organization_id = $1
         AND p2.deleted IS FALSE
-      ORDER BY p2.id ASC
+      ORDER BY p2.created_at ASC, p2.id ASC
       LIMIT 1
     )
     -- A non-default project surfaces only when the caller has a matching assigned
@@ -133,7 +134,7 @@ WHERE pr.organization_id = $1
     -- marketplace and observability plugin are just noise for this user.
     OR p.id IS NOT NULL
   )
-ORDER BY pr.id, p.slug
+ORDER BY is_default_project DESC, pr.created_at, pr.id, p.slug
 `
 
 type GetAgentPluginSetParams struct {
@@ -174,10 +175,10 @@ type GetAgentPluginSetRow struct {
 // distinct names surface as distinct marketplaces; projects that share a name
 // (e.g. several on the org default) still collapse to one in the view.
 //
-// Rows are ordered by pr.id so the org's default project (first by id ASC, the
-// one created at org setup) sorts first. When projects share a name and the view
-// collapses them, keeping the first row's token makes that collapse resolve to
-// the default project rather than the arbitrary alphabetically-first one.
+// Rows put the org's default project first, then use creation order and id for
+// deterministic grouping. When projects share a name and the view collapses
+// them, keeping the first row's token resolves to the default project rather
+// than whichever UUID happens to sort first.
 func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
 	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
