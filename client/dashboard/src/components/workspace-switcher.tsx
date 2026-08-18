@@ -22,7 +22,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 
-export function WorkspaceSwitcher(): JSX.Element {
+export function WorkspaceSwitcher({
+  className,
+}: {
+  className?: string;
+} = {}): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const session = useSession();
@@ -59,8 +63,10 @@ export function WorkspaceSwitcher(): JSX.Element {
     const orgLabel = organization.name || organization.slug;
     const orgColors = getGradientColors(organization.id);
     const orgInitial = orgLabel.charAt(0).toUpperCase();
-    const rowClass =
-      "flex w-full items-center gap-2 border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0";
+    const rowClass = cn(
+      "flex w-full items-center gap-2 border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0",
+      className,
+    );
     const content = (
       <>
         <div
@@ -114,7 +120,10 @@ export function WorkspaceSwitcher(): JSX.Element {
         <PopoverTrigger asChild>
           <Button
             variant="tertiary"
-            className="h-auto w-full justify-start gap-2 border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
+            className={cn(
+              "hover:bg-accent h-auto w-full justify-start gap-2 border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1",
+              className,
+            )}
           >
             {/* rounded-none: keep the square tile idiom over ProjectAvatar's
                 rounded-full default. */}
@@ -122,14 +131,17 @@ export function WorkspaceSwitcher(): JSX.Element {
               project={project}
               className="h-5 w-5 shrink-0 rounded-none"
             />
+            {/* "Project" suffix names what the switcher switches. */}
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
-              {project?.name || project?.slug || projectSlug}
+              {project?.name || project?.slug || projectSlug} Project
             </span>
             <ChevronsUpDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[240px] p-0" align="start">
-          <Command className="border-none">
+          {/* CommandInput's wrapper is a fixed h-14 (command-palette sizing);
+              override it here so the popover's search row stays compact. */}
+          <Command className="border-none [&_[data-slot=command-input-wrapper]]:h-10">
             <CommandInput placeholder="Find Project..." className="h-10" />
             <CommandList className="max-h-[250px] !p-1">
               <CommandEmpty>No projects found.</CommandEmpty>
@@ -152,11 +164,14 @@ export function WorkspaceSwitcher(): JSX.Element {
                       <span className="flex-1 truncate">
                         {p.name || p.slug}
                       </span>
-                      {p.name && p.name !== p.slug && (
-                        <span className="text-muted-foreground max-w-[80px] truncate font-mono text-xs">
-                          {p.slug}
-                        </span>
-                      )}
+                      {/* Case-insensitive: "Default" / "default" is the same
+                          name, so the slug adds nothing. */}
+                      {p.name &&
+                        p.name.toLowerCase() !== p.slug.toLowerCase() && (
+                          <span className="text-muted-foreground max-w-[80px] truncate font-mono text-xs">
+                            {p.slug}
+                          </span>
+                        )}
                       {p.id === project.id && (
                         <CheckIcon className="h-4 w-4 shrink-0" />
                       )}

@@ -155,7 +155,9 @@ const AppLayoutContent = ({
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <div className="flex w-full flex-1 overflow-hidden">
-        <AppSidebar variant="inset" />
+        {/* Default (non-inset) variant: flat panes divided by a hairline
+            instead of a floating bordered card. */}
+        <AppSidebar />
         <SidebarInset>
           <GlobalInsightsWrapper>
             <MembershipSyncGuard>
@@ -253,7 +255,7 @@ export const OrgLayout = (): JSX.Element => {
       <div className="flex h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
         <div className="flex w-full flex-1 overflow-hidden">
-          <OrgSidebar variant="inset" />
+          <OrgSidebar />
           <SidebarInset>
             <MembershipSyncGuard>
               <Outlet />
