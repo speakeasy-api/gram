@@ -8,10 +8,9 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { platformMcpStartOnboarding } from "../funcs/platformMcpStartOnboarding.js";
+import { platformMcpRecordDashboardCtaEvent } from "../funcs/platformMcpRecordDashboardCtaEvent.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { PlatformMCPOnboardingState } from "../models/components/platformmcponboardingstate.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +23,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  StartPlatformMCPOnboardingRequest,
-  StartPlatformMCPOnboardingSecurity,
-} from "../models/operations/startplatformmcponboarding.js";
+  RecordPlatformMCPDashboardCtaEventRequest,
+  RecordPlatformMCPDashboardCtaEventSecurity,
+} from "../models/operations/recordplatformmcpdashboardctaevent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type StartPlatformMCPOnboardingMutationVariables = {
-  request: StartPlatformMCPOnboardingRequest;
-  security?: StartPlatformMCPOnboardingSecurity | undefined;
+export type RecordPlatformMCPDashboardCtaEventMutationVariables = {
+  request: RecordPlatformMCPDashboardCtaEventRequest;
+  security?: RecordPlatformMCPDashboardCtaEventSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type StartPlatformMCPOnboardingMutationData = PlatformMCPOnboardingState;
+export type RecordPlatformMCPDashboardCtaEventMutationData = void;
 
-export type StartPlatformMCPOnboardingMutationError =
+export type RecordPlatformMCPDashboardCtaEventMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +50,49 @@ export type StartPlatformMCPOnboardingMutationError =
   | SDKValidationError;
 
 /**
- * startOnboarding platformMcp
+ * recordDashboardCtaEvent platformMcp
  *
  * @remarks
- * Create or resume the current user's durable Platform MCP onboarding workflow.
+ * Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.
  */
-export function useStartPlatformMCPOnboardingMutation(
+export function useRecordPlatformMCPDashboardCtaEventMutation(
   options?: MutationHookOptions<
-    StartPlatformMCPOnboardingMutationData,
-    StartPlatformMCPOnboardingMutationError,
-    StartPlatformMCPOnboardingMutationVariables
+    RecordPlatformMCPDashboardCtaEventMutationData,
+    RecordPlatformMCPDashboardCtaEventMutationError,
+    RecordPlatformMCPDashboardCtaEventMutationVariables
   >,
 ): UseMutationResult<
-  StartPlatformMCPOnboardingMutationData,
-  StartPlatformMCPOnboardingMutationError,
-  StartPlatformMCPOnboardingMutationVariables
+  RecordPlatformMCPDashboardCtaEventMutationData,
+  RecordPlatformMCPDashboardCtaEventMutationError,
+  RecordPlatformMCPDashboardCtaEventMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildStartPlatformMCPOnboardingMutation(client, options),
+    ...buildRecordPlatformMCPDashboardCtaEventMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyStartPlatformMCPOnboarding(): MutationKey {
-  return ["@gram/client", "platformMcp", "startOnboarding"];
+export function mutationKeyRecordPlatformMCPDashboardCtaEvent(): MutationKey {
+  return ["@gram/client", "platformMcp", "recordDashboardCtaEvent"];
 }
 
-export function buildStartPlatformMCPOnboardingMutation(
+export function buildRecordPlatformMCPDashboardCtaEventMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: StartPlatformMCPOnboardingMutationVariables,
-  ) => Promise<StartPlatformMCPOnboardingMutationData>;
+    variables: RecordPlatformMCPDashboardCtaEventMutationVariables,
+  ) => Promise<RecordPlatformMCPDashboardCtaEventMutationData>;
 } {
   return {
-    mutationKey: mutationKeyStartPlatformMCPOnboarding(),
-    mutationFn: function startPlatformMCPOnboardingMutationFn({
+    mutationKey: mutationKeyRecordPlatformMCPDashboardCtaEvent(),
+    mutationFn: function recordPlatformMCPDashboardCtaEventMutationFn({
       request,
       security,
       options,
-    }): Promise<StartPlatformMCPOnboardingMutationData> {
+    }): Promise<RecordPlatformMCPDashboardCtaEventMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +105,7 @@ export function buildStartPlatformMCPOnboardingMutation(
           ),
         },
       };
-      return unwrapAsync(platformMcpStartOnboarding(
+      return unwrapAsync(platformMcpRecordDashboardCtaEvent(
         client$,
         request,
         security,

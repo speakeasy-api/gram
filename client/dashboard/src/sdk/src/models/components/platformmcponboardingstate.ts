@@ -195,6 +195,10 @@ export type PlatformMCPOnboardingState = {
    */
   mcpUrl: string;
   /**
+   * Whether the organization already has a durable Platform MCP value outcome or an attached distribution.
+   */
+  organizationSetupComplete: boolean;
+  /**
    * Whether selected-registration readiness is currently fresh.
    */
   readinessFreshness: ReadinessFreshness;
@@ -296,6 +300,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
     distribution_tool_succeeded: z.boolean(),
     enabled: z.boolean(),
     mcp_url: z.string(),
+    organization_setup_complete: z.boolean(),
     readiness_freshness: ReadinessFreshness$inboundSchema,
     readiness_state: ReadinessState$inboundSchema,
     readiness_verified: z.boolean(),
@@ -322,6 +327,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
       "distribution_state": "distributionState",
       "distribution_tool_succeeded": "distributionToolSucceeded",
       "mcp_url": "mcpUrl",
+      "organization_setup_complete": "organizationSetupComplete",
       "readiness_freshness": "readinessFreshness",
       "readiness_state": "readinessState",
       "readiness_verified": "readinessVerified",

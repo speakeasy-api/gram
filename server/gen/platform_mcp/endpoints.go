@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	GetOnboarding                  goa.Endpoint
 	StartOnboarding                goa.Endpoint
+	RecordDashboardCtaEvent        goa.Endpoint
 	RecordInstallIntent            goa.Endpoint
 	RecordAgentConfigurationCopied goa.Endpoint
 	StartOnboardingSetup           goa.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		GetOnboarding:                  NewGetOnboardingEndpoint(s, a.APIKeyAuth),
 		StartOnboarding:                NewStartOnboardingEndpoint(s, a.APIKeyAuth),
+		RecordDashboardCtaEvent:        NewRecordDashboardCtaEventEndpoint(s, a.APIKeyAuth),
 		RecordInstallIntent:            NewRecordInstallIntentEndpoint(s, a.APIKeyAuth),
 		RecordAgentConfigurationCopied: NewRecordAgentConfigurationCopiedEndpoint(s, a.APIKeyAuth),
 		StartOnboardingSetup:           NewStartOnboardingSetupEndpoint(s, a.APIKeyAuth),
@@ -50,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOnboarding = m(e.GetOnboarding)
 	e.StartOnboarding = m(e.StartOnboarding)
+	e.RecordDashboardCtaEvent = m(e.RecordDashboardCtaEvent)
 	e.RecordInstallIntent = m(e.RecordInstallIntent)
 	e.RecordAgentConfigurationCopied = m(e.RecordAgentConfigurationCopied)
 	e.StartOnboardingSetup = m(e.StartOnboardingSetup)
@@ -103,6 +106,29 @@ func NewStartOnboardingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.StartOnboarding(ctx, p)
+	}
+}
+
+// NewRecordDashboardCtaEventEndpoint returns an endpoint function that calls
+// the method "recordDashboardCtaEvent" of service "platformMcp".
+func NewRecordDashboardCtaEventEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RecordDashboardCtaEventPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RecordDashboardCtaEvent(ctx, p)
 	}
 }
 

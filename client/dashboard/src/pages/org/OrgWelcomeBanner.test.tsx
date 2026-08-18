@@ -1,5 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
+import { OrgWelcomeBanner } from "./OrgWelcomeBanner";
 
 const projects = vi.hoisted(() => ({
   current: [{ id: "p1", name: "Alpha", slug: "alpha" }],
@@ -7,7 +9,9 @@ const projects = vi.hoisted(() => ({
 const setupEligible = vi.hoisted(() => ({ current: true }));
 
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ projects: projects.current }),
+  useIsPlatformAdmin: () => true,
+  useOrganization: () => ({ id: "org1", projects: projects.current }),
+  useUser: () => ({ id: "user1" }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
@@ -15,8 +19,22 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/hooks/useOnboardingCta", () => ({
   useOnboardingCta: () => ({ eligible: setupEligible.current }),
 }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true }),
+}));
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
   useOrgWelcomeBanner: () => ({ visible: true }),
+}));
+vi.mock("@/hooks/usePlatformMcpCta", () => ({
+  usePlatformMcpCta: () => ({
+    dismiss: vi.fn(),
+    href: "/acme/platform-mcp",
+    label: "Set up Platform MCP",
+    recordImpression: vi.fn(),
+    recordSelected: vi.fn(),
+    visible: false,
+  }),
+  usePlatformMcpCtaImpression: () => vi.fn(),
 }));
 // Resolves the same paths the real hooks build for org "acme".
 vi.mock("@/routes", () => ({
@@ -44,8 +62,6 @@ vi.mock("react-router", () => ({
     </a>
   ),
 }));
-
-import { OrgWelcomeBanner } from "./OrgWelcomeBanner";
 
 const hrefFor = (cta: string) =>
   screen.getByText(cta).closest("a")?.getAttribute("href");

@@ -275,6 +275,10 @@ func EncodeStartOnboardingRequest(encoder func(*http.Request) goahttp.Encoder) f
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		body := NewStartOnboardingRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("platformMcp", "startOnboarding", err)
+		}
 		return nil
 	}
 }
@@ -474,6 +478,228 @@ func DecodeStartOnboardingResponse(decoder func(*http.Response) goahttp.Decoder,
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "startOnboarding", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRecordDashboardCtaEventRequest instantiates a HTTP request object with
+// method and path set to call the "platformMcp" service
+// "recordDashboardCtaEvent" endpoint
+func (c *Client) BuildRecordDashboardCtaEventRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RecordDashboardCtaEventPlatformMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("platformMcp", "recordDashboardCtaEvent", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRecordDashboardCtaEventRequest returns an encoder for requests sent to
+// the platformMcp recordDashboardCtaEvent server.
+func EncodeRecordDashboardCtaEventRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*platformmcp.RecordDashboardCtaEventPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("platformMcp", "recordDashboardCtaEvent", "*platformmcp.RecordDashboardCtaEventPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRecordDashboardCtaEventRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("platformMcp", "recordDashboardCtaEvent", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRecordDashboardCtaEventResponse returns a decoder for responses
+// returned by the platformMcp recordDashboardCtaEvent endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRecordDashboardCtaEventResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRecordDashboardCtaEventResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RecordDashboardCtaEventUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RecordDashboardCtaEventForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RecordDashboardCtaEventBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RecordDashboardCtaEventNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RecordDashboardCtaEventConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RecordDashboardCtaEventUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RecordDashboardCtaEventInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RecordDashboardCtaEventInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+				}
+				err = ValidateRecordDashboardCtaEventInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+				}
+				return nil, NewRecordDashboardCtaEventInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RecordDashboardCtaEventUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+				}
+				err = ValidateRecordDashboardCtaEventUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+				}
+				return nil, NewRecordDashboardCtaEventUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformMcp", "recordDashboardCtaEvent", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RecordDashboardCtaEventGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("platformMcp", "recordDashboardCtaEvent", resp.StatusCode, string(body))
 		}
 	}
 }
