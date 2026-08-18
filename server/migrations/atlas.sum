@@ -1,4 +1,4 @@
-h1:Gtpei0NEbK6hWFRpcCB/znC6HXYlcm5RM8flEdjXonY=
+h1:Kzpv1+XJ/STr6ALnOAd+030FQaOp5kE92twvGhBur80=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -354,3 +354,4 @@ h1:Gtpei0NEbK6hWFRpcCB/znC6HXYlcm5RM8flEdjXonY=
 20260818121359_platform-mcp-connectionless-onboarding-evidence.sql h1:TQQ0kyMRLQ7G78JCsZ1vRhbU39erV7r1a7QAxjiohi4=
 20260818183520_http-tool-definitions-project-id-index.sql h1:X4dI05qrxUpgNaQquYPJWUbWxHmCNXNWKXLuuc2lO8k=
 20260818190528_remote-session-issuers-add-code-challenge-methods-supported.sql h1:OPMkLq4PyRSo/rSAJBXDFigYnRsbRX1gWxoy5yS2SjQ=
+20260818203516_mcp-approval-evidence-change-detection.sql h1:yNs/1liPkJfSG3clzyfd+6zGfhYbWVHVFo4rUfXOQ3Q=
