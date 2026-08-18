@@ -12,7 +12,7 @@ import {
 
 // The image formats assets.uploadImage accepts at every tier. The server
 // sniffs the real content type from the bytes; this only filters the picker.
-export const IMAGE_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
+const IMAGE_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
 // AssetImageUploadField is the shared logo/icon picker: a preview, an Upload
 // button backed by a hidden file input, and a Remove button while a value is

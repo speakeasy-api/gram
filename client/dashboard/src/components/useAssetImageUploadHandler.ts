@@ -19,7 +19,7 @@ const UPLOAD_ENDPOINTS: Record<AssetUploadTier, string> = {
 
 // Matches the server's MaxFileSizeImage cap. Checked client-side so an
 // oversized pick fails immediately instead of after an upload round-trip.
-export const MAX_IMAGE_UPLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 export function useAssetImageUploadHandler(
   onSuccess: (res: UploadImageResult) => void,
