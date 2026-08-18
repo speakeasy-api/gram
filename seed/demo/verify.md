@@ -17,6 +17,11 @@ when its check passes.
    way in. Chat transcripts ARE readable here — the demo org is exempt from
    the impersonation transcript block (chat.load carve-out).
 
+Most checks below can also be run WITHOUT impersonation, straight against your
+own org after `mise run seed` — it seeds the same data. Use that for quick
+iteration; use the demo org itself before ticking a row, since only it exercises
+the read-only grant set and the impersonation carve-outs.
+
 ## Checks
 
 A check FAILS when the page shows an empty state, an error boundary, or zero

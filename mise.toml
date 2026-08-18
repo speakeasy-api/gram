@@ -148,6 +148,17 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Material the local seed provisions (`mise run seed`). These are fixed,
+## well-known local-only values written straight into the database by
+## `gram demo-seed --local`, so they are checked in here rather than written
+## back into mise.local.toml after a seed run — a fresh clone is configured
+## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
+GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
+TUNNEL_LOCAL_ID = "10ca1000-0000-4000-a000-000000007001"
+TUNNEL_LOCAL_MCP_SERVER_ID = "10ca1000-0000-4000-a000-000000007002"
+TUNNEL_LOCAL_KEY = "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000"
+TUNNEL_LOCAL_MCP_ENDPOINT_SLUG = "default-seeded-local-postgres-mcp"
+
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 TUNNEL_GATEWAY_PUBLIC_PORT = "8090"

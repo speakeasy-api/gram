@@ -50,12 +50,13 @@ if INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent; then
     exit 0
 fi
 
-# `mise run seed` is `zero`'s last step and its flakiest: it authenticates
-# through dev-idp, and that handshake 307s while a just-restarted server
-# settles ("auth.callback did not return a session"). Seeding is also the step
-# that lifts the org off the demo gate, so a boot that stops here leaves a
-# dashboard that looks broken. Retry the seed alone -- if `zero` failed earlier
-# than seeding, these retries fail too and the boot is reported failed anyway.
+# `mise run seed` is `zero`'s last step, and the one that fills the org with
+# data and lifts it off the demo gate -- a boot that stops here leaves a
+# dashboard that looks broken. It talks only to Postgres and ClickHouse (no
+# server, no dev-idp handshake), so the remaining failure mode is a database
+# still settling on a cold volume. Retry the seed alone -- if `zero` failed
+# earlier than seeding, these retries fail too and the boot is reported failed
+# anyway.
 for delay in 15 30 60; do
     sleep "$delay"
     echo "Retrying seed after a ${delay}s wait..."
