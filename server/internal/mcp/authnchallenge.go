@@ -320,7 +320,7 @@ func (s *Service) contextForSessionSubject(
 	// Stamped for every subject kind, anonymous included: liveness describes
 	// the connection, and an anonymous session is a real connection whose
 	// principal happens to be unknown.
-	s.touchUserSessionLastUsed(ctx, endpoint, session.JTI)
+	s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
 		return ctx, nil
