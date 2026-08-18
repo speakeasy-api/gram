@@ -258,6 +258,8 @@ type AuditLog struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 }
 
