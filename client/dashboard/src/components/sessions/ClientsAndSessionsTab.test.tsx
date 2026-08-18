@@ -342,7 +342,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    fireEvent.click(screen.getByText("Client"));
+    fireEvent.click(screen.getByText("Agent"));
 
     expect(screen.getByText("Never Used Client")).toBeDefined();
 
@@ -363,7 +363,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    fireEvent.click(screen.getByText("Client"));
+    fireEvent.click(screen.getByText("Agent"));
 
     expect(screen.getByText("Revoke registration")).toBeDefined();
     expect(screen.getByText("Revoke all connections")).toBeDefined();

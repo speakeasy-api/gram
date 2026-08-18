@@ -1100,9 +1100,9 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
-  userSessions: {
-    title: "MCP Connections",
-    url: "user-sessions",
+  mcpSessions: {
+    title: "MCP Sessions",
+    url: "mcp-sessions",
     icon: "users",
     component: UserSessions,
   },

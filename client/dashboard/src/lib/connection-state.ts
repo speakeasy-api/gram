@@ -50,32 +50,37 @@ const DORMANT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const CONNECTION_STATE_PRESENTATION: Record<
   ConnectionState,
-  { label: string; tone: ConnectionTone; toneClass: string }
+  { label: string; tone: ConnectionTone; toneClass: string; dotClass: string }
 > = {
   live: {
     label: "Live",
     tone: "success",
     toneClass: "text-default-success",
+    dotClass: "bg-[var(--text-default-success)]",
   },
   idle: {
     label: "Idle",
     tone: "neutral",
     toneClass: "text-muted-foreground",
+    dotClass: "bg-muted-foreground/50",
   },
   expiring: {
     label: "Expiring",
     tone: "warning",
     toneClass: "text-default-warning",
+    dotClass: "bg-[var(--text-default-warning)]",
   },
   needs_reauth: {
     label: "Needs re-auth",
     tone: "destructive",
     toneClass: "text-default-destructive",
+    dotClass: "bg-[var(--text-default-destructive)]",
   },
   revoked: {
     label: "Revoked",
     tone: "neutral",
     toneClass: "text-muted-foreground",
+    dotClass: "bg-muted-foreground/50",
   },
 };
 
