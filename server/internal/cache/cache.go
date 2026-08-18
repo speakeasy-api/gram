@@ -44,6 +44,13 @@ type Cache interface {
 	DeleteByPrefix(ctx context.Context, prefix string) error
 }
 
+// CompareAndSwapCache is an optional capability for atomically replacing a
+// cache value only when its serialized value still matches an expected value.
+type CompareAndSwapCache interface {
+	CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error)
+	CompareAndDelete(ctx context.Context, key string, expected any) (bool, error)
+}
+
 type TypedCacheObject[T CacheableObject[T]] struct {
 	logger    *slog.Logger
 	cache     Cache
@@ -150,6 +157,37 @@ func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
 	return nil
+}
+
+// CompareAndSwap atomically replaces expected when the cached value has not changed.
+func (d *TypedCacheObject[T]) CompareAndSwap(ctx context.Context, expected, replacement T) (bool, error) {
+	if expected.CacheKey() != replacement.CacheKey() {
+		return false, errors.New("compare and swap cache keys differ")
+	}
+	cas, ok := d.cache.(CompareAndSwapCache)
+	if !ok {
+		return false, errors.New("cache does not support compare and swap")
+	}
+	key := d.fullKey(expected.CacheKey())
+	swapped, err := cas.CompareAndSwap(ctx, key, expected, replacement, replacement.TTL())
+	if err != nil {
+		return false, fmt.Errorf("compare and swap %s: %w", key, err)
+	}
+	return swapped, nil
+}
+
+// CompareAndDelete atomically deletes expected when the cached value has not changed.
+func (d *TypedCacheObject[T]) CompareAndDelete(ctx context.Context, expected T) (bool, error) {
+	cas, ok := d.cache.(CompareAndSwapCache)
+	if !ok {
+		return false, errors.New("cache does not support compare and delete")
+	}
+	key := d.fullKey(expected.CacheKey())
+	deleted, err := cas.CompareAndDelete(ctx, key, expected)
+	if err != nil {
+		return false, fmt.Errorf("compare and delete %s: %w", key, err)
+	}
+	return deleted, nil
 }
 
 func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {
