@@ -22,7 +22,17 @@ func TestCreditsAccountTypeMap(t *testing.T) {
 	} {
 		t.Run(string(tt.tier), func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, creditsAccountTypeMap[string(tt.tier)])
+			limit, ok := AccountTypeCreditLimit(tt.tier)
+			require.True(t, ok)
+			require.Equal(t, tt.want, limit)
 		})
 	}
+}
+
+func TestAccountTypeCreditLimitDoesNotFallBackForUnknownTier(t *testing.T) {
+	t.Parallel()
+
+	limit, ok := AccountTypeCreditLimit(billing.Tier("unknown"))
+	require.False(t, ok)
+	require.Zero(t, limit)
 }

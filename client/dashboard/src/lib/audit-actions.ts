@@ -83,6 +83,7 @@ export const AUDIT_ACTIONS = [
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
+  "organization:payg_deactivated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -385,6 +386,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restarted enterprise trial";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
+    case "organization:payg_deactivated":
+      return "deactivated pay-as-you-go billing for";
 
     case "organization_invitation:create":
       return "invited";

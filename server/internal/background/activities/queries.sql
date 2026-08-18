@@ -49,6 +49,52 @@ WHERE toolsets.deleted = false
 GROUP BY organization_metadata.id
 HAVING COUNT(toolsets.id) > 0;
 
+-- name: AcquirePaygOpenRouterChatKeyLock :exec
+-- A session lock lets the reconciler serialize a billing projection read and
+-- its upstream PATCH without holding a database transaction across the
+-- network call. Billing writers take the same key transactionally before
+-- changing the projection.
+SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+
+-- name: ReleasePaygOpenRouterChatKeyLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0)) AS unlocked;
+
+-- name: GetPaygOpenRouterChatKeyProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+  , chat_key.disabled AS chat_key_disabled
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+LEFT JOIN openrouter_api_keys chat_key
+  ON chat_key.organization_id = organization_metadata.id
+ AND chat_key.key_type = 'chat'
+ AND chat_key.deleted IS FALSE
+WHERE organization_metadata.id = @organization_id;
+
+-- name: SetPaygOpenRouterChatKeyProjectionFixture :exec
+WITH updated_organization AS (
+  UPDATE organization_metadata
+  SET gram_account_type = @gram_account_type,
+      updated_at = clock_timestamp()
+  WHERE organization_metadata.id = @organization_id
+  RETURNING organization_metadata.id
+)
+INSERT INTO billing_metadata (
+    organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+)
+SELECT
+    updated_organization.id
+  , 'customer_placeholder'
+  , @stripe_subscription_id
+FROM updated_organization
+ON CONFLICT (organization_id) DO UPDATE
+SET stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+    updated_at = clock_timestamp();
+
 -- name: GetOpenRouterCreditsMonitoringTargets :many
 -- Targets for periodic OpenRouter credit usage polling. Filters out disabled
 -- orgs and disabled/deleted keys, and restricts to the caller-supplied

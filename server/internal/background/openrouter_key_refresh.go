@@ -38,32 +38,64 @@ func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Contex
 	return err
 }
 
-// SchedulePaygOpenRouterKeyRefresh uses the durable outbox event ID as the
-// workflow identity, so Pub/Sub redelivery cannot start the same refresh twice.
-func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterKeyRefresh(ctx context.Context, eventID, orgID string, keyType openrouter.KeyType, limit *int) error {
-	if err := keyType.Validate(); err != nil {
-		return fmt.Errorf("refresh openrouter key workflow: %w", err)
+// SchedulePaygOpenRouterChatKeyReconciliation uses the durable outbox event ID
+// as the workflow identity, so Pub/Sub redelivery cannot start the same
+// reconciliation twice. The workflow reads current billing state instead of
+// trusting the event's historical transition.
+func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx context.Context, eventID, orgID string, desiredState openrouter.KeyDesiredState) error {
+	if eventID == "" {
+		return errors.New("PAYG billing event ID is required")
+	}
+	if orgID == "" {
+		return errors.New("organization ID is required")
+	}
+	if err := desiredState.Validate(); err != nil {
+		return fmt.Errorf("schedule PAYG OpenRouter chat key reconciliation: %w", err)
 	}
 
 	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    fmt.Sprintf("v1:openrouter-key-refresh:payg-activation:%s", eventID),
+		ID:                    fmt.Sprintf("v1:openrouter-chat-key-reconcile:billing:%s", eventID),
 		TaskQueue:             string(w.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowRunTimeout:    3 * time.Minute,
-	}, OpenrouterKeyRefreshWorkflow, OpenRouterKeyRefreshParams{
-		OrgID:   orgID,
-		Limit:   limit,
-		KeyType: string(keyType),
+	}, PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{
+		OrganizationID: orgID,
+		DesiredState:   desiredState,
 	})
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	switch {
 	case errors.As(err, &alreadyStarted):
 		return nil
 	case err != nil:
-		return fmt.Errorf("start PAYG openrouter key refresh workflow: %w", err)
+		return fmt.Errorf("start PAYG OpenRouter chat key reconciliation workflow: %w", err)
 	default:
 		return nil
 	}
+}
+
+type ReconcilePaygOpenRouterChatKeyParams struct {
+	OrganizationID string
+	DesiredState   openrouter.KeyDesiredState
+}
+
+func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params ReconcilePaygOpenRouterChatKeyParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 5,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(
+		ctx,
+		a.ReconcilePaygOpenRouterChatKey,
+		activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: params.OrganizationID, DesiredState: params.DesiredState},
+	).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile PAYG OpenRouter chat key: %w", err)
+	}
+
+	return nil
 }
 
 // Called by your service to start (or restart) the workflow

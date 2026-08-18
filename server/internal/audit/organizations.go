@@ -31,7 +31,8 @@ const (
 	ActionOrganizationEnterpriseTrialRearmed  Action = "organization:enterprise_trial_rearmed"
 	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
 
-	ActionOrganizationPaygActivated Action = "organization:payg_activated"
+	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -573,6 +574,54 @@ func (l *Logger) LogOrganizationPaygActivated(ctx context.Context, dbtx repo.DBT
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
 		Action: string(ActionOrganizationPaygActivated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
+}
+
+type LogOrganizationPaygDeactivatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
+	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygDeactivatedEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationPaygDeactivated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationPaygDeactivated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationPaygDeactivated),
 
 		SubjectID:          event.OrganizationID,
 		SubjectType:        "organization",
