@@ -68,9 +68,6 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 		return resp, true
 	}
 
-	// A payload that does not decode as a tools/list result leaves ok=false, so
-	// the typed loop is skipped and the response relays to the user unchanged.
-	// That includes a `null` result, which carries no tools to filter.
 	result := &ToolsListResult{Tools: nil, NextCursor: "", extras: nil}
 	if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 		return nil, false
@@ -116,9 +113,7 @@ func (r *ToolsListResponse) SetTools(tools []*Tool) error {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
 	}
 
-	// Staged on a clone so a failure cannot leave the wire disagreeing with the
-	// typed view: confining the cache scope writes to the carried members, which
-	// the live result would otherwise share.
+	// Stage cache-hint changes so marshal failure leaves the typed view untouched.
 	staged := r.Result.clone()
 	staged.Tools = tools
 	staged.confineToCaller()

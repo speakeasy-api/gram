@@ -90,22 +90,12 @@ func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Request", r.UserRequest.JSONRPCMessages[0])}
 	}
 
-	// Only the `arguments` member is rewritten; every other member the client
-	// sent travels on untouched, including the ones the vendored SDK's
-	// CallToolParamsRaw does not model. Under MCP 2026-07-28 those include a
-	// multi round-trip retry's `requestState` and `inputResponses`, which a
-	// re-marshal of the struct would strand.
+	// Mutate the raw params so fields unknown to the vendored SDK survive.
 	params, err := decodeObject(rpcReq.Params)
 	if err != nil {
 		return &MutationError{Op: "set arguments", Cause: err}
 	}
-	// Gram authorized this call against the decoded `name`. Carrying a case-fold
-	// alias of it onward would let an exact-key upstream execute a different tool
-	// than the one authorized, and for a request the safe answer is to refuse
-	// rather than to pick one.
-	// A RejectError rather than a MutationError: the payload is invalid client
-	// input, so the caller gets a JSON-RPC rejection instead of a 5xx blamed on
-	// the proxy.
+	// Reject aliases that could make upstream invoke a different tool than Gram authorized.
 	if err := requireUnambiguousInvocation(params, "name"); err != nil {
 		return &RejectError{
 			Code:    RejectCodeInvalidParams,
@@ -114,8 +104,7 @@ func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 		}
 	}
 	if len(arguments) == 0 {
-		// The SDK struct spells the member `omitempty`, so clearing it removes
-		// the member rather than writing an explicit null.
+		// Match CallToolParamsRaw's omitempty behavior.
 		delete(params, "arguments")
 	} else {
 		params["arguments"] = arguments

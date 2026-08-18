@@ -9,44 +9,10 @@ import (
 	"strings"
 )
 
-// The types here model the MCP payloads the proxy mutates. They exist instead of
-// the vendored modelcontextprotocol/go-sdk structs because a struct commits its
-// author's opinion about which members exist, and committing a mutation through
-// one publishes that opinion as Gram's: every member the SDK version does not
-// model is deleted in transit. MCP 2026-07-28 requires `resultType` on every
-// result and clients validate it, so a member Gram drops makes Gram the
-// non-compliant party for a payload the upstream got right — and the proxy is a
-// pass-through on protocol version, so the revision being validated against is
-// the one the client and the upstream settled between themselves, not one Gram
-// picked.
-//
-// Each type models the members Gram itself reads and carries every other member
-// of the same object, so a decode/encode round trip reproduces the payload.
-// Carried members live on the object that owns them, which is what makes
-// filtering a list preserve each surviving item's own members with no bookkeeping
-// on the side, and a nested object that Gram reads into is modeled by a type of
-// its own so the same guarantee holds one level down.
-//
-// Adding a field is how Gram takes a dependency on a member. Anything not listed
-// travels through untouched, which is the point.
-//
-// Two things are deliberately not preserved, because preserving them would make
-// the payload mean different things to different readers:
-//
-//   - A repeated member name collapses to the single value Go's decoder kept.
-//     Parsers disagree here — Go keeps the last, first-wins parsers are common —
-//     so relaying both onward would let Gram authorize one tool while a peer
-//     downstream reads another.
-//   - A member whose name differs from a modeled one only by case is dropped.
-//     Go matches a struct field to a member case-insensitively while the protocol
-//     matches keys exactly, so carrying both `name` and `Name` would leave Gram
-//     having authorized one value and a case-insensitive peer reading the other.
-//
-// Member order is not preserved either, but that carries no meaning. Byte-for-byte
-// relay remains the behaviour whenever nothing mutates, which never decodes at all.
-
-// extrasOnly returns the members of a decoded object that the modeled names do
-// not claim, dropping each modeled name and any case-fold alias of it.
+// These wire types preserve members that Gram does not model, allowing newer MCP
+// payloads to survive mutations. Duplicate and case-folded names are collapsed so
+// Gram and downstream parsers cannot disagree about authorized values. Messages
+// that are not mutated bypass these types and relay byte-for-byte.
 func extrasOnly(members object, modeled ...string) object {
 	extras := make(object, len(members))
 	maps.Copy(extras, members)
@@ -63,9 +29,6 @@ func extrasOnly(members object, modeled ...string) object {
 	return extras
 }
 
-// mergeModeled writes the carried extras and then the modeled members into one
-// object, dropping any extra that case-fold collides with a modeled name so the
-// emitted object cannot read differently to a case-insensitive parser.
 func mergeModeled(extras object, modeled object) (json.RawMessage, error) {
 	names := make([]string, 0, len(modeled))
 	for name := range modeled {
@@ -78,10 +41,7 @@ func mergeModeled(extras object, modeled object) (json.RawMessage, error) {
 	return out.encode()
 }
 
-// ToolAnnotations is a tool's annotation hints. Gram matches annotation-scoped
-// grants against the four the spec defines; anything else an upstream attaches is
-// carried. Absent and explicitly-false hints are both nil, so a caller cannot
-// mistake "not declared" for "declared false".
+// ToolAnnotations contains the hints Gram evaluates and preserves unknown members.
 type ToolAnnotations struct {
 	ReadOnlyHint    *bool
 	DestructiveHint *bool
@@ -143,18 +103,12 @@ func (a ToolAnnotations) MarshalJSON() ([]byte, error) {
 	return mergeModeled(a.extras, modeled)
 }
 
-// Tool is a tools/list entry. Gram reads a tool's name to authorize it, its
-// annotation hints to match annotation-scoped grants, and carries its input
-// schema so a caller can construct a usable replacement; everything else —
-// description, output schema, title, icons, `_meta`, vendor extensions — is
-// carried opaquely.
+// Tool is a tools/list entry that preserves members Gram does not model.
 type Tool struct {
-	// Name identifies the tool and is what Gram authorizes against, so it is
-	// read exact-key rather than through a case-insensitive struct match.
+	// Name identifies the tool for authorization.
 	Name string
 
-	// InputSchema is the tool's declared parameter schema, kept as the bytes the
-	// peer sent so no schema dialect or numeric formatting is reinterpreted.
+	// InputSchema preserves the peer's raw schema encoding.
 	InputSchema json.RawMessage
 
 	// Annotations is nil when the tool declared none.
@@ -214,9 +168,7 @@ func (t Tool) MarshalJSON() ([]byte, error) {
 	return mergeModeled(t.extras, modeled)
 }
 
-// ToolsListResult is a tools/list result. Gram reads the tool array and the
-// pagination cursor; every other member — `resultType`, the caching hints,
-// `_meta`, vendor extensions — is carried.
+// ToolsListResult preserves unmodeled members of a tools/list result.
 type ToolsListResult struct {
 	Tools      []*Tool
 	NextCursor string
@@ -233,10 +185,7 @@ func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
 
 	var next ToolsListResult
 	if raw, ok := members["tools"]; ok {
-		// An explicit null decodes to an empty list without error, which a
-		// mutation would then emit as [] — normalising the upstream's malformed
-		// payload on exactly the paths that happen to filter, and relaying it
-		// untouched on the rest. Refuse the view instead, so every path relays.
+		// Reject null so mutation cannot silently normalize it to [].
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return errors.New("tools is null, not an array")
 		}
@@ -244,8 +193,7 @@ func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("decode tools: %w", err)
 		}
 	}
-	// A null entry would reach every reader of the list as a tool with no name,
-	// so it is refused here rather than guarded at each of them.
+	// Reject null entries before authorization code dereferences them.
 	for idx, tool := range next.Tools {
 		if tool == nil {
 			return fmt.Errorf("tool %d is null", idx)
@@ -266,7 +214,7 @@ func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
 func (r ToolsListResult) MarshalJSON() ([]byte, error) {
 	tools := r.Tools
 	if tools == nil {
-		// MCP list results carry an array, never null.
+		// MCP requires an array.
 		tools = []*Tool{}
 	}
 	encodedTools, err := json.Marshal(tools)
@@ -286,8 +234,7 @@ func (r ToolsListResult) MarshalJSON() ([]byte, error) {
 	return mergeModeled(r.extras, modeled)
 }
 
-// Resource is a resources/list entry. Gram reads a resource's uri and name;
-// everything else is carried.
+// Resource is a resources/list entry that preserves members Gram does not model.
 type Resource struct {
 	URI  string
 	Name string
@@ -333,8 +280,7 @@ func (r Resource) MarshalJSON() ([]byte, error) {
 	return mergeModeled(r.extras, object{"uri": uri, "name": name})
 }
 
-// ResourcesListResult is a resources/list result, modeled like
-// [ToolsListResult].
+// ResourcesListResult preserves unmodeled members of a resources/list result.
 type ResourcesListResult struct {
 	Resources  []*Resource
 	NextCursor string
@@ -351,10 +297,7 @@ func (r *ResourcesListResult) UnmarshalJSON(data []byte) error {
 
 	var next ResourcesListResult
 	if raw, ok := members["resources"]; ok {
-		// An explicit null decodes to an empty list without error, which a
-		// mutation would then emit as [] — normalising the upstream's malformed
-		// payload on exactly the paths that happen to filter, and relaying it
-		// untouched on the rest. Refuse the view instead, so every path relays.
+		// Reject null so mutation cannot silently normalize it to [].
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return errors.New("resources is null, not an array")
 		}
@@ -401,16 +344,10 @@ func (r ResourcesListResult) MarshalJSON() ([]byte, error) {
 	return mergeModeled(r.extras, modeled)
 }
 
-// confineToCaller marks a list result the proxy has filtered for one caller as
-// cacheable only within that caller's authorization context. See the identically
-// named method on [object] for why.
 func (r *ToolsListResult) confineToCaller() { r.extras.confineToCaller() }
 
-// confineToCaller mirrors [ToolsListResult.confineToCaller].
 func (r *ResourcesListResult) confineToCaller() { r.extras.confineToCaller() }
 
-// clone returns a copy whose carried members can be mutated without touching the
-// original's, so a setter can stage a mutation and abandon it on failure.
 func (r ToolsListResult) clone() ToolsListResult {
 	r.extras = maps.Clone(r.extras)
 	if r.extras == nil {
@@ -420,7 +357,6 @@ func (r ToolsListResult) clone() ToolsListResult {
 	return r
 }
 
-// clone mirrors [ToolsListResult.clone].
 func (r ResourcesListResult) clone() ResourcesListResult {
 	r.extras = maps.Clone(r.extras)
 	if r.extras == nil {
@@ -430,17 +366,8 @@ func (r ResourcesListResult) clone() ResourcesListResult {
 	return r
 }
 
-// requireUnambiguousInvocation rejects a request payload whose members would
-// identify a different operation to a peer than the one Gram authorized.
-//
-// Gram authorizes a tools/call against the decoded `name` and then forwards the
-// payload, so a body carrying both `name` and a case-fold alias of it can be
-// authorized as one tool and executed as another by an exact-key upstream.
-// Dropping the alias is the right answer for a response Gram is filtering, but
-// not for a request: silently changing which tool is invoked is worse than
-// refusing to invoke one. Callers surface this as a [*RejectError] carrying
-// [RejectCodeInvalidParams] — the payload is invalid client input, so the caller
-// gets a JSON-RPC rejection rather than a 5xx blamed on the proxy.
+// requireUnambiguousInvocation rejects aliases that could make upstream invoke a
+// different tool than Gram authorized.
 func requireUnambiguousInvocation(members object, modeled ...string) error {
 	for _, name := range modeled {
 		if _, ok := members[name]; !ok {
