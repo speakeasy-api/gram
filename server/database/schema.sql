@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   -- Current Stripe subscription. NULL after cancellation and replaced when
   -- the organization subscribes again.
   stripe_subscription_id TEXT,
+  -- Exact UTC billing-cycle anchor for the current Stripe subscription. This
+  -- is the first paid-period boundary after any trial or free checkout stub.
+  -- NULL until Stripe confirms a subscription and cleared on subscription loss.
+  stripe_billing_cycle_anchor timestamptz,
+
+  -- Durable inputs for one pending Stripe Checkout intent. Retries reuse these
+  -- values until the session expires; a replacement intent clears or replaces
+  -- them together so sessions with different anchors cannot overlap.
+  stripe_checkout_idempotency_key TEXT,
+  stripe_checkout_billing_cycle_anchor timestamptz,
+  -- Stripe-side aligned trial end captured when Checkout starts during an
+  -- active product trial. NULL for immediate, non-prorated checkout.
+  stripe_checkout_trial_end timestamptz,
+  stripe_checkout_expires_at timestamptz,
+  stripe_checkout_session_id TEXT,
 
   -- Contracted monthly "tokens under management" allowance. NULL means no
   -- contracted limit has been configured.
@@ -149,6 +164,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_customer_id_key
 ON billing_metadata (stripe_customer_id)
 WHERE stripe_customer_id IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_checkout_session_id_key
+ON billing_metadata (stripe_checkout_session_id)
+WHERE stripe_checkout_session_id IS NOT NULL;
+
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
 -- Durable completion receipts for accepted Stripe webhooks. A row commits
@@ -173,59 +192,112 @@ ON stripe_webhook_receipts (organization_id);
 -- of each cycle's usage for billing, overage math, and admin reporting.
 CREATE TABLE IF NOT EXISTS billing_cycle_usage (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  -- Nullable so the permanent billing record survives organization deletion.
+  organization_id TEXT,
 
   -- [cycle_start, cycle_end) boundaries computed from
   -- billing_metadata.billing_cycle_anchor_day at snapshot time.
   cycle_start timestamptz NOT NULL,
   cycle_end timestamptz NOT NULL,
 
-  -- Total tokens under management observed for the cycle.
+  -- Latest tokens under management observed for the cycle. This may continue
+  -- changing during the late-arrival window after the billed baseline freezes.
   tum_tokens BIGINT NOT NULL DEFAULT 0,
 
-  -- Set once the cycle has closed plus an ingest grace period, after which the
-  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  -- Immutable billing baseline captured after the cycle's 48-hour ingest grace
+  -- period. NULL until the cycle is ready to bill.
+  billed_tum_tokens BIGINT,
+  billed_frozen_at timestamptz,
+
+  -- Set after the final 72-hour observation cutoff, after which tum_tokens is
+  -- no longer refreshed. NULL while late telemetry is still being observed.
   finalized_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
-  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
   CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
   -- Token counts originate from client-supplied OTEL attributes; a negative
   -- sum must never become part of the permanent billing record.
-  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0),
+  CONSTRAINT billing_cycle_usage_billed_tum_tokens_check CHECK (billed_tum_tokens IS NULL OR billed_tum_tokens >= 0),
+  CONSTRAINT billing_cycle_usage_billed_frozen_at_check CHECK (billed_frozen_at IS NULL OR billed_tum_tokens IS NOT NULL)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
 ON billing_cycle_usage (organization_id, cycle_start);
 
--- Append-only mirror of TUM meter events reported to Stripe Billing. The
--- upstream event identifier derives from the organization, cycle start, and
--- sequence number, making sends idempotent and the ledger exactly replayable.
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_id_key
+ON billing_cycle_usage (organization_id, id);
+
+-- Durable TUM meter-event intents and their Stripe delivery state. Each row
+-- retains the complete intended event so pending and ambiguous deliveries can
+-- be reconciled without rebuilding payloads from mutable billing metadata.
 CREATE TABLE IF NOT EXISTS stripe_meter_reports (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  -- Nullable so intended-delivery history survives organization deletion.
+  organization_id TEXT,
 
-  -- Cycle boundary from billing_cycle_usage at report time.
+  -- Intended-event fields added during the migration-first rollout remain
+  -- nullable so existing reports migrate without DML. New reports bind directly
+  -- to the durable cycle row and persist every field required for replay.
+  billing_cycle_usage_id uuid,
   cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz,
   -- Monotonic sequence within an organization's billing cycle.
   seq INT NOT NULL,
-  -- Tokens added by this report. The cycle's reported total is the sum of
-  -- these deltas.
+  -- Immutable Stripe routing data needed to replay the intended meter event
+  -- without reading mutable organization billing metadata.
+  stripe_customer_id TEXT,
+  stripe_meter_event_name TEXT,
+  -- Stable identifier supplied to Stripe for idempotent meter-event delivery.
+  stripe_identifier TEXT,
+  -- Signed correction to the cycle's previously reported total.
   delta_tokens BIGINT NOT NULL,
+  -- Timestamp assigned to the Stripe meter event. It remains inside the
+  -- service period even when delivery or reconciliation happens later.
+  event_timestamp timestamptz,
+
+  -- Allowed values (pending, confirmed, ambiguous) live in application code.
+  -- The confirmed default preserves the meaning of legacy sent-report rows;
+  -- new intended deliveries explicitly write pending.
+  delivery_state TEXT NOT NULL DEFAULT 'confirmed',
+  first_attempted_at timestamptz,
+  last_attempted_at timestamptz,
+  confirmed_at timestamptz,
+  ambiguous_at timestamptz,
+  reconciled_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT stripe_meter_reports_pkey PRIMARY KEY (id),
-  CONSTRAINT stripe_meter_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT stripe_meter_reports_delta_tokens_check CHECK (delta_tokens >= 0)
+  CONSTRAINT stripe_meter_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_meter_reports_org_billing_cycle_usage_fkey FOREIGN KEY (organization_id, billing_cycle_usage_id) REFERENCES billing_cycle_usage (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT stripe_meter_reports_cycle_bounds_check CHECK (cycle_end IS NULL OR cycle_end > cycle_start),
+  CONSTRAINT stripe_meter_reports_event_timestamp_check CHECK (
+    event_timestamp IS NULL
+    OR (cycle_end IS NOT NULL AND event_timestamp >= cycle_start AND event_timestamp < cycle_end)
+  )
 );
 
+-- Retained during the migration-first rollout so the deployed writer, which
+-- does not populate cycle_end yet, keeps its existing uniqueness guarantee.
 CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_organization_id_cycle_start_seq_key
 ON stripe_meter_reports (organization_id, cycle_start, seq);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_org_cycle_bounds_seq_key
+ON stripe_meter_reports (organization_id, cycle_start, cycle_end, seq);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_stripe_identifier_key
+ON stripe_meter_reports (stripe_identifier)
+WHERE stripe_identifier IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS stripe_meter_reports_billing_cycle_usage_id_idx
+ON stripe_meter_reports (billing_cycle_usage_id)
+WHERE billing_cycle_usage_id IS NOT NULL;
 
 -- Durable per-day OpenRouter spend per platform-managed key. Upstream history
 -- expires, so these rows are the permanent billing-grade record. key_type
@@ -253,6 +325,104 @@ CREATE TABLE IF NOT EXISTS openrouter_spend_daily (
 
 CREATE UNIQUE INDEX IF NOT EXISTS openrouter_spend_daily_organization_id_key_type_day_key
 ON openrouter_spend_daily (organization_id, key_type, day);
+
+-- Stripe invoice identity and its UTC service period. Status values are
+-- validated by the application so Stripe can add states without a migration.
+-- Rows survive organization deletion because invoices remain an external
+-- financial record.
+CREATE TABLE IF NOT EXISTS stripe_invoices (
+  stripe_invoice_id TEXT NOT NULL,
+  organization_id TEXT,
+  stripe_customer_id TEXT NOT NULL,
+  stripe_subscription_id TEXT NOT NULL,
+  service_period_start timestamptz NOT NULL,
+  service_period_end timestamptz NOT NULL,
+  invoice_state TEXT NOT NULL,
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_invoices_pkey PRIMARY KEY (stripe_invoice_id),
+  CONSTRAINT stripe_invoices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoices_service_period_bounds_check CHECK (service_period_end > service_period_start)
+);
+
+CREATE INDEX IF NOT EXISTS stripe_invoices_organization_id_service_period_start_idx
+ON stripe_invoices (organization_id, service_period_start)
+WHERE organization_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoices_organization_id_stripe_invoice_id_key
+ON stripe_invoices (organization_id, stripe_invoice_id);
+
+-- Append-only settlements of cumulative source charges to Stripe invoices.
+-- source_kind and source_key form an application-defined logical identity so a
+-- missing OpenRouter day can be allocated before a source row exists. The source
+-- bounds and cumulative USD snapshot preserve the financial record independently
+-- of source-row lifecycle. The sum of confirmed signed amount_usd rows for a
+-- source is its billed baseline; a restatement or carry-forward uses the next seq.
+CREATE TABLE IF NOT EXISTS stripe_invoice_allocations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  source_kind TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  seq INT NOT NULL,
+  source_day DATE,
+  source_period_start timestamptz,
+  source_period_end timestamptz,
+  source_snapshot_usd NUMERIC(14, 6),
+
+  -- TUM settlements retain their signed token delta and USD price per token for
+  -- invoice reconstruction. Both are NULL for non-TUM sources.
+  delta_tokens BIGINT,
+  original_tum_unit_price_usd NUMERIC(14, 12),
+  -- Positive values bill; negative values credit. Six decimal places retain
+  -- sub-cent amounts until a later allocation can be represented in Stripe.
+  -- NULL represents a planned missing-day settlement awaiting source data.
+  amount_usd NUMERIC(14, 6),
+
+  original_invoice_id TEXT,
+  destination_invoice_id TEXT,
+  stripe_invoice_item_id TEXT,
+  stripe_credit_note_id TEXT,
+  idempotency_key TEXT NOT NULL,
+
+  -- Allowed values (pending, confirmed, ambiguous) live in application code.
+  delivery_state TEXT NOT NULL DEFAULT 'pending',
+  first_attempted_at timestamptz,
+  last_attempted_at timestamptz,
+  confirmed_at timestamptz,
+  ambiguous_at timestamptz,
+  reconciled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_invoice_allocations_pkey PRIMARY KEY (id),
+  CONSTRAINT stripe_invoice_allocations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_org_original_invoice_fkey FOREIGN KEY (organization_id, original_invoice_id) REFERENCES stripe_invoices (organization_id, stripe_invoice_id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_org_destination_invoice_fkey FOREIGN KEY (organization_id, destination_invoice_id) REFERENCES stripe_invoices (organization_id, stripe_invoice_id) ON DELETE SET NULL,
+  CONSTRAINT stripe_invoice_allocations_source_period_bounds_check CHECK (
+    (source_day IS NOT NULL AND source_period_start IS NULL AND source_period_end IS NULL)
+    OR
+    (source_day IS NULL AND source_period_start IS NOT NULL AND source_period_end IS NOT NULL AND source_period_end > source_period_start)
+  ),
+  CONSTRAINT stripe_invoice_allocations_source_snapshot_usd_check CHECK (source_snapshot_usd IS NULL OR source_snapshot_usd >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoice_allocations_idempotency_key_key
+ON stripe_invoice_allocations (idempotency_key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoice_allocations_org_source_seq_key
+ON stripe_invoice_allocations (organization_id, source_kind, source_key, seq);
+
+CREATE INDEX IF NOT EXISTS stripe_invoice_allocations_original_invoice_id_idx
+ON stripe_invoice_allocations (original_invoice_id)
+WHERE original_invoice_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS stripe_invoice_allocations_destination_invoice_id_idx
+ON stripe_invoice_allocations (destination_invoice_id)
+WHERE destination_invoice_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
