@@ -36,6 +36,8 @@ const (
 	TemplateKeyCustomDomainUnhealthy     TemplateKey = "custom_domain_unhealthy"
 	TemplateKeyWeeklyUsageSummary        TemplateKey = "weekly_usage_summary"
 	TemplateKeyAccessRequest             TemplateKey = "access_request"
+	TemplateKeyTrialEndingSoon           TemplateKey = "trial_ending_soon"
+	TemplateKeyAccessPaused              TemplateKey = "access_paused"
 )
 
 var (
@@ -120,4 +122,6 @@ var RegisteredTemplates = []Template{
 	CustomDomainUnhealthy{Email: "", Domain: "", IssueMessage: "", DomainLink: ""},
 	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", CycleElapsedPercent: "", TotalTokens: "", PreviousTotalTokens: "", TotalChangePercent: "", ViewUsageURL: ""},
 	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: ""},
+	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
+	AccessPaused{OrganizationName: "", ActionURL: ""},
 }
