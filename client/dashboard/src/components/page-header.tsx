@@ -88,6 +88,7 @@ function PageHeaderTitle({
 //     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
+  "platform-mcp": "Platform MCP",
   "shadow-mcp": "Shadow MCP",
   sdks: "SDKs",
   elements: "Chat Elements",
