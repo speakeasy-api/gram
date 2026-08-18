@@ -255,6 +255,130 @@ func TestHandleGetSession_RefreshesExpiredTokens(t *testing.T) {
 	require.True(t, session.AccessTokenExpiresAt.After(time.Now()))
 }
 
+func TestSessionStore_UpdateTokensAdoptsConcurrentWinner(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("sub-cas", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-cas",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	first, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	stale := first
+	_, err = svc.sessions.UpdateTokens(ctx, first, "winner-access-token", "winner-refresh-token", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	winner, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	adopted, err := svc.sessions.UpdateTokens(ctx, stale, "stale-access-token", "stale-refresh-token", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	require.Equal(t, winner, adopted)
+	accessToken, err := svc.sessions.DecryptAccessToken(adopted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-access-token", accessToken)
+	refreshToken, err := svc.sessions.DecryptRefreshToken(adopted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-refresh-token", refreshToken)
+	persisted, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, winner, persisted)
+	deleted, err := svc.sessions.DeleteIfUnchanged(ctx, stale)
+	require.NoError(t, err)
+	require.False(t, deleted)
+	persisted, err = svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, winner, persisted)
+}
+
+func TestHandleGetSession_AdoptsConcurrentRefreshWinner(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	usedAccessToken := make(chan string, 1)
+	var svc *Service
+	var sessionID string
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		func(w http.ResponseWriter, r *http.Request) {
+			usedAccessToken <- r.Header.Get("Authorization")
+			userinfoOK("sub-cas-verifier", "operator@example.com")(w, r)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			snapshot, err := svc.sessions.Get(r.Context(), sessionID)
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			_, err = svc.sessions.UpdateTokens(r.Context(), snapshot, "winner-access-token", "winner-refresh-token", time.Now().Add(time.Hour))
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "stale-access-token",
+				"refresh_token": "stale-refresh-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		},
+	)
+	svc = newTestSessionService(t, oidcClient)
+	var err error
+	sessionID, err = svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-cas-verifier",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, callSessionGet(t, svc, sessionID).Code)
+	require.Equal(t, "Bearer winner-access-token", <-usedAccessToken)
+	persisted, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	refreshToken, err := svc.sessions.DecryptRefreshToken(persisted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-refresh-token", refreshToken)
+}
+
+func TestSessionStore_UpdateTokensDoesNotRecreateDeletedSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("sub-deleted", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-deleted",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+	snapshot, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.NoError(t, svc.sessions.Delete(ctx, sessionID))
+
+	_, err = svc.sessions.UpdateTokens(ctx, snapshot, "new-access-token", "new-refresh-token", time.Now().Add(time.Hour))
+	require.Error(t, err)
+	_, err = svc.sessions.Get(ctx, sessionID)
+	require.Error(t, err)
+}
+
 func TestHandleGetSession_ClassifiesRefreshFailures(t *testing.T) {
 	t.Parallel()
 

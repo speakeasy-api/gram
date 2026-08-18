@@ -12,7 +12,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var _ Cache = (*RedisCacheAdapter)(nil)
+var (
+	_ Cache               = (*RedisCacheAdapter)(nil)
+	_ CompareAndSwapCache = (*RedisCacheAdapter)(nil)
+)
 
 const mutateMaxRetries = 5
 
@@ -84,6 +87,21 @@ func (r *RedisCacheAdapter) AcquireLease(ctx context.Context, key, owner string,
 	return ok, nil
 }
 
+// RenewLease extends key only if it is still owned by owner.
+func (r *RedisCacheAdapter) RenewLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	const compareAndExpire = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`
+	renewed, err := r.client.Eval(ctx, compareAndExpire, []string{key}, owner, ttl.Milliseconds()).Int64()
+	if err != nil {
+		return false, fmt.Errorf("renew lease %s: %w", key, err)
+	}
+	return renewed == 1, nil
+}
+
 // ReleaseLease atomically deletes key only if it is still owned by owner.
 func (r *RedisCacheAdapter) ReleaseLease(ctx context.Context, key, owner string) error {
 	const compareAndDelete = `
@@ -96,6 +114,49 @@ return 0
 		return fmt.Errorf("release lease %s: %w", key, err)
 	}
 	return nil
+}
+
+// CompareAndSwap atomically replaces key when its serialized value matches expected.
+func (r *RedisCacheAdapter) CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error) {
+	expectedRaw, err := r.cache.Marshal(expected)
+	if err != nil {
+		return false, fmt.Errorf("marshal expected value: %w", err)
+	}
+	replacementRaw, err := r.cache.Marshal(replacement)
+	if err != nil {
+		return false, fmt.Errorf("marshal replacement value: %w", err)
+	}
+	const compareAndSwap = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  redis.call("SET", KEYS[1], ARGV[2], "PX", ARGV[3])
+  return 1
+end
+return 0
+`
+	swapped, err := r.client.Eval(ctx, compareAndSwap, []string{key}, expectedRaw, replacementRaw, ttl.Milliseconds()).Int64()
+	if err != nil {
+		return false, fmt.Errorf("compare and swap %s: %w", key, err)
+	}
+	return swapped == 1, nil
+}
+
+// CompareAndDelete atomically deletes key when its serialized value matches expected.
+func (r *RedisCacheAdapter) CompareAndDelete(ctx context.Context, key string, expected any) (bool, error) {
+	expectedRaw, err := r.cache.Marshal(expected)
+	if err != nil {
+		return false, fmt.Errorf("marshal expected value: %w", err)
+	}
+	const compareAndDelete = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`
+	deleted, err := r.client.Eval(ctx, compareAndDelete, []string{key}, expectedRaw).Int64()
+	if err != nil {
+		return false, fmt.Errorf("compare and delete %s: %w", key, err)
+	}
+	return deleted == 1, nil
 }
 
 func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {

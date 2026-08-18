@@ -166,29 +166,74 @@ func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session, lo
 		return current, "", fmt.Errorf("decrypt admin refresh token: %w", err)
 	}
 	if refreshToken == "" {
-		if err := v.sessions.Delete(ctx, current.SessionID); err != nil {
+		deleted, err := v.sessions.DeleteIfUnchanged(ctx, current)
+		if err != nil {
 			return current, "", fmt.Errorf("delete unrefreshable admin session: %w", err)
+		}
+		if !deleted {
+			return v.awaitRefreshedSession(ctx, current.SessionID)
 		}
 		return current, "", errAdminSessionRefreshRequired
 	}
 
+	renewed, err := v.locks.RenewLease(ctx, lockKey, owner, adminRefreshLockTTL)
+	if err != nil {
+		return current, "", fmt.Errorf("renew admin refresh lease before provider call: %w", err)
+	}
+	if !renewed {
+		return v.awaitRefreshedSession(ctx, current.SessionID)
+	}
+
 	refreshCtx, cancel := context.WithTimeout(ctx, adminRefreshUpstreamTimeout)
 	defer cancel()
-	tok, err := v.oidc.Refresh(refreshCtx, refreshToken)
+	tok, refreshErr := v.oidc.Refresh(refreshCtx, refreshToken)
+	renewed, err = v.locks.RenewLease(ctx, lockKey, owner, adminRefreshLockTTL)
 	if err != nil {
-		if !isInvalidGrant(err) {
-			return current, "", fmt.Errorf("refresh oidc access token: %w", err)
+		return current, "", fmt.Errorf("renew admin refresh lease after provider call: %w", err)
+	}
+	if !renewed {
+		return v.awaitRefreshedSession(ctx, current.SessionID)
+	}
+	if refreshErr != nil {
+		if !isInvalidGrant(refreshErr) {
+			return current, "", fmt.Errorf("refresh oidc access token: %w", refreshErr)
 		}
-		if err := v.sessions.Delete(ctx, current.SessionID); err != nil {
+		deleted, err := v.sessions.DeleteIfUnchanged(ctx, current)
+		if err != nil {
 			return current, "", fmt.Errorf("delete rejected admin session: %w", err)
 		}
-		return current, "", errAdminSessionRefreshRequired
+		if deleted {
+			return current, "", errAdminSessionRefreshRequired
+		}
+
+		current, err = v.sessions.Get(ctx, current.SessionID)
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return current, "", errAdminSessionRefreshRequired
+		}
+		if err != nil {
+			return current, "", fmt.Errorf("reload admin session after rejected refresh: %w", err)
+		}
+		if NeedsRefresh(current.AccessTokenExpiresAt) {
+			return current, "", errors.New("admin session changed but still requires refresh")
+		}
+		accessToken, err := v.sessions.DecryptAccessToken(current)
+		if err != nil {
+			return current, "", fmt.Errorf("decrypt concurrently refreshed admin access token: %w", err)
+		}
+		return current, accessToken, nil
 	}
 	current, err = v.sessions.UpdateTokens(ctx, current, tok.AccessToken, tok.RefreshToken, tok.Expiry)
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return current, "", errAdminSessionRefreshRequired
+	}
 	if err != nil {
 		return current, "", fmt.Errorf("persist refreshed admin session: %w", err)
 	}
-	return current, tok.AccessToken, nil
+	accessToken, err := v.sessions.DecryptAccessToken(current)
+	if err != nil {
+		return current, "", fmt.Errorf("decrypt persisted admin access token: %w", err)
+	}
+	return current, accessToken, nil
 }
 
 func (v *Verifier) awaitRefreshedSession(ctx context.Context, sessionID string) (Session, string, error) {
