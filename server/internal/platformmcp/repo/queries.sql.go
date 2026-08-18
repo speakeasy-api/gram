@@ -258,10 +258,17 @@ WHERE handoff.handoff_hash = $1
   AND handoff.organization_id = $2
   AND handoff.project_id = $3
   AND handoff.registration_id = $4
-  AND handoff.connection_id = $5
-  AND handoff.connection_generation = $6
-  AND handoff.provider_key = $7
-  AND handoff.intent = $8
+  -- A handoff issued by a connection-less surface is matched by its user, the
+  -- same way the dashboard-start lookup above matches it.
+  AND (
+    (
+      handoff.connection_id = $5
+      AND handoff.connection_generation = $6
+    )
+    OR (handoff.connection_id IS NULL AND handoff.user_id = $7)
+  )
+  AND handoff.provider_key = $8
+  AND handoff.intent = $9
   AND handoff.redeemed_at IS NULL
   AND handoff.invalidated_at IS NULL
   AND handoff.expires_at > clock_timestamp()
@@ -272,16 +279,21 @@ WHERE handoff.handoff_hash = $1
         ON project.id = registration.project_id
        AND project.organization_id = registration.organization_id
        AND project.deleted IS FALSE
-      JOIN platform_mcp_connections AS connection
+      LEFT JOIN platform_mcp_connections AS connection
         ON connection.id = handoff.connection_id
        AND connection.organization_id = handoff.organization_id
       WHERE registration.id = handoff.registration_id
         AND registration.organization_id = handoff.organization_id
         AND registration.project_id = handoff.project_id
         AND registration.deleted IS FALSE
-        AND connection.subject_urn = $9
-        AND connection.active_generation = handoff.connection_generation
-        AND connection.revoked_at IS NULL
+        AND (
+          handoff.connection_id IS NULL
+          OR (
+            connection.subject_urn = $10
+            AND connection.active_generation = handoff.connection_generation
+            AND connection.revoked_at IS NULL
+          )
+        )
   )
 RETURNING handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.user_id, handoff.acting_surface, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
 `
@@ -293,6 +305,7 @@ type ConsumePlatformMCPSetupHandoffParams struct {
 	RegistrationID       uuid.UUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
 	ProviderKey          string
 	Intent               string
 	SubjectUrn           string
@@ -306,6 +319,7 @@ func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg Consum
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
 		arg.ProviderKey,
 		arg.Intent,
 		arg.SubjectUrn,
@@ -1105,6 +1119,8 @@ INSERT INTO platform_mcp_setup_handoffs (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_key,
     intent,
     handoff_hash,
@@ -1119,7 +1135,9 @@ SELECT
     $6,
     $7,
     $8,
-    $9
+    $9,
+    $10,
+    $11
 WHERE EXISTS (
     SELECT 1
     FROM platform_mcp_catalog_registrations AS registration
@@ -1141,6 +1159,8 @@ type CreatePlatformMCPSetupHandoffParams struct {
 	RegistrationID       uuid.UUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProviderKey          string
 	Intent               string
 	HandoffHash          string
@@ -1154,6 +1174,8 @@ func (q *Queries) CreatePlatformMCPSetupHandoff(ctx context.Context, arg CreateP
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 		arg.ProviderKey,
 		arg.Intent,
 		arg.HandoffHash,
@@ -3255,9 +3277,14 @@ SET invalidated_at = clock_timestamp(),
 WHERE organization_id = $1
   AND project_id = $2
   AND registration_id = $3
-  AND connection_id = $4
-  AND connection_generation = $5
-  AND intent = $6
+  AND (
+    (
+      connection_id = $4
+      AND connection_generation = $5
+    )
+    OR (connection_id IS NULL AND user_id = $6)
+  )
+  AND intent = $7
   AND redeemed_at IS NULL
   AND invalidated_at IS NULL
 `
@@ -3268,6 +3295,7 @@ type InvalidateActivePlatformMCPSetupHandoffsParams struct {
 	RegistrationID       uuid.UUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
 	Intent               string
 }
 
@@ -3278,6 +3306,7 @@ func (q *Queries) InvalidateActivePlatformMCPSetupHandoffs(ctx context.Context, 
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
 		arg.Intent,
 	)
 	if err != nil {
@@ -3961,6 +3990,51 @@ type RecordPlatformMCPCatalogExploredParams struct {
 
 func (q *Queries) RecordPlatformMCPCatalogExplored(ctx context.Context, arg RecordPlatformMCPCatalogExploredParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordPlatformMCPCatalogExplored, arg.OrganizationID, arg.ConnectionID, arg.ConnectionGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordPlatformMCPCatalogExploredForUser = `-- name: RecordPlatformMCPCatalogExploredForUser :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    user_id,
+    acting_surface
+)
+VALUES (
+    $1,
+    'catalog_explored',
+    $2,
+    $3
+)
+ON CONFLICT (organization_id, milestone, user_id)
+WHERE connection_id IS NULL
+  AND user_id IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'catalog_explored',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+)
+DO NOTHING
+`
+
+type RecordPlatformMCPCatalogExploredForUserParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+	ActingSurface  pgtype.Text
+}
+
+// A surface acting under assistant identity holds no connection, so its
+// evidence is keyed by the acting user and dedupes on the user grain instead of
+// the connection generation.
+func (q *Queries) RecordPlatformMCPCatalogExploredForUser(ctx context.Context, arg RecordPlatformMCPCatalogExploredForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPlatformMCPCatalogExploredForUser, arg.OrganizationID, arg.UserID, arg.ActingSurface)
 	if err != nil {
 		return 0, err
 	}

@@ -590,6 +590,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(expiredDashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an expired handoff")
@@ -605,12 +606,14 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(invalidatedDashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an invalidated handoff")
 	dashboardStart, err := platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(dashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.NoError(t, err)
@@ -679,6 +682,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(rotatedGenerationHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects a handoff after connection generation rotation")
@@ -992,6 +996,99 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 // attributed to the real user and its acting surface, and must still replay
 // idempotently — the property that breaks first if a read path joins through
 // the connection it does not have.
+// The assistant issues a handoff with no connection and the dashboard, which
+// authenticates under its own session, redeems it. This is the whole point of
+// the connection-less surfaces: neither step can key on a connection.
+func TestSetupHandoffRoundTripsWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_handoff_no_connection")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-handoff", "assistant-handoff-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant-handoff")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	binding := SetupHandoffBinding{
+		ProjectID:        project.ID,
+		RegistrationID:   receipt.RegistrationID.UUID,
+		ProviderKey:      request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+		Intent:           "dashboard_source_settings",
+	}
+	issued, err := store.IssueSetupHandoff(ctx, assistant, binding, time.Now().UTC())
+	require.NoError(t, err, "a connection-less surface must be able to issue a handoff")
+
+	// The dashboard finds it by user, with no connection on the row to match.
+	start, err := platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(issued.Value),
+		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGText(assistant.UserID),
+		SubjectUrn:     userSubjectURN(assistant.UserID),
+	})
+	require.NoError(t, err, "the dashboard must find a connection-less handoff")
+	require.False(t, start.ConnectionID.Valid)
+
+	dashboard := Principal{
+		UserID:         assistant.UserID,
+		OrganizationID: assistant.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "",
+		Surface:        SurfaceDashboard,
+	}
+	consumed, err := store.ConsumeSetupHandoff(ctx, dashboard, binding, issued.Value)
+	require.NoError(t, err, "the dashboard must be able to redeem a connection-less handoff")
+	require.Equal(t, issued.ID, consumed.ID)
+
+	_, err = store.ConsumeSetupHandoff(ctx, dashboard, binding, issued.Value)
+	require.Error(t, err, "a redeemed handoff must not be redeemable twice")
+}
+
+// A connection-less surface records catalogue evidence against its user, and
+// repeat searches must not append a row per search.
+func TestCatalogExploredEvidenceIsIdempotentWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_evidence_no_connection")
+	require.NoError(t, err)
+
+	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+
+	onboarding := &OnboardingService{db: conn}
+	require.NoError(t, onboarding.RecordCatalogExplored(ctx, assistant))
+	require.NoError(t, onboarding.RecordCatalogExplored(ctx, assistant), "a repeat search must stay idempotent")
+}
+
 func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	t.Parallel()
 

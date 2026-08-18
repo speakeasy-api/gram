@@ -863,6 +863,34 @@ func principalConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, err
 	return uuid.NullUUID{UUID: connectionID, Valid: true}, uuid.NullUUID{UUID: generation, Valid: true}, nil
 }
 
+// connectionPair is a connection pair as the repository takes it, absent for a
+// principal that holds no connection.
+type connectionPair struct {
+	id         uuid.NullUUID
+	generation uuid.NullUUID
+}
+
+func principalConnectionPair(principal Principal, connectionID, generation uuid.UUID) connectionPair {
+	if !principal.HasConnection() {
+		return connectionPair{id: uuid.NullUUID{}, generation: uuid.NullUUID{}}
+	}
+	return connectionPair{
+		id:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		generation: uuid.NullUUID{UUID: generation, Valid: true},
+	}
+}
+
+// handoffLockKey serialises handoff issuance per issuer. A connection-less
+// caller has no connection to key on, so it serialises per user instead —
+// keying every such caller on the nil UUID would serialise the whole
+// deployment on one advisory lock.
+func handoffLockKey(principal Principal, connectionID uuid.UUID) string {
+	if !principal.HasConnection() {
+		return "user:" + principal.UserID
+	}
+	return connectionID.String()
+}
+
 // parseOptionalConnection reads the connection pair of a principal that may not
 // have one. A connection-less caller yields the nil pair without an error, so a
 // setup it started is identified by its user instead. A caller that claims a

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -310,9 +311,21 @@ func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal
 	if s == nil || s.db == nil {
 		return ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return err
+	}
+	// A connection-less surface records the same milestone against its user, on
+	// the user grain, so repeat searches stay idempotent without a generation.
+	if !principal.HasConnection() {
+		if _, err := platformrepo.New(s.db).RecordPlatformMCPCatalogExploredForUser(ctx, platformrepo.RecordPlatformMCPCatalogExploredForUserParams{
+			OrganizationID: principal.OrganizationID,
+			UserID:         conv.ToPGText(principal.UserID),
+			ActingSurface:  conv.ToPGText(string(principal.surface())),
+		}); err != nil {
+			return fmt.Errorf("record platform mcp catalog explored milestone: %w", err)
+		}
+		return nil
 	}
 	rows, err := platformrepo.New(s.db).RecordPlatformMCPCatalogExplored(ctx, platformrepo.RecordPlatformMCPCatalogExploredParams{
 		OrganizationID:       principal.OrganizationID,
