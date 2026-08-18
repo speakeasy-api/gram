@@ -35,7 +35,7 @@ func TestBuildUserSessionView_ResolvesUser(t *testing.T) {
 		Deleted:             false,
 	}
 
-	got := BuildUserSessionView(row)
+	got := BuildUserSessionView(row, nil)
 
 	require.Equal(t, "my-issuer", got.IssuerSlug)
 	require.Equal(t, "user", got.SubjectType)
@@ -59,7 +59,7 @@ func TestBuildUserSessionView_UserFallsBackToEmail(t *testing.T) {
 		UserEmail:       pgtype.Text{String: "ada@example.com", Valid: true},
 	}
 
-	got := BuildUserSessionView(row)
+	got := BuildUserSessionView(row, nil)
 	require.NotNil(t, got.SubjectDisplayName)
 	require.Equal(t, "ada@example.com", *got.SubjectDisplayName)
 }
@@ -79,7 +79,7 @@ func TestBuildUserSessionView_APIKeyAndRevoked(t *testing.T) {
 		Deleted:    true,
 	}
 
-	got := BuildUserSessionView(row)
+	got := BuildUserSessionView(row, nil)
 	require.Equal(t, "apikey", got.SubjectType)
 	require.NotNil(t, got.SubjectDisplayName)
 	require.Equal(t, "ci-key", *got.SubjectDisplayName)
@@ -98,7 +98,7 @@ func TestBuildUserSessionView_AnonymousHasNoName(t *testing.T) {
 		IssuerSlug: "iss",
 	}
 
-	got := BuildUserSessionView(row)
+	got := BuildUserSessionView(row, nil)
 	require.Equal(t, "anonymous", got.SubjectType)
 	require.Nil(t, got.SubjectDisplayName)
 }
