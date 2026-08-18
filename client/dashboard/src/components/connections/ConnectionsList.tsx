@@ -29,7 +29,7 @@ import { getInitials } from "@/lib/initials";
 import { providerLabel } from "@/lib/provider-label";
 import { subjectLabel } from "@/lib/user-session-status";
 import { cn } from "@/lib/utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
@@ -170,7 +170,7 @@ function PersonIcon({
 
 function ClientIcon({ label }: { label: string }): JSX.Element {
   return (
-    <HookSourceIcon
+    <AgentProviderIcon
       source={label}
       className="text-muted-foreground size-5 shrink-0"
     />

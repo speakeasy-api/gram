@@ -34,7 +34,7 @@ import {
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
@@ -99,7 +99,10 @@ function UserSources({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {orderedSources.map((source) => (
         <div className="flex items-center gap-1.5" key={source.source}>
-          <HookSourceIcon source={source.source} className="size-4 shrink-0" />
+          <AgentProviderIcon
+            source={source.source}
+            className="size-4 shrink-0"
+          />
           <span className="whitespace-nowrap font-medium">
             {sourceLabel(source.source)}
           </span>

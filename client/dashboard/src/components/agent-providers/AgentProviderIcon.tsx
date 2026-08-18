@@ -317,15 +317,15 @@ function BedrockIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
-interface HookSourceIconProps {
+export interface AgentProviderIconProps {
   source?: string;
   className?: string;
 }
 
-export function HookSourceIcon({
+export function AgentProviderIcon({
   source,
   className,
-}: HookSourceIconProps): JSX.Element {
+}: AgentProviderIconProps): JSX.Element {
   const normalizedSource = source?.toLowerCase();
 
   if (

@@ -15,8 +15,8 @@ import {
   ClaudeCodeIcon,
   CodexIcon,
   GeminiIcon,
-  HookSourceIcon,
-} from "../hooks/HookSourceIcon";
+  AgentProviderIcon,
+} from "@/components/agent-providers/AgentProviderIcon";
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
@@ -641,7 +641,7 @@ export function CostTable({
                   />
                 )}
                 {showAgentIcon && (
-                  <HookSourceIcon
+                  <AgentProviderIcon
                     source={row.groupValue}
                     className="size-4 shrink-0"
                   />

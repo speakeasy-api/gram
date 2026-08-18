@@ -27,7 +27,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { HookSourceIcon } from "../hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -49,48 +50,8 @@ type ContentProps = {
   candidatePlugins?: { name: string; slug: string; description?: string }[];
 };
 
-type Provider =
-  | "claude-code"
-  | "claude-cowork"
-  | "cursor"
-  | "codex"
-  | "copilot"
-  | "gemini"
-  | "glean"
-  | "bedrock"
-  | "opencode";
-
-const providers: {
-  id: Provider;
-  label: string;
-  source: string;
-  available: boolean;
-}[] = [
-  {
-    id: "claude-code",
-    label: "Claude Code",
-    source: "claude-code",
-    available: true,
-  },
-  {
-    id: "claude-cowork",
-    label: "Claude Cowork",
-    source: "cowork",
-    available: true,
-  },
-  { id: "cursor", label: "Cursor", source: "cursor", available: true },
-  { id: "codex", label: "Codex", source: "codex", available: true },
-  { id: "opencode", label: "opencode", source: "opencode", available: true },
-  { id: "copilot", label: "Copilot", source: "copilot", available: false },
-  { id: "gemini", label: "Gemini", source: "gemini", available: false },
-  { id: "glean", label: "Glean", source: "glean", available: false },
-  {
-    id: "bedrock",
-    label: "AWS Bedrock",
-    source: "aws-bedrock",
-    available: false,
-  },
-];
+const providers = agentProvidersForSurface("plugins");
+type Provider = (typeof providers)[number]["id"];
 
 function ExternalTextLink({
   href,
@@ -807,7 +768,7 @@ type DialogProps = ContentProps & {
 };
 
 const providerLabel = (id: Provider): string =>
-  providers.find((p) => p.id === id)?.label ?? id;
+  providers.find((p) => p.id === id)?.name ?? id;
 
 export function InstallInstructionsDialog({
   open,
@@ -997,9 +958,12 @@ export function InstallInstructionsDialog({
                       )}
                     >
                       <div className="bg-secondary flex h-10 w-10 items-center justify-center">
-                        <HookSourceIcon source={p.source} className="size-5" />
+                        <AgentProviderIcon
+                          source={p.iconSource}
+                          className="size-5"
+                        />
                       </div>
-                      <span className="text-sm font-medium">{p.label}</span>
+                      <span className="text-sm font-medium">{p.name}</span>
                       {!p.available && (
                         <span className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Soon
@@ -1034,7 +998,7 @@ export function InstallInstructionsDialog({
                 </h3>
               </div>
 
-              {selected === "claude-code" && (
+              {selected === "claude" && (
                 <ClaudeCodeInstallContent
                   marketplaceUrl={content.marketplaceUrl}
                   marketplaceName={marketplaceName}
