@@ -173,12 +173,12 @@ func ExtractIDToken(tok *oauth2.Token) (string, error) {
 	return raw, nil
 }
 
-// Refresh obtains a new access token using the stored refresh token.
 func isInvalidGrant(err error) bool {
 	var retrieveErr *oauth2.RetrieveError
 	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
 }
 
+// Refresh obtains a new access token using the stored refresh token.
 func (g *OIDCClient) Refresh(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, g.httpClient)
 	ts := g.oauth2Config.TokenSource(ctx, &oauth2.Token{

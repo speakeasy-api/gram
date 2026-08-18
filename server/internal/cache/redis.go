@@ -75,6 +75,29 @@ func (r *RedisCacheAdapter) Add(ctx context.Context, key string, ttl time.Durati
 	return ok, nil
 }
 
+// AcquireLease sets a caller-provided ownership token only when key is absent.
+func (r *RedisCacheAdapter) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	ok, err := r.client.SetNX(ctx, key, owner, ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("acquire lease %s: %w", key, err)
+	}
+	return ok, nil
+}
+
+// ReleaseLease atomically deletes key only if it is still owned by owner.
+func (r *RedisCacheAdapter) ReleaseLease(ctx context.Context, key, owner string) error {
+	const compareAndDelete = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`
+	if err := r.client.Eval(ctx, compareAndDelete, []string{key}, owner).Err(); err != nil {
+		return fmt.Errorf("release lease %s: %w", key, err)
+	}
+	return nil
+}
+
 func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
 	var lastErr error
 	for range mutateMaxRetries {

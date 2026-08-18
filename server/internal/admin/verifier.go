@@ -8,12 +8,14 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -27,10 +29,10 @@ type Verifier struct {
 	logger   *slog.Logger
 	sessions *SessionStore
 	oidc     *OIDCClient
-	locks    cache.Cache
+	locks    *cache.RedisCacheAdapter
 }
 
-func NewVerifier(logger *slog.Logger, sessions *SessionStore, oidc *OIDCClient, locks cache.Cache) *Verifier {
+func NewVerifier(logger *slog.Logger, sessions *SessionStore, oidc *OIDCClient, locks *cache.RedisCacheAdapter) *Verifier {
 	return &Verifier{
 		logger:   logger.With(attr.SlogComponent("adminauth")),
 		sessions: sessions,
@@ -115,6 +117,7 @@ const (
 	adminRefreshLockTTL         = 12 * time.Second
 	adminRefreshWaitBudget      = adminRefreshLockTTL + adminRefreshUpstreamTimeout + time.Second
 	adminRefreshWaitPoll        = 200 * time.Millisecond
+	adminRefreshReleaseTimeout  = 5 * time.Second
 )
 
 func adminSessionRefreshLockKey(sessionID string) string {
@@ -126,17 +129,23 @@ func adminSessionRefreshLockKey(sessionID string) string {
 // instead of presenting the same refresh token again.
 func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session, string, error) {
 	lockKey := adminSessionRefreshLockKey(session.SessionID)
-	held, err := v.locks.Add(ctx, lockKey, adminRefreshLockTTL)
+	owner := uuid.NewString()
+	held, err := v.locks.AcquireLease(ctx, lockKey, owner, adminRefreshLockTTL)
 	if err != nil {
 		return session, "", fmt.Errorf("acquire admin refresh lock: %w", err)
 	}
 	if !held {
 		return v.awaitRefreshedSession(ctx, session.SessionID)
 	}
-	return v.refreshSessionLocked(ctx, session)
+	return v.refreshSessionLocked(ctx, session, lockKey, owner)
 }
 
-func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session) (Session, string, error) {
+func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session, lockKey, owner string) (Session, string, error) {
+	defer o11y.LogDefer(ctx, v.logger, func() error {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRefreshReleaseTimeout)
+		defer cancel()
+		return v.locks.ReleaseLease(releaseCtx, lockKey, owner)
+	})
 
 	// The caller's snapshot predates lock acquisition. Re-read so a refresh that
 	// completed while this request was acquiring is adopted rather than replayed.
@@ -201,12 +210,13 @@ func (v *Verifier) awaitRefreshedSession(ctx context.Context, sessionID string) 
 		}
 
 		lockKey := adminSessionRefreshLockKey(sessionID)
-		held, err := v.locks.Add(waitCtx, lockKey, adminRefreshLockTTL)
+		owner := uuid.NewString()
+		held, err := v.locks.AcquireLease(waitCtx, lockKey, owner, adminRefreshLockTTL)
 		if err != nil {
 			return current, "", fmt.Errorf("reacquire admin refresh lock: %w", err)
 		}
 		if held {
-			return v.refreshSessionLocked(waitCtx, current)
+			return v.refreshSessionLocked(waitCtx, current, lockKey, owner)
 		}
 
 		select {
