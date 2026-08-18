@@ -134,7 +134,9 @@ export function Projects({
           {rows.length === 1 ? "1 project" : `${rows.length} projects`}
         </p>
       )}
-      <div className="overflow-hidden rounded-lg border">
+      {/* `overflow-clip`, not `overflow-hidden`: hidden makes this a scroll
+          container and the `sticky top-0` header would pin to it, not the page. */}
+      <div className="overflow-clip rounded-lg border">
         <Table cellPadding="condensed">
           <Table.Header table={table} />
           <Table.Body>

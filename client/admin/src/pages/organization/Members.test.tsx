@@ -136,6 +136,25 @@ describe("Members", () => {
     expect(cellsOf(row)[0]).toBe("ADAda");
   });
 
+  it("takes a three-word name's monogram from its first and last word", async () => {
+    mocks.listOrganizationMembers.mockImplementation(() =>
+      Promise.resolve({
+        members: [aMember({ display_name: "Ada Byron Lovelace" })],
+      }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    await screen.findByRole("cell", { name: "Ada Byron Lovelace" });
+    const row = screen.getAllByRole("row")[1];
+    if (!row) throw new Error("the table drew no member row");
+    // The surname, not the middle name. Reading the second word gives "AB",
+    // which is the initials of a different person and nothing else notices.
+    expect(cellsOf(row)[0]).toBe("ALAda Byron Lovelace");
+  });
+
   it("draws the members oldest first, whatever order the endpoint sent", async () => {
     // Shuffled on the wire. `organization.members` promises no order, so a view
     // that renders what it was handed shows one organization two ways on two
