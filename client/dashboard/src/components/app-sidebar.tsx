@@ -125,7 +125,16 @@ export function AppSidebar({
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
-    sidebarContent = <SidebarNavSkeleton />;
+    // Shaped like the real list below — 3 top-level items, the divider, the
+    // 4 collapsed groups, then Settings — at the same spacing, so resolving
+    // the grants swaps the rows out without shifting the nav.
+    sidebarContent = (
+      <SidebarNavSkeleton
+        rows={8}
+        divideAfter={3}
+        className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+      />
+    );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
