@@ -8,6 +8,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,8 +84,11 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 		authz:         authzEngine,
 		db:            db,
 		repo:          repo.New(db),
+		orgRepo:       orgRepo.New(db),
 		telemetryRepo: telemetryrepo.New(chConn),
 		auditLogger:   audit.NewLogger(),
+		stripeClient:  nil,
+		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
 	}
 
@@ -570,6 +574,70 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, float64(2_000_000), afterSnapshot["tum_monthly_token_limit"], 0)
 	require.InDelta(t, float64(25), afterSnapshot["tunneled_mcp_server_limit"], 0)
+}
+
+func TestSetBillingMetadata_PreservesPaygStripeOwnedFields(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-tum-payg-email-owner"
+	svc, db, _, _ := newTUMTestService(t, orgID)
+	require.NoError(t, orgRepo.New(db).SetAccountType(t.Context(), orgRepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierPayg),
+		ID:              orgID,
+	}))
+	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(t.Context(), repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
+		OrganizationID:       orgID,
+		StripeCustomerID:     pgtype.Text{String: "cus_tum_payg", Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: "sub_tum_payg", Valid: true},
+	}))
+
+	configuredEmail := "payg-billing@example.test"
+	_, err := repo.New(db).UpsertBillingMetadata(t.Context(), repo.UpsertBillingMetadataParams{
+		OrganizationID:         orgID,
+		TumMonthlyTokenLimit:   pgtype.Int8{},
+		AlertEmail:             conv.ToPGText(configuredEmail),
+		BillingCycleAnchorDay:  1,
+		TunneledMcpServerLimit: pgtype.Int4{},
+	})
+	require.NoError(t, err)
+
+	staleEmail := "legacy-writer@example.test"
+	limit := int64(2_000_000)
+	result, err := svc.SetBillingMetadata(testAdminAuthContext(orgID), &gen.SetBillingMetadataPayload{
+		MonthlyTokenLimit:     &limit,
+		AlertEmail:            &staleEmail,
+		BillingCycleAnchorDay: 12,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.AlertEmail)
+	require.Equal(t, configuredEmail, *result.AlertEmail)
+	require.Equal(t, 1, result.BillingCycleAnchorDay)
+
+	stored, err := repo.New(db).GetBillingMetadata(t.Context(), orgID)
+	require.NoError(t, err)
+	require.Equal(t, configuredEmail, stored.AlertEmail.String)
+	require.Equal(t, int32(1), stored.BillingCycleAnchorDay)
+}
+
+func TestSetBillingMetadata_InitializesLegacyPaygMetadata(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-tum-legacy-payg"
+	svc, db, _, _ := newTUMTestService(t, orgID)
+	require.NoError(t, orgRepo.New(db).SetAccountType(t.Context(), orgRepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierPayg),
+		ID:              orgID,
+	}))
+
+	configuredEmail := "legacy-payg@example.test"
+	result, err := svc.SetBillingMetadata(testAdminAuthContext(orgID), &gen.SetBillingMetadataPayload{
+		AlertEmail:            &configuredEmail,
+		BillingCycleAnchorDay: 12,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 12, result.BillingCycleAnchorDay)
+	require.NotNil(t, result.AlertEmail)
+	require.Equal(t, configuredEmail, *result.AlertEmail)
 }
 
 func TestSetBillingMetadata_RejectsOversizedTunneledMcpServerLimit(t *testing.T) {

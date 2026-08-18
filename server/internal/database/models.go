@@ -258,6 +258,8 @@ type AuditLog struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 }
 
@@ -302,24 +304,32 @@ type AwsKmsKey struct {
 }
 
 type BillingCycleUsage struct {
-	ID             uuid.UUID
-	OrganizationID string
-	CycleStart     pgtype.Timestamptz
-	CycleEnd       pgtype.Timestamptz
-	TumTokens      int64
-	FinalizedAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	OrganizationID  pgtype.Text
+	CycleStart      pgtype.Timestamptz
+	CycleEnd        pgtype.Timestamptz
+	TumTokens       int64
+	BilledTumTokens pgtype.Int8
+	BilledFrozenAt  pgtype.Timestamptz
+	FinalizedAt     pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type BillingMetadatum struct {
-	ID                    uuid.UUID
-	OrganizationID        string
-	StripeCustomerID      pgtype.Text
-	StripeSubscriptionID  pgtype.Text
-	TumMonthlyTokenLimit  pgtype.Int8
-	AlertEmail            pgtype.Text
-	BillingCycleAnchorDay int32
+	ID                               uuid.UUID
+	OrganizationID                   string
+	StripeCustomerID                 pgtype.Text
+	StripeSubscriptionID             pgtype.Text
+	StripeBillingCycleAnchor         pgtype.Timestamptz
+	StripeCheckoutIdempotencyKey     pgtype.Text
+	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
+	StripeCheckoutTrialEnd           pgtype.Timestamptz
+	StripeCheckoutExpiresAt          pgtype.Timestamptz
+	StripeCheckoutSessionID          pgtype.Text
+	TumMonthlyTokenLimit             pgtype.Int8
+	AlertEmail                       pgtype.Text
+	BillingCycleAnchorDay            int32
 	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
 	TunneledMcpServerLimit pgtype.Int4
 	CreatedAt              pgtype.Timestamptz
@@ -364,6 +374,7 @@ type Chat struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
 	LitellmProxied     bool
+	Cwd                pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -1582,16 +1593,19 @@ type PlatformMcpCatalogRegistration struct {
 }
 
 type PlatformMcpConnection struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	SubjectUrn       string
-	OauthClientID    uuid.UUID
-	ActiveGeneration uuid.UUID
-	AuthorizedAt     pgtype.Timestamptz
-	ReauthorizedAt   pgtype.Timestamptz
-	RevokedAt        pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                        uuid.UUID
+	OrganizationID            string
+	SubjectUrn                string
+	OauthClientID             uuid.UUID
+	ActiveGeneration          uuid.UUID
+	AuthorizedAt              pgtype.Timestamptz
+	ReauthorizedAt            pgtype.Timestamptz
+	AuthorizationExpiresAt    pgtype.Timestamptz
+	ReauthorizationRequiredAt pgtype.Timestamptz
+	ReauthorizationReason     pgtype.Text
+	RevokedAt                 pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type PlatformMcpDistribution struct {
@@ -1606,8 +1620,10 @@ type PlatformMcpDistribution struct {
 	AttachmentWasCreated bool
 	PublicationState     string
 	PublicationUpdatedAt pgtype.Timestamptz
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }
@@ -1658,6 +1674,8 @@ type PlatformMcpOnboardingMilestone struct {
 	Milestone            string
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProjectID            uuid.NullUUID
 	McpKey               string
 	AttemptID            uuid.NullUUID
@@ -1708,8 +1726,10 @@ type PlatformMcpReadiness struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.UUID
-	ConnectionGeneration             uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -1756,8 +1776,10 @@ type PlatformMcpSetupHandoff struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProviderKey          string
 	Intent               string
 	HandoffHash          string
@@ -2038,6 +2060,7 @@ type RemoteSessionIssuer struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
@@ -2202,6 +2225,20 @@ type RiskResult struct {
 	FalsePositiveAt     pgtype.Timestamptz
 	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
+}
+
+type SessionHandoffLink struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	SessionID      string
+	Token          string
+	BlobUrl        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+	ConsumedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type Skill struct {
@@ -2483,14 +2520,67 @@ type SpendRuleEvent struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type StripeInvoice struct {
+	StripeInvoiceID      string
+	OrganizationID       pgtype.Text
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type StripeInvoiceAllocation struct {
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+	SourceKind              string
+	SourceKey               string
+	Seq                     int32
+	SourceDay               pgtype.Date
+	SourcePeriodStart       pgtype.Timestamptz
+	SourcePeriodEnd         pgtype.Timestamptz
+	SourceSnapshotUsd       pgtype.Numeric
+	DeltaTokens             pgtype.Int8
+	OriginalTumUnitPriceUsd pgtype.Numeric
+	AmountUsd               pgtype.Numeric
+	OriginalInvoiceID       pgtype.Text
+	DestinationInvoiceID    pgtype.Text
+	StripeInvoiceItemID     pgtype.Text
+	StripeCreditNoteID      pgtype.Text
+	IdempotencyKey          string
+	DeliveryState           string
+	FirstAttemptedAt        pgtype.Timestamptz
+	LastAttemptedAt         pgtype.Timestamptz
+	ConfirmedAt             pgtype.Timestamptz
+	AmbiguousAt             pgtype.Timestamptz
+	ReconciledAt            pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
 type StripeMeterReport struct {
-	ID             uuid.UUID
-	OrganizationID string
-	CycleStart     pgtype.Timestamptz
-	Seq            int32
-	DeltaTokens    int64
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID                   uuid.UUID
+	OrganizationID       pgtype.Text
+	BillingCycleUsageID  uuid.NullUUID
+	CycleStart           pgtype.Timestamptz
+	CycleEnd             pgtype.Timestamptz
+	Seq                  int32
+	StripeCustomerID     pgtype.Text
+	StripeMeterEventName pgtype.Text
+	StripeIdentifier     pgtype.Text
+	DeltaTokens          int64
+	EventTimestamp       pgtype.Timestamptz
+	DeliveryState        string
+	FirstAttemptedAt     pgtype.Timestamptz
+	LastAttemptedAt      pgtype.Timestamptz
+	ConfirmedAt          pgtype.Timestamptz
+	AmbiguousAt          pgtype.Timestamptz
+	ReconciledAt         pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type StripeWebhookReceipt struct {

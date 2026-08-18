@@ -456,3 +456,10 @@ SELECT
     now()::timestamptz AS transaction_now,
     (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
     (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
+
+-- name: GetSessionHandoffLinkFixture :one
+-- Test-only inspection of a minted session-handoff link, so tests can assert a
+-- consumed link keeps its burn bookkeeping without keeping the blob pointer.
+SELECT blob_url, consumed_at
+FROM session_handoff_links
+WHERE token = @token;

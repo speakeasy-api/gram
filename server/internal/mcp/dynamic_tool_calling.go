@@ -256,6 +256,7 @@ func handleSearchToolsCall(
 			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").LogError(ctx, logger)
@@ -371,6 +372,7 @@ func handleDescribeToolsCall(
 			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").LogError(ctx, logger)

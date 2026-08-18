@@ -46,14 +46,21 @@ const ServiceName = "auditlogs"
 var MethodNames = [2]string{"list", "listFacets"}
 
 type AuditLog struct {
-	ID                 string
-	ProjectID          *string
-	ProjectSlug        *string
-	ActorID            string
-	ActorType          string
-	ActorDisplayName   *string
-	ActorSlug          *string
-	Action             string
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName *string
@@ -81,6 +88,8 @@ type ListAuditLogFacetsResult struct {
 	Actors []*AuditLogFacetOption
 	// Available action facets
 	Actions []*AuditLogFacetOption
+	// Available acting surface facets
+	Surfaces []*AuditLogFacetOption
 }
 
 // ListAuditLogsResult is the result type of the auditlogs service list method.
@@ -119,6 +128,9 @@ type ListPayload struct {
 	// Subject ID to filter audit logs to a specific subject (e.g. a single
 	// assistant).
 	SubjectID *string
+	// Acting surface to filter audit logs to changes made through one surface,
+	// e.g. 'platform_mcp' to review agent-driven activity alone.
+	ActingSurface *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

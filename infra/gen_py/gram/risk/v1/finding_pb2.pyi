@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Finding(_message.Message):
-    __slots__ = ("id", "request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "rule_id", "description", "match", "start_pos", "end_pos", "tags", "source", "confidence", "dead_letter_reason", "content_part_id", "false_positive_at", "surface", "field", "path", "tool_call_id")
+    __slots__ = ("id", "request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "rule_id", "description", "match", "start_pos", "end_pos", "tags", "source", "confidence", "dead_letter_reason", "content_part_id", "false_positive_at", "surface", "field", "path", "tool_call_id", "excluded_at", "excluded_reason", "excluded_detail")
     ID_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -32,6 +32,9 @@ class Finding(_message.Message):
     FIELD_FIELD_NUMBER: _ClassVar[int]
     PATH_FIELD_NUMBER: _ClassVar[int]
     TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_AT_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_REASON_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_DETAIL_FIELD_NUMBER: _ClassVar[int]
     id: str
     request_id: str
     chat_message_id: str
@@ -55,4 +58,7 @@ class Finding(_message.Message):
     field: str
     path: str
     tool_call_id: str
-    def __init__(self, id: _Optional[str] = ..., request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., rule_id: _Optional[str] = ..., description: _Optional[str] = ..., match: _Optional[str] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., tags: _Optional[_Iterable[str]] = ..., source: _Optional[str] = ..., confidence: _Optional[float] = ..., dead_letter_reason: _Optional[str] = ..., content_part_id: _Optional[str] = ..., false_positive_at: _Optional[str] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ...) -> None: ...
+    excluded_at: str
+    excluded_reason: str
+    excluded_detail: str
+    def __init__(self, id: _Optional[str] = ..., request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., rule_id: _Optional[str] = ..., description: _Optional[str] = ..., match: _Optional[str] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., tags: _Optional[_Iterable[str]] = ..., source: _Optional[str] = ..., confidence: _Optional[float] = ..., dead_letter_reason: _Optional[str] = ..., content_part_id: _Optional[str] = ..., false_positive_at: _Optional[str] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., excluded_at: _Optional[str] = ..., excluded_reason: _Optional[str] = ..., excluded_detail: _Optional[str] = ...) -> None: ...

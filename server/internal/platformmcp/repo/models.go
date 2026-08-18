@@ -52,16 +52,19 @@ type PlatformMcpCatalogRegistration struct {
 }
 
 type PlatformMcpConnection struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	SubjectUrn       string
-	OauthClientID    uuid.UUID
-	ActiveGeneration uuid.UUID
-	AuthorizedAt     pgtype.Timestamptz
-	ReauthorizedAt   pgtype.Timestamptz
-	RevokedAt        pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                        uuid.UUID
+	OrganizationID            string
+	SubjectUrn                string
+	OauthClientID             uuid.UUID
+	ActiveGeneration          uuid.UUID
+	AuthorizedAt              pgtype.Timestamptz
+	ReauthorizedAt            pgtype.Timestamptz
+	AuthorizationExpiresAt    pgtype.Timestamptz
+	ReauthorizationRequiredAt pgtype.Timestamptz
+	ReauthorizationReason     pgtype.Text
+	RevokedAt                 pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type PlatformMcpDistribution struct {
@@ -76,8 +79,10 @@ type PlatformMcpDistribution struct {
 	AttachmentWasCreated bool
 	PublicationState     string
 	PublicationUpdatedAt pgtype.Timestamptz
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }
@@ -138,8 +143,10 @@ type PlatformMcpReadiness struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.UUID
-	ConnectionGeneration             uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -171,8 +178,10 @@ type PlatformMcpSetupHandoff struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProviderKey          string
 	Intent               string
 	HandoffHash          string

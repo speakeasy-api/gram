@@ -36,6 +36,7 @@ func TestAuthenticate_AdminCanAccessNonMemberOrg(t *testing.T) {
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: customerOrg.ID,
 		WorkOSSessionID:      "workos-sid-admin",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -72,6 +73,7 @@ func TestAuthenticate_NonAdminCannotAccessNonMemberOrg(t *testing.T) {
 		SessionID:            "nonadmin-foreign-auth",
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: foreignOrg.ID,
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 

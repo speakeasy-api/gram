@@ -57,6 +57,11 @@ func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"
 }
 
+// DownloadPlatformMCPPluginPluginsPath returns the URL path to the plugins service downloadPlatformMCPPlugin HTTP endpoint.
+func DownloadPlatformMCPPluginPluginsPath() string {
+	return "/rpc/plugins.downloadPlatformMCPPlugin"
+}
+
 // DownloadObservabilityPluginPluginsPath returns the URL path to the plugins service downloadObservabilityPlugin HTTP endpoint.
 func DownloadObservabilityPluginPluginsPath() string {
 	return "/rpc/plugins.downloadObservabilityPlugin"
@@ -65,6 +70,16 @@ func DownloadObservabilityPluginPluginsPath() string {
 // DownloadCodexInstallScriptPluginsPath returns the URL path to the plugins service downloadCodexInstallScript HTTP endpoint.
 func DownloadCodexInstallScriptPluginsPath() string {
 	return "/rpc/plugins.downloadCodexInstallScript"
+}
+
+// GetPlatformMCPPackageStatusPluginsPath returns the URL path to the plugins service getPlatformMCPPackageStatus HTTP endpoint.
+func GetPlatformMCPPackageStatusPluginsPath() string {
+	return "/rpc/plugins.getPlatformMCPPackageStatus"
+}
+
+// RepairPlatformMCPPackagePluginsPath returns the URL path to the plugins service repairPlatformMCPPackage HTTP endpoint.
+func RepairPlatformMCPPackagePluginsPath() string {
+	return "/rpc/plugins.repairPlatformMCPPackage"
 }
 
 // GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.

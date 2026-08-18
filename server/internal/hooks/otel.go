@@ -145,6 +145,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			// Claude OTEL records carry no hostname; adopt whatever the hooks
 			// path cached for the session (the Go hooks send it on every event).
 			Hostname:      cached.Hostname,
+			Cwd:           cached.Cwd,
 			AccountType:   "",
 			BillingMode:   "",
 			UserAccountID: "",

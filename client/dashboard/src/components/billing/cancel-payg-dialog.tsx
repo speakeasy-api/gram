@@ -1,0 +1,142 @@
+import { formatBillingDate } from "@/components/billing/payg-plan-state";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { useCancelStripeSubscriptionMutation } from "@gram/client/react-query/cancelStripeSubscription.js";
+import { invalidateAllGetStripeSubscription } from "@gram/client/react-query/getStripeSubscription.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+const TRIGGER_LABEL = "Cancel pay as you go";
+const CONFIRM_LABEL = "Cancel subscription";
+const ERROR_MESSAGE = "Couldn't cancel the subscription. Try again.";
+
+/**
+ * What the organization is agreeing to, spelled out before the cancellation is
+ * scheduled: service runs to the end of the period they have already started,
+ * the usage from it is still invoiced, and the organization loses access after
+ * that. Naming the end date turns "the current billing period" into something
+ * the admin can check against their own calendar.
+ */
+function paidCancellationDescription(endsOn: Date | null): string {
+  const outcome =
+    "A final invoice for the usage in that period follows. After the period ends, access to this organization is revoked.";
+  const formatted = formatBillingDate(endsOn);
+
+  if (formatted === null) {
+    return `Your service continues through the current billing period. ${outcome}`;
+  }
+  return `Your service continues through the current billing period, which ends on ${formatted}. ${outcome}`;
+}
+
+/**
+ * The same agreement for a subscription Stripe is still trialing.
+ *
+ * Canceling a trial stops it from ever converting, so no pay-as-you-go period
+ * is ever billed. The paid copy's promise of a final invoice would have the
+ * customer waiting on a charge that never arrives.
+ */
+function trialCancellationDescription(endsOn: Date | null): string {
+  const outcome =
+    "Pay as you go never starts, so you won't be invoiced. After the trial ends, access to this organization is revoked.";
+  const formatted = formatBillingDate(endsOn);
+
+  if (formatted === null) {
+    return `Your trial continues through the end of the trial period. ${outcome}`;
+  }
+  return `Your trial continues through ${formatted}. ${outcome}`;
+}
+
+function cancellationDescription(
+  endsOn: Date | null,
+  trialing: boolean,
+): string {
+  if (trialing) return trialCancellationDescription(endsOn);
+  return paidCancellationDescription(endsOn);
+}
+
+/**
+ * Ends pay as you go at the end of the current period, behind a confirmation.
+ *
+ * Nothing stops immediately — the mutation schedules the cancellation, which
+ * `ResumePaygButton` can clear right up until the period closes — but it is
+ * still the action that takes the organization's access away, so it is
+ * confirmed rather than fired from a single click.
+ */
+export function CancelPaygDialog({
+  endsOn,
+  trialing = false,
+}: {
+  endsOn: Date | null;
+  /** Whether Stripe is still trialing the subscription being canceled. */
+  trialing?: boolean;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  // The invalidation lives on the mutation rather than in the `mutate`
+  // callbacks: React Query skips the per-call callbacks once the dispatching
+  // mount is gone, and this dialog closes itself on success.
+  const cancel = useCancelStripeSubscriptionMutation({
+    // Settled, not success: Stripe can accept the cancellation and the request
+    // still fail afterwards, so a failed call is no proof the subscription is
+    // unchanged. Refetching either way keeps the dashboard from showing a plan
+    // state Stripe has already moved on from.
+    onSettled: () => {
+      // Every billing surface reads the subscription off this key, so the
+      // whole key is refreshed rather than the one entry this dialog caused.
+      void invalidateAllGetStripeSubscription(queryClient);
+    },
+  });
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    // A failure left over from the last attempt would otherwise greet the
+    // admin the next time the dialog opens.
+    if (!next && cancel.isError) cancel.reset();
+  };
+
+  const confirmCancellation = () => {
+    cancel.mutate({}, { onSuccess: () => setOpen(false) });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Trigger asChild>
+        <Button variant="destructive-secondary">{TRIGGER_LABEL}</Button>
+      </Dialog.Trigger>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Cancel pay as you go?</Dialog.Title>
+          <Dialog.Description>
+            {cancellationDescription(endsOn, trialing)}
+          </Dialog.Description>
+        </Dialog.Header>
+        <Stack gap={3}>
+          {cancel.isError && (
+            <Text small destructive role="alert">
+              {ERROR_MESSAGE}
+            </Text>
+          )}
+          <Dialog.Footer>
+            <Button
+              variant="tertiary"
+              onClick={() => handleOpenChange(false)}
+              disabled={cancel.isPending}
+            >
+              Keep pay as you go
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={confirmCancellation}
+              disabled={cancel.isPending}
+            >
+              {cancel.isPending ? "CANCELING..." : CONFIRM_LABEL}
+            </Button>
+          </Dialog.Footer>
+        </Stack>
+      </Dialog.Content>
+    </Dialog>
+  );
+}

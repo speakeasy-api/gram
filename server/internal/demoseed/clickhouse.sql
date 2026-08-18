@@ -41,9 +41,11 @@
 -- collapses per trace_id, so sharing one trace across row types would merge
 -- them into a single unclassifiable trace.
 --
---   Local: applied by `mise run seed:demo` via clickhouse-client --multiquery.
 --   Prod:  run daily by the infra cron AFTER demo.ensure_demo_org() on
 --          Postgres (ClickHouse has no procedural functions, hence a script).
+--   Demo:  `mise run seed:demo` applies the same statements locally.
+--   Local: `mise run seed` rewrites the demo constants to the dev-idp org
+--          first (demoseed.Spec) and seeds that tenant instead.
 
 SET lightweight_deletes_sync = 1;
 

@@ -7,14 +7,12 @@ SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || @organization_id::tex
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
-  , key
   , key_encrypted
   , key_hash
   , monthly_credits
 ) VALUES (
     @organization_id
   , @key_type
-  , @key
   , @key_encrypted
   , @key_hash
   , @monthly_credits
@@ -31,36 +29,12 @@ WHERE organization_id = @organization_id
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
-    disabled = disabled AND NOT @reinstate::boolean
+    disabled = disabled AND NOT @reinstate::boolean,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
 RETURNING *;
-
--- name: SetOpenRouterKeyEncrypted :one
--- The platform-admin encrypt action: records the ciphertext and clears the
--- plaintext column in one statement so a half-applied scrub cannot exist.
--- Callers must hold the provisioning advisory lock and verify the ciphertext
--- decrypts back to the plaintext before running this — the upstream API only
--- returns key material at creation, so a bad scrub is unrecoverable.
-UPDATE openrouter_api_keys
-SET key_encrypted = @key_encrypted, key = NULL
-WHERE organization_id = @organization_id
-  AND key_type = @key_type
-  AND deleted IS FALSE
-RETURNING *;
-
--- name: BackfillOpenRouterKeyEncryption :exec
--- Lazy read-repair for rows minted before encrypted storage existed: records
--- the ciphertext without touching the plaintext column. The key_encrypted IS
--- NULL guard makes concurrent repairs harmless and refuses to clobber a
--- ciphertext written by the platform-admin encrypt action.
-UPDATE openrouter_api_keys
-SET key_encrypted = @key_encrypted
-WHERE organization_id = @organization_id
-  AND key_type = @key_type
-  AND key_encrypted IS NULL
-  AND deleted IS FALSE;
 
 -- name: DisableOpenRouterAPIKey :exec
 -- Locks the key down without deleting it, so a reinstated organization keeps
@@ -78,9 +52,22 @@ WHERE organization_id = @organization_id
 -- metrics-collection reconciliation path when the upstream OpenRouter limit
 -- diverges from the locally cached value (e.g. after a manual change on the
 -- OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
--- key-provisioning write path and also mutates key/key_hash.
+-- key-provisioning write path and also mutates key_hash.
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
+  AND deleted IS FALSE;
+
+-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
+-- Reconciles an upstream observation only while the local mirror still equals
+-- what the caller observed. A concurrent explicit cap change wins this CAS.
+UPDATE openrouter_api_keys
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND monthly_credits = @current_monthly_credits
+  AND (extract(epoch FROM updated_at) * 1000000)::bigint = @current_generation::bigint
   AND deleted IS FALSE;

@@ -1532,6 +1532,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		UserID:               gramUserID,
 		ActiveOrganizationID: invite.OrganizationID,
 		WorkOSSessionID:      idpUser.WorkOSSessionID,
+		ImpersonatorEmail:    "",
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))

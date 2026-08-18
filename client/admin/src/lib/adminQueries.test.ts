@@ -6,10 +6,12 @@ import {
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
+  projectQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import type {
   AdminOrganization,
+  AdminProjectDetail,
   ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
 
@@ -297,6 +299,66 @@ describe("writeOrganizationToCache", () => {
 
     expect(qc.getQueryData(detail.queryKey)?.disabled_at).toBe(
       DISABLED.disabled_at,
+    );
+  });
+});
+
+// The same slug in two organizations is two projects, and the whole reason the
+// organization is a parameter. One cache entry for both would show whichever was
+// opened first under the other's URL.
+describe("projectQuery", () => {
+  // Both share the slug `default`, which is the collision the organization
+  // exists to settle.
+  function project(id: string, organizationID: string): AdminProjectDetail {
+    return {
+      id,
+      name: "Default",
+      slug: "default",
+      organization_id: organizationID,
+      toolset_count: 0,
+      deployment_count: 0,
+      http_tool_count: 0,
+      environment_count: 0,
+      api_key_count: 0,
+      assistant_count: 0,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+  }
+
+  it("keeps two organizations' project of the same name apart", () => {
+    const qc = new QueryClient();
+
+    qc.setQueryData(
+      projectQuery("default", "one").queryKey,
+      project("a", "one"),
+    );
+    qc.setQueryData(
+      projectQuery("default", "two").queryKey,
+      project("b", "two"),
+    );
+
+    expect(qc.getQueryData(projectQuery("default", "one").queryKey)?.id).toBe(
+      "a",
+    );
+    expect(qc.getQueryData(projectQuery("default", "two").queryKey)?.id).toBe(
+      "b",
+    );
+  });
+
+  // The global lookup page has no organization, so its entry has to be its own
+  // rather than borrowing a record's.
+  it("keeps the unscoped lookup apart from a record's read", () => {
+    const qc = new QueryClient();
+
+    qc.setQueryData(
+      projectQuery("default", "one").queryKey,
+      project("a", "one"),
+    );
+    qc.setQueryData(projectQuery("default").queryKey, project("b", "two"));
+
+    expect(qc.getQueryData(projectQuery("default", "one").queryKey)?.id).toBe(
+      "a",
     );
   });
 });

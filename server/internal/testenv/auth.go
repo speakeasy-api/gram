@@ -121,6 +121,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 		UserID:               userID,
 		ActiveOrganizationID: mockidp.MockOrgID,
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}
 	err = sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)

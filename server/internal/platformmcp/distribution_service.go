@@ -206,8 +206,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		existing.State == distributionStateAttached &&
 		existing.PluginServerID.Valid &&
 		existing.PluginServerID.UUID == live.ID &&
-		existing.ConnectionID == connectionID &&
-		existing.ConnectionGeneration == generation {
+		existing.ConnectionID.Valid &&
+		existing.ConnectionID.UUID == connectionID &&
+		existing.ConnectionGeneration.Valid &&
+		existing.ConnectionGeneration.UUID == generation {
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution: %w", err)
 		}
@@ -435,8 +437,8 @@ func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -497,8 +499,8 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 			State:                input.state,
 			Version:              1,
 			AttachmentWasCreated: input.attachmentWasCreated,
-			ConnectionID:         input.connectionID,
-			ConnectionGeneration: input.connectionGeneration,
+			ConnectionID:         uuid.NullUUID{UUID: input.connectionID, Valid: true},
+			ConnectionGeneration: uuid.NullUUID{UUID: input.connectionGeneration, Valid: true},
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return repo.PlatformMcpDistribution{}, ErrDistributionTargetUnavailable
@@ -513,8 +515,8 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 		State:                input.state,
 		Version:              existing.Version + 1,
 		AttachmentWasCreated: input.attachmentWasCreated,
-		ConnectionID:         input.connectionID,
-		ConnectionGeneration: input.connectionGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: input.connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: input.connectionGeneration, Valid: true},
 		ID:                   existing.ID,
 		OrganizationID:       input.organizationID,
 		ProjectID:            input.projectID,
