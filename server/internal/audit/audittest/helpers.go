@@ -35,6 +35,13 @@ type LogRecord struct {
 	Metadata       []byte
 	BeforeSnapshot []byte
 	AfterSnapshot  []byte
+
+	// ActingSurface and ActingClientID are read straight from the row, so both
+	// keep the absent-vs-blank distinction: a row written before attribution
+	// existed has no surface at all, and a call with no OAuth client records
+	// NULL rather than an empty string.
+	ActingSurface  *string
+	ActingClientID *string
 }
 
 func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
@@ -59,6 +66,8 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 		Metadata:         row.Metadata,
 		BeforeSnapshot:   row.BeforeSnapshot,
 		AfterSnapshot:    row.AfterSnapshot,
+		ActingSurface:    conv.FromPGText[string](row.ActingSurface),
+		ActingClientID:   conv.FromPGText[string](row.ActingClientID),
 	}, nil
 }
 

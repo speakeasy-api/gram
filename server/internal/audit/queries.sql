@@ -13,7 +13,9 @@ INSERT INTO audit_logs (
   subject_slug,
   before_snapshot,
   after_snapshot,
-  metadata
+  metadata,
+  acting_surface,
+  acting_client_id
 ) VALUES (
   @organization_id,
   @project_id,
@@ -28,7 +30,9 @@ INSERT INTO audit_logs (
   @subject_slug,
   @before_snapshot,
   @after_snapshot,
-  @metadata
+  @metadata,
+  @acting_surface,
+  @acting_client_id
 )
 RETURNING id, organization_id;
 
@@ -63,6 +67,13 @@ WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
+  )
+  -- A row written before attribution existed has no surface. Coalescing here
+  -- means filtering for 'unknown' finds those rows too, instead of returning
+  -- nothing and implying the organization has no unattributed history.
+  AND (
+    sqlc.narg(acting_surface)::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
 ORDER BY a.seq DESC
 LIMIT 51;
@@ -105,6 +116,29 @@ SELECT
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
+
+-- name: ListAuditSurfaceFacets :many
+-- Assistant activity events are excluded: facets power the platform audit
+-- feed, which hides them (see ListAuditLogs).
+-- Rows predating attribution have no surface and are counted as 'unknown',
+-- so the facet totals reconcile with the unfiltered feed rather than silently
+-- omitting an organization's older history.
+SELECT
+  COALESCE(acting_surface, 'unknown')::text AS value,
+  COALESCE(acting_surface, 'unknown')::text AS display_name,
+  COUNT(*)::bigint AS count
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND subject_type <> 'assistant'
+  AND (
+    sqlc.narg(project_id)::uuid IS NULL
+    OR project_id = sqlc.narg(project_id)::uuid
+  )
+-- Group on the coalesced value, not the column: an organization can hold both
+-- nulls from before attribution and rows the application wrote as 'unknown',
+-- and grouping on the raw column would return two facets with the same label.
+GROUP BY COALESCE(acting_surface, 'unknown')
+ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
 -- Assistant activity events are excluded: facets power the platform audit

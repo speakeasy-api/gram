@@ -9624,6 +9624,13 @@ paths:
                     description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
                     type: string
                 - allowEmptyValue: true
+                  description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
+                  in: query
+                  name: acting_surface
+                  schema:
+                    description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -58479,6 +58486,12 @@ components:
         AuditLog:
             type: object
             properties:
+                acting_client_id:
+                    type: string
+                    description: The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+                acting_surface:
+                    type: string
+                    description: 'How the change was made: ''dashboard'', ''api_key'', ''platform_mcp'', ''project_assistant'', or ''unknown'' when no surface was identifiable. Always present.'
                 action:
                     type: string
                 actor_display_name:
@@ -58519,6 +58532,7 @@ components:
                 - action
                 - subject_id
                 - subject_type
+                - acting_surface
                 - created_at
         AuditLogFacetOption:
             type: object
@@ -66032,12 +66046,21 @@ components:
                     items:
                         $ref: '#/components/schemas/AuditLogFacetOption'
                     description: Available actor facets
+                surfaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuditLogFacetOption'
+                    description: Available acting surface facets
             required:
                 - actors
                 - actions
+                - surfaces
         ListAuditLogsForm:
             type: object
             properties:
+                acting_surface:
+                    type: string
+                    description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
                 action:
                     type: string
                     description: Action to filter audit logs to a specific action.
