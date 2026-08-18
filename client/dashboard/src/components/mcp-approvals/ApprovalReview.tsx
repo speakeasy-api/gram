@@ -13,6 +13,8 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   openSafeExternalUrl,
@@ -427,6 +429,7 @@ function ResearchReports({
   reports: ResearchReport[];
   requestId: string;
 }): JSX.Element {
+  const researchFlag = useFeatureFlag(FEATURE_FLAGS.mcpResearch);
   const project = useProject();
   const queryClient = useQueryClient();
   const startResearch = useStartMcpResearchMutation({
@@ -454,30 +457,40 @@ function ResearchReports({
         <Heading variant="h3" className="text-lg font-thin">
           Web research
         </Heading>
-        {/* The same org-admin gate as the endpoint behind it: research
-            spends the org's money, so a non-admin must not see a button
-            whose click comes back 403. */}
-        <RequireScope scope="org:admin" level="component">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={running || startResearch.isPending}
-            onClick={() =>
-              startResearch.mutate({
-                request: { id: requestId, gramProject: project.slug },
-              })
-            }
-          >
-            {running && (
-              <Button.LeftIcon>
-                <Loader2 className="animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {running ? "Researching…" : "Run Research"}
-            </Button.Text>
-          </Button>
-        </RequireScope>
+        {/* Display only — the endpoint enforces the same flag, and any
+            non-disabled state (loading, missing, error) falls through to the
+            button so a PostHog hiccup never hides a working control. */}
+        {researchFlag.status === "disabled" ? (
+          <p className="text-muted-foreground max-w-72 text-right text-xs">
+            Web research isn't included in your organization's plan yet —
+            contact your Speakeasy representative to enable it.
+          </p>
+        ) : (
+          // The same org-admin gate as the endpoint behind it: research
+          // spends the org's money, so a non-admin must not see a button
+          // whose click comes back 403.
+          <RequireScope scope="org:admin" level="component">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={running || startResearch.isPending}
+              onClick={() =>
+                startResearch.mutate({
+                  request: { id: requestId, gramProject: project.slug },
+                })
+              }
+            >
+              {running && (
+                <Button.LeftIcon>
+                  <Loader2 className="animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {running ? "Researching…" : "Run Research"}
+              </Button.Text>
+            </Button>
+          </RequireScope>
+        )}
       </div>
       <p className="text-muted-foreground text-xs">
         Gathered by an agent from public web sources, which may be inaccurate,
