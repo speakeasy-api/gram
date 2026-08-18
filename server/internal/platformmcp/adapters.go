@@ -66,10 +66,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 		Jti:            claims.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Principal{}, ErrUnauthorized
-		}
-		return Principal{}, fmt.Errorf("lookup active platform mcp session: %w", err)
+		return Principal{}, jwtAuthenticationStoreError(err)
 	}
 	if session.SubjectUrn != subject.String() || session.ClientID != claims.ClientID || session.ConnectionGeneration != session.ActiveGeneration {
 		return Principal{}, ErrUnauthorized
@@ -88,6 +85,13 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 type LiveOrgAdminAuthorizer struct {
 	db     *pgxpool.Pool
 	engine *authz.Engine
+}
+
+func jwtAuthenticationStoreError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrUnauthorized
+	}
+	return fmt.Errorf("%w: lookup active platform mcp session: %w", ErrUnavailable, err)
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {

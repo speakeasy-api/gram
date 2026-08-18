@@ -456,13 +456,9 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 		}
 		return false, nil
 	}
-	terminalized := false
-	if !row.ReauthorizationRequiredAt.Valid {
-		err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, now)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return false, err
-		}
-		terminalized = err == nil
+	terminalized, err := terminalizeRefreshReuse(ctx, q, row, now)
+	if err != nil {
+		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit reused platform mcp session family: %w", err)
@@ -494,13 +490,16 @@ func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformo
 		if !row.RotatedAt.Valid {
 			return platformoauth.Session{}, platformoauth.ErrRevoked
 		}
-		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, input.Now); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		terminalized, err := terminalizeRefreshReuse(ctx, q, row, input.Now)
+		if err != nil {
 			return platformoauth.Session{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp refresh: %w", err)
 		}
-		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+		if terminalized {
+			s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+		}
 		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
 	}
 	if row.ConnectionRevokedAt.Valid || row.ClientRevokedAt.Valid || row.ReauthorizationRequiredAt.Valid {
@@ -557,13 +556,16 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		if !row.RotatedAt.Valid {
 			return platformoauth.Session{}, platformoauth.ErrRevoked
 		}
-		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, input.Now); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		terminalized, err := terminalizeRefreshReuse(ctx, q, row, input.Now)
+		if err != nil {
 			return platformoauth.Session{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp session family: %w", err)
 		}
-		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+		if terminalized {
+			s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+		}
 		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
 	}
 	if row.OrganizationID != input.OrganizationID || row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() || input.Replacement.Connection.Generation != row.ConnectionGeneration.String() {
@@ -743,6 +745,20 @@ func (s *PostgresOAuthStore) createSessionWithQueries(ctx context.Context, q *pl
 	}
 	_, err = q.CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{ID: id, OrganizationID: session.Connection.OrganizationID, ConnectionID: connectionID, OauthClientID: connection.OauthClientID, ConnectionGeneration: generation, Jti: session.JTI, RefreshTokenHash: session.RefreshHash, ExpiresAt: timestamp(session.ExpiresAt), RefreshExpiresAt: timestamp(session.RefreshExpiresAt)})
 	return mapOAuthWriteError(err)
+}
+
+func terminalizeRefreshReuse(ctx context.Context, q *platformrepo.Queries, row platformrepo.GetPlatformMCPSessionForRefreshForUpdateRow, now time.Time) (bool, error) {
+	if row.ReauthorizationRequiredAt.Valid {
+		return false, nil
+	}
+	err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, now)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func validateSessionConnection(ctx context.Context, q *platformrepo.Queries, session platformoauth.Session) error {

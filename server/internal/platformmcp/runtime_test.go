@@ -188,7 +188,8 @@ func (r *testReadinessRecorder) RecordReady(_ context.Context, principal Princip
 }
 
 type testOAuthTelemetry struct {
-	events []OAuthEvent
+	events                    []OAuthEvent
+	terminalTransitionReasons []platformoauth.ReauthorizationReason
 }
 
 func (t *testOAuthTelemetry) Record(_ context.Context, event OAuthEvent) {
@@ -197,7 +198,8 @@ func (t *testOAuthTelemetry) Record(_ context.Context, event OAuthEvent) {
 
 func (*testOAuthTelemetry) RecordRefreshSuccess(context.Context, time.Duration, time.Duration) {}
 
-func (*testOAuthTelemetry) RecordTerminalTransition(context.Context, platformoauth.ReauthorizationReason) {
+func (t *testOAuthTelemetry) RecordTerminalTransition(_ context.Context, reason platformoauth.ReauthorizationReason) {
+	t.terminalTransitionReasons = append(t.terminalTransitionReasons, reason)
 }
 
 type testAuthenticator struct {
