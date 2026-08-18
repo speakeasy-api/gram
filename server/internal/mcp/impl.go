@@ -265,11 +265,14 @@ type mcpInputs struct {
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
 	tags []string
-	// protocolVersionHeader is the sanitized MCP-Protocol-Version header value
-	// the request arrived with, or empty when absent (every `initialize`, and
-	// every request from a pre-2025-06-18 client). Threaded here because the
-	// dispatch and handlers run without access to the *http.Request.
-	protocolVersionHeader string
+	// protocolVersion is the protocol revision resolved for this request:
+	// what the request declared (header, falling back to per-request `_meta`)
+	// for telemetry, and the supported-set member in effect for behavior.
+	// Threaded here because the dispatch and handlers run without access to
+	// the *http.Request. Resolved once where this struct is built; the
+	// initialize handler overwrites InEffect with the negotiated answer, which
+	// is the one sanctioned mutation.
+	protocolVersion mcpversions.Resolution
 	// toolSelection is the consent-screen tool policy loaded from the
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
@@ -1003,7 +1006,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
 		tags:                  tags,
-		protocolVersionHeader: mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)),
+		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
 		toolSelection:         callerToolSelection,
 	}
 
@@ -1299,12 +1302,13 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 }
 
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
-	// The census version resolves lazily: the header answers for every
-	// conforming client since 2025-06-18, and only a header-less request pays
-	// the `_meta` scan. Handlers that consume the rest of the per-request
-	// metadata decode it themselves (tools/call in the same pass as its
-	// params, tools/list scoped to its analytics event).
-	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(payload.protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfaceHosting)
+	// The census dimension is what the request declared, not the in-effect
+	// revision: clamping keeps absent and unknown declarations countable,
+	// and the resolved value would fabricate a revision for clients that
+	// named none. Handlers that consume the rest of the per-request metadata
+	// decode it themselves (tools/call in the same pass as its params,
+	// tools/list scoped to its analytics event).
+	s.metrics.RecordMCPRequest(ctx, payload.protocolVersion.Declared, req.Method, mcpmetrics.SurfaceHosting)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()

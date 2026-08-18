@@ -34,13 +34,121 @@ func TestAllReturnsACopy(t *testing.T) {
 	require.Equal(t, mcpversions.Version20241105, mcpversions.All()[0], "All must not hand out a mutable view of package state")
 }
 
-// TestServedVersionsAreKnown guards every surface's served revision against
-// drifting out of the registry. Add a case here when a surface is added.
-func TestServedVersionsAreKnown(t *testing.T) {
+// TestSupportedSetsAreKnownAndOrdered guards every surface's supported set
+// against drifting out of the registry or out of the oldest-first ordering
+// Negotiate's highest-supported fallback depends on. Add a case here when a
+// surface is added.
+func TestSupportedSetsAreKnownAndOrdered(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, mcpversions.Known(mcpversions.ServedHostedToolset))
-	require.True(t, mcpversions.Known(mcpversions.ServedPlatformToolset))
+	for _, supported := range [][]string{
+		mcpversions.SupportedHostedToolset(),
+		mcpversions.SupportedPlatformToolset(),
+	} {
+		require.NotEmpty(t, supported)
+		require.True(t, slices.IsSorted(supported), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
+		require.Contains(t, supported, mcpversions.DefaultInEffect, "the unversioned default must itself be servable")
+		for _, v := range supported {
+			require.True(t, mcpversions.Known(v), "expected %q to be recognized", v)
+		}
+	}
+}
+
+func TestSupportedSetsReturnCopies(t *testing.T) {
+	t.Parallel()
+
+	mcpversions.SupportedHostedToolset()[0] = "mutated"
+	mcpversions.SupportedPlatformToolset()[0] = "mutated"
+
+	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedHostedToolset()[0], "SupportedHostedToolset must not hand out a mutable view of package state")
+	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedPlatformToolset()[0], "SupportedPlatformToolset must not hand out a mutable view of package state")
+}
+
+// TestSupportedSetsExclude20260728 pins the current ceiling: advertising
+// 2026-07-28 is its own project, and adding it to a set is the entire
+// behavioral switch for that work — it must not happen by accident.
+func TestSupportedSetsExclude20260728(t *testing.T) {
+	t.Parallel()
+
+	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
+	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
+}
+
+func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
+	t.Parallel()
+
+	supported := mcpversions.SupportedHostedToolset()
+	for _, v := range supported {
+		require.Equal(t, v, mcpversions.Negotiate(v, supported))
+	}
+}
+
+// TestNegotiateAnswersAbsentWithTheDefault pins that the no-version cohort is
+// not handed the ceiling: a client that omitted the field entirely is the
+// likeliest to break on a newer revision, and the spec's omitted-version rule
+// points at 2025-03-26.
+func TestNegotiateAnswersAbsentWithTheDefault(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, mcpversions.DefaultInEffect, mcpversions.Negotiate("", mcpversions.SupportedHostedToolset()))
+}
+
+func TestNegotiateAnswersUnsupportedWithTheNewestSupported(t *testing.T) {
+	t.Parallel()
+
+	supported := mcpversions.SupportedHostedToolset()
+	newest := supported[len(supported)-1]
+
+	require.Equal(t, newest, mcpversions.Negotiate(mcpversions.Version20260728, supported), "known but unsupported")
+	require.Equal(t, newest, mcpversions.Negotiate("1999-12-31", supported), "well-formed but unrecognized")
+	require.Equal(t, newest, mcpversions.Negotiate("garbage", supported), "not a version at all")
+}
+
+func TestNegotiateSanitizesRawClientInput(t *testing.T) {
+	t.Parallel()
+
+	supported := mcpversions.SupportedHostedToolset()
+
+	require.Equal(t, mcpversions.Version20250618, mcpversions.Negotiate("  2025-06-18\t", supported), "surrounding whitespace trims to a supported version")
+	require.Equal(t, mcpversions.DefaultInEffect, mcpversions.Negotiate("2025-06-18\x00", supported), "non-printable input sanitizes to absent, not to the ceiling")
+}
+
+func TestResolveKeepsEverySupportedDeclarationInEffect(t *testing.T) {
+	t.Parallel()
+
+	supported := mcpversions.SupportedHostedToolset()
+	for _, v := range supported {
+		got := mcpversions.Resolve(v, supported)
+		require.Equal(t, v, got.Declared)
+		require.Equal(t, v, got.InEffect)
+	}
+}
+
+func TestResolveDefaultsAnAbsentDeclaration(t *testing.T) {
+	t.Parallel()
+
+	got := mcpversions.Resolve("", mcpversions.SupportedHostedToolset())
+	require.Empty(t, got.Declared, "telemetry must still see that nothing was declared")
+	require.Equal(t, mcpversions.DefaultInEffect, got.InEffect)
+}
+
+// TestResolveDefaultsAnUnsupportedDeclaration pins the over-serve-downward
+// arm: a declaration outside the supported set keeps its raw value for
+// telemetry while behavior falls back to the default rather than trusting it.
+func TestResolveDefaultsAnUnsupportedDeclaration(t *testing.T) {
+	t.Parallel()
+
+	got := mcpversions.Resolve(mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	require.Equal(t, mcpversions.Version20260728, got.Declared)
+	require.Equal(t, mcpversions.DefaultInEffect, got.InEffect)
+}
+
+func TestResolveSanitizesRawClientInput(t *testing.T) {
+	t.Parallel()
+
+	got := mcpversions.Resolve("  2025-06-18\t", mcpversions.SupportedHostedToolset())
+	require.Equal(t, mcpversions.Version20250618, got.Declared)
+	require.Equal(t, mcpversions.Version20250618, got.InEffect)
 }
 
 func TestKnownAcceptsEveryPublishedRevision(t *testing.T) {
