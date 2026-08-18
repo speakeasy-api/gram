@@ -495,7 +495,11 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	recorded := &oauthResponseRecorder{ResponseWriter: w}
 	w = recorded
 	defer func() {
-		s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: "interactive_authorization", Outcome: recorded.outcome()})
+		s.oauthTelemetry().Record(r.Context(), OAuthEvent{
+			Operation: "interactive_authorization",
+			Outcome:   recorded.outcome(),
+			Reason:    recorded.reason,
+		})
 	}()
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
@@ -513,6 +517,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
+		setOAuthTelemetryReason(w, "authorization_denied")
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "user denied authorization"})
 		return
 	}
@@ -796,6 +801,7 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 }
 
 func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, err error) {
+	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
@@ -850,11 +856,11 @@ func (w *oauthResponseRecorder) Write(body []byte) (int, error) {
 }
 
 func (w *oauthResponseRecorder) outcome() string {
-	if w.status >= http.StatusOK && w.status < http.StatusMultipleChoices {
-		return "succeeded"
-	}
 	if validOAuthOutcome(w.oauthOutcome) {
 		return w.oauthOutcome
+	}
+	if w.status >= http.StatusOK && w.status < http.StatusMultipleChoices {
+		return "succeeded"
 	}
 	return "server_error"
 }
@@ -898,6 +904,9 @@ func oauthGateReason(err error) string {
 	}
 	if errors.Is(err, ErrForbidden) {
 		return "authorization_denied"
+	}
+	if errors.Is(err, ErrUnavailable) {
+		return "authorization_unavailable"
 	}
 	return ""
 }

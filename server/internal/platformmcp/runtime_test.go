@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -57,29 +58,63 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 	}
 }
 
-func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
+func TestRuntimeHandlerClassifiesAuthenticationFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name string
-		err  error
+		name      string
+		authErr   error
+		status    int
+		telemetry OAuthEvent
 	}{
-		{name: "denied", err: ErrForbidden},
-		{name: "unexpected error", err: errors.New("authorization store unavailable")},
+		{name: "unavailable", authErr: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
+		{name: "unauthorized", authErr: ErrUnauthorized, status: http.StatusUnauthorized, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "unauthorized"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			authorizer := &testAuthorizer{err: tc.err}
-			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", "test-cursor-key", nil, nil, nil, nil, nil).Handler()
+			telemetry := &testOAuthTelemetry{}
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{err: tc.authErr}, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil).WithOAuthTelemetry(telemetry).Handler()
 			req := httptest.NewRequest(http.MethodPost, Path, nil)
 			req.Header.Set("Authorization", "Bearer access-token")
 			res := httptest.NewRecorder()
 
 			handler.ServeHTTP(res, req)
 
-			require.Equal(t, http.StatusForbidden, res.Code)
+			require.Equal(t, tc.status, res.Code)
+			require.Equal(t, []OAuthEvent{tc.telemetry}, telemetry.events)
+		})
+	}
+}
+
+func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		err       error
+		status    int
+		telemetry OAuthEvent
+	}{
+		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}},
+		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
+		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			authorizer := &testAuthorizer{err: tc.err}
+			telemetry := &testOAuthTelemetry{}
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", "test-cursor-key", nil, nil, nil, nil, nil).WithOAuthTelemetry(telemetry).Handler()
+			req := httptest.NewRequest(http.MethodPost, Path, nil)
+			req.Header.Set("Authorization", "Bearer access-token")
+			res := httptest.NewRecorder()
+
+			handler.ServeHTTP(res, req)
+
+			require.Equal(t, tc.status, res.Code)
 			require.Equal(t, 1, authorizer.calls)
+			require.Equal(t, []OAuthEvent{tc.telemetry}, telemetry.events)
 		})
 	}
 }
@@ -150,6 +185,19 @@ func (r *testReadinessRecorder) RecordReady(_ context.Context, principal Princip
 	r.calls++
 	r.principal = principal
 	return nil
+}
+
+type testOAuthTelemetry struct {
+	events []OAuthEvent
+}
+
+func (t *testOAuthTelemetry) Record(_ context.Context, event OAuthEvent) {
+	t.events = append(t.events, event)
+}
+
+func (*testOAuthTelemetry) RecordRefreshSuccess(context.Context, time.Duration, time.Duration) {}
+
+func (*testOAuthTelemetry) RecordTerminalTransition(context.Context, platformoauth.ReauthorizationReason) {
 }
 
 type testAuthenticator struct {

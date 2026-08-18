@@ -70,20 +70,34 @@ func TestOAuthResponseRecorderDoesNotRetainResponseBody(t *testing.T) {
 	require.NotContains(t, strings.Join([]string{recorder.oauthOutcome, recorder.reason}, " "), "token")
 }
 
-func TestOAuthResponseRecorderClassifiesSuccessfulRedirectExplicitly(t *testing.T) {
+func TestOAuthResponseRecorderPrefersExplicitRedirectOutcome(t *testing.T) {
 	t.Parallel()
 
-	recorder := &oauthResponseRecorder{ResponseWriter: testResponseWriter{}}
-	recorder.setOAuthOutcome("succeeded")
-	recorder.WriteHeader(http.StatusSeeOther)
+	for _, tc := range []struct {
+		name    string
+		outcome string
+	}{
+		{name: "success", outcome: "succeeded"},
+		{name: "denied", outcome: "access_denied"},
+		{name: "unavailable", outcome: "temporarily_unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	require.Equal(t, "succeeded", recorder.outcome())
+			recorder := &oauthResponseRecorder{ResponseWriter: testResponseWriter{}}
+			recorder.setOAuthOutcome(tc.outcome)
+			recorder.WriteHeader(http.StatusSeeOther)
+
+			require.Equal(t, tc.outcome, recorder.outcome())
+		})
+	}
 }
 
 func TestOAuthTelemetryAcceptsOnlyBoundedDimensions(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}))
+	require.True(t, validOAuthEvent(OAuthEvent{Operation: "interactive_authorization", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "https://untrusted.example", Outcome: "succeeded"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "refresh", Outcome: "succeeded", Reason: "access-token"}))
 }

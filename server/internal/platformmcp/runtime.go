@@ -188,6 +188,11 @@ func (r *Runtime) Handler() http.Handler {
 
 		principal, err := r.authenticate(req)
 		if err != nil {
+			if errors.Is(err, ErrUnavailable) {
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
 				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
@@ -207,8 +212,13 @@ func (r *Runtime) Handler() http.Handler {
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
-			r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
-			http.Error(w, "forbidden", http.StatusForbidden)
+			if isAuthorizationDenied(err) {
+				r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
+				http.Error(w, "forbidden", http.StatusForbidden)
+			} else {
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			}
 			return
 		}
 

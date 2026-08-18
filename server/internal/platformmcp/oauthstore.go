@@ -279,7 +279,9 @@ func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, organizationI
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit revoke platform mcp connection: %w", err)
 	}
-	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonConnectionRevoked)
+	if !connection.ReauthorizationRequiredAt.Valid {
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonConnectionRevoked)
+	}
 	return nil
 }
 
@@ -454,13 +456,20 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 		}
 		return false, nil
 	}
-	if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration, RevokedAt: timestamp(now)}); err != nil {
-		return false, fmt.Errorf("revoke reused platform mcp session family: %w", err)
+	terminalized := false
+	if !row.ReauthorizationRequiredAt.Valid {
+		err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, now)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return false, err
+		}
+		terminalized = err == nil
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit reused platform mcp session family: %w", err)
 	}
-	s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+	if terminalized {
+		s.recordTerminalTransition(ctx, platformoauth.ReauthorizationReasonRefreshReuse)
+	}
 	return true, nil
 }
 

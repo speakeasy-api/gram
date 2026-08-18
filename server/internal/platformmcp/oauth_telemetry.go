@@ -125,7 +125,7 @@ func validOAuthReason(reason string) bool {
 		return true
 	}
 	switch reason {
-	case "not_found", "already_used", "expired", "revoked", "client_mismatch", "generation_invalid", "redirect_uri_invalid", "pkce_invalid", "authorization_denied", "platform_disabled":
+	case "not_found", "already_used", "expired", "revoked", "client_mismatch", "generation_invalid", "redirect_uri_invalid", "pkce_invalid", "authorization_denied", "authorization_unavailable", "platform_disabled":
 		return true
 	default:
 		return false
