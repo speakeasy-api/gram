@@ -701,6 +701,91 @@ func TestUpdateRemoteSessionIssuer_OmittedNameKeepsExisting(t *testing.T) {
 	require.Equal(t, "Keep Me", *updated.Name)
 }
 
+func TestUpdateRemoteSessionIssuer_SetsLogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-update-logo"))
+	require.NoError(t, err)
+	require.Nil(t, created.LogoAssetID)
+
+	assetID := createTestImageAsset(t, ctx, ti.conn).String()
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &assetID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.LogoAssetID)
+	require.Equal(t, assetID, *updated.LogoAssetID)
+}
+
+// An explicit empty string clears the logo to NULL, mirroring the name
+// column's sentinel.
+func TestUpdateRemoteSessionIssuer_ClearsLogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	assetID := createTestImageAsset(t, ctx, ti.conn).String()
+	createPayload := newIssuerPayload("idp-clear-logo")
+	createPayload.LogoAssetID = &assetID
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, createPayload)
+	require.NoError(t, err)
+	require.NotNil(t, created.LogoAssetID)
+
+	empty := ""
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.LogoAssetID)
+}
+
+// An omitted logo asset id (nil) leaves the existing value untouched.
+func TestUpdateRemoteSessionIssuer_OmittedLogoAssetIDKeepsExisting(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	assetID := createTestImageAsset(t, ctx, ti.conn).String()
+	createPayload := newIssuerPayload("idp-keep-logo")
+	createPayload.LogoAssetID = &assetID
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, createPayload)
+	require.NoError(t, err)
+
+	newSlug := "idp-keep-logo-renamed"
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:          created.ID,
+		Slug:        &newSlug,
+		LogoAssetID: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.LogoAssetID)
+	require.Equal(t, assetID, *updated.LogoAssetID)
+}
+
+// A malformed logo asset id is rejected as a 400 before the update query
+// runs; the query casts the text parameter to uuid, so letting it through
+// would surface as a Postgres cast error instead.
+func TestUpdateRemoteSessionIssuer_InvalidLogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-bad-logo"))
+	require.NoError(t, err)
+
+	badID := "not-a-uuid"
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &badID,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestUpdateRemoteSessionIssuer_NotFound(t *testing.T) {
 	t.Parallel()
 

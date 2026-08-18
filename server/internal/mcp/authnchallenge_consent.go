@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -149,6 +151,18 @@ type sessionDurationOption struct {
 type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
+
+	// IssuerDisplay is the card's identity-provider label: the issuer's
+	// operator-set display name when present, otherwise the slug. Issuer
+	// branding is Gram-controlled and tenant-set, unlike the
+	// attacker-chosen CIMD client_name/logo_uri surfaced via
+	// ClientIDOrigin, so the two stay visually separate on the page.
+	IssuerDisplay string
+
+	// IssuerLogoURL points at the issuer's logo through the public
+	// assets.serveImage endpoint, empty when the issuer has no logo.
+	IssuerLogoURL string
+
 	Connected  bool
 	Expired    bool
 	CanRefresh bool
@@ -768,6 +782,29 @@ func desiredSessionDurationHours(raw string) int {
 	return hours
 }
 
+// issuerCardBranding resolves the branding a consent card renders for its
+// identity provider. The display fallback matches
+// formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
+// name wins, otherwise the identifier the page always rendered (the slug).
+// The logo URL points at the public assets.serveImage endpoint on the
+// platform origin, the same construction mcpmetadata uses for MCP server
+// logos, and is empty when the issuer has no logo.
+func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+	display = c.IssuerSlug
+	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
+		display = name
+	}
+	if c.IssuerLogoAssetID.Valid {
+		u := *serverURL
+		u.Path = "/rpc/assets.serveImage"
+		q := u.Query()
+		q.Set("id", c.IssuerLogoAssetID.UUID.String())
+		u.RawQuery = q.Encode()
+		logoURL = u.String()
+	}
+	return display, logoURL
+}
+
 // buildRemoteSessionCards loads every remote_session_client linked to the
 // endpoint's user_session_issuer and materialises a card per client. Each
 // card carries a connected/disconnected state (read from remote_sessions
@@ -830,9 +867,12 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
 		cards = append(cards, remoteSessionCard{
 			ClientID:           c.ID.String(),
 			IssuerSlug:         c.IssuerSlug,
+			IssuerDisplay:      issuerDisplay,
+			IssuerLogoURL:      issuerLogoURL,
 			Connected:          state.Status == remotesessions.RemoteSessionActive,
 			Expired:            state.Status == remotesessions.RemoteSessionExpired,
 			CanRefresh:         state.CanRefresh,

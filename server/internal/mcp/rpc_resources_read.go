@@ -233,8 +233,9 @@ func handleResourcesRead(
 	if isMCPPassthrough(resourceDef.Meta) {
 		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
 		bs, err := json.Marshal(result[json.RawMessage]{
-			ID:     req.ID,
-			Result: json.RawMessage(rw.body.Bytes()),
+			ID:             req.ID,
+			Result:         json.RawMessage(rw.body.Bytes()),
+			serverIdentity: serverInfoHostedToolset,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
@@ -270,6 +271,7 @@ func handleResourcesRead(
 		Result: resourceReadResult{
 			Contents: []resourceContent{content},
 		},
+		serverIdentity: serverInfoHostedToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)

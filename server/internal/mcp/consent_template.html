@@ -253,9 +253,21 @@
       }
 
       .remote-card .meta .issuer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         font-weight: 500;
         color: var(--fill-neutral-default);
         font-family: var(--font-diatype-mono);
+      }
+
+      .remote-card .meta .issuer-logo {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 4px;
+        object-fit: contain;
+        flex-shrink: 0;
+        display: block;
       }
 
       .remote-card .meta .state {
@@ -597,7 +609,13 @@
               data-auto-refresh-input
             />
             <div class="meta">
-              <div class="issuer">{{.IssuerSlug}}</div>
+              <div class="issuer">
+                {{if .IssuerLogoURL}}<img
+                  class="issuer-logo"
+                  src="{{.IssuerLogoURL}}"
+                  alt=""
+                />{{end}}<span>{{.IssuerDisplay}}</span>
+              </div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
               {{if .AutoRefreshChecked}}
@@ -659,7 +677,7 @@
                 name="action"
                 value="disconnect"
                 class="icon-btn"
-                aria-label="Disconnect {{.IssuerSlug}}"
+                aria-label="Disconnect {{.IssuerDisplay}}"
                 title="Disconnect"
               >
                 <svg

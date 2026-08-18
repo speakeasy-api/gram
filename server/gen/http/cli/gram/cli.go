@@ -103,7 +103,7 @@ func UsageCommands() []string {
 		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
-		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
@@ -479,6 +479,12 @@ func ParseEndpoint(
 		assetsUploadOpenAPIv3ProjectSlugInputFlag = assetsUploadOpenAPIv3Flags.String("project-slug-input", "", "")
 		assetsUploadOpenAPIv3SessionTokenFlag     = assetsUploadOpenAPIv3Flags.String("session-token", "", "")
 		assetsUploadOpenAPIv3StreamFlag           = assetsUploadOpenAPIv3Flags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		assetsFetchImageFromURLFlags                = flag.NewFlagSet("fetch-image-from-url", flag.ExitOnError)
+		assetsFetchImageFromURLBodyFlag             = assetsFetchImageFromURLFlags.String("body", "REQUIRED", "")
+		assetsFetchImageFromURLApikeyTokenFlag      = assetsFetchImageFromURLFlags.String("apikey-token", "", "")
+		assetsFetchImageFromURLProjectSlugInputFlag = assetsFetchImageFromURLFlags.String("project-slug-input", "", "")
+		assetsFetchImageFromURLSessionTokenFlag     = assetsFetchImageFromURLFlags.String("session-token", "", "")
 
 		assetsFetchOpenAPIv3FromURLFlags                = flag.NewFlagSet("fetch-open-ap-iv3-from-url", flag.ExitOnError)
 		assetsFetchOpenAPIv3FromURLBodyFlag             = assetsFetchOpenAPIv3FromURLFlags.String("body", "REQUIRED", "")
@@ -3547,6 +3553,7 @@ func ParseEndpoint(
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
 	assetsUploadFunctionsFlags.Usage = assetsUploadFunctionsUsage
 	assetsUploadOpenAPIv3Flags.Usage = assetsUploadOpenAPIv3Usage
+	assetsFetchImageFromURLFlags.Usage = assetsFetchImageFromURLUsage
 	assetsFetchOpenAPIv3FromURLFlags.Usage = assetsFetchOpenAPIv3FromURLUsage
 	assetsServeOpenAPIv3Flags.Usage = assetsServeOpenAPIv3Usage
 	assetsServeFunctionFlags.Usage = assetsServeFunctionUsage
@@ -4577,6 +4584,9 @@ func ParseEndpoint(
 
 			case "upload-open-ap-iv3":
 				epf = assetsUploadOpenAPIv3Flags
+
+			case "fetch-image-from-url":
+				epf = assetsFetchImageFromURLFlags
 
 			case "fetch-open-ap-iv3-from-url":
 				epf = assetsFetchOpenAPIv3FromURLFlags
@@ -6656,6 +6666,9 @@ func ParseEndpoint(
 				if err == nil {
 					data, err = assetsc.BuildUploadOpenAPIv3StreamPayload(data, *assetsUploadOpenAPIv3StreamFlag)
 				}
+			case "fetch-image-from-url":
+				endpoint = c.FetchImageFromURL()
+				data, err = assetsc.BuildFetchImageFromURLPayload(*assetsFetchImageFromURLBodyFlag, *assetsFetchImageFromURLApikeyTokenFlag, *assetsFetchImageFromURLProjectSlugInputFlag, *assetsFetchImageFromURLSessionTokenFlag)
 			case "fetch-open-ap-iv3-from-url":
 				endpoint = c.FetchOpenAPIv3FromURL()
 				data, err = assetsc.BuildFetchOpenAPIv3FromURLPayload(*assetsFetchOpenAPIv3FromURLBodyFlag, *assetsFetchOpenAPIv3FromURLApikeyTokenFlag, *assetsFetchOpenAPIv3FromURLProjectSlugInputFlag, *assetsFetchOpenAPIv3FromURLSessionTokenFlag)
@@ -9722,6 +9735,7 @@ func assetsUsage() {
 	fmt.Fprintln(os.Stderr, `    upload-image: Upload an image to Gram.`)
 	fmt.Fprintln(os.Stderr, `    upload-functions: Upload functions to Gram.`)
 	fmt.Fprintln(os.Stderr, `    upload-open-ap-iv3: Upload an OpenAPI v3 document to Gram.`)
+	fmt.Fprintln(os.Stderr, `    fetch-image-from-url: Fetch an image from a URL and upload it to Gram as an image asset.`)
 	fmt.Fprintln(os.Stderr, `    fetch-open-ap-iv3-from-url: Fetch an OpenAPI v3 document from a URL and upload it to Gram.`)
 	fmt.Fprintln(os.Stderr, `    serve-open-ap-iv3: Serve an OpenAPIv3 asset from Gram.`)
 	fmt.Fprintln(os.Stderr, `    serve-function: Serve a Gram Functions asset from Gram.`)
@@ -9834,6 +9848,30 @@ func assetsUploadOpenAPIv3Usage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets upload-open-ap-iv3 --content-type \"abc123\" --content-length 1 --apikey-token \"abc123\" --project-slug-input \"abc123\" --session-token \"abc123\" --stream \"goa.png\"")
+}
+
+func assetsFetchImageFromURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assets fetch-image-from-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch an image from a URL and upload it to Gram as an image asset.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets fetch-image-from-url --body '{\n      \"url\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --session-token \"abc123\"")
 }
 
 func assetsFetchOpenAPIv3FromURLUsage() {
@@ -17042,7 +17080,7 @@ func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersDeleteIssuerUsage() {
@@ -17298,7 +17336,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -17544,7 +17582,7 @@ func adminRemoteSessionsUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsDeleteGlobalIssuerUsage() {

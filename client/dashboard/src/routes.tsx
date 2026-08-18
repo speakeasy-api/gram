@@ -229,7 +229,9 @@ const ROUTE_STRUCTURE = {
     unauthenticated: true,
   },
   home: {
-    title: "Home",
+    // "Home" now belongs to the org-level nav entry; the project's landing
+    // page is its overview.
+    title: "Project Overview",
     url: "",
     icon: "house",
     component: Home,

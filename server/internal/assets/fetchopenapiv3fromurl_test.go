@@ -308,12 +308,12 @@ func TestService_FetchOpenAPIv3FromURL_RejectsHTTPRedirect(t *testing.T) {
 	require.NotErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
-func TestService_FetchImageFromURL_RejectsHTTPScheme(t *testing.T) {
+func TestService_FetchImageAssetFromURL_RejectsHTTPScheme(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
 
-	_, err := ti.service.FetchImageFromURL(ctx, "http://example.com/favicon.ico")
+	_, err := ti.service.FetchImageAssetFromURL(ctx, "http://example.com/favicon.ico")
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -321,12 +321,12 @@ func TestService_FetchImageFromURL_RejectsHTTPScheme(t *testing.T) {
 	require.Equal(t, "invalid URL", oopsErr.Error())
 }
 
-func TestService_FetchImageFromURL_RejectsBlockedIPLiteral(t *testing.T) {
+func TestService_FetchImageAssetFromURL_RejectsBlockedIPLiteral(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsServiceWithPolicy(t, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
 
-	_, err := ti.service.FetchImageFromURL(ctx, "https://169.254.169.254/latest/meta-data/")
+	_, err := ti.service.FetchImageAssetFromURL(ctx, "https://169.254.169.254/latest/meta-data/")
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
