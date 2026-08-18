@@ -29,6 +29,8 @@ type Service interface {
 	UploadFunctions(context.Context, *UploadFunctionsForm, io.ReadCloser) (res *UploadFunctionsResult, err error)
 	// Upload an OpenAPI v3 document to Gram.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
+	// Fetch an image from a URL and upload it to Gram as an image asset.
+	FetchImageFromURL(context.Context, *FetchImageFromURLForm) (res *UploadImageResult, err error)
 	// Fetch an OpenAPI v3 document from a URL and upload it to Gram.
 	FetchOpenAPIv3FromURL(context.Context, *FetchOpenAPIv3FromURLForm) (res *UploadOpenAPIv3Result, err error)
 	// Serve an OpenAPIv3 asset from Gram.
@@ -86,7 +88,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment", "createSignedChatAttachmentURL", "serveChatAttachmentSigned"}
+var MethodNames = [13]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "fetchImageFromURL", "fetchOpenAPIv3FromURL", "serveOpenAPIv3", "serveFunction", "listAssets", "uploadChatAttachment", "serveChatAttachment", "createSignedChatAttachmentURL", "serveChatAttachmentSigned"}
 
 type Asset struct {
 	// The ID of the asset
@@ -126,6 +128,16 @@ type CreateSignedChatAttachmentURLResult struct {
 	URL string
 	// When the signed URL expires
 	ExpiresAt string
+}
+
+// FetchImageFromURLForm is the payload type of the assets service
+// fetchImageFromURL method.
+type FetchImageFromURLForm struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The URL to fetch the image from
+	URL string
 }
 
 // FetchOpenAPIv3FromURLForm is the payload type of the assets service

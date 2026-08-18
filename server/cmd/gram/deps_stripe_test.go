@@ -16,10 +16,12 @@ func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *tes
 	t.Parallel()
 
 	ctx := newStripeCLIContext(t, map[string]string{
-		"environment":             "local",
-		"stripe-api-key":          "unset",
-		"stripe-price-id-tum":     "partial-price",
-		"stripe-meter-event-name": "",
+		"environment":                    "local",
+		"stripe-api-key":                 "unset",
+		"stripe-price-id-tum":            "partial-price",
+		"stripe-meter-id-tum":            "",
+		"stripe-meter-event-name":        "",
+		"stripe-portal-configuration-id": "",
 	})
 
 	client, err := newStripeClient(
@@ -37,10 +39,12 @@ func TestNewStripeClientRealClientValidatesCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx := newStripeCLIContext(t, map[string]string{
-		"environment":             "local",
-		"stripe-api-key":          "sk_test_placeholder",
-		"stripe-price-id-tum":     "partial-price",
-		"stripe-meter-event-name": "",
+		"environment":                    "local",
+		"stripe-api-key":                 "sk_test_placeholder",
+		"stripe-price-id-tum":            "partial-price",
+		"stripe-meter-id-tum":            "mtr_placeholder",
+		"stripe-meter-event-name":        "",
+		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
 	client, err := newStripeClient(
@@ -75,11 +79,13 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx := newStripeCLIContext(t, map[string]string{
-		"environment":             "prod",
-		"stripe-api-key":          "sk_test_placeholder",
-		"stripe-webhook-secret":   "whsec_placeholder",
-		"stripe-price-id-tum":     "price_placeholder",
-		"stripe-meter-event-name": "tum",
+		"environment":                    "prod",
+		"stripe-api-key":                 "sk_test_placeholder",
+		"stripe-webhook-secret":          "whsec_placeholder",
+		"stripe-price-id-tum":            "price_placeholder",
+		"stripe-meter-id-tum":            "mtr_placeholder",
+		"stripe-meter-event-name":        "tum",
+		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
 	client, err := newStripeClient(
@@ -91,8 +97,10 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
-		PriceIDTUM:     "price_placeholder",
-		MeterEventName: "tum",
+		PriceIDTUM:            "price_placeholder",
+		MeterIDTUM:            "mtr_placeholder",
+		MeterEventName:        "tum",
+		PortalConfigurationID: "bpc_placeholder",
 	}, client.Catalog())
 }
 
@@ -147,7 +155,9 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
+	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
+	set.String("stripe-portal-configuration-id", "", "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))

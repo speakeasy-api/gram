@@ -1373,7 +1373,9 @@ func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType str
 		return nil
 	}
 
-	if pu.IncludedCredits > 0 && pu.Credits >= pu.IncludedCredits {
+	included := conv.PtrValOr(pu.IncludedCredits, 0)
+	used := conv.PtrValOr(pu.Credits, 0)
+	if included > 0 && used >= included {
 		return oops.C(oops.CodeInsufficientCredits).LogError(
 			ctx, s.logger,
 			attr.SlogOrganizationID(orgID),

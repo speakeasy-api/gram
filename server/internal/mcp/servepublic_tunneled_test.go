@@ -281,6 +281,28 @@ func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 	require.Zero(t, gateway.forwardCount(), "unknown sessions must not reach the tunnel")
 }
 
+// An offline tunnel (no live route) means the user's tunnel client is not
+// running — that is not a platform fault, so it must surface as 404 rather
+// than polluting the platform 5xx error budget with 502s. The public message
+// must stay generic: tunnel internals are not exposed to callers.
+func TestServePublic_Tunneled_OfflineTunnelIs404(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
+
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, "not found", oopsErr.Error(), "public message must not expose tunnel internals")
+	require.Zero(t, gateway.forwardCount(), "an offline tunnel has nothing to forward to")
+}
+
 // A dead pinned agent session must surface as 404 and drop the mapping so
 // the client re-initializes rather than seeing 502s forever.
 func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {

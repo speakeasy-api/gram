@@ -386,9 +386,8 @@ export function DistributeServersStep({
                 Set up with Platform MCP
               </p>
               <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-                Connect your AI agent to Speakeasy AICP Platform MCP to explore
-                reviewed MCP servers before setting them up for distribution in
-                the browser.
+                Connect your AI agent to Platform MCP to explore reviewed MCP
+                servers before setting them up for distribution in the browser.
               </p>
             </div>
             <Button

@@ -40,6 +40,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -556,6 +557,13 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
               </StatTileGroup>
+
+              {isProjectEmpty && (
+                <PlatformMcpPromotion
+                  surface="project_overview_zero_data"
+                  projectSlug={projectSlug}
+                />
+              )}
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -24,7 +25,7 @@ type DemoteExpiredTrials struct {
 	repo       *trialsrepo.Queries
 	openRouter openrouter.Provisioner
 	audit      *audit.Logger
-	trial      trialemails.Notifier
+	notifier   trialemails.Notifier
 }
 
 func NewDemoteExpiredTrials(
@@ -32,19 +33,15 @@ func NewDemoteExpiredTrials(
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
 	auditLogger *audit.Logger,
-	trialNotifier trialemails.Notifier,
+	notifier trialemails.Notifier,
 ) *DemoteExpiredTrials {
-	if trialNotifier == nil {
-		trialNotifier = trialemails.NoopNotifier{}
-	}
-
 	return &DemoteExpiredTrials{
 		logger:     logger.With(attr.SlogComponent("demote_expired_trials")),
 		db:         db,
 		repo:       trialsrepo.New(db),
 		openRouter: openRouterProvisioner,
 		audit:      auditLogger,
-		trial:      trialNotifier,
+		notifier:   notifier,
 	}
 }
 
@@ -73,14 +70,10 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	trial, err := tx.MarkTrialDemoted(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// A conversion, a completed demotion, or a re-arm (ends_at moved
-		// forward, stamps cleared) landed between the list and this write.
-		// Only a closed trial should drop out of the Loops sequence.
+		// A conversion or a manual reinstatement landed between the list and
+		// this write. The organization is no longer ours to demote.
 		d.logger.InfoContext(ctx, "expired trial changed before demotion",
 			attr.SlogOrganizationID(args.OrganizationID))
-		if err := d.notifyTrialInactiveIfClosed(ctx, args.OrganizationID); err != nil {
-			return err
-		}
 		return nil
 	case err != nil:
 		return fmt.Errorf("mark trial demoted: %w", err)
@@ -91,12 +84,18 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// stamp back and leaves the trial armed for the next sweep, which a lockdown
 	// after the commit would not get: a stamped row drops out of the sweep.
 	//
-	// DisableAPIKey writes its own disabled flag on the pool rather than on
-	// dbtx, so a key already taken down stays down through that rollback. The
-	// organization reads as enterprise with a dead key until the next sweep
-	// completes the demotion.
+	// DisableAPIKeyWithDB writes its disabled flag on the locked key session,
+	// outside dbtx, so a key already taken down stays down through an
+	// organization-transaction rollback. The organization reads as enterprise
+	// with a dead key until the next sweep completes the demotion.
 	for _, keyType := range openrouter.AllKeyTypes {
-		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
+		if err := keybillinglock.With(ctx, d.logger, d.db, args.OrganizationID, keyType, func(conn *pgxpool.Conn) error {
+			dbProvisioner, ok := d.openRouter.(openRouterKeyBillingDBProvisioner)
+			if !ok {
+				return errors.New("OpenRouter key provisioner cannot use the locked database session")
+			}
+			return dbProvisioner.DisableAPIKeyWithDB(ctx, conn, args.OrganizationID, keyType)
+		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}
 	}
@@ -122,30 +121,11 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit trial demotion: %w", err)
 	}
+	if d.notifier != nil {
+		if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {
+			d.logger.ErrorContext(ctx, "notify inactive trial after demotion", attr.SlogOrganizationID(args.OrganizationID), attr.SlogError(err))
+		}
+	}
 
-	d.notifyTrialInactive(ctx, args.OrganizationID)
 	return nil
-}
-
-func (d *DemoteExpiredTrials) notifyTrialInactiveIfClosed(ctx context.Context, organizationID string) error {
-	// GetActiveTrial is the armed-trial predicate. Re-read it immediately
-	// before Loops so a re-arm that landed after MarkTrialDemoted's
-	// ErrNoRows keeps trialActive. Lookup errors fail the activity so
-	// Temporal retries; notifier errors stay logged-only.
-	_, err := d.repo.GetActiveTrial(ctx, organizationID)
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, pgx.ErrNoRows):
-		d.notifyTrialInactive(ctx, organizationID)
-		return nil
-	default:
-		return fmt.Errorf("revalidate trial before inactive notify: %w", err)
-	}
-}
-
-func (d *DemoteExpiredTrials) notifyTrialInactive(ctx context.Context, organizationID string) {
-	if err := d.trial.TrialInactive(ctx, organizationID); err != nil {
-		d.logger.ErrorContext(ctx, "failed to notify trial inactive", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	}
 }

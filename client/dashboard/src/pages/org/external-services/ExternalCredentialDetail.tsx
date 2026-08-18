@@ -10,20 +10,29 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
+import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpIamCredential } from "@gram/client/react-query/getGcpIamCredential";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { providerFromSlug, providerLabel } from "./providers";
-import {
-  activeDetailTab,
-  EXTERNAL_CREDENTIAL_TABS,
-  type ExternalCredentialTab,
-} from "./tabs";
+import { EXTERNAL_CREDENTIAL_TABS, type ExternalCredentialTab } from "./tabs";
+import { KmsKeysTab } from "./tabs/KmsKeysTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 
 const ORG_READ_SCOPES: Scope[] = ["org:read", "org:admin"];
+
+// Maps a credential tab value to its route subpage key (the KMS Keys tab's URL
+// segment is "kms-keys" but its route key is camelCase "kmsKeys").
+const CREDENTIAL_TAB_ROUTE_KEY: Record<
+  ExternalCredentialTab,
+  "overview" | "kmsKeys" | "settings"
+> = {
+  overview: "overview",
+  "kms-keys": "kmsKeys",
+  settings: "settings",
+};
 
 export default function ExternalCredentialDetail(): JSX.Element {
   const { provider: providerParam = "", credentialId = "" } = useParams<{
@@ -60,10 +69,9 @@ export default function ExternalCredentialDetail(): JSX.Element {
     EXTERNAL_CREDENTIAL_TABS,
   );
   const tabHref = (tab: ExternalCredentialTab) =>
-    orgRoutes.externalServices.credentialDetail[tab].href(
-      providerParam,
-      credentialId,
-    );
+    orgRoutes.externalServices.credentialDetail[
+      CREDENTIAL_TAB_ROUTE_KEY[tab]
+    ].href(providerParam, credentialId);
 
   const label = credential?.name ?? "External Credential";
 
@@ -133,6 +141,9 @@ export default function ExternalCredentialDetail(): JSX.Element {
                 <PageTabsTrigger value="overview" asChild>
                   <Link to={tabHref("overview")}>Overview</Link>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="kms-keys" asChild>
+                  <Link to={tabHref("kms-keys")}>KMS Keys</Link>
+                </PageTabsTrigger>
                 <PageTabsTrigger value="settings" asChild>
                   <Link to={tabHref("settings")}>Settings</Link>
                 </PageTabsTrigger>
@@ -144,6 +155,9 @@ export default function ExternalCredentialDetail(): JSX.Element {
             <TabsContent value="overview" className="mt-0">
               {credential && <OverviewTab credential={credential} />}
               {isLoading && <Text muted>Loading…</Text>}
+            </TabsContent>
+            <TabsContent value="kms-keys" className="mt-0">
+              <KmsKeysTab credentialId={credentialId} />
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               {credential && (

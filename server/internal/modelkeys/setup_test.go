@@ -80,7 +80,7 @@ func (p *stubProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return 0, nil, p.usageErr
 }
 
-func (p *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (p *stubProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 type GetSetupHandoffToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
 	ProviderKey    string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
 	CatalogRef     string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`
@@ -32,9 +32,10 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 		Title:       "Get Setup Handoff",
 		Description: "Get the secure dashboard continuation for one reviewed MCP registration. Browser Catalogue entries return a server-owned dashboard Inspect URL, which contains the available setup and authorization actions; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
 	}, ToolMeta{
-		// External-only: setup handoffs require a connection, which a
-		// connection-less surface cannot satisfy.
-		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSetupHandoffToolInput) (*mcp.CallToolResult, GetSetupHandoffToolOutput, error) {
+		// The handoff carries the caller to the dashboard, which completes setup
+		// under its own session. A connection-less caller issues a handoff bound
+		// to its user rather than to a connection.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSetupHandoffToolInput) (*mcp.CallToolResult, GetSetupHandoffToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err

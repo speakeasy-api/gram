@@ -1002,6 +1002,39 @@ func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBo
 		SubjectDisplayName:  v.SubjectDisplayName,
 		SubjectPhotoURL:     v.SubjectPhotoURL,
 		RevokedAt:           v.RevokedAt,
+		LastUsedAt:          v.LastUsedAt,
+	}
+	res.Upstreams = make([]*types.UserSessionUpstream, len(v.Upstreams))
+	for i, val := range v.Upstreams {
+		if val == nil {
+			res.Upstreams[i] = nil
+			continue
+		}
+		res.Upstreams[i] = unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(val)
+	}
+
+	return res
+}
+
+// unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream builds a
+// value of type *types.UserSessionUpstream from a value of type
+// *UserSessionUpstreamResponseBody.
+func unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(v *UserSessionUpstreamResponseBody) *types.UserSessionUpstream {
+	res := &types.UserSessionUpstream{
+		RemoteSessionID:        *v.RemoteSessionID,
+		RemoteSessionClientID:  *v.RemoteSessionClientID,
+		RemoteSessionIssuerID:  *v.RemoteSessionIssuerID,
+		IssuerSlug:             *v.IssuerSlug,
+		AccessExpiresAt:        v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		HasRefreshToken:        *v.HasRefreshToken,
+		AutoRefresh:            *v.AutoRefresh,
+		LastUsedAt:             v.LastUsedAt,
+	}
+	res.Scopes = make([]string, len(v.Scopes))
+	for i, val := range v.Scopes {
+		res.Scopes[i] = val
 	}
 
 	return res

@@ -1,6 +1,7 @@
 # Demo org seed
 
-SQL-first seed for the shared, read-only demo organization. The SQL lives in
+SQL-first seed for the shared, read-only demo organization — and, retargeted,
+for your local development organization. The SQL lives in
 `server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
 server binary, and is applied by the `gram demo-seed` subcommand — the SAME
 code path locally and in prod, versioned atomically with each deploy. This
@@ -32,10 +33,45 @@ Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
 rerun regenerates a fresh window, data never goes stale, and no MV backfill is
 ever needed (fresh rows are past every MV date cutoff).
 
+## Tenants
+
+The scripts are written against the demo org's literals. Every other tenant is
+produced by rewriting those literals — one `demoseed.Spec` per tenant, applied
+by `Spec.Rewrite` before the SQL is executed:
+
+| Spec              | Org id                                     | Used by                                      |
+| ----------------- | ------------------------------------------ | -------------------------------------------- |
+| `DefaultSpec()`   | `org_gram_demo_workspace`                  | production's daily run, `mise run seed:demo` |
+| `LocalSpec()`     | derived from WorkOS `org_devidp_speakeasy` | `mise run seed` — your local dev org         |
+| `otherTenantSpec` | `org_gram_othr_workspace`                  | `TestDemoSeedSafety`'s adversarial fixture   |
+
+Rewriting with `DefaultSpec()` is a no-op, so production executes the scripts
+exactly as written (asserted by `TestDefaultSpecRewriteIsIdentity`). Adding a
+new identifier family to the SQL means adding a field to `Spec` — otherwise it
+is NOT rewritten, and the local and test tenants write it into the demo org's
+scope. `TestLocalSpecRewritesEveryDefaultIdentifier` catches that without
+needing a database.
+
+`LocalSpec` identifies the dev-idp's default org, so logging in locally lands
+you inside the seeded data. Unlike the demo org it is a perfectly ordinary
+writable org: none of the demo carve-outs in `authz.Engine` or
+`middleware.DemoOrgWriteGuard` key off it.
+
+Its `OrgID` is **derived**, not equal to the WorkOS org id:
+`organization_metadata.id` for any organization that came from WorkOS is
+`orgid.FromWorkOSID(workos_id)` — a UUIDv5 — and the auth callback recomputes
+it on every login. The demo org is the exception that makes this easy to get
+wrong: its id is hand-written and never came from WorkOS. Seed under the raw
+WorkOS id and the callback derives a different id, inserts a SECOND
+organization, and drops you into an empty org next to the seeded one, with a
+suffixed slug because the seeded row already holds `speakeasy`.
+
 ## Running
 
-- Local: `mise run seed:demo` (wraps `gram demo-seed`), then verify pages
-  with the `verify.md` playbook (playwright agent).
+- Local development: `mise run seed`. Applies `LocalSpec`, then
+  `RunLocalFixtures` — see below.
+- The demo org itself: `mise run seed:demo` (wraps `gram demo-seed`), then
+  verify pages with the `verify.md` playbook (playwright agent).
 - Prod (target wiring, gram-infra repo — NOT a GitHub Action, NOT pg_cron;
   pg_cron is not provisioned on the Cloud SQL instance despite earlier
   assumptions): a Helm-templated Kubernetes CronJob in
@@ -46,6 +82,39 @@ ever needed (fresh rows are past every MV date cutoff).
   db-sweeper CronJob as the template): the app IAM DB user has no CREATE
   grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
   proxy as an explicit sidecar with --quitquitquit so the Job completes.
+
+## Local-only fixtures
+
+`gram demo-seed --local` runs `RunLocalFixtures`
+(`server/internal/demoseed/local.go`) after the seed, adding what a developer
+needs and the shared demo org must never have:
+
+- **You.** A `users` row derived from `git config user.email` exactly as the
+  dev-idp derives it, a membership, the Admin role, platform super-admin, and
+  a direct `chat:read` grant (Admin deliberately omits it, and without it the
+  Agent Sessions list would hide every seeded chat because they belong to the
+  fictional teammates).
+- **Fixed credentials.** A `seed-key` API key and the Postgres-MCP tunnel key,
+  both well-known constants rather than generated values — so `mise.toml` ships
+  `GRAM_API_KEY` and `TUNNEL_LOCAL_*` as checked-in defaults and nothing is
+  written back into `mise.local.toml` after a seed run. `server/.golangci.yaml`
+  carries a narrow, commented `G101` exemption for them: they are genuinely
+  hardcoded credentials, deliberately, scoped to one developer's database.
+- **A default environment**, the global `Gram Recommended` MCP registry row
+  (not tenant-scoped, so it cannot live in the seed proper), and the
+  Playground's MCP App: a Gram Function zipped in-memory from
+  `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
+  demo org never gets a functions deployment production would have to run.
+
+The fixtures are idempotent, and everything they write is either upserted by a
+fixed id or cascades from the seeded deployment/project, so a reseed rolls
+forward cleanly. There is no completion marker: the seed is fast and
+idempotent, so `mise run seed` simply always runs.
+
+Not covered, deliberately: real OpenAPI/functions **deployments** through the
+API. The seed fabricates the tool stack in SQL, which is what the dashboard
+reads, but it never exercises upload → parse → tool generation. Testing that
+pipeline is a test's job, not the seed's.
 
 ## Iteration loop
 
@@ -62,12 +131,13 @@ merge-blocking guard for every seed change, run by the standalone
 
     mise run test:server -tags=demoseed_safety ./internal/demoseed/...
 
-It is build-tagged out of the sharded server suite, so a plain
-`go test ./server/internal/demoseed/` reporting "no test files" is expected.
+The safety test is build-tagged out of the sharded server suite, while the
+package's untagged `TestSeedCELCompiles` test still runs with a plain
+`mise run test:server ./internal/demoseed/`. Use the tagged command above when
+you need to run the safety test.
 
-How it works: a fake "customer" tenant is provisioned by running a
-transformed copy of the seed itself (every demo identifier string-rewritten
-via `otherTenantReplacements`), so the customer has rows in exactly the
+How it works: a fake "customer" tenant is provisioned by running the seed
+retargeted at `otherTenantSpec`, so the customer has rows in exactly the
 tables the seed touches — automatically including tables future seed versions
 add. Then the real seed runs twice, with stray demo rows planted in between,
 and the test asserts:
@@ -86,8 +156,8 @@ What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the
 `gram.deployment.id: demo-seed` marker on all telemetry rows, name ClickHouse
 scoping columns `organization_id`/`gram_project_id`, and register any new
-globally-unique identifier family in `otherTenantReplacements`. The
-`gram-demo-seed` agent skill covers these rules in detail.
+globally-unique identifier family as a `Spec` field. The `gram-demo-seed`
+agent skill covers these rules in detail.
 
 ## Server changes required for user access
 

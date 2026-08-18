@@ -92,10 +92,13 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	if s == nil || s.db == nil {
 		return IssuedSetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// A surface acting under assistant identity issues a handoff bound to its
+	// user; the dashboard completing it authenticates under its own session.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return IssuedSetupHandoff{}, err
 	}
+	connection := principalConnectionPair(principal, connectionID, generation)
 	if err := validateSetupHandoffBinding(principal.OrganizationID, binding); err != nil {
 		return IssuedSetupHandoff{}, err
 	}
@@ -124,7 +127,7 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	}
 	lock := platformrepo.LockPlatformMCPSetupHandoffParams{
 		RegistrationID:       binding.RegistrationID.String(),
-		ConnectionID:         connectionID.String(),
+		ConnectionID:         handoffLockKey(principal, connectionID),
 		ConnectionGeneration: generation.String(),
 		Intent:               binding.Intent,
 	}
@@ -135,8 +138,9 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		Intent:               binding.Intent,
 	}); err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("invalidate platform mcp setup handoffs: %w", err)
@@ -146,8 +150,10 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		HandoffHash:          setupHandoffHash(value),
@@ -183,10 +189,13 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 	if s == nil || s.db == nil {
 		return SetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// A handoff issued by a connection-less surface is redeemed by its user, so
+	// the redemption tolerates the absent pair the same way the lookup does.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return SetupHandoff{}, err
 	}
+	connection := principalConnectionPair(principal, connectionID, generation)
 	if err := validateSetupHandoffBinding(principal.OrganizationID, binding); err != nil || value == "" {
 		return SetupHandoff{}, ErrSetupHandoffInvalid
 	}
@@ -212,8 +221,9 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		SubjectUrn:           userSubjectURN(principal.UserID),
@@ -248,7 +258,10 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if s == nil || s.db == nil {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// A handoff issued by a connection-less surface carries no connection to
+	// bind the setup to. The dashboard completing it is authenticated by its own
+	// session, so the setup is identified by the acting user instead.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
@@ -388,8 +401,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -397,8 +410,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -443,8 +456,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     connectionID,
-		ConnectionGeneration:             generation,
+		ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
@@ -456,8 +469,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     connectionID,
-			ConnectionGeneration:             generation,
+			ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
+			ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
 			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		})
 		if loadErr == nil {
@@ -479,8 +492,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         connectionID,
-			ConnectionGeneration: generation,
+			ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+			ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {
@@ -611,8 +624,8 @@ func setupHandoffFromRow(row platformrepo.PlatformMcpSetupHandoff) SetupHandoff 
 		ProviderKey:          row.ProviderKey,
 		Intent:               row.Intent,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 	}
 }
 
@@ -625,8 +638,8 @@ func readinessFromRow(row platformrepo.PlatformMcpReadiness, now time.Time) Read
 		EvidenceCode:         row.EvidenceCode.String,
 		CheckedAt:            row.CheckedAt.Time,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 		Fresh:                row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now),
 	}
 }

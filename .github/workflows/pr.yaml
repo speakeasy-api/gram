@@ -316,9 +316,16 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # hk.pkl amends a pkl package hosted on github.com, so evaluating the
+      # config is a network call on every run. Cache it against a blip there.
+      # Namespaced by runner provider, as the other cache families are.
+      - name: Cache pkl packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
+          path: ~/.pkl/cache
+
       - name: Check formatting
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: hk check --all
 
       - name: Prune aube store
@@ -1120,6 +1127,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: server
 
       - name: Upload server build
@@ -1209,8 +1218,10 @@ jobs:
       - name: Lint proto files
         run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
+      # gram-infra only. --all-packages would pull in pystreams, whose spaCy
+      # model is a 400MB wheel fetched from a github.com release on every run.
       - name: Install uv dependencies
-        run: mise run install:uv --all-packages --locked
+        run: mise run install:uv --package gram-infra --locked
 
       - name: Type-check and test the infra Python package
         run: mise run test:infra
@@ -1320,6 +1331,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: cli
 
       - name: Install Go tools
@@ -1423,6 +1436,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: plog
 
       - name: Test
@@ -1759,7 +1774,7 @@ jobs:
         working-directory: client/dashboard
 
       - name: Lint admin
-        run: pnpm lint
+        run: aube run lint
         working-directory: client/admin
 
       - name: Knip (dead code / unused deps)
@@ -1930,6 +1945,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: functions
 
       - name: Test Go server

@@ -93,12 +93,15 @@ type InfoPayload struct {
 
 // InfoResult is the result type of the auth service info method.
 type InfoResult struct {
-	UserID               string
-	UserEmail            string
-	UserSignature        *string
-	UserDisplayName      *string
-	UserPhotoURL         *string
-	IsAdmin              bool
+	UserID          string
+	UserEmail       string
+	UserSignature   *string
+	UserDisplayName *string
+	UserPhotoURL    *string
+	IsAdmin         bool
+	// The WorkOS Dashboard operator who initiated this impersonation session.
+	// Empty for ordinary authentication.
+	ImpersonatorEmail    *string
 	ActiveOrganizationID string
 	GramAccountType      string
 	// Whether the organization has an active billing subscription

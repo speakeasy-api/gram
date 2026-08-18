@@ -102,7 +102,7 @@ flowchart LR
   s_gram_risk_v1_prompt_policy_analyzer --> c20
   c21[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
   s_gram_telemetry_v1_noop --> c21
-  c22[\"📥<br/>server/cmd/gram/streams.go<br/>svixRelayHandler"\]:::go
+  c22[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
   s_gram_webhooks_v1_svix_relay --> c22
 ```
 

@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -28,6 +29,7 @@ type WeeklyUsageSummaryTarget struct {
 	OrganizationID   string
 	OrganizationName string
 	OrganizationSlug string
+	AccountType      string
 	AlertEmail       string
 	AnchorDay        int
 }
@@ -68,7 +70,7 @@ func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, chConn clickho
 }
 
 // ListTargets resolves the organizations due a weekly usage summary:
-// enabled orgs with a billing alert email configured.
+// enabled enterprise and PAYG organizations eligible for billing email.
 func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSummaryTarget, error) {
 	rows, err := a.repo.ListWeeklyUsageSummaryTargets(ctx)
 	if err != nil {
@@ -77,15 +79,12 @@ func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSumm
 
 	targets := make([]WeeklyUsageSummaryTarget, 0, len(rows))
 	for _, row := range rows {
-		alertEmail := conv.FromPGText[string](row.AlertEmail)
-		if alertEmail == nil {
-			continue
-		}
 		targets = append(targets, WeeklyUsageSummaryTarget{
 			OrganizationID:   row.OrganizationID,
 			OrganizationName: row.OrganizationName,
 			OrganizationSlug: row.OrganizationSlug,
-			AlertEmail:       *alertEmail,
+			AccountType:      row.GramAccountType,
+			AlertEmail:       conv.FromPGTextOrEmpty[string](row.AlertEmail),
 			AnchorDay:        int(row.BillingCycleAnchorDay),
 		})
 	}
@@ -149,6 +148,18 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		return nil
 	}
 
+	configuredEmail := conv.PtrEmpty(target.AlertEmail)
+	// Targets persisted by workflows started before AccountType was added came
+	// only from the legacy enterprise-with-email query.
+	accountType := conv.Default(target.AccountType, string(billing.TierEnterprise))
+	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.db, target.OrganizationID, accountType, configuredEmail)
+	if len(recipients) == 0 {
+		if resolutionErr == nil {
+			logger.InfoContext(ctx, "skipping weekly usage summary without eligible recipient")
+		}
+		return resolutionErr
+	}
+
 	viewUsageURL := ""
 	if a.siteURL != nil {
 		viewUsageURL = a.siteURL.JoinPath(target.OrganizationSlug, "billing").String()
@@ -166,9 +177,15 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		ViewUsageURL:        viewUsageURL,
 	}
 
-	idempotencyKey := fmt.Sprintf("weekly-usage-summary:%s:%s", target.OrganizationID, now.Format(time.DateOnly))
-	if err := a.emails.SendIdempotent(ctx, target.AlertEmail, idempotencyKey, tmpl); err != nil {
-		return fmt.Errorf("dispatch weekly usage summary email: %w", err)
+	deliveryErrors := []error{resolutionErr}
+	for _, recipient := range recipients {
+		idempotencyKey := recipientEmailIdempotencyKey(recipient, "weekly-usage-summary", target.OrganizationID, now.Format(time.DateOnly))
+		if err := a.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
+			deliveryErrors = append(deliveryErrors, fmt.Errorf("dispatch weekly usage summary email: %w", err))
+		}
+	}
+	if err := errors.Join(deliveryErrors...); err != nil {
+		return err
 	}
 
 	logger.InfoContext(ctx, "sent weekly usage summary")

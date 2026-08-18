@@ -123,6 +123,14 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /user_management/authenticate", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Code string `json:"code"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		resp := map[string]any{
 			"access_token":    fmt.Sprintf("mock_access_token_%p", userInfo),
@@ -136,6 +144,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 				"profile_picture_url": "",
 				"external_id":         userInfo.ExternalID,
 			},
+		}
+		if request.Code == "impersonation_code" {
+			resp["authentication_method"] = "Impersonation"
+			resp["impersonator"] = map[string]string{
+				"email":  "support@example.com",
+				"reason": "Investigating a reported issue",
+			}
 		}
 		_ = json.NewEncoder(w).Encode(resp)
 	})

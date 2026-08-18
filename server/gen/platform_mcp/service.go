@@ -22,6 +22,9 @@ type Service interface {
 	GetOnboarding(context.Context, *GetOnboardingPayload) (res *PlatformMCPOnboardingState, err error)
 	// Create or resume the current user's durable Platform MCP onboarding workflow.
 	StartOnboarding(context.Context, *StartOnboardingPayload) (res *PlatformMCPOnboardingState, err error)
+	// Record a bounded Platform MCP dashboard CTA impression, selection, or
+	// dismissal.
+	RecordDashboardCtaEvent(context.Context, *RecordDashboardCtaEventPayload) (err error)
 	// Record a selected manual-install client family for the current user's
 	// Platform MCP workflow.
 	RecordInstallIntent(context.Context, *RecordInstallIntentPayload) (res *PlatformMCPOnboardingState, err error)
@@ -72,7 +75,7 @@ const ServiceName = "platformMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"getOnboarding", "startOnboarding", "recordInstallIntent", "recordAgentConfigurationCopied", "startOnboardingSetup", "recheckOnboardingReadiness", "distributeOnboardingCandidate", "removeOnboardingDistribution", "repairOnboardingPublication", "dismissOnboarding"}
+var MethodNames = [11]string{"getOnboarding", "startOnboarding", "recordDashboardCtaEvent", "recordInstallIntent", "recordAgentConfigurationCopied", "startOnboardingSetup", "recheckOnboardingReadiness", "distributeOnboardingCandidate", "removeOnboardingDistribution", "repairOnboardingPublication", "dismissOnboarding"}
 
 // DismissOnboardingPayload is the payload type of the platformMcp service
 // dismissOnboarding method.
@@ -119,6 +122,9 @@ type PlatformMCPOnboardingState struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string
 	// Whether the user copied Platform MCP configuration or completed an
@@ -127,6 +133,11 @@ type PlatformMCPOnboardingState struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool
@@ -182,6 +193,16 @@ type RecordAgentConfigurationCopiedPayload struct {
 	SessionToken *string
 }
 
+// RecordDashboardCtaEventPayload is the payload type of the platformMcp
+// service recordDashboardCtaEvent method.
+type RecordDashboardCtaEventPayload struct {
+	// CTA action.
+	Action string
+	// CTA surface.
+	Surface      string
+	SessionToken *string
+}
+
 // RecordInstallIntentPayload is the payload type of the platformMcp service
 // recordInstallIntent method.
 type RecordInstallIntentPayload struct {
@@ -213,7 +234,9 @@ type RepairOnboardingPublicationPayload struct {
 // StartOnboardingPayload is the payload type of the platformMcp service
 // startOnboarding method.
 type StartOnboardingPayload struct {
-	SessionToken *string
+	// Bounded dashboard surface that opened setup.
+	SourceSurface *string
+	SessionToken  *string
 }
 
 // StartOnboardingSetupPayload is the payload type of the platformMcp service

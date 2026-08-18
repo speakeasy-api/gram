@@ -174,13 +174,6 @@ function CatalogInner() {
           onChange: (v) => pageState.setSort(v as SortOption),
           options: CATALOG_SORT_OPTIONS,
         }}
-        count={
-          isLoading
-            ? undefined
-            : filteredServers.length === allServers.length
-              ? `${allServers.length} servers`
-              : `${filteredServers.length} of ${allServers.length} servers`
-        }
         viewToggle={{ value: viewMode, onChange: setViewMode }}
         onRefresh={() => void refetchCatalog()}
         isRefreshing={isFetching}

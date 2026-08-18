@@ -67,6 +67,7 @@ Contains the main application code for the Gram server:
 - `mise build:server`: Build the server binary
 - `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
+- `mise run test:server`: Run server tests; accepts the same extra arguments as `go test` and runs from `server/`, so package paths are relative to `server/` (for example, `mise run test:server ./internal/thirdparty/openrouter/`)
 - `mise run start`: Run the process manager that spins up local servers (server, worker, idp, ...)
 - `hk fix`: Runs formatters across changed files in the current branch.
 

@@ -356,28 +356,3 @@ func TestMetrics_CacheResultLabelsPinned(t *testing.T) {
 	require.Equal(t, "cached", string(fetchResultCached))
 	require.Equal(t, "conditional_not_modified", string(fetchResultConditionalNotModified))
 }
-
-// TestMetrics_ReservedResultLabels pins the provisional label spelling that a
-// follow-up issue will emit — rate_limited (AIS-215) — so dashboards built on
-// this vocabulary stay valid when the emitting code lands. AIS-371's
-// admission_denied is deliberately absent: admission records to its own
-// cimd.admission.decisions counter, since a denial means no fetch ran and so
-// has no place under fetch.attempts.
-func TestMetrics_ReservedResultLabels(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	reader := sdkmetric.NewManualReader()
-	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	m := newMetrics(meterProvider, testenv.NewLogger(t))
-
-	require.Equal(t, "rate_limited", string(fetchResultRateLimited))
-	m.RecordAttempt(ctx, "client.example.com", fetchResultRateLimited)
-
-	rm := collectMetrics(t, reader)
-
-	attempts := counterPoints(t, rm, meterFetchAttempts)
-	require.Len(t, attempts, 1)
-	requireAttr(t, attempts[0].Attributes, attr.OutcomeKey, string(fetchResultRateLimited))
-	requireAttr(t, attempts[0].Attributes, attr.CIMDOriginKey, "client.example.com")
-}

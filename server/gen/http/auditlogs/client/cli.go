@@ -13,7 +13,7 @@ import (
 
 // BuildListPayload builds the payload for the auditlogs list endpoint from CLI
 // flags.
-func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
+func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListActingSurface string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
 	var cursor *string
 	{
 		if auditlogsListCursor != "" {
@@ -50,6 +50,12 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 			subjectID = &auditlogsListSubjectID
 		}
 	}
+	var actingSurface *string
+	{
+		if auditlogsListActingSurface != "" {
+			actingSurface = &auditlogsListActingSurface
+		}
+	}
 	var apikeyToken *string
 	{
 		if auditlogsListApikeyToken != "" {
@@ -69,6 +75,7 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 	v.Action = action
 	v.SubjectType = subjectType
 	v.SubjectID = subjectID
+	v.ActingSurface = actingSurface
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

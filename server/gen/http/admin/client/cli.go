@@ -97,10 +97,16 @@ func BuildLogoutPayload(adminLogoutSessionID string) (*admin.LogoutPayload, erro
 
 // BuildGetProjectPayload builds the payload for the admin getProject endpoint
 // from CLI flags.
-func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
+func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectOrganizationIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
 	var idOrSlug string
 	{
 		idOrSlug = adminGetProjectIDOrSlug
+	}
+	var organizationIDOrSlug *string
+	{
+		if adminGetProjectOrganizationIDOrSlug != "" {
+			organizationIDOrSlug = &adminGetProjectOrganizationIDOrSlug
+		}
 	}
 	var adminSessionToken *string
 	{
@@ -110,6 +116,7 @@ func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdmin
 	}
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.OrganizationIDOrSlug = organizationIDOrSlug
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil
@@ -126,8 +133,8 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
 		}
 		if body.AccountType != nil {
-			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "enterprise") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "enterprise"}))
+			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "payg" || *body.AccountType == "enterprise") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "payg", "enterprise"}))
 			}
 		}
 		if err != nil {
@@ -174,8 +181,8 @@ func BuildBulkUpdateAccountTypePayload(adminBulkUpdateAccountTypeBody string, ad
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))
 			}
 		}
-		if !(body.AccountType == "free" || body.AccountType == "pro" || body.AccountType == "enterprise") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", body.AccountType, []any{"free", "pro", "enterprise"}))
+		if !(body.AccountType == "free" || body.AccountType == "pro" || body.AccountType == "payg" || body.AccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", body.AccountType, []any{"free", "pro", "payg", "enterprise"}))
 		}
 		if err != nil {
 			return nil, err

@@ -308,6 +308,73 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 	require.Equal(t, 1, strings.Count(html, `role="tooltip"`))
 }
 
+// A branded issuer renders its display name and logo; the disconnect
+// control is labeled with the same display name.
+func TestConsentTemplateRendersIssuerBranding(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:      "client-id",
+			IssuerSlug:    "corp-okta",
+			IssuerDisplay: "Corporate Okta",
+			IssuerLogoURL: "https://app.getgram.ai/rpc/assets.serveImage?id=00000000-0000-0000-0000-000000000001",
+			Connected:     true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "Corporate Okta")
+	require.Contains(t, html, `class="issuer-logo"`)
+	require.Contains(t, html, `src="https://app.getgram.ai/rpc/assets.serveImage?id=00000000-0000-0000-0000-000000000001"`)
+	// The logo is decorative next to the visible display name, so it must
+	// carry an explicitly empty alt.
+	require.Contains(t, html, `alt=""`)
+	require.Contains(t, html, `aria-label="Disconnect Corporate Okta"`)
+}
+
+// An unbranded issuer keeps the slug-only rendering with no logo element.
+func TestConsentTemplateOmitsLogoWhenIssuerUnbranded(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:      "client-id",
+			IssuerSlug:    "example-issuer",
+			IssuerDisplay: "example-issuer",
+			IssuerLogoURL: "",
+			Connected:     true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "example-issuer")
+	// The stylesheet always mentions .issuer-logo; only the element itself
+	// must be absent.
+	require.NotContains(t, html, `class="issuer-logo"`)
+	require.Contains(t, html, `aria-label="Disconnect example-issuer"`)
+}
+
 func TestFormatTimeRemaining(t *testing.T) {
 	t.Parallel()
 

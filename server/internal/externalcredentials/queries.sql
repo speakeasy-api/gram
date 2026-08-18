@@ -111,6 +111,53 @@ SET impersonate_service_account = sqlc.narg('impersonate_service_account'),
 WHERE external_credential_id = @external_credential_id
 RETURNING *;
 
+-- Locks the external credential row so a preflight run against it cannot be
+-- raced by a concurrent key write. FOR UPDATE is load-bearing and must not be
+-- weakened to FOR NO KEY UPDATE or FOR SHARE: inserting or re-pointing an
+-- external_keys row takes FOR KEY SHARE on this parent row through
+-- external_keys_external_credential_id_fkey, which conflicts with FOR UPDATE but
+-- not with the weaker modes. Downgrading the lock would silently reopen the
+-- TOCTOU window where a key write commits between the preflight and the soft
+-- delete, leaving a live key behind a deleted credential.
+--
+-- This is the only row lock the credential delete takes, and the key delete in
+-- externalkeys locks only the key, so neither path holds one lock while waiting
+-- on the other and the two cannot deadlock.
+-- name: LockExternalCredentialForUpdate :one
+SELECT id
+FROM external_credentials
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM @organization_id
+  AND project_id IS NULL
+  AND provider = @provider
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- Reports whether any live external key still names the credential, which
+-- refuses the delete. Run inside the delete transaction, after taking the row
+-- lock.
+--
+-- Soft-deleted keys do not count: a deleted key signs nothing, so it cannot be
+-- broken by removing the credential that reached it.
+--
+-- The database will not enforce this. external_credentials.deleted is a
+-- generated column, so the soft delete is an UPDATE and
+-- external_keys_external_credential_id_fkey never fires — which is exactly why
+-- soft-deleting a credential today silently orphans every key behind it.
+--
+-- The parameter is explicitly cast because external_keys carries its own
+-- external_credential_id column, which leaves sqlc unable to infer the named
+-- parameter's type from the column reference alone. The check is a single
+-- EXISTS: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool, and an unset
+-- value there would read as "not referenced" and fail this preflight open.
+-- name: SoftDeleteExternalCredentialPreflight :one
+SELECT EXISTS (
+  SELECT 1
+  FROM external_keys
+  WHERE external_credential_id = @external_credential_id::uuid
+    AND deleted IS FALSE
+);
+
 -- name: SoftDeleteExternalCredential :one
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()

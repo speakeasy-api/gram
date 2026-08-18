@@ -33,6 +33,8 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -59,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
@@ -89,6 +92,34 @@ func newStreamsCommand() *cli.Command {
 			Usage:    "Database URL",
 			EnvVars:  []string{"GRAM_DATABASE_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "temporal-address",
+			Usage:   "The address of the temporal server",
+			EnvVars: []string{"TEMPORAL_ADDRESS"},
+			Value:   "localhost:7233",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-namespace",
+			Usage:   "The temporal namespace to use",
+			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			Value:   "default",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-cert",
+			Usage:   "Client cert of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-key",
+			Usage:   "Client key of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
 		},
 		&cli.StringFlag{
 			Name:     "encryption-key",
@@ -123,10 +154,22 @@ func newStreamsCommand() *cli.Command {
 			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-id-tum",
+			Aliases: []string{"stripe.meter_id_tum"},
+			Usage:   "The Stripe TUM billing meter ID",
+			EnvVars: []string{"STRIPE_METER_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-meter-event-name",
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-portal-configuration-id",
+			Aliases: []string{"stripe.portal_configuration_id"},
+			Usage:   "The controlled Stripe customer portal configuration ID",
+			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
 		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
@@ -270,6 +313,22 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create temporal client: %w", err)
+			}
+			if temporalEnv == nil {
+				return errors.New("insufficient options to create temporal client")
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
+
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -399,7 +458,7 @@ func newStreamsCommand() *cli.Command {
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					[]*o11y.NamedResource[client.Client]{},
+					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)
@@ -434,6 +493,21 @@ func newStreamsCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, svixShutdown)
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
+			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
+				var handlerErrors []error
+				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("relay webhook event to Svix: %w", err))
+				}
+				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
+				}
+				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				return errors.Join(handlerErrors...)
+			})
 
 			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
 
@@ -448,7 +522,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
-				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
+				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
 				mustReceive(
 					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},

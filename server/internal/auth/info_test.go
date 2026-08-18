@@ -32,6 +32,7 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 		UserDisplayName:       nil,
 		UserPhotoURL:          nil,
 		IsAdmin:               false,
+		ImpersonatorEmail:     nil,
 		ActiveOrganizationID:  "organization-id",
 		GramAccountType:       "test",
 		HasActiveSubscription: false,
@@ -52,6 +53,7 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 
 	result := authclient.NewInfoResultOK(&body, "session-token", "session-cookie")
 	require.Nil(t, result.Trial)
+	require.Nil(t, result.ImpersonatorEmail)
 }
 
 func TestService_Info(t *testing.T) {
@@ -70,6 +72,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -209,6 +212,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -282,6 +286,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // First org is active
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -345,6 +350,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "customer-org-for-info",
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -404,6 +410,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "target-org-info",
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -462,6 +469,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "org-b-info",
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -556,6 +564,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -607,6 +616,7 @@ func TestService_Info_OrganizationlessSessionContinuesLogin(t *testing.T) {
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: "",
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -643,6 +653,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -782,6 +793,7 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: customerOrgID,
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}
 	err = instance.sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)

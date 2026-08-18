@@ -2,10 +2,14 @@ package activities
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -13,12 +17,14 @@ import (
 type RefreshOpenRouterKey struct {
 	openRouter openrouter.Provisioner
 	logger     *slog.Logger
+	db         *pgxpool.Pool
 }
 
 func NewRefreshOpenRouterKey(logger *slog.Logger, db *pgxpool.Pool, openrouter openrouter.Provisioner) *RefreshOpenRouterKey {
 	return &RefreshOpenRouterKey{
 		openRouter: openrouter,
 		logger:     logger,
+		db:         db,
 	}
 }
 
@@ -38,15 +44,40 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 	if err := keyType.Validate(); err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid openrouter key type").LogError(ctx, o.logger)
 	}
-	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID, keyType, args.Limit)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)
-	}
+	return withOpenRouterKeyBillingConnectionLock(ctx, o.logger, o.db, args.OrgID, keyType, func(conn *pgxpool.Conn, queries *repo.Queries) error {
+		if keyType == openrouter.KeyTypeChat {
+			projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrgID)
+			if err != nil {
+				return fmt.Errorf("read billing state before OpenRouter chat key refresh: %w", err)
+			}
 
-	o.logger.InfoContext(ctx, "refreshed openrouter key limit",
-		attr.SlogOpenRouterKeyLimit(limit),
-		attr.SlogOpenRouterKeyType(string(keyType)),
-	)
+			hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+			if (projection.GramAccountType == string(billing.TierPayg) && !hasSubscription) ||
+				(projection.GramAccountType == string(billing.TierBase) && hasSubscription) {
+				return fmt.Errorf("inconsistent billing state before OpenRouter chat key refresh: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
+			}
+			if projection.GramAccountType == string(billing.TierBase) && !hasSubscription && projection.ChatKeyDisabled.Valid && projection.ChatKeyDisabled.Bool {
+				// Subscription loss marks the existing chat key disabled locally
+				// before publishing the deactivation event. An older refresh must
+				// not reinstate it after that committed transition.
+				return nil
+			}
+		}
 
-	return nil
+		dbProvisioner, ok := o.openRouter.(openRouterKeyBillingDBProvisioner)
+		if !ok {
+			return errors.New("OpenRouter key provisioner cannot use the locked database session")
+		}
+		limit, err := dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, args.OrgID, keyType, args.Limit)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)
+		}
+
+		o.logger.InfoContext(ctx, "refreshed openrouter key limit",
+			attr.SlogOpenRouterKeyLimit(limit),
+			attr.SlogOpenRouterKeyType(string(keyType)),
+		)
+
+		return nil
+	})
 }

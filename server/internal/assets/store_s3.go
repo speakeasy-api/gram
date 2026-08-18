@@ -208,6 +208,22 @@ func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType s
 	return pw, uri, nil
 }
 
+// Delete removes the object; a missing key is success (S3 DeleteObject is
+// idempotent by contract), matching the BlobStore burn-after-read semantics.
+func (sbs *S3BlobStore) Delete(ctx context.Context, u *url.URL) error {
+	subpath, err := sbs.getPath(u)
+	if err != nil {
+		return fmt.Errorf("generate asset path: %w", err)
+	}
+	if _, err := sbs.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(sbs.bucket),
+		Key:    aws.String(subpath),
+	}); err != nil {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}
+
 func (sbs *S3BlobStore) PresignRead(ctx context.Context, subpath string, ttl time.Duration) (*url.URL, error) {
 	uri, err := sbs.getBucketURI(subpath)
 	if err != nil {

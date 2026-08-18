@@ -1,0 +1,27 @@
+<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="#121212" buttonBodyXPadding="22" buttonBodyYPadding="14" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FFFFFF" buttonTextFormat="0" buttonTextFontSize="13" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="#121212" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
+<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem verticalAlignment="middle">
+    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
+  </ColumnItem>
+</Columns>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">BILLING · PAY AS YOU GO ACTIVE</Strong></Paragraph>
+<H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Pay as you go is active.</H1>
+<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is on pay as you go with the full feature set. Tokens under management are metered and billed each cycle. Other inference is billed at provider cost, and security inference is funded by Speakeasy.</Paragraph>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">METERED RATE</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="155" paddingTop="8"><Text textColor="#121212">${data.tum_price_per_million_usd} per million tokens under management</Text></Paragraph>
+</Section>
+<Paragraph paddingTop="28" paddingRight="40" paddingBottom="28" paddingLeft="40">Cycle usage, the current invoice estimate, inference caps, and your payment method are all managed from the billing page.</Paragraph>
+<Button href="{data.action_url}" paddingRight="40" paddingBottom="48" paddingLeft="40">View billing →</Button>
+<Divider />
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">You’re receiving this operational email because this address receives billing notifications for {data.organization_name}.</Paragraph>
+</Section>

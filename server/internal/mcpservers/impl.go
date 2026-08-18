@@ -228,56 +228,79 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Best-effort: an unproxied server has no logo of its own to inherit, so
-	// give it the vendor's favicon as a starting icon rather than leaving it
-	// blank. Backgrounded on a detached context so a slow or unreachable
-	// favicon (up to the fetch's own timeout) doesn't add latency to the
-	// create response; the request's ctx would otherwise cancel this the
-	// moment the handler returns. Bounded independently of the request so a
-	// stuck DB call can't leave the goroutine running forever.
-	if ids.UnproxiedMcpServerID.Valid {
+	// Best-effort: an unproxied or remote server has no logo of its own to
+	// inherit, so give it the vendor's favicon as a starting icon rather than
+	// leaving it blank. Catalog installs set the registry icon unconditionally
+	// via mcpMetadata.set, and this default only fills an unset logo, so the
+	// catalog icon wins regardless of which write lands first. Backgrounded on
+	// a detached context so a slow or unreachable favicon (up to the fetch's
+	// own timeout) doesn't add latency to the create response; the request's
+	// ctx would otherwise cancel this the moment the handler returns. Bounded
+	// independently of the request so a stuck DB call can't leave the
+	// goroutine running forever.
+	if ids.UnproxiedMcpServerID.Valid || ids.RemoteMcpServerID.Valid {
 		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
+		// Deref before spawning: the goroutine outlives the request, and the
+		// auth context must not be read after the handler returns.
+		projectID := *authCtx.ProjectID
 		go func() {
 			defer cancel()
-			s.setDefaultUnproxiedIcon(bgCtx, logger, *authCtx.ProjectID, server.ID, ids.UnproxiedMcpServerID.UUID)
+			s.setDefaultServerIcon(bgCtx, logger, projectID, server.ID, ids)
 		}()
 	}
 
 	return mv.BuildMcpServerView(server), nil
 }
 
-// setDefaultUnproxiedIcon fetches the vendor's favicon and sets it as the
+// setDefaultServerIcon fetches the vendor's favicon and sets it as the
 // newly-created server's icon. Best-effort: any failure is logged and
 // swallowed rather than surfaced, since a missing icon is cosmetic and must
 // never fail the create call it's attached to.
-func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, unproxiedMcpServerID uuid.UUID) {
-	source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
-		ID:        unproxiedMcpServerID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
+func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, ids serverIDs) {
+	var sourceURL string
+	switch {
+	case ids.UnproxiedMcpServerID.Valid:
+		source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
+			ID:        ids.UnproxiedMcpServerID.UUID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
+			return
+		}
+		sourceURL = source.Url
+	case ids.RemoteMcpServerID.Valid:
+		source, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+			ID:        ids.RemoteMcpServerID.UUID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			logger.ErrorContext(ctx, "load remote mcp server for default icon", attr.SlogError(err))
+			return
+		}
+		sourceURL = source.Url
+	default:
 		return
 	}
 
-	vendorURL, err := url.Parse(source.Url)
+	vendorURL, err := url.Parse(sourceURL)
 	if err != nil {
-		logger.ErrorContext(ctx, "parse unproxied mcp server url for default icon", attr.SlogError(err))
+		logger.ErrorContext(ctx, "parse mcp server url for default icon", attr.SlogError(err))
 		return
 	}
 
-	asset, err := s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, vendorURL.Host))
+	asset, err := s.assets.FetchImageAssetFromURL(ctx, vendorFaviconURL(vendorURL.Scheme, vendorURL.Host))
 	if err != nil {
 		// Some vendors only register a favicon against their registrable
 		// domain, not the specific subdomain hosting the MCP endpoint (e.g.
 		// mcp.figma.com has none, figma.com does) -- retry once against that
 		// before giving up.
 		if registrable, rErr := publicsuffix.EffectiveTLDPlusOne(vendorURL.Hostname()); rErr == nil && registrable != vendorURL.Host {
-			asset, err = s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, registrable))
+			asset, err = s.assets.FetchImageAssetFromURL(ctx, vendorFaviconURL(vendorURL.Scheme, registrable))
 		}
 	}
 	if err != nil {
-		logger.WarnContext(ctx, "fetch default favicon for unproxied mcp server", attr.SlogError(err))
+		logger.WarnContext(ctx, "fetch default favicon for mcp server", attr.SlogError(err))
 		return
 	}
 
@@ -302,11 +325,11 @@ func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logg
 		ProjectID:   projectID,
 		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.ErrorContext(ctx, "save default favicon for unproxied mcp server", attr.SlogError(err))
+		logger.ErrorContext(ctx, "save default favicon for mcp server", attr.SlogError(err))
 	}
 }
 
-func unproxiedFaviconURL(scheme, host string) string {
+func vendorFaviconURL(scheme, host string) string {
 	return fmt.Sprintf(
 		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
 		url.QueryEscape(scheme+"://"+host),
@@ -793,10 +816,11 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
+		ProjectID:              *authCtx.ProjectID,
+		CreatedByUserID:        authCtx.UserID,
+		CommitMessage:          "Initial marketplace publish",
+		ForcePlatformMCPRepair: false,
+		SkipIfUnchanged:        false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
