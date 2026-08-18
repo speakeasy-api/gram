@@ -77,7 +77,7 @@ func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float
 	return 0, nil, nil
 }
 
-func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 

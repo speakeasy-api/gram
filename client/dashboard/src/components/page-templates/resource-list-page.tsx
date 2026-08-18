@@ -68,7 +68,6 @@ export function ResourceListPage({
   filters,
   sort,
   viewToggle,
-  count,
   toolbarActions,
   onRefresh,
   isRefreshing,
@@ -99,7 +98,6 @@ export function ResourceListPage({
     filters?: FiltersProps;
     sort?: ComponentProps<typeof Page.Toolbar.SortBy>;
     viewToggle?: { value: ViewMode; onChange: (value: ViewMode) => void };
-    count?: ReactNode;
     toolbarActions?: ReactNode;
     onRefresh?: () => void;
     isRefreshing?: boolean;
@@ -119,7 +117,6 @@ export function ResourceListPage({
       filters != null ||
       sort != null ||
       viewToggle != null ||
-      count != null ||
       toolbarActions != null ||
       onRefresh != null);
 
@@ -152,7 +149,6 @@ export function ResourceListPage({
           {search != null && <Page.Toolbar.Search {...search} />}
           {filters != null && <Page.Toolbar.Filters {...filters} />}
           {sort != null && <Page.Toolbar.SortBy {...sort} />}
-          {count != null && <Page.Toolbar.Count>{count}</Page.Toolbar.Count>}
           {viewToggle != null && <Page.Toolbar.ViewAs {...viewToggle} />}
           {toolbarActions != null && (
             <Page.Toolbar.Actions>{toolbarActions}</Page.Toolbar.Actions>

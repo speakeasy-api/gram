@@ -27,9 +27,15 @@ export const AUDIT_ACTIONS = [
   "aws_kms_key:create",
   "aws_kms_key:delete",
   "aws_kms_key:update",
+  "billing_metadata:cancel_stripe_subscription",
+  "billing_metadata:create_stripe_checkout",
+  "billing_metadata:create_stripe_portal",
+  "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
+  "chat_session:handoff_export",
+  "chat_session:move",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
@@ -72,12 +78,16 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:upsert",
   "openrouter-key:disable",
   "openrouter-key:enable",
+  "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
+  "organization:payg_activated",
+  "organization:payg_deactivated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -173,6 +183,7 @@ export const AUDIT_ACTIONS = [
   "tunneled-mcp:update",
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
+  "user-session-client:cimd-refresh",
   "user-session-client:revoke",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
@@ -262,12 +273,24 @@ export function staticActionPhrase(action: AuditAction): string {
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
 
+    case "billing_metadata:create_stripe_checkout":
+      return "started Stripe checkout for";
+    case "billing_metadata:create_stripe_portal":
+      return "opened Stripe billing portal for";
+    case "billing_metadata:cancel_stripe_subscription":
+      return "canceled Stripe subscription for";
+    case "billing_metadata:resume_stripe_subscription":
+      return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
       return "opened chat session";
+    case "chat_session:handoff_export":
+      return "exported chat session handoff";
+    case "chat_session:move":
+      return "moved chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -352,6 +375,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled platform OpenRouter key";
     case "openrouter-key:enable":
       return "enabled platform OpenRouter key";
+    case "openrouter-key:set_spend_cap":
+      return "changed inference cap for";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
@@ -367,8 +392,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_extended":
+      return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
+    case "organization:payg_activated":
+      return "activated pay-as-you-go billing for";
+    case "organization:payg_deactivated":
+      return "deactivated pay-as-you-go billing for";
 
     case "organization_invitation:create":
       return "invited";
@@ -580,6 +611,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "user-session:revoke":
       return "revoked user session";
+    case "user-session-client:cimd-refresh":
+      return "refreshed the client metadata document for";
     case "user-session-client:revoke":
       return "revoked user session client";
     case "user-session-consent:revoke":

@@ -109,8 +109,44 @@ func TestService_Login(t *testing.T) {
 		var state map[string]any
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
-		require.Equal(t, redirectURL, state["final_destination_url"])
+		require.Equal(t, "/dashboard/projects/my-project", state["final_destination_url"])
 		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
+	})
+
+	t.Run("login drops a redirect that leaves the dashboard origin", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		// AIS-428: browsers normalize the leading "/\" to "//", so storing this
+		// verbatim would hand the callback a protocol-relative destination.
+		for _, redirectURL := range []string{
+			`/\attacker.example.net`,
+			"//attacker.example.net/phish",
+			"https://attacker.example.net/phish",
+		} {
+			payload := &gen.LoginPayload{
+				Redirect: &redirectURL,
+			}
+			result, err := instance.service.Login(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			parsedURL, err := url.Parse(result.Location)
+			require.NoError(t, err)
+			stateParam := parsedURL.Query().Get("state")
+			require.NotEmpty(t, stateParam, "state parameter should be present")
+
+			stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
+			require.NoError(t, err)
+
+			var state map[string]any
+			err = json.Unmarshal(stateBytes, &state)
+			require.NoError(t, err)
+			require.Empty(t, state["final_destination_url"], "redirect %q must not reach the state param", redirectURL)
+			require.NotEmpty(t, state["nonce"], "state should contain a nonce")
+		}
 	})
 
 	t.Run("login with complex redirect URL encodes state correctly", func(t *testing.T) {
@@ -138,7 +174,7 @@ func TestService_Login(t *testing.T) {
 		var state map[string]any
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
-		require.Equal(t, redirectURL, state["final_destination_url"])
+		require.Equal(t, "/dashboard/projects/my-project?tab=settings&view=details", state["final_destination_url"])
 		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
 	})
 

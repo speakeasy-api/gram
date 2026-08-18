@@ -6,7 +6,8 @@ import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useLocation, useMatch, useParams } from "react-router";
+import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
@@ -20,6 +21,12 @@ function PageHeaderComponent({
   className?: string;
   children: React.ReactNode;
 }) {
+  // The org billing route, matched as a route rather than by suffix: a project
+  // path ending in the same segment is a different page, and suppressing the
+  // banner there would hide a paused organization from the page it was working
+  // on.
+  const onBillingPage = useMatch("/:orgSlug/billing") !== null;
+
   return (
     <>
       <header
@@ -41,6 +48,11 @@ function PageHeaderComponent({
           divides the main panel's header from its content on the right side. */}
       <BrandGradientLine />
       <OnboardingBanner />
+      {/* Inference stopping is felt on whichever page the user was working on,
+          so the reason for it rides the header rather than waiting on the
+          billing page. Billing renders all of its banners together so payment
+          failure can remain the first, destructive state. */}
+      {!onBillingPage && <PaygCapReachedBanners />}
     </>
   );
 }

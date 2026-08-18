@@ -24,7 +24,7 @@ export function GcpGrantInstructions(): JSX.Element {
   if (isError) {
     return (
       <Text small muted>
-        Could not load Gram's service account. Reload to try again.
+        Could not load Speakeasy's service account. Reload to try again.
       </Text>
     );
   }
@@ -32,21 +32,21 @@ export function GcpGrantInstructions(): JSX.Element {
   return (
     <Stack gap={2}>
       <Text small muted>
-        Grant Gram's service account the{" "}
+        Grant Speakeasy's service account the{" "}
         <span className="font-mono">
           {data?.requiredRole ?? "roles/iam.serviceAccountTokenCreator"}
         </span>{" "}
-        role on the service account you want Gram to impersonate.
+        role on the service account you want Speakeasy to impersonate.
       </Text>
       {data?.serviceAccountEmail ? (
         <GrantValue
-          label="Gram service account"
+          label="Speakeasy service account"
           value={data.serviceAccountEmail}
         />
       ) : (
         <Text small muted>
-          This environment cannot report Gram's service account. Contact support
-          for the principal to grant.
+          This environment cannot report Speakeasy's service account. Contact
+          support for the principal to grant.
         </Text>
       )}
     </Stack>

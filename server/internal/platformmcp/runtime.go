@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 const (
@@ -101,6 +102,9 @@ type ReadinessRecorder interface {
 }
 
 type Runtime struct {
+	// registrar holds every tool this deployment composed, so an admitted
+	// audience can be served from the same pass that built the endpoint.
+	registrar            *Registrar
 	authenticator        Authenticator
 	gate                 Gate
 	authorizer           Authorizer
@@ -122,13 +126,15 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *Runtime {
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
 		readiness:            readiness,
-		server:               newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate),
+		server:               server,
+		registrar:            registrar,
 	}
 	if readiness != nil {
 		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -219,11 +225,52 @@ func (r *Runtime) authenticate(req *http.Request) (Principal, error) {
 
 type principalContextKey struct{}
 
+// ContextWithPrincipal binds an acting identity to a context so tool handlers
+// read it with PrincipalFromContext. Exported for the assistant adapter, which
+// calls handlers directly rather than through the MCP transport.
+func ContextWithPrincipal(ctx context.Context, principal Principal) context.Context {
+	return contextWithPrincipal(ctx, principal)
+}
+
+// contextWithPrincipal binds the acting identity, and with it the attribution
+// audit records for any write the call goes on to make.
+//
+// Platform MCP authenticates its own way, so nothing else on the context tells
+// audit which surface is acting; without this mark a registration made by an
+// agent would be recorded exactly like one made from the dashboard. Marking
+// here rather than at each call site means every path that establishes a
+// principal — the HTTP endpoint and the assistant adapter alike — is attributed
+// by construction.
 func contextWithPrincipal(ctx context.Context, principal Principal) context.Context {
+	ctx = contextvalues.SetActingSurface(ctx, string(principal.surface()))
+	// Only a principal holding an OAuth connection has a registered client to
+	// name. Other surfaces carry an internal client identifier that is not an
+	// OAuth client record, and recording it would misrepresent where the
+	// identity came from; the surface already says who acted.
+	//
+	// The connection-less path clears the value rather than leaving it alone.
+	// This context may descend from a request that authenticated as some other
+	// OAuth client — the assistant adapter runs inside one — and inheriting it
+	// would attribute the write to a client that had no part in it.
+	if principal.HasConnection() {
+		ctx = contextvalues.SetOAuthClientID(ctx, principal.ClientID)
+	} else {
+		ctx = contextvalues.SetOAuthClientID(ctx, "")
+	}
 	return context.WithValue(ctx, principalContextKey{}, principal)
 }
 
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	principal, ok := ctx.Value(principalContextKey{}).(Principal)
 	return principal, ok
+}
+
+// AssistantTools returns the descriptors admitted to a project's managed
+// assistant. The assistant adapter composes these directly; nothing else in
+// the catalogue reaches it.
+func (r *Runtime) AssistantTools() []Descriptor {
+	if r == nil {
+		return nil
+	}
+	return r.registrar.For(AudienceAssistant)
 }

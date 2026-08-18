@@ -1,13 +1,13 @@
-import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import {
   useEffect,
   useRef,
-  useState,
   type JSX,
   type ReactNode,
   type RefObject,
 } from "react";
 
+import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,9 @@ import { cn, fmtDateShort } from "@/lib/utils";
 
 import { OrganizationActions } from "./OrganizationActions";
 
-const COPY_CONFIRM_MS = 1500;
-
 // One panel is on the page at a time, so a constant is enough and the row's
 // trigger can point `aria-controls` at it without threading an id through.
 export const PEEK_PANEL_ID = "organization-peek-panel";
-
-function noop(): void {}
 
 function Field({
   label,
@@ -38,49 +34,6 @@ function Field({
       <dt className="text-muted-foreground text-sm">{label}</dt>
       <dd className="min-w-0 text-sm">{children}</dd>
     </>
-  );
-}
-
-function CopyValue({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}): JSX.Element {
-  // The value copied, not a flag. Peek swaps the record under a mounted panel,
-  // and a flag would stand as a confirmation against an id never copied,
-  // including where the write resolves after the swap.
-  const [copiedValue, setCopiedValue] = useState<string>();
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const copied = copiedValue === value;
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  return (
-    <span className="flex items-center gap-1">
-      <span className="truncate font-mono text-xs">{value}</span>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={copied ? `${label} copied` : `Copy ${label}`}
-        onClick={() => {
-          // Undefined outside a secure context, where the call would throw.
-          if (!navigator.clipboard?.writeText) return;
-          // A check over a failed write sends the operator off with the wrong id.
-          void navigator.clipboard.writeText(value).then(() => {
-            setCopiedValue(value);
-            clearTimeout(timer.current);
-            timer.current = setTimeout(
-              () => setCopiedValue(undefined),
-              COPY_CONFIRM_MS,
-            );
-          }, noop);
-        }}
-      >
-        {copied ? <CheckIcon /> : <CopyIcon />}
-      </Button>
-    </span>
   );
 }
 
@@ -168,7 +121,7 @@ export function PeekPanel({
           list watches for Escape and the arrow keys, and a menu would answer
           Escape before the panel it is drawn in. */}
       <div className="flex min-h-8 items-center gap-2 p-4">
-        <OrganizationActions org={org} layout="footer" />
+        <OrganizationActions org={org} layout="buttons" />
       </div>
     </aside>
   );

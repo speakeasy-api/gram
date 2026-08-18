@@ -21,7 +21,6 @@ type Server struct {
 	Mounts      []*MountPoint
 	ListKeys    http.Handler
 	GetKeyUsage http.Handler
-	EncryptKey  http.Handler
 	DisableKey  http.Handler
 	EnableKey   http.Handler
 }
@@ -55,13 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListKeys", "GET", "/rpc/adminOpenRouterKeys.listKeys"},
 			{"GetKeyUsage", "GET", "/rpc/adminOpenRouterKeys.getKeyUsage"},
-			{"EncryptKey", "POST", "/rpc/adminOpenRouterKeys.encryptKey"},
 			{"DisableKey", "POST", "/rpc/adminOpenRouterKeys.disableKey"},
 			{"EnableKey", "POST", "/rpc/adminOpenRouterKeys.enableKey"},
 		},
 		ListKeys:    NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
 		GetKeyUsage: NewGetKeyUsageHandler(e.GetKeyUsage, mux, decoder, encoder, errhandler, formatter),
-		EncryptKey:  NewEncryptKeyHandler(e.EncryptKey, mux, decoder, encoder, errhandler, formatter),
 		DisableKey:  NewDisableKeyHandler(e.DisableKey, mux, decoder, encoder, errhandler, formatter),
 		EnableKey:   NewEnableKeyHandler(e.EnableKey, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -74,7 +71,6 @@ func (s *Server) Service() string { return "adminOpenRouterKeys" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListKeys = m(s.ListKeys)
 	s.GetKeyUsage = m(s.GetKeyUsage)
-	s.EncryptKey = m(s.EncryptKey)
 	s.DisableKey = m(s.DisableKey)
 	s.EnableKey = m(s.EnableKey)
 }
@@ -86,7 +82,6 @@ func (s *Server) MethodNames() []string { return adminopenrouterkeys.MethodNames
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListKeysHandler(mux, h.ListKeys)
 	MountGetKeyUsageHandler(mux, h.GetKeyUsage)
-	MountEncryptKeyHandler(mux, h.EncryptKey)
 	MountDisableKeyHandler(mux, h.DisableKey)
 	MountEnableKeyHandler(mux, h.EnableKey)
 }
@@ -179,59 +174,6 @@ func NewGetKeyUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getKeyUsage")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "adminOpenRouterKeys")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountEncryptKeyHandler configures the mux to serve the "adminOpenRouterKeys"
-// service "encryptKey" endpoint.
-func MountEncryptKeyHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/adminOpenRouterKeys.encryptKey", f)
-}
-
-// NewEncryptKeyHandler creates a HTTP handler which loads the HTTP request and
-// calls the "adminOpenRouterKeys" service "encryptKey" endpoint.
-func NewEncryptKeyHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeEncryptKeyRequest(mux, decoder)
-		encodeResponse = EncodeEncryptKeyResponse(encoder)
-		encodeError    = EncodeEncryptKeyError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "encryptKey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminOpenRouterKeys")
 		payload, err := decodeRequest(r)
 		if err != nil {

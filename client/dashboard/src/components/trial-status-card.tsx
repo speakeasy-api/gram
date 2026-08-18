@@ -1,13 +1,12 @@
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import {
   getTrialLifecycleFromDates,
   getTrialStatusFromDates,
-  isValidDate,
-  MILLISECONDS_PER_DAY,
 } from "@/lib/trial-status";
-import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 // The in-app upgrade gate, which prefills the booking form from the session.
@@ -42,50 +41,9 @@ function getTrialProgressColorClass(
 
 export function TrialStatusCard(): React.ReactNode {
   const { trial } = useSession();
-  const [now, setNow] = useState(() => new Date());
+  const now = useTrialNow(trial);
   const status = getTrialStatusFromDates(trial, now);
   const lifecycle = getTrialLifecycleFromDates(trial, now);
-  const startedAt = isValidDate(trial?.startedAt)
-    ? trial.startedAt.getTime()
-    : undefined;
-  const endsAt = isValidDate(trial?.endsAt)
-    ? trial.endsAt.getTime()
-    : undefined;
-  const nowTime = now.getTime();
-  const dayNumber = status?.dayNumber;
-  const remainingDays = status?.remainingDays;
-
-  useEffect(() => {
-    setNow(new Date());
-  }, [trial?.startedAt, trial?.endsAt]);
-
-  useEffect(() => {
-    if (
-      startedAt === undefined ||
-      endsAt === undefined ||
-      dayNumber === undefined ||
-      remainingDays === undefined
-    ) {
-      return;
-    }
-
-    const nextDayBoundary = startedAt + dayNumber * MILLISECONDS_PER_DAY;
-    const nextRemainingDaysBoundary =
-      endsAt - (remainingDays - 1) * MILLISECONDS_PER_DAY;
-    const nextUpdateAt = Math.min(
-      endsAt,
-      nextDayBoundary > nowTime ? nextDayBoundary : Infinity,
-      nextRemainingDaysBoundary > nowTime
-        ? nextRemainingDaysBoundary
-        : Infinity,
-    );
-    const timer = window.setTimeout(
-      () => setNow(new Date()),
-      nextUpdateAt - nowTime,
-    );
-
-    return () => window.clearTimeout(timer);
-  }, [dayNumber, endsAt, nowTime, remainingDays, startedAt]);
 
   if (status === null && lifecycle !== "expired") {
     return null;
@@ -146,6 +104,9 @@ export function TrialStatusCard(): React.ReactNode {
             />
           </div>
         </div>
+        {/* Self-serve upgrade for admins still in the trial; sales stays the
+            fallback for everyone else and for expired trials. */}
+        <StartPaygCheckoutCTA size="sm" label="Add payment method" />
         <Link
           to={SALES_PATH}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

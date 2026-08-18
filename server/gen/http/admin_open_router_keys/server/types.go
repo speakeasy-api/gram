@@ -12,15 +12,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncryptKeyRequestBody is the type of the "adminOpenRouterKeys" service
-// "encryptKey" endpoint HTTP request body.
-type EncryptKeyRequestBody struct {
-	// Organization that owns the key.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Key type to encrypt.
-	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
-}
-
 // DisableKeyRequestBody is the type of the "adminOpenRouterKeys" service
 // "disableKey" endpoint HTTP request body.
 type DisableKeyRequestBody struct {
@@ -59,32 +50,6 @@ type GetKeyUsageResponseBody struct {
 	UpstreamLimit *int64 `form:"upstream_limit,omitempty" json:"upstream_limit,omitempty" xml:"upstream_limit,omitempty"`
 }
 
-// EncryptKeyResponseBody is the type of the "adminOpenRouterKeys" service
-// "encryptKey" endpoint HTTP response body.
-type EncryptKeyResponseBody struct {
-	// Organization that owns the key.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Display name of the owning organization.
-	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
-	// Slug of the owning organization.
-	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
-	GramAccountType string `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
-	// Which upstream key this row provisions: 'chat' pays for customer-facing
-	// completions, 'internal' pays for platform-initiated LLM usage.
-	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
-	// Monthly credit ceiling last mirrored from OpenRouter.
-	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-	// Whether the key is locked down (refused locally and disabled upstream).
-	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
-	// Storage state of the key material.
-	EncryptionStatus string `form:"encryption_status" json:"encryption_status" xml:"encryption_status"`
-	// When the key row was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the key row was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
 // DisableKeyResponseBody is the type of the "adminOpenRouterKeys" service
 // "disableKey" endpoint HTTP response body.
 type DisableKeyResponseBody struct {
@@ -103,8 +68,6 @@ type DisableKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
-	// Storage state of the key material.
-	EncryptionStatus string `form:"encryption_status" json:"encryption_status" xml:"encryption_status"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -129,8 +92,6 @@ type EnableKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
-	// Storage state of the key material.
-	EncryptionStatus string `form:"encryption_status" json:"encryption_status" xml:"encryption_status"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -489,190 +450,6 @@ type GetKeyUsageUnexpectedResponseBody struct {
 // service "getKeyUsage" endpoint HTTP response body for the "gateway_error"
 // error.
 type GetKeyUsageGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyUnauthorizedResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "unauthorized"
-// error.
-type EncryptKeyUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyForbiddenResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "forbidden" error.
-type EncryptKeyForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyBadRequestResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "bad_request" error.
-type EncryptKeyBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyNotFoundResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "not_found" error.
-type EncryptKeyNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyConflictResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "conflict" error.
-type EncryptKeyConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyUnsupportedMediaResponseBody is the type of the
-// "adminOpenRouterKeys" service "encryptKey" endpoint HTTP response body for
-// the "unsupported_media" error.
-type EncryptKeyUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyInvalidResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "invalid" error.
-type EncryptKeyInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyInvariantViolationResponseBody is the type of the
-// "adminOpenRouterKeys" service "encryptKey" endpoint HTTP response body for
-// the "invariant_violation" error.
-type EncryptKeyInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyUnexpectedResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "unexpected" error.
-type EncryptKeyUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EncryptKeyGatewayErrorResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "gateway_error"
-// error.
-type EncryptKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1073,8 +850,6 @@ type AdminOpenRouterKeyResponseBody struct {
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
-	// Storage state of the key material.
-	EncryptionStatus string `form:"encryption_status" json:"encryption_status" xml:"encryption_status"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -1111,24 +886,6 @@ func NewGetKeyUsageResponseBody(res *adminopenrouterkeys.GetKeyUsageResult) *Get
 	return body
 }
 
-// NewEncryptKeyResponseBody builds the HTTP response body from the result of
-// the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *EncryptKeyResponseBody {
-	body := &EncryptKeyResponseBody{
-		OrganizationID:   res.OrganizationID,
-		OrganizationName: res.OrganizationName,
-		OrganizationSlug: res.OrganizationSlug,
-		GramAccountType:  res.GramAccountType,
-		KeyType:          res.KeyType,
-		MonthlyCredits:   res.MonthlyCredits,
-		Disabled:         res.Disabled,
-		EncryptionStatus: res.EncryptionStatus,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
-	}
-	return body
-}
-
 // NewDisableKeyResponseBody builds the HTTP response body from the result of
 // the "disableKey" endpoint of the "adminOpenRouterKeys" service.
 func NewDisableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *DisableKeyResponseBody {
@@ -1140,7 +897,6 @@ func NewDisableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Dis
 		KeyType:          res.KeyType,
 		MonthlyCredits:   res.MonthlyCredits,
 		Disabled:         res.Disabled,
-		EncryptionStatus: res.EncryptionStatus,
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
 	}
@@ -1158,7 +914,6 @@ func NewEnableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Enab
 		KeyType:          res.KeyType,
 		MonthlyCredits:   res.MonthlyCredits,
 		Disabled:         res.Disabled,
-		EncryptionStatus: res.EncryptionStatus,
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
 	}
@@ -1439,147 +1194,6 @@ func NewGetKeyUsageUnexpectedResponseBody(res *goa.ServiceError) *GetKeyUsageUne
 // service.
 func NewGetKeyUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetKeyUsageGatewayErrorResponseBody {
 	body := &GetKeyUsageGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyUnauthorizedResponseBody(res *goa.ServiceError) *EncryptKeyUnauthorizedResponseBody {
-	body := &EncryptKeyUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyForbiddenResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyForbiddenResponseBody(res *goa.ServiceError) *EncryptKeyForbiddenResponseBody {
-	body := &EncryptKeyForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyBadRequestResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyBadRequestResponseBody(res *goa.ServiceError) *EncryptKeyBadRequestResponseBody {
-	body := &EncryptKeyBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyNotFoundResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyNotFoundResponseBody(res *goa.ServiceError) *EncryptKeyNotFoundResponseBody {
-	body := &EncryptKeyNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyConflictResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyConflictResponseBody(res *goa.ServiceError) *EncryptKeyConflictResponseBody {
-	body := &EncryptKeyConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyUnsupportedMediaResponseBody builds the HTTP response body from
-// the result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *EncryptKeyUnsupportedMediaResponseBody {
-	body := &EncryptKeyUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyInvalidResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyInvalidResponseBody(res *goa.ServiceError) *EncryptKeyInvalidResponseBody {
-	body := &EncryptKeyInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "encryptKey" endpoint of the "adminOpenRouterKeys"
-// service.
-func NewEncryptKeyInvariantViolationResponseBody(res *goa.ServiceError) *EncryptKeyInvariantViolationResponseBody {
-	body := &EncryptKeyInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyUnexpectedResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyUnexpectedResponseBody(res *goa.ServiceError) *EncryptKeyUnexpectedResponseBody {
-	body := &EncryptKeyUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEncryptKeyGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyGatewayErrorResponseBody(res *goa.ServiceError) *EncryptKeyGatewayErrorResponseBody {
-	body := &EncryptKeyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1892,18 +1506,6 @@ func NewGetKeyUsagePayload(organizationID string, keyType string, sessionToken *
 	return v
 }
 
-// NewEncryptKeyPayload builds a adminOpenRouterKeys service encryptKey
-// endpoint payload.
-func NewEncryptKeyPayload(body *EncryptKeyRequestBody, sessionToken *string) *adminopenrouterkeys.EncryptKeyPayload {
-	v := &adminopenrouterkeys.EncryptKeyPayload{
-		OrganizationID: *body.OrganizationID,
-		KeyType:        *body.KeyType,
-	}
-	v.SessionToken = sessionToken
-
-	return v
-}
-
 // NewDisableKeyPayload builds a adminOpenRouterKeys service disableKey
 // endpoint payload.
 func NewDisableKeyPayload(body *DisableKeyRequestBody, sessionToken *string) *adminopenrouterkeys.DisableKeyPayload {
@@ -1926,23 +1528,6 @@ func NewEnableKeyPayload(body *EnableKeyRequestBody, sessionToken *string) *admi
 	v.SessionToken = sessionToken
 
 	return v
-}
-
-// ValidateEncryptKeyRequestBody runs the validations defined on
-// EncryptKeyRequestBody
-func ValidateEncryptKeyRequestBody(body *EncryptKeyRequestBody) (err error) {
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.KeyType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
-	}
-	if body.KeyType != nil {
-		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
-		}
-	}
-	return
 }
 
 // ValidateDisableKeyRequestBody runs the validations defined on

@@ -62,19 +62,32 @@ func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID s
 	return i, err
 }
 
-const extendTrial = `-- name: ExtendTrial :execrows
+const extendTrial = `-- name: ExtendTrial :one
+WITH previous AS (
+    SELECT trials.organization_id, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = $2
+      AND trials.converted_at IS NULL
+      AND trials.demoted_at IS NULL
+      AND trials.ends_at > clock_timestamp()
+    FOR UPDATE
+)
 UPDATE trials
-SET ends_at = ends_at + make_interval(days => $1::int),
+SET ends_at = trials.ends_at + make_interval(days => $1::int),
     updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND converted_at IS NULL
-  AND demoted_at IS NULL
-  AND ends_at > clock_timestamp()
+FROM previous
+WHERE trials.organization_id = previous.organization_id
+RETURNING previous.ends_at AS previous_ends_at, trials.ends_at
 `
 
 type ExtendTrialParams struct {
 	ExtendByDays   int32
 	OrganizationID string
+}
+
+type ExtendTrialRow struct {
+	PreviousEndsAt pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
 }
 
 // Operator-initiated extension. The interval is added to the existing ends_at
@@ -91,10 +104,23 @@ type ExtendTrialParams struct {
 // session TimeZone has to revisit them.
 //
 // Only a running trial can be extended, and the conditions that define running
-// are here rather than in the handler so the database enforces them. Zero rows
+// are here rather than in the handler so the database enforces them. No row
 // means either that the trial cannot be extended or that the organization does
-// not exist at all; the two share a row count but not an operator action, so the
-// handler tells them apart with a follow-up read rather than merging them.
+// not exist at all; the two share an empty result but not an operator action, so
+// the handler tells them apart with a follow-up read rather than merging them.
+//
+// The previous ends_at comes back from a CTE that reads the row before the
+// update rather than from subtracting the interval afterwards: the calendar-day
+// arithmetic above has no exact inverse across a daylight saving boundary, and
+// the audit entry has to carry the date the row actually held.
+//
+// Every condition sits on the locking read and the UPDATE keeps only the join.
+// That placement is load-bearing under READ COMMITTED. FOR UPDATE re-evaluates
+// its own conditions against the newest row version once it stops waiting on a
+// competing writer; the UPDATE's scan cannot, because a row its snapshot already
+// rejects is skipped before the lock is ever taken. With the conditions on the
+// UPDATE, a second operator extending a trial in its last moments unblocks onto
+// a row that just gained two weeks and is told there is no running trial.
 //
 // The three conditions are not equally load-bearing today, and it is worth
 // saying which is which:
@@ -121,12 +147,11 @@ type ExtendTrialParams struct {
 //     afterwards should not have silently lost the ability to extend in between,
 //     and a trial that keeps expiring during the investigation punishes the
 //     investigation.
-func (q *Queries) ExtendTrial(ctx context.Context, arg ExtendTrialParams) (int64, error) {
-	result, err := q.db.Exec(ctx, extendTrial, arg.ExtendByDays, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) ExtendTrial(ctx context.Context, arg ExtendTrialParams) (ExtendTrialRow, error) {
+	row := q.db.QueryRow(ctx, extendTrial, arg.ExtendByDays, arg.OrganizationID)
+	var i ExtendTrialRow
+	err := row.Scan(&i.PreviousEndsAt, &i.EndsAt)
+	return i, err
 }
 
 const getActiveTrial = `-- name: GetActiveTrial :one

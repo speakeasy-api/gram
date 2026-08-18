@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -67,18 +68,30 @@ type Service struct {
 	trial trialemails.Notifier
 }
 
-// TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
+// TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
 // ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
 var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
 
+const keyBillingLockWaitTimeout = 5 * time.Second
+
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
+}
+
+func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
+}
+
+func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrKeyRevivalUnavailable
 }
 
@@ -292,49 +305,61 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) error 
 func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.AdminProjectDetail, error) {
 	queries := repo.New(s.db)
 
-	if id, err := uuid.Parse(payload.IDOrSlug); err == nil {
-		row, err := queries.AdminGetProjectDetailByID(ctx, id)
+	// The organization is resolved to its id first so that both project
+	// addresses below are checked against the same value: the caller names it
+	// the way the URL does, by id or slug, and a project row carries only the id.
+	var orgID string
+	if payload.OrganizationIDOrSlug != nil {
+		var err error
+		orgID, err = queries.AdminResolveOrganizationID(ctx, *payload.OrganizationIDOrSlug)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.C(oops.CodeNotFound)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve organization").LogError(ctx, s.logger)
 		}
-		return adminProjectDetailFromIDRow(row), nil
 	}
 
-	row, err := queries.AdminGetProjectDetailBySlug(ctx, payload.IDOrSlug)
+	// A slug is resolved to one id before the detail is read, never counted
+	// against directly: slugs are unique only within an organization, and the
+	// detail query prices every row it matches. See AdminResolveProjectIDBySlug.
+	id, err := uuid.Parse(payload.IDOrSlug)
+	if err != nil {
+		if orgID != "" {
+			id, err = queries.AdminResolveProjectIDBySlugInOrganization(ctx, repo.AdminResolveProjectIDBySlugInOrganizationParams{
+				OrganizationID: orgID,
+				Slug:           payload.IDOrSlug,
+			})
+		} else {
+			id, err = queries.AdminResolveProjectIDBySlug(ctx, payload.IDOrSlug)
+		}
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.C(oops.CodeNotFound)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve project slug").LogError(ctx, s.logger)
+		}
+	}
+
+	row, err := queries.AdminGetProjectDetailByID(ctx, id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").LogError(ctx, s.logger)
 	}
-	return adminProjectDetailFromSlugRow(row), nil
+
+	// An id addresses a project on its own, so the organization is checked after
+	// the read rather than inside it. Duplicating the six-subquery detail read
+	// for one comparison would cost more than the comparison saves.
+	if orgID != "" && row.OrganizationID != orgID {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return adminProjectDetailFromIDRow(row), nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
-	logo := uuidPtr(row.LogoAssetID)
-	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
-	return &gen.AdminProjectDetail{
-		ID:                     row.ID.String(),
-		Name:                   row.Name,
-		Slug:                   row.Slug,
-		OrganizationID:         row.OrganizationID,
-		LogoAssetID:            logo,
-		FunctionsRunnerVersion: runner,
-		ToolsetCount:           int(row.ToolsetCount),
-		DeploymentCount:        int(row.DeploymentCount),
-		HTTPToolCount:          int(row.HttpToolCount),
-		EnvironmentCount:       int(row.EnvironmentCount),
-		APIKeyCount:            int(row.ApiKeyCount),
-		AssistantCount:         int(row.AssistantCount),
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-	}
-}
-
-func adminProjectDetailFromSlugRow(row repo.AdminGetProjectDetailBySlugRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
@@ -707,45 +732,99 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
 	}
 
-	rows, err := trialsRepo.New(s.db).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial extension transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
 		OrganizationID: payload.ID,
 		ExtendByDays:   int32(payload.Days),
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unextended trial",
+			"organization has no running enterprise trial to extend")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
 	}
-	// Zero rows has two causes that mean different things to the operator, and
-	// only the second is a conflict: the organization does not exist at all, or
-	// it exists and its trial cannot be extended. Disable and enable both answer
-	// not-found for an id that matches nothing, so an operator who pastes one bad
-	// id must not be told to go and look at a trial by this endpoint alone.
-	//
-	// The lookup is on the failure path only, so the happy path still costs one
-	// write and one read.
-	if rows == 0 {
-		_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-			ID:        payload.ID,
-			AllowSlug: false,
-		})
-		switch {
-		case errors.Is(lookupErr, pgx.ErrNoRows):
-			return nil, oops.C(oops.CodeNotFound)
-		case lookupErr != nil:
-			// Falling through to the conflict here would report a trial state we
-			// never managed to read.
-			return nil, oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unextended trial").LogError(ctx, s.logger)
-		}
 
-		// The organization exists, so it is the trial that blocks the write:
-		// converted, demoted, expired, or never granted. Which one is not the
-		// operator's business, and arming a trial that was never granted is the
-		// auth flow's job rather than this endpoint's. failed_precondition would
-		// read better than conflict, but the admin service does not declare it,
-		// so it would leave as a 500.
-		return nil, oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
 	}
+
+	actor, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID: payload.ID,
+		Actor:          actor,
+		// The customer reads this feed, so the entry carries the team label
+		// rather than the operator's email. adminActor says why.
+		ActorDisplayName:    conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      payload.Days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial extension").LogError(ctx, logger)
+	}
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "extended enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+// rejectTrialChange turns a trial write that touched no row into the error the
+// operator should act on. There are two causes and only the second is a
+// conflict: the organization does not exist at all, or it exists and its trial
+// is in the wrong state. Disable and enable both answer not-found for an id that
+// matches nothing, so an operator who pastes one bad id must not be told to go
+// and look at a trial by this endpoint alone.
+//
+// The organization existing means the trial is what blocks the write: converted,
+// demoted, expired, or never granted. Which one is not the operator's business,
+// and arming a trial that was never granted is the auth flow's job rather than
+// this endpoint's. failed_precondition would read better than conflict, but the
+// admin service does not declare it, so it would leave as a 500.
+//
+// The lookup is on the failure path only, and runs on the pool because the
+// caller's transaction is already rolled back.
+func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, organizationID string, lookupContext string, conflictMessage string) error {
+	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(lookupErr, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case lookupErr != nil:
+		// Falling through to the conflict here would report a trial state we
+		// never managed to read.
+		return oops.E(oops.CodeUnexpected, lookupErr, "%s", lookupContext).LogError(ctx, logger)
+	}
+
+	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
 // CreateOrganization creates an organization in WorkOS and then in Gram.
@@ -891,6 +970,57 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
+	var result *gen.AdminOrganization
+	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
+		var lockedErr error
+		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys)
+		return lockedErr
+	})
+	if err == nil {
+		return result, nil
+	}
+
+	var shareable *oops.ShareableError
+	if errors.As(err, &shareable) {
+		return nil, shareable
+	}
+	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+	}
+	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial re-arm").LogError(ctx, logger)
+}
+
+func (s *Service) withTrialKeyBillingLocks(
+	ctx context.Context,
+	logger *slog.Logger,
+	organizationID string,
+	keyTypes []openrouter.KeyType,
+	locked map[openrouter.KeyType]*pgxpool.Conn,
+	operation func() error,
+) error {
+	if len(keyTypes) == 0 {
+		return operation()
+	}
+
+	keyType := keyTypes[0]
+	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		locked[keyType] = conn
+		defer delete(locked, keyType)
+		return s.withTrialKeyBillingLocks(ctx, logger, organizationID, keyTypes[1:], locked, operation)
+	})
+	if err != nil {
+		return fmt.Errorf("hold OpenRouter %s key billing lock for trial re-arm: %w", keyType, err)
+	}
+	return nil
+}
+
+func (s *Service) rearmTrialLocked(
+	ctx context.Context,
+	logger *slog.Logger,
+	payload *gen.RearmTrialPayload,
+	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
+) (*gen.AdminOrganization, error) {
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -902,16 +1032,21 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 
 	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
 		OrganizationID: payload.ID,
-		RearmForDays:   int32(payload.Days),
+		RearmForDays:   conv.SafeInt32(payload.Days),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, s.rejectRearm(ctx, logger, payload.ID)
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unrearmed trial",
+			"organization has no demoted enterprise trial to re-arm")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, payload.ID)
+	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -944,7 +1079,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
 	}
 
-	s.recapRevivedKeys(ctx, logger, payload.ID, uncapped)
+	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
 
 	// Speakeasy-only, and the only place the email meets the entry's subject.
 	logger.InfoContext(ctx, "re-armed enterprise trial",
@@ -954,40 +1089,25 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
 }
 
-// rejectRearm turns a zero-row re-arm into the error the operator should act
-// on: a pasted wrong id must report a missing organization, not a trial state.
-func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        organizationID,
-		AllowSlug: false,
-	})
-	switch {
-	case errors.Is(lookupErr, pgx.ErrNoRows):
-		return oops.C(oops.CodeNotFound)
-	case lookupErr != nil:
-		// Falling through would report a trial state we never managed to read.
-		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
-	}
-
-	// Which of the three reasons applies is not the operator's business.
-	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
-}
-
 // reviveTrialKeys brings every platform key the organization holds back up, and
 // returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
 //
 // Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
 // DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
 //
-// It runs on the pool, not the caller's transaction, so a revived key survives
-// a later rollback. That is the safe direction.
-func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string) ([]openrouter.KeyType, error) {
-	keys := orrepo.New(s.db)
-
+// The caller holds both per-key session locks through commit. Key revival uses
+// those locked sessions but stays outside the organization transaction, so a
+// later rollback leaves the org demoted with live keys instead of exposing an
+// admitted trial whose keys are still disabled.
+func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, error) {
 	var uncapped []openrouter.KeyType
 
 	for _, keyType := range openrouter.AllKeyTypes {
-		row, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+		conn := lockedKeys[keyType]
+		if conn == nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
+		}
+		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
 			OrganizationID: organizationID,
 			KeyType:        string(keyType),
 		})
@@ -996,31 +1116,22 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, orga
 			continue
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		}
-
-		if !row.Disabled {
+		case !row.Disabled:
 			continue
 		}
 
-		// The ceiling recorded on the row, not the policy default: a trial key
-		// is minted well below that default.
-		//
-		// A zero becomes a nil limit, which RefreshAPIKeyLimit resolves on the
-		// pool: pre-commit that reads free. recapRevivedKeys fixes those after.
+		// The ceiling recorded on the row, not the policy default: a trial
+		// key is minted well below that default. A zero resolves from the
+		// pre-commit free-tier projection and is corrected after commit.
 		if row.MonthlyCredits == 0 {
 			uncapped = append(uncapped, keyType)
 		}
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
 		switch {
 		case errors.Is(err, ErrKeyRevivalUnavailable):
-			// CodeInvalid and not CodeGatewayError: the admin app trusts a
-			// response body only below 500, and this names a deployment setting
-			// to fix rather than a call to retry.
 			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
 		case err != nil:
-			// OpenRouter refusing: the operator's action is to retry, not to
-			// read a stack trace.
 			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
 		}
 	}
@@ -1030,13 +1141,20 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, orga
 
 // recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
 // could only revive at the free-tier one. It must run after the commit, because
-// RefreshAPIKeyLimit resolves a nil limit from the pool.
+// a nil limit resolves from the now-committed organization tier.
 //
 // A failure is logged and swallowed: the re-arm is already durable, so an error
 // here would report an armed trial as unarmed.
-func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) {
+func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string, keyTypes []openrouter.KeyType) {
 	for _, keyType := range keyTypes {
-		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil); err != nil {
+		conn := lockedKeys[keyType]
+		if conn == nil {
+			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: missing key lock",
+				attr.SlogOpenRouterKeyType(string(keyType)),
+			)
+			continue
+		}
+		if _, err := s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
 			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
 				attr.SlogError(err),
 				attr.SlogOpenRouterKeyType(string(keyType)),

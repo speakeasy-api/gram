@@ -80,7 +80,8 @@ type Catalog interface {
 type RegistryCatalogSource struct {
 	// Client is constructed by server composition. The local fixture uses a
 	// development-CA-aware client; normal browser-catalogue registries share the
-	// standard client. It is never chosen from Platform MCP input.
+	// standard client. It is never chosen from Platform MCP input. Every source is
+	// strict: search fails closed rather than presenting a partial reviewed catalog.
 	Client      *externalmcp.RegistryClient
 	Descriptors []CatalogDescriptor
 }
@@ -95,14 +96,20 @@ type RegistryCatalog struct {
 }
 
 type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, error)
+type RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
 
 type DynamicRegistryCatalog struct {
-	client *externalmcp.RegistryClient
-	load   CatalogDescriptorLoader
+	client      *externalmcp.RegistryClient
+	load        CatalogDescriptorLoader
+	loadSources RegistryCatalogSourceLoader
 }
 
 func NewDynamicRegistryCatalog(client *externalmcp.RegistryClient, load CatalogDescriptorLoader) *DynamicRegistryCatalog {
 	return &DynamicRegistryCatalog{client: client, load: load}
+}
+
+func NewDynamicRegistryCatalogSources(load RegistryCatalogSourceLoader) *DynamicRegistryCatalog {
+	return &DynamicRegistryCatalog{loadSources: load}
 }
 
 func (c *DynamicRegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
@@ -122,7 +129,17 @@ func (c *DynamicRegistryCatalog) Inspect(ctx context.Context, providerKey, catal
 }
 
 func (c *DynamicRegistryCatalog) current(ctx context.Context) (*RegistryCatalog, error) {
-	if c == nil || c.client == nil || c.load == nil {
+	if c == nil {
+		return nil, ErrCatalogUnavailable
+	}
+	if c.loadSources != nil {
+		sources, err := c.loadSources(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load platform mcp catalog sources: %w", err)
+		}
+		return NewRegistryCatalogSources(sources), nil
+	}
+	if c.client == nil || c.load == nil {
 		return nil, ErrCatalogUnavailable
 	}
 	descriptors, err := c.load(ctx)

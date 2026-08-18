@@ -1,5 +1,143 @@
 # admin
 
+## 0.2.2
+
+### Patch Changes
+
+- 3a8f15f: Add pay-as-you-go as a first-class billing tier across server entitlements, management API tier data, and dashboard and admin tier controls. PAYG organizations receive enterprise feature access with capped PAYG billing behavior, and Stripe-authoritative tier state cannot be overwritten by stale Polar data.
+
+## 0.2.1
+
+### Patch Changes
+
+- d375c27: Platform admins can now create an organization from the organizations list. The
+  endpoint shipped without a caller, so opening an organization still meant leaving
+  Gram for the WorkOS dashboard. A Create organization button sits at the end of
+  the toolbar, takes a name, and creates the organization.
+
+  What it creates is deliberately plain: no members, not whitelisted, no trial, and
+  on the free tier. The server validates the name exactly as self-serve signup
+  validates it, so an operator cannot name an organization something a customer
+  could not have named it.
+
+  The list is fetched again after a create rather than having the new row written
+  into the page on screen. Where that row belongs depends on the sort, the filters
+  and the page the operator is on, so putting it anywhere by hand would put it
+  somewhere the server would not have. For the same reason the confirmation names
+  the organization that was created and says the list may not show it: a list
+  filtered to running trials is right to leave a new free-tier organization out,
+  and the operator still needs to be told the write landed.
+
+  A refused name leaves the dialog open with the name still in it and the server's
+  reason beside it, because a rejected name is one the operator wants to edit
+  rather than retype. A deployment with no WorkOS configuration refuses this way
+  too, so it reports that it cannot create organizations instead of failing
+  silently. A refusal also leaves the list as it found it, so pressing Create while
+  the list is still loading cannot leave the table saying there are no
+  organizations. While a create is in flight, the confirm button, the cancel button, the
+  close control and the Escape key are all held, so one press creates one
+  organization.
+
+- 06d079f: An organization record's Overview now reads as three named groups rather than
+  one flat list of facts. Identity carries the name, slug, organization id, WorkOS
+  id and the created and updated dates. Plan carries the account type and the
+  trial. Access carries Whitelisted and Disabled at.
+
+  Whitelisted keeps its name and sits on its own, because it gates the
+  organization's access to the platform rather than expressing a preference.
+
+  The slug, the organization id and the WorkOS id can each be copied with one
+  click, the same control the organizations list already uses when you peek at a
+  record. An organization with no WorkOS id gets no copy button rather than a
+  button that copies a dash.
+
+  The Members row is gone from the Overview. The record's own nav already counts
+  members, so the row said the same thing twice.
+
+- a595516: An organization record's editable facts are now committed one at a time. The
+  save bar that sat under the whole record is gone, along with the draft it wrote
+  into, so the record no longer holds an unsaved change.
+
+  Changing the account type, or the Whitelisted switch, raises a confirmation
+  naming that one change and nothing else: "Account type: pro → enterprise." The
+  write that follows carries only the field that was changed. A change that is
+  not confirmed is never written, and the control goes back to reading the record
+  on its own.
+
+  Both controls are held while a write is in flight, so one record cannot take
+  two writes at once. Every write now reports through the record's own reporter:
+  spoken on success, and both spoken and shown on failure, in place of the error
+  line the save bar used to carry.
+
+- 234bbcb: An organization in the admin app is now a record rather than a page. The
+  sidebar drops the global nav while an operator is inside one and shows the
+  record instead: a row back to all organizations, the organization's name with
+  its account type and trial state under it, and Overview, Projects, Features and
+  Members, with a count beside Projects and Members. Features is the one item that
+  leaves the admin app: it opens that organization's feature list in the Gram
+  dashboard, in a new tab, and the row is marked so an operator can tell before
+  clicking. An organization with one project
+  carries no count and its Projects item opens that project. The breadcrumb above
+  reads Organizations, then the organization by name, then the view.
+
+  Each of those views has its own address, so a link to one organization's
+  members opens on its members, a refresh stays where it was, and the back button
+  walks back through the views rather than out of the record. A project opened
+  from the list stays inside the record it belongs to, and the record's name,
+  trial and actions stay on screen above it.
+
+  The record's name, account type and trial now sit in a header at the top of
+  every view, beside Open in Gram and Disable. An organization on a live trial
+  also gets a callout naming the day the trial ends, with Extend trial beside the
+  date it acts on. An organization that never trialled shows no trial mark at all.
+
+  The facts themselves are unchanged, apart from one thing worth knowing before
+  you read a date: dates in the moved content are now the server's day in UTC with
+  no clock time, the same reading the organizations list has always shown. The
+  Members table's Last login and Overview's Updated used to carry a time of day in
+  the reader's own zone and no longer do.
+
+- 038c7eb: Opening a project from an organization record could hang forever. Every link
+  into a project now addresses it by id, and `project.get` resolves a slug to one
+  project before it reads that project's detail.
+
+  Project slugs are unique only within an organization, so a slug the whole
+  platform uses matches one project per organization. The detail read counts six
+  child tables for every row it matches, and two of those counts have no index on
+  `project_id` to use, so a common slug cost one full table scan per organization
+  and the read never returned. It now resolves the slug to a single id first and
+  counts once.
+
+  `project.get` also takes the organization now. Inside an organization record the
+  project is read scoped to it, so a slug names one project rather than an
+  arbitrary one, and a project outside that organization is reported as not found
+  whichever way it is addressed.
+
+- 0f51b62: Let a platform admin put a demoted enterprise trial back on from the
+  organizations list. The endpoint has been there since the demotion sweeper
+  shipped, and nothing in the admin app called it, so a demotion was one-way from
+  the admin app and undoing one meant a hand-written API call.
+
+  Re-arm trial sits beside Disable and Extend trial, in the row menu and in the
+  peek panel footer, and it is offered on a demoted trial and on nothing else. A
+  trial that has converted or is still running is refused by the server, an
+  expired one has not been demoted yet, and Extend trial covers the trials that
+  are running: the two actions are never offered on the same record.
+
+  The confirmation says what the action does rather than what its day count
+  suggests. Re-arming restores the organization's account type, brings its model
+  provider keys back, takes it out from behind the book-a-demo gate, and starts a
+  fresh trial of the given length counted from now, not from the date the old one
+  ended on. That is a different action from extending, which only adds days to an
+  end date.
+
+  The day count starts at fourteen days, the trial length the rest of the system
+  assumes, and a count the server would refuse is refused in the browser instead
+  of being sent. A request the server rejects leaves the dialog open with the day
+  count intact, so the operator adjusts the attempt rather than retyping it. The
+  row repaints from the answer, so an organization does not move out from under
+  the operator who just acted on it.
+
 ## 0.2.0
 
 ### Minor Changes

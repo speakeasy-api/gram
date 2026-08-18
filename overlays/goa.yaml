@@ -18,6 +18,9 @@ actions:
       allOf:
         - $ref: "#/components/schemas/Trial"
       nullable: true
+  - target: $.components.schemas.BillingEmail.properties.email
+    update:
+      nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
   - target: $.components.schemas.InfoResponseBody

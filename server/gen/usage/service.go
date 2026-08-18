@@ -23,12 +23,38 @@ type Service interface {
 	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
 	// Set an organization's billing contract terms. Restricted to platform admins.
 	SetBillingMetadata(context.Context, *SetBillingMetadataPayload) (res *TokensUnderManagement, err error)
+	// Get the billing notification email for a PAYG organization
+	GetBillingEmail(context.Context, *GetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set or clear the billing notification email for a PAYG organization
+	SetBillingEmail(context.Context, *SetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set the monthly spend cap for one of a PAYG organization's platform-managed
+	// inference keys
+	SetSpendCap(context.Context, *SetSpendCapPayload) (res *SpendCap, err error)
+	// List current usage and caps for the organization's materialized
+	// platform-managed inference keys
+	GetInferenceSpendCaps(context.Context, *GetInferenceSpendCapsPayload) (res []*InferenceSpendCap, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
+	// Create a Stripe Checkout link for starting PAYG billing
+	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
+	// Get the live lifecycle state of the organization's Stripe PAYG subscription
+	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
+	// Get exact billable usage and estimated cost for the organization's live paid
+	// Stripe service period
+	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *PaygBillingSummary, err error)
+	// Create a Stripe customer portal session for the organization's PAYG
+	// subscription
+	CreateStripePortalSession(context.Context, *CreateStripePortalSessionPayload) (res string, err error)
+	// Schedule the organization's Stripe PAYG subscription to cancel at the end of
+	// its current period
+	CancelStripeSubscription(context.Context, *CancelStripeSubscriptionPayload) (res *StripeSubscription, err error)
+	// Remove a scheduled end-of-period cancellation from the organization's Stripe
+	// PAYG subscription
+	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *StripeSubscription, err error)
 	// Create a checkout link for a one-time credit top-up purchase
 	CreateTopUpCheckout(context.Context, *CreateTopUpCheckoutPayload) (res string, err error)
 }
@@ -53,7 +79,20 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
+var MethodNames = [17]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+
+// BillingEmail is the result type of the usage service getBillingEmail method.
+type BillingEmail struct {
+	// The configured billing notification email. Omitted when organization
+	// administrators receive billing notifications.
+	Email *string
+}
+
+// CancelStripeSubscriptionPayload is the payload type of the usage service
+// cancelStripeSubscription method.
+type CancelStripeSubscriptionPayload struct {
+	SessionToken *string
+}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -67,9 +106,39 @@ type CreateCustomerSessionPayload struct {
 	SessionToken *string
 }
 
+// CreateStripeCheckoutPayload is the payload type of the usage service
+// createStripeCheckout method.
+type CreateStripeCheckoutPayload struct {
+	SessionToken *string
+}
+
+// CreateStripePortalSessionPayload is the payload type of the usage service
+// createStripePortalSession method.
+type CreateStripePortalSessionPayload struct {
+	SessionToken *string
+}
+
 // CreateTopUpCheckoutPayload is the payload type of the usage service
 // createTopUpCheckout method.
 type CreateTopUpCheckoutPayload struct {
+	SessionToken *string
+}
+
+// GetBillingEmailPayload is the payload type of the usage service
+// getBillingEmail method.
+type GetBillingEmailPayload struct {
+	SessionToken *string
+}
+
+// GetInferenceSpendCapsPayload is the payload type of the usage service
+// getInferenceSpendCaps method.
+type GetInferenceSpendCapsPayload struct {
+	SessionToken *string
+}
+
+// GetPaygBillingSummaryPayload is the payload type of the usage service
+// getPaygBillingSummary method.
+type GetPaygBillingSummaryPayload struct {
 	SessionToken *string
 }
 
@@ -79,10 +148,48 @@ type GetPeriodUsagePayload struct {
 	SessionToken *string
 }
 
+// GetStripeSubscriptionPayload is the payload type of the usage service
+// getStripeSubscription method.
+type GetStripeSubscriptionPayload struct {
+	SessionToken *string
+}
+
 // GetTokensUnderManagementPayload is the payload type of the usage service
 // getTokensUnderManagement method.
 type GetTokensUnderManagementPayload struct {
 	SessionToken *string
+}
+
+type InferenceSpendCap struct {
+	// The platform-managed inference function
+	KeyType string
+	// Monthly usage in USD
+	CreditsUsed float64
+	// The enforced monthly spend cap in USD
+	MonthlyCredits int
+	// Whether the platform-managed key is disabled
+	Disabled bool
+}
+
+// PaygBillingSummary is the result type of the usage service
+// getPaygBillingSummary method.
+type PaygBillingSummary struct {
+	// Start of the live paid Stripe service period
+	PeriodStart string
+	// End of the live paid Stripe service period (exclusive)
+	PeriodEnd string
+	// Tokens under management in the live paid service period
+	TumTokens int64
+	// Exact flat USD price per token under management
+	TumUnitPriceUsd string
+	// Exact estimated tokens-under-management cost in USD
+	TumCostUsd string
+	// Exact durable Other inference spend in USD through recorded_through
+	OtherInferenceSpendUsd string
+	// Most recent completed durable UTC spend day included in the estimate
+	RecordedThrough *string
+	// Exact estimated current-cycle total in USD through recorded_through
+	EstimatedTotalUsd string
 }
 
 // PeriodUsage is the result type of the usage service getPeriodUsage method.
@@ -97,12 +204,27 @@ type PeriodUsage struct {
 	IncludedServers int
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount int
-	// The number of credits used
-	Credits int
-	// The number of credits included in the tier
-	IncludedCredits int
+	// The number of credits used. Only populated for platform admins.
+	Credits *int
+	// The number of credits included in the tier. Only populated for platform
+	// admins.
+	IncludedCredits *int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
+}
+
+// ResumeStripeSubscriptionPayload is the payload type of the usage service
+// resumeStripeSubscription method.
+type ResumeStripeSubscriptionPayload struct {
+	SessionToken *string
+}
+
+// SetBillingEmailPayload is the payload type of the usage service
+// setBillingEmail method.
+type SetBillingEmailPayload struct {
+	SessionToken *string
+	// The billing notification email. Omit to notify organization administrators.
+	Email *string
 }
 
 // SetBillingMetadataPayload is the payload type of the usage service
@@ -118,6 +240,49 @@ type SetBillingMetadataPayload struct {
 	AlertEmail *string
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int
+}
+
+// SetSpendCapPayload is the payload type of the usage service setSpendCap
+// method.
+type SetSpendCapPayload struct {
+	SessionToken *string
+	// The platform-managed inference key to update. Defaults to chat for
+	// compatibility.
+	KeyType *string
+	// The monthly inference spend cap in USD
+	MonthlyCredits int
+}
+
+// SpendCap is the result type of the usage service setSpendCap method.
+type SpendCap struct {
+	// The platform-managed inference key whose cap is reported
+	KeyType string
+	// The monthly inference spend cap in USD
+	MonthlyCredits int
+}
+
+// StripeSubscription is the result type of the usage service
+// getStripeSubscription method.
+type StripeSubscription struct {
+	// The live Stripe subscription status
+	Status string
+	// Start of the current Stripe service period
+	CurrentPeriodStart string
+	// End of the current Stripe service period (exclusive)
+	CurrentPeriodEnd string
+	// Start of the Stripe trial, when the subscription is trialing
+	TrialStart *string
+	// End of the Stripe trial, when one is configured
+	TrialEnd *string
+	// Whether Stripe will cancel the subscription at the end of the current period
+	CancelAtPeriodEnd bool
+	// Scheduled cancellation time, when present
+	CancelAt *string
+	// Time cancellation was requested or completed, when present
+	CanceledAt *string
+	// Whether a past-due subscription has an open latest invoice with an unpaid
+	// balance
+	PaymentFailed bool
 }
 
 type TUMPeriod struct {
@@ -158,6 +323,8 @@ type TierLimits struct {
 	IncludedBullets []string
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service
@@ -190,6 +357,8 @@ type UsageTiers struct {
 	Free *TierLimits
 	// The limits for the pro tier
 	Pro *TierLimits
+	// The limits for the pay-as-you-go tier
+	Payg *TierLimits
 	// The limits for the enterprise tier
 	Enterprise *TierLimits
 }

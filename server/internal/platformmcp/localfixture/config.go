@@ -172,7 +172,7 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 			"1. Start the authenticated dashboard setup handoff returned by `get_setup_handoff`.\n" +
 			"2. Complete the local synthetic authorization page.\n" +
 			"3. Recheck authenticated readiness after the completion landing page.\n\n" +
-			"Trusted links: use only the same-origin dashboard handoff and completion route returned by Gram.\n",
+			"Trusted links: use only the same-origin dashboard handoff and completion route returned by the AI Control Plane.\n",
 	}}
 }
 

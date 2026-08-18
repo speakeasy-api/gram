@@ -75,6 +75,8 @@ const (
 	ReasonKey   = attribute.Key("reason")
 	ValueKey    = attribute.Key("value")
 
+	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
+
 	SpanIDKey                    = attribute.Key("span.id")
 	SpanParentIDKey              = attribute.Key("span.parent_id")
 	TraceIDKey                   = attribute.Key("trace.id")
@@ -480,6 +482,10 @@ const (
 	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
 	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
 	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldOrderChangedKey    = attribute.Key("gram.identity_fold.order_changed")
+	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
+	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
 	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
 	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
@@ -831,6 +837,26 @@ func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
 	return slog.Int(string(IdentityFoldLiteralGroupsKey), v)
 }
 
+func IdentityFoldNewKeys(v int) attribute.KeyValue { return IdentityFoldNewKeysKey.Int(v) }
+func SlogIdentityFoldNewKeys(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldNewKeysKey), v)
+}
+
+func IdentityFoldOrderChanged(v bool) attribute.KeyValue { return IdentityFoldOrderChangedKey.Bool(v) }
+func SlogIdentityFoldOrderChanged(v bool) slog.Attr {
+	return slog.Bool(string(IdentityFoldOrderChangedKey), v)
+}
+
+func IdentityFoldTruncated(v bool) attribute.KeyValue { return IdentityFoldTruncatedKey.Bool(v) }
+func SlogIdentityFoldTruncated(v bool) slog.Attr {
+	return slog.Bool(string(IdentityFoldTruncatedKey), v)
+}
+
+func IdentityFoldTokenDelta(v int64) attribute.KeyValue { return IdentityFoldTokenDeltaKey.Int64(v) }
+func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
+	return slog.Int64(string(IdentityFoldTokenDeltaKey), v)
+}
+
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
 
@@ -878,6 +904,11 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
+func SlogStripeWebhookEventID(v string) slog.Attr {
+	return slog.String(string(StripeWebhookEventIDKey), v)
+}
 
 func Expected(v any) attribute.KeyValue { return ExpectedKey.String(fmt.Sprintf("%v", v)) }
 func SlogExpected(v any) slog.Attr      { return slog.Any(string(ExpectedKey), v) }

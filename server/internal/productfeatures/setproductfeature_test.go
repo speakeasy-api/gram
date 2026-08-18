@@ -1,6 +1,7 @@
 package productfeatures_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -386,6 +387,30 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, isEnabled)
 	})
+}
+
+func TestProductFeaturesClient_IsFeatureEnabledUncachedReturnsCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	redisClient, err := infra.NewRedisClient(t, 1)
+	require.NoError(t, err)
+	client := productfeatures.NewClient(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		ti.conn,
+		redisClient,
+	)
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	enabled, err := client.IsFeatureEnabledUncached(canceled, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
+	require.False(t, enabled)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {

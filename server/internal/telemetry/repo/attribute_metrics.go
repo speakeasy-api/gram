@@ -238,7 +238,7 @@ func attributeGroupValueExpr(groupBy, canonicalOrgLit string) (expr string, grou
 // AttributeMetricsRow.DimensionValues. Keys are sorted for deterministic SQL.
 // Dimension keys come from the allowlist (never client input) so inlining the
 // string literals is safe.
-func attributeDimensionValuesExpr(groupBy string) string {
+func attributeDimensionValuesExpr(groupBy, canonicalOrgLit string) string {
 	keys := make([]string, 0, len(attributeDimensionRegistry))
 	for k := range attributeDimensionRegistry {
 		if k == groupBy {
@@ -253,6 +253,13 @@ func attributeDimensionValuesExpr(groupBy string) string {
 	for _, k := range keys {
 		dim := attributeDimensionRegistry[k]
 		var collected string
+		if k == "email" && canonicalOrgLit != "" {
+			// Fold the collected email values so pivot previews and axis
+			// pruning agree with the folded breakdowns they gate: one
+			// employee lists once, under the canonical email.
+			parts = append(parts, "'"+k+"', groupUniqArray("+capStr+")("+canonicalEmailExpr(canonicalOrgLit, "("+dim.column+")")+")")
+			continue
+		}
 		switch dim.kind {
 		case attributeDimArray:
 			// Flatten the per-row arrays and dedup across the group. An empty
@@ -366,7 +373,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
+		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)))).
 		From("attribute_metrics_summaries").
 		// Exclude tombstoned rows (soft-deleted backfill data; see the
 		// is_active column comment in server/clickhouse/schema.sql).
