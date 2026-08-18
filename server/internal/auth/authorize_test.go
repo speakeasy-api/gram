@@ -104,6 +104,7 @@ func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 		ActiveOrganizationID: userInfo.Organizations[0].ID,
 		UserID:               userInfo.UserID,
 		WorkOSSessionID:      "workos-project-access-session",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -136,6 +137,7 @@ func TestAuthorizeSessionRejectsUngrantedOrganizationProject(t *testing.T) {
 		ActiveOrganizationID: userInfo.Organizations[0].ID,
 		UserID:               userInfo.UserID,
 		WorkOSSessionID:      "workos-project-access-session-ungranted",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 

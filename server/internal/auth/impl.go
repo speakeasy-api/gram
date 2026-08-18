@@ -351,6 +351,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		UserID:               userID,
 		ActiveOrganizationID: "",
 		WorkOSSessionID:      idpUser.WorkOSSessionID,
+		ImpersonatorEmail:    idpUser.ImpersonatorEmail(),
 	}
 
 	if len(userInfo.Organizations) == 0 {
@@ -783,6 +784,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
@@ -805,6 +807,11 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
+	}
+
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting auth session").LogError(ctx, s.logger)
 	}
 
 	// Sessions in the shared demo org: append the demo org alongside real
@@ -923,6 +930,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		UserDisplayName:       userInfo.DisplayName,
 		UserPhotoURL:          userInfo.PhotoURL,
 		IsAdmin:               userInfo.Admin,
+		ImpersonatorEmail:     conv.PtrEmpty(session.ImpersonatorEmail),
 		Organizations:         organizations,
 	}, nil
 }
