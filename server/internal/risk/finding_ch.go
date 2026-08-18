@@ -106,18 +106,41 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			continue
 		}
 
-		// Annotate findings suppressed by a going-forward exclusion instead of
-		// dropping them, so excluded findings stay auditable and filterable at
-		// read time. The shadow scan path that feeds this writer does not apply
-		// exclusions, so we mirror the Postgres path here. Dead-letter sentinels
-		// carry no rule/match to match against, so they bypass the check.
+		// Suppression annotation. A message-carried excluded_at (set only on
+		// republished findings recording a manual suppression state change, see
+		// Finding.excluded_at) wins verbatim, reason and detail included. A
+		// parse failure must skip the message rather than fall through
+		// unsuppressed — the same clobber hazard as false_positive_at below.
+		//
+		// Otherwise annotate findings suppressed by a going-forward exclusion
+		// instead of dropping them, so excluded findings stay auditable and
+		// filterable at read time. The shadow scan path that feeds this writer
+		// does not apply exclusions, so we mirror the Postgres path here.
+		// Dead-letter sentinels carry no rule/match to match against, so they
+		// bypass the check. This branch also runs for an unmark republish
+		// (empty excluded_at): a finding still matching an active exclusion is
+		// re-stamped as rule-suppressed instead of resurfacing.
 		var excludedAt *time.Time
 		var exclusionID *uuid.UUID
-		if !deadLetter {
+		excludedReason := ""
+		excludedDetail := ""
+		if raw := message.GetExcludedAt(); raw != "" {
+			t, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				logger.ErrorContext(ctx, "finding has invalid excluded_at timestamp", attr.SlogError(err), attr.SlogValueString(raw))
+				w.metrics.RecordFindingCHSkipped(ctx, "invalid_excluded_at")
+				continue
+			}
+			utc := t.UTC()
+			excludedAt = &utc
+			excludedReason = message.GetExcludedReason()
+			excludedDetail = message.GetExcludedDetail()
+		} else if !deadLetter {
 			if exID, ok := w.matchedExclusion(ctx, message); ok {
 				now := time.Now().UTC()
 				excludedAt = &now
 				exclusionID = &exID
+				excludedReason = chrepo.ExcludedReasonRule
 				w.metrics.RecordFindingCHExcluded(ctx)
 			}
 		}
@@ -268,6 +291,8 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			ExcludedAt:               excludedAt,
 			ExclusionID:              exclusionID,
 			FalsePositiveAt:          falsePositiveAt,
+			ExcludedReason:           excludedReason,
+			ExcludedDetail:           excludedDetail,
 			MessageCreatedAt:         messageCreatedAt,
 			AssistantID:              assistantID,
 			ChatSource:               chatSource,

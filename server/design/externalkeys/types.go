@@ -148,6 +148,43 @@ var UpdateGcpKmsKeyForm = Type("UpdateGcpKmsKeyForm", func() {
 	Required("external_credential_id", "name")
 })
 
+// VerifyKmsKeyResult is the outcome of a live probe that Gram can reach an
+// external key and use it to sign. It is ephemeral and never persisted.
+//
+// A probe that reaches the provider and is refused is a reportable outcome
+// rather than a request error, because almost every negative result here names
+// something the key's owner can fix. probe_outcome is what callers branch on;
+// detail explains the result to a human and may carry provider error text.
+//
+// The field is named probe_outcome rather than a bare "outcome", "reason", or
+// "status" because Speakeasy hoists enum attribute names into top-level SDK type
+// names on a first-come-first-served basis, so a generic one collides with an
+// unrelated endpoint that happens to pick the same word.
+var VerifyKmsKeyResult = Type("VerifyKmsKeyResult", func() {
+	Description("Result of a live probe that Gram can reach an external key and use it to sign.")
+
+	Attribute("verified", Boolean, "Whether the key produced a signature that validated against its own public half.")
+	Attribute("probe_outcome", String, "The machine-readable outcome of the probe.", func() {
+		Enum(
+			"verified",
+			"credential_deleted",
+			"credential_unusable",
+			"invalid_resource_name",
+			"key_not_found",
+			"permission_denied",
+			"key_unusable",
+			"unsupported_algorithm",
+			"algorithm_mismatch",
+			"signature_invalid",
+			"unavailable",
+			"unexpected",
+		)
+	})
+	Attribute("detail", String, "Human-readable detail about the probe outcome, including the failure reason when it did not verify.")
+
+	Required("verified", "probe_outcome")
+})
+
 // ListExternalKeysResult wraps the generic, supertype-only list items.
 var ListExternalKeysResult = Type("ListExternalKeysResult", func() {
 	Attribute("keys", ArrayOf(ExternalKeySummary), "The organization's external keys.")

@@ -65,6 +65,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   extendTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  rearmTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   bulkUpdateAccountType:
     vi.fn<
       (
@@ -92,6 +94,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
+    rearmTrial: mocks.rearmTrial,
     bulkUpdateAccountType: mocks.bulkUpdateAccountType,
     createOrganization: mocks.createOrganization,
   };
@@ -409,6 +412,9 @@ beforeEach(() => {
   mocks.extendTrial.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
+  // No default answer: the one describe that re-arms owns a record none of the
+  // rows above it carry, so it supplies its own.
+  mocks.rearmTrial.mockReset();
   // Everything the request asked for, and nothing missing. The reversal guards
   // nothing on its own, because only the length of this array is ever read;
   // "names the organizations the server could not find" is the test that holds
@@ -618,6 +624,21 @@ describe("organizations list", () => {
       expect(lastListParams().account_types).toEqual(["free", "enterprise"]);
     });
     expect(currentSearch(router)).toContain('type=["free","enterprise"]');
+  });
+
+  it("filters by payg, which the type picker offers", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    await openFilters("Type");
+    await chooseFilter("Type", "payg");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["payg"]);
+    });
+    expect(currentSearch(router)).toContain('type=["payg"]');
   });
 
   it("holds the table still until the operator applies", async () => {
@@ -2591,8 +2612,19 @@ describe("organizations list write actions", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
     await screen.findByRole("dialog");
 
-    const days = screen.getByLabelText("Days");
-    fireEvent.change(days, { target: { value: "0" } });
+    // The one refusal the calendar's own bounds cannot prevent: pressing the
+    // selected day again clears the selection.
+    fireEvent.click(screen.getByLabelText("Ends on"));
+    await screen.findByRole("grid");
+    const selected = document.querySelector("td[data-selected='true'] button");
+    if (!(selected instanceof HTMLButtonElement)) {
+      throw new Error("the calendar opened with no day selected");
+    }
+    fireEvent.click(selected);
+    await waitFor(() => {
+      expect(screen.queryByRole("grid")).toBeNull();
+    });
+
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Extend" }));
     });
@@ -2605,7 +2637,7 @@ describe("organizations list write actions", () => {
     // zero-width space alternates, so the second refusal reaches the
     // accessibility tree as a change rather than as silence. Nothing on screen
     // moves on that press, which is the whole reason this path announces.
-    expect(announcement()).toContain("between 1 and 365");
+    expect(announcement()).toContain("Pick a date between");
     expect(liveRegion().textContent).not.toBe(first);
     expect(mocks.extendTrial).not.toHaveBeenCalled();
   });
@@ -2746,27 +2778,21 @@ describe("organizations list write actions", () => {
     );
     await screen.findByRole("dialog");
 
-    // A spinner, which is the premise of everything below: the arrow keys have
-    // something to do inside this field only because it steps its own value,
-    // and the bounds are on the control as well as in the check behind it.
-    // happy-dom does not step a number input on ArrowUp or ArrowDown, so the
-    // attributes are assertable here and the stepping is not.
-    const days = screen.getByLabelText("Days");
-    expect(days.getAttribute("type")).toBe("number");
-    expect(days.getAttribute("min")).toBe("1");
-    expect(days.getAttribute("max")).toBe("365");
-    expect(days.getAttribute("step")).toBe("1");
+    // The control the arrow keys mean something to: it opens a calendar that
+    // walks itself day by day. Dispatched from the trigger rather than from the
+    // grid, so nothing but the list's own handler can claim the key.
+    const endsOn = screen.getByLabelText("Ends on");
 
     // The dialog is drawn in a portal and rendered inside the panel's subtree,
     // so its keys reach the list's handler through React even though the node
-    // is outside the panel. An operator holding ArrowUp to reach 30 days is not
+    // is outside the panel. An operator walking the calendar a week down is not
     // asking the list to walk the peek down the page underneath them.
     const event = new KeyboardEvent("keydown", {
       key: "ArrowDown",
       bubbles: true,
       cancelable: true,
     });
-    days.dispatchEvent(event);
+    endsOn.dispatchEvent(event);
 
     // Read off the row rather than through a role query: an open modal takes
     // the table out of the accessibility tree.
@@ -2785,7 +2811,7 @@ describe("organizations list write actions", () => {
     );
     await screen.findByRole("dialog");
 
-    fireEvent.keyDown(screen.getByLabelText("Days"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByLabelText("Ends on"), { key: "Escape" });
 
     // One surface per press. Escape inside the panel body closes the peek, and
     // this key is inside the panel's React subtree, so two separate things
@@ -4069,5 +4095,89 @@ describe("organizationsSearchSchema", () => {
 
   it.each(cases)("%s", (_name, search, expected) => {
     expect(organizationsSearchSchema(search)).toEqual(expected);
+  });
+});
+
+// The one action whose own success takes its control off the page: a re-armed
+// record is running rather than demoted, so the peek footer drops the Re-arm
+// button and mounts an Extend button beside it. Its own block and its own
+// fixture list, so nothing above this reads a fourth row.
+describe("re-arming a trial from the peek panel", () => {
+  const DEMOTED_ORG: AdminOrganization = {
+    id: "org_placeholder_five",
+    name: "Placeholder Five",
+    slug: "placeholder-five",
+    account_type: "free",
+    whitelisted: false,
+    trial_state: "demoted",
+    member_count: 2,
+    created_at: "2026-02-02T00:00:00Z",
+    updated_at: "2026-02-07T00:00:00Z",
+  };
+
+  const REARMED_TRIAL_END = "2026-09-04T00:00:00Z";
+
+  beforeEach(() => {
+    mocks.listOrganizations.mockResolvedValue({ organizations: [DEMOTED_ORG] });
+    mocks.rearmTrial.mockResolvedValue({
+      ...DEMOTED_ORG,
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "running",
+      trial_ends_at: REARMED_TRIAL_END,
+    });
+  });
+
+  async function pressRearm(): Promise<HTMLElement> {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(DEMOTED_ORG.name);
+    const control = within(peekPanel()).getByRole("button", {
+      name: `Re-arm trial for ${DEMOTED_ORG.name}`,
+    });
+    fireEvent.click(control);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Re-arm" }));
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    return control;
+  }
+
+  it("re-arms from the panel and repaints the panel with the answer", async () => {
+    await pressRearm();
+
+    // The default day count, sent without the operator typing anything.
+    expect(mocks.rearmTrial).toHaveBeenCalledWith({
+      id: DEMOTED_ORG.id,
+      days: 14,
+    });
+    expect(peekPanel().textContent).toContain(shortDate(REARMED_TRIAL_END));
+    expect(announcement()).toBe(
+      `${DEMOTED_ORG.name} trial re-armed for 14 days.`,
+    );
+  });
+
+  it("gives the keyboard to the panel when the control that opened the dialog goes", async () => {
+    const control = await pressRearm();
+
+    // Not the same node through the write, unlike extend: the footer's two
+    // trial controls are sibling conditionals in separate slots, so React
+    // unmounts one and mounts the other rather than reusing the element.
+    expect(control.isConnected).toBe(false);
+    expect(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${DEMOTED_ORG.name}`,
+      }),
+    ).toBeTruthy();
+
+    // The panel, and specifically not the body. Radix would have focused a
+    // DialogTrigger that does not exist here, leaving the keyboard at the top
+    // of the page with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(peekPanel());
+    });
+    expect(document.activeElement).not.toBe(document.body);
   });
 });

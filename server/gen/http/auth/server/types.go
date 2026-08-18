@@ -22,12 +22,15 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               string  `form:"user_id" json:"user_id" xml:"user_id"`
-	UserEmail            string  `form:"user_email" json:"user_email" xml:"user_email"`
-	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              bool    `form:"is_admin" json:"is_admin" xml:"is_admin"`
+	UserID          string  `form:"user_id" json:"user_id" xml:"user_id"`
+	UserEmail       string  `form:"user_email" json:"user_email" xml:"user_email"`
+	UserSignature   *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL    *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin         bool    `form:"is_admin" json:"is_admin" xml:"is_admin"`
+	// The WorkOS Dashboard operator who initiated this impersonation session.
+	// Empty for ordinary authentication.
+	ImpersonatorEmail    *string `form:"impersonator_email,omitempty" json:"impersonator_email,omitempty" xml:"impersonator_email,omitempty"`
 	ActiveOrganizationID string  `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
 	GramAccountType      string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Whether the organization has an active billing subscription
@@ -1340,6 +1343,7 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		UserDisplayName:       res.UserDisplayName,
 		UserPhotoURL:          res.UserPhotoURL,
 		IsAdmin:               res.IsAdmin,
+		ImpersonatorEmail:     res.ImpersonatorEmail,
 		ActiveOrganizationID:  res.ActiveOrganizationID,
 		GramAccountType:       res.GramAccountType,
 		HasActiveSubscription: res.HasActiveSubscription,

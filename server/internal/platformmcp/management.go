@@ -33,7 +33,11 @@ const (
 	repairActionSelectProject        = "select_project"
 	repairActionStartSetup           = "start_setup"
 	repairActionPublication          = "repair_publication"
+
+	platformMCPDashboardCtaCampaign = "track_c_v1"
 )
+
+var platformMCPDashboardCtaNamespace = uuid.MustParse("d9b9e2d5-3107-5ec3-b32d-1f5742d6bb9c")
 
 // ManagementService exposes the session-authenticated dashboard projection. It
 // deliberately returns only bounded lifecycle state; setup handoffs, OAuth
@@ -111,16 +115,51 @@ func (s *ManagementService) GetOnboarding(ctx context.Context, _ *platformmcpgen
 	return s.state(ctx, authCtx, projection, true, readiness, found), nil
 }
 
-func (s *ManagementService) StartOnboarding(ctx context.Context, _ *platformmcpgen.StartOnboardingPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
+func (s *ManagementService) StartOnboarding(ctx context.Context, payload *platformmcpgen.StartOnboardingPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
+	if payload == nil {
+		return nil, oops.C(oops.CodeBadRequest)
+	}
 	authCtx, err := s.enabledContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	projection, err := s.onboarding.Start(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
+	source := OnboardingSourcePlatformMCPSettings
+	if payload.SourceSurface != nil {
+		source = OnboardingSourceSurface(*payload.SourceSurface)
+		if !validOnboardingSource(source) {
+			return nil, oops.C(oops.CodeBadRequest)
+		}
+	}
+	projection, err := s.onboarding.Start(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, source)
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
 	return s.state(ctx, authCtx, projection, true, nil, false), nil
+}
+
+func (s *ManagementService) RecordDashboardCtaEvent(ctx context.Context, payload *platformmcpgen.RecordDashboardCtaEventPayload) error {
+	if payload == nil {
+		return oops.C(oops.CodeBadRequest)
+	}
+	authCtx, err := s.enabledContext(ctx)
+	if err != nil {
+		return err
+	}
+	milestone, ok := platformMCPDashboardCtaMilestone(payload.Action, payload.Surface)
+	if !ok {
+		return oops.C(oops.CodeBadRequest)
+	}
+	if s.db == nil {
+		return oops.C(oops.CodeUnexpected)
+	}
+	if _, err := repo.New(s.db).RecordPlatformMCPDashboardCtaEvent(ctx, repo.RecordPlatformMCPDashboardCtaEventParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Milestone:      milestone,
+		AttemptID:      uuid.NullUUID{UUID: platformMCPDashboardCtaSubject(authCtx.ActiveOrganizationID, authCtx.UserID), Valid: true},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record platform mcp dashboard CTA event")
+	}
+	return nil
 }
 
 func (s *ManagementService) RecordInstallIntent(ctx context.Context, payload *platformmcpgen.RecordInstallIntentPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
@@ -316,13 +355,13 @@ func (s *ManagementService) enabled(ctx context.Context, authCtx *contextvalues.
 }
 
 func (s *ManagementService) disabledState() *platformmcpgen.PlatformMCPOnboardingState {
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.mcpURL, WorkflowActive: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.mcpURL, WorkflowActive: false, OrganizationSetupComplete: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionAuthState: ConnectionAuthStateNotConnected, ReauthorizationReason: "", ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
 }
 
 func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection, enabled bool, readiness *Readiness, readinessFound bool) *platformmcpgen.PlatformMCPOnboardingState {
 	connectionReady := false
-	for _, connection := range projection.Connections {
-		connectionReady = connectionReady || connection.Ready
+	if connection, found := projection.connectionForEvidence(); found {
+		connectionReady = connection.Ready
 	}
 	clientFamily := ""
 	workflowActive := projection.Workflow != nil
@@ -363,6 +402,8 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 	switch {
 	case distributionAvailable && distributionPublicationState == publicationStateRepairRequired:
 		repairAction = repairActionPublication
+	case projection.ConnectionAuthState == ConnectionAuthStateReauthorizationRequired:
+		repairAction = repairActionAuthorizePlatformMCP
 	case workflowActive && !connectionReady:
 		repairAction = repairActionAuthorizePlatformMCP
 	case workflowActive && !registrationComplete:
@@ -381,13 +422,14 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 	case registrationComplete:
 		repairAction = repairActionStartSetup
 	}
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.mcpURL, WorkflowActive: workflowActive, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: len(projection.Connections) > 0, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.mcpURL, WorkflowActive: workflowActive, OrganizationSetupComplete: projection.OrganizationSetupComplete, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive, ConnectionAuthState: projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
 }
 func agentConfigurationReady(projection OnboardingProjection) bool {
 	if projection.Workflow == nil {
 		return false
 	}
-	return projection.Workflow.AgentConfigurationCopiedAt != nil || len(projection.Connections) > 0 || projection.CatalogExplored || projection.RegistrationSucceeded || projection.DistributionToolSucceeded || projection.ReadinessVerified
+	_, hasConnectionEvidence := projection.connectionForEvidence()
+	return projection.Workflow.AgentConfigurationCopiedAt != nil || hasConnectionEvidence || projection.CatalogExplored || projection.RegistrationSucceeded || projection.DistributionToolSucceeded || projection.ReadinessVerified
 }
 func (s *ManagementService) hasSelectedUseEvidence(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection) bool {
 	if authCtx == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil || s.db == nil {
@@ -434,6 +476,24 @@ func (s *ManagementService) currentConnectionPrincipal(authCtx *contextvalues.Au
 	}
 	return Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID, ConnectionID: connection.ID.String(), Generation: connection.Generation.String()}, nil
 }
+func platformMCPDashboardCtaSubject(organizationID, userID string) uuid.UUID {
+	return uuid.NewSHA1(platformMCPDashboardCtaNamespace, []byte(platformMCPDashboardCtaCampaign+"\x00"+organizationID+"\x00"+userSubjectURN(userID)))
+}
+
+func platformMCPDashboardCtaMilestone(action, surface string) (string, bool) {
+	switch action {
+	case "impression", "selected", "dismissed":
+	default:
+		return "", false
+	}
+	switch surface {
+	case "sidebar_footer", "sources_empty", "project_overview_zero_data", "organization_home":
+		return "dashboard_cta_" + action + "_" + surface + "_v1", true
+	default:
+		return "", false
+	}
+}
+
 func onboardingRegistrationIdempotencyKey(workflowID uuid.UUID, projectSlug, providerKey, catalogRef string) string {
 	payload := workflowID.String() + "\x00" + projectSlug + "\x00" + providerKey + "\x00" + catalogRef
 	digest := sha256.Sum256([]byte(payload))

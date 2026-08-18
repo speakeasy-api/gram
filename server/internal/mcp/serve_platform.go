@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -102,7 +104,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)))
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -207,7 +209,11 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
+	protocolVersionHeader string,
 ) (json.RawMessage, error) {
+	// Census parity with the hosted dispatch.
+	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfacePlatform)
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
@@ -217,7 +223,7 @@ func (s *Service) handlePlatformToolsetRequest(
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
 	case "notifications/initialized", "notifications/cancelled":
@@ -231,7 +237,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *metrics, req *rawRequest) (json.RawMessage, error) {
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest) (json.RawMessage, error) {
 	// This path answers ServedPlatformToolset unconditionally and does not
 	// otherwise read the request params. Parsing them purely for telemetry is
 	// the point: without it the platform surface is the one inbound path where
@@ -254,12 +260,10 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram Platform Toolset",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoPlatformToolset,
 			Instructions: "",
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -297,8 +301,9 @@ func (s *Service) listPlatformToolsetTools(
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
-		ID:     req.ID,
-		Result: toolsListResultTools{Tools: tools},
+		ID:             req.ID,
+		Result:         toolsListResultTools{Tools: tools},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
@@ -491,6 +496,7 @@ func (s *Service) callPlatformToolsetTool(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))

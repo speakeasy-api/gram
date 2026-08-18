@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -46,7 +46,7 @@ import { Result } from "../types/fp.js";
  */
 export function platformMcpStartOnboarding(
   client: GramCore,
-  request?: StartPlatformMCPOnboardingRequest | undefined,
+  request: StartPlatformMCPOnboardingRequest,
   security?: StartPlatformMCPOnboardingSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function platformMcpStartOnboarding(
 
 async function $do(
   client: GramCore,
-  request?: StartPlatformMCPOnboardingRequest | undefined,
+  request: StartPlatformMCPOnboardingRequest,
   security?: StartPlatformMCPOnboardingSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,24 +95,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(StartPlatformMCPOnboardingRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(StartPlatformMCPOnboardingRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.StartOnboardingRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/platformMcp.startOnboarding")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

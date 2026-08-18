@@ -20,8 +20,6 @@ SELECT
     k.key_type,
     k.monthly_credits,
     k.disabled,
-    (k.key IS NOT NULL)::boolean AS has_plaintext,
-    (k.key_encrypted IS NOT NULL)::boolean AS has_encrypted,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -44,8 +42,6 @@ type GetOpenRouterAPIKeyForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
-	HasPlaintext     bool
-	HasEncrypted     bool
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -61,8 +57,6 @@ func (q *Queries) GetOpenRouterAPIKeyForAdmin(ctx context.Context, arg GetOpenRo
 		&i.KeyType,
 		&i.MonthlyCredits,
 		&i.Disabled,
-		&i.HasPlaintext,
-		&i.HasEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -78,8 +72,6 @@ SELECT
     k.key_type,
     k.monthly_credits,
     k.disabled,
-    (k.key IS NOT NULL)::boolean AS has_plaintext,
-    (k.key_encrypted IS NOT NULL)::boolean AS has_encrypted,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -96,15 +88,13 @@ type ListOpenRouterAPIKeysForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
-	HasPlaintext     bool
-	HasEncrypted     bool
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
 
 // Platform-admin inventory of every organization's platform OpenRouter keys.
 // Key material is deliberately absent from the select list: this feeds an API
-// response and only needs the encryption state, not the secrets themselves.
+// response that never carries the secrets themselves.
 func (q *Queries) ListOpenRouterAPIKeysForAdmin(ctx context.Context) ([]ListOpenRouterAPIKeysForAdminRow, error) {
 	rows, err := q.db.Query(ctx, listOpenRouterAPIKeysForAdmin)
 	if err != nil {
@@ -122,8 +112,6 @@ func (q *Queries) ListOpenRouterAPIKeysForAdmin(ctx context.Context) ([]ListOpen
 			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.Disabled,
-			&i.HasPlaintext,
-			&i.HasEncrypted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
