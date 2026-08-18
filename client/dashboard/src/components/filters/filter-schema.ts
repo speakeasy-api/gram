@@ -92,6 +92,14 @@ interface BaseDimension<K extends FilterKind> {
    * "All"` for a Risk filter instead of "All risks").
    */
   allLabel?: string;
+  /**
+   * The dimension always holds a value — there is no "all" for it, so its chip
+   * hides the × rather than offering a clear that resolves straight back to a
+   * value. Use for a scope the query cannot run without (e.g. the project a
+   * list is read within), never merely for a filter that happens to be
+   * important.
+   */
+  required?: boolean;
 }
 
 type MultiselectDimension = BaseDimension<"multiselect">;
