@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1113,43 +1114,19 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").LogError(ctx, s.logger)
 	}
 
-	// Normalize and validate every principal URN through urn.ParsePrincipal so
-	// the typed wrapper is the single source of truth on what a principal is.
-	// Role assignments additionally require an active canonical role principal.
-	// The wildcard is a literal token (not a typed URN), so it takes a
-	// fast-path. Email IDs are lowercased here so the device-agent endpoint
-	// can match a lowercased lookup deterministically.
-	urns := make([]string, 0, len(payload.PrincipalUrns))
+	principals := make([]pluginAssignmentPrincipal, 0, len(payload.PrincipalUrns))
 	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
 	for _, raw := range payload.PrincipalUrns {
-		var principalURN string
-		if raw == urn.PrincipalWildcard {
-			principalURN = raw
-		} else {
-			normalized := raw
-			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
-				normalized = string(urn.PrincipalTypeEmail) + ":" + conv.NormalizeEmail(addr)
-			}
-			parsed, err := urn.ParsePrincipal(normalized)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
-			}
-			if parsed.Type == urn.PrincipalTypeRole {
-				if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, parsed); err != nil {
-					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-						return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
-					}
-					return nil, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
-				}
-			}
-			principalURN = parsed.String()
+		principal, err := s.parsePluginAssignmentPrincipal(ctx, ac.ActiveOrganizationID, raw)
+		if err != nil {
+			return nil, err
 		}
 
-		if _, ok := seenURNs[principalURN]; ok {
+		if _, ok := seenURNs[principal.String()]; ok {
 			continue
 		}
-		seenURNs[principalURN] = struct{}{}
-		urns = append(urns, principalURN)
+		seenURNs[principal.String()] = struct{}{}
+		principals = append(principals, principal)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -1159,22 +1136,55 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := s.repo.WithTx(tx)
+	directoryRepo := workosrepo.New(tx)
+	for _, principal := range principals {
+		switch principal.Type {
+		case pluginAssignmentPrincipalDirectoryGroup:
+			groupID, err := uuid.Parse(principal.Identifier)
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.String())
+			}
+			exists, err := directoryRepo.DirectoryGroupExists(ctx, workosrepo.DirectoryGroupExistsParams{ID: groupID, OrganizationID: ac.ActiveOrganizationID})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
+			}
+			if !exists {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.String())
+			}
+		case pluginAssignmentPrincipalDirectoryAttribute:
+			attribute, err := parseDirectoryAttributePrincipal(principal.String())
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.String())
+			}
+			exists, err := directoryRepo.DirectoryAttributeValueExists(ctx, workosrepo.DirectoryAttributeValueExistsParams{OrganizationID: ac.ActiveOrganizationID, AttributeKey: []byte(attribute.Key), AttributeValue: []byte(attribute.Value)})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
+			}
+			if !exists {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.String())
+			}
+		}
+	}
 
 	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").LogError(ctx, s.logger)
 	}
 
-	assignments := make([]*gen.PluginAssignment, 0, len(urns))
-	for _, u := range urns {
+	assignments := make([]*gen.PluginAssignment, 0, len(principals))
+	for _, principal := range principals {
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   u,
+			PrincipalUrn:   principal.String(),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").LogError(ctx, s.logger)
 		}
 		assignments = append(assignments, pluginAssignmentToGen(row))
+	}
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
 	}
 
 	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
@@ -1186,7 +1196,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		PrincipalURNs:    urns,
+		PrincipalURNs:    principalURNs,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").LogError(ctx, s.logger)
 	}

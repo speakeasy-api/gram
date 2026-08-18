@@ -142,6 +142,53 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, arg DeleteD
 	return result.RowsAffected(), nil
 }
 
+const directoryAttributeValueExists = `-- name: DirectoryAttributeValueExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_users AS du
+  WHERE du.organization_id = $1
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND du.attributes ->> $2 = $3
+)
+`
+
+type DirectoryAttributeValueExistsParams struct {
+	OrganizationID string
+	AttributeKey   []byte
+	AttributeValue []byte
+}
+
+func (q *Queries) DirectoryAttributeValueExists(ctx context.Context, arg DirectoryAttributeValueExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, directoryAttributeValueExists, arg.OrganizationID, arg.AttributeKey, arg.AttributeValue)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const directoryGroupExists = `-- name: DirectoryGroupExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_groups
+  WHERE id = $1
+    AND organization_id = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+`
+
+type DirectoryGroupExistsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DirectoryGroupExists(ctx context.Context, arg DirectoryGroupExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, directoryGroupExists, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getDirectoryGroupByWorkOSID = `-- name: GetDirectoryGroupByWorkOSID :one
 SELECT organization_id, name, attributes, deleted
 FROM directory_groups

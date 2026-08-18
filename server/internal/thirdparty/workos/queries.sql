@@ -286,3 +286,23 @@ WHERE du.organization_id = @organization_id
   AND du.email IS NOT NULL
   AND LOWER(du.email) = ANY(@emails::text[])
 ORDER BY email, attribute.key, attribute.value;
+
+-- name: DirectoryAttributeValueExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_users AS du
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND du.attributes ->> @attribute_key = @attribute_value
+);
+
+-- name: DirectoryGroupExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_groups
+  WHERE id = @id
+    AND organization_id = @organization_id
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+);
