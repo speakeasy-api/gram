@@ -84,12 +84,6 @@ func TestIsConfigured(t *testing.T) {
 	require.True(t, IsConfigured("sk_test_placeholder"))
 }
 
-func TestSDKPinsExpectedAPIVersion(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "2026-03-25.dahlia", stripesdk.APIVersion)
-}
-
 type fakeStripeAPI struct {
 	customerParams         *stripesdk.CustomerCreateParams
 	checkoutSessionParams  *stripesdk.CheckoutSessionCreateParams
@@ -932,19 +926,25 @@ func TestVerifyWebhookRejectsReplayedTimestamp(t *testing.T) {
 	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
-func TestVerifyWebhookRejectsWrongAPIVersion(t *testing.T) {
+func TestVerifyWebhookAcceptsSignedEventsAcrossAPIVersions(t *testing.T) {
 	t.Parallel()
 
-	const secret = "whsec_test"
-	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
-		Payload: webhookPayload(t, "2026-05-27.dahlia", time.Now(), map[string]any{"id": "in_test"}),
-		Secret:  secret,
-	})
-	c := &client{webhookSecret: secret}
+	for _, apiVersion := range []string{"2025-09-30.clover", "2026-07-29.dahlia", "2099-01-01.future"} {
+		t.Run(apiVersion, func(t *testing.T) {
+			t.Parallel()
 
-	_, err := c.VerifyWebhook(signed.Payload, signed.Header)
-	require.ErrorContains(t, err, "expected API version "+stripesdk.APIVersion)
-	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
+			const secret = "whsec_test"
+			signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+				Payload: webhookPayload(t, apiVersion, time.Now(), map[string]any{"id": "in_test"}),
+				Secret:  secret,
+			})
+			c := &client{webhookSecret: secret}
+
+			event, err := c.VerifyWebhook(signed.Payload, signed.Header)
+			require.NoError(t, err)
+			require.Equal(t, "in_test", event.ObjectID)
+		})
+	}
 }
 
 func TestStubClientIsSafeToCall(t *testing.T) {

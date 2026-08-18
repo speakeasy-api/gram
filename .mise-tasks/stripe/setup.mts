@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
-//MISE description="Provision and validate the Stripe sandbox TUM meter and metered price, then save the catalog config to mise.local.toml"
+//MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
 
 // Idempotent: the meter is keyed on its event name and the price on its
 // lookup key, so re-running against a sandbox that already has the objects
@@ -160,6 +160,27 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
   return { key: entered, prompted: true };
 }
 
+async function resolveWebhookSecret(key: string): Promise<string> {
+  const listener = await $({
+    nothrow: true,
+    quiet: true,
+    env: { ...process.env, STRIPE_API_KEY: key },
+  })`stripe listen --print-secret --skip-update`;
+  const output = `${listener.stdout}\n${listener.stderr}`;
+  const secret = output.match(/whsec_[A-Za-z0-9]+/)?.[0];
+  if (listener.exitCode !== 0 || !secret) {
+    const details = output
+      .replaceAll(key, "<redacted>")
+      .replace(/(?:sk|rk)_(?:test|live)_[A-Za-z0-9_]+/g, "<redacted>")
+      .replace(/whsec_[A-Za-z0-9]+/g, "<redacted>")
+      .trim();
+    throw new Error(
+      `Initialize Stripe CLI webhook listener secret failed${details ? `: ${details}` : "."}`,
+    );
+  }
+  return secret;
+}
+
 async function findMeter(
   key: string,
   status: "active" | "inactive",
@@ -317,10 +338,14 @@ async function main() {
     ["recurring.meter", price.recurring?.meter, meter.id],
   ]);
 
+  const webhookSecret = await resolveWebhookSecret(key);
+  log.success("Initialized the Stripe CLI webhook signing secret.");
+
   const settings: Record<string, string> = {
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_METER_ID_TUM: meter.id,
     STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
+    STRIPE_WEBHOOK_SECRET: webhookSecret,
   };
   if (prompted) {
     settings.STRIPE_API_KEY = key;
@@ -335,13 +360,29 @@ async function main() {
 
   log.info(
     [
-      "Manual follow-ups (dashboard-only settings, not settable via API):",
-      "  - Billing → Revenue recovery: use 8 Smart Retry attempts over 2 weeks,",
-      "    then cancel the subscription after retries are exhausted.",
-      "  - Billing → Invoices: set a 72-hour finalization grace period for this metered price.",
-      "  - Customer emails: enable failed-payment, finalized-invoice, and receipt emails.",
-      "  - Webhooks: once the webhook route exists, run `stripe listen --forward-to` against it",
-      "    and put the printed whsec_… value in mise.local.toml as STRIPE_WEBHOOK_SECRET.",
+      "Start webhook forwarding for this worktree in a separate terminal:",
+      '  if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi',
+      '  stripe listen --latest --skip-verify --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"',
+    ].join("\n"),
+  );
+
+  log.info(
+    [
+      "Finish Stripe Dashboard setup before sandbox validation:",
+      "",
+      "1. Configure subscription Smart Retries",
+      "   Billing → Revenue recovery → Retries",
+      "   - Under Card payments, click Manage.",
+      "   - Select Smart Retries: 8 retries within 2 weeks.",
+      "   - Set Subscription status to cancel the subscription.",
+      "   - Leave Invoice status as leave the invoice past-due; it applies to one-off invoices.",
+      "   - Save the settings.",
+      "",
+      "2. Configure the metered invoice grace period",
+      "   Settings → Billing → Invoices → Invoice finalization grace period",
+      "   - Click Add rule and set Invoice finalization delay to 72 hours.",
+      "   - Add both conditions: Has a metered price and Invoice is from a subscription cycle.",
+      "   - Save the rule.",
     ].join("\n"),
   );
 

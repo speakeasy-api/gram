@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type allocationStripeMock struct {
@@ -822,4 +824,101 @@ func TestSettleStripeInvoiceAllocations_RefusesVoidCreditDestination(t *testing.
 	err := activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(24 * time.Hour)})
 	require.ErrorContains(t, err, `status "void" does not support credit notes`)
 	require.Empty(t, stripe.creditInputs)
+}
+
+func TestM3FreezeObservationAndCarrySettlementLifecycle(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	reporter, meterStripe, db, organizationID := setupTUMStripeReporter(t, "m3_freeze_carry_lifecycle", "payg", anchor)
+	cycleEnd := anchor.AddDate(0, 1, 0)
+	upsertTUMCycle(t, db, organizationID, anchor, cycleEnd, 2_000_000, nil)
+
+	allocationStripe := &allocationStripeMock{invoices: make(map[string]*stripeclient.InvoiceState)}
+	allocator := activities.NewSettleStripeInvoiceAllocations(testenv.NewLogger(t), db, allocationStripe)
+	addStripeInvoice(t, db, allocationStripe, organizationID, "invoice_original", anchor, cycleEnd, "draft", 0)
+	addStripeInvoice(t, db, allocationStripe, organizationID, "invoice_carry", cycleEnd, cycleEnd.AddDate(0, 1, 0), "draft", 0)
+	createChatKeyAt(t, db, organizationID, anchor.Add(-time.Hour))
+	putDailySpend(t, db, organizationID, anchor, "1.005000")
+
+	meterStripe.On("CreateMeterEvent", mock.Anything, mock.MatchedBy(func(input stripeclient.CreateMeterEventInput) bool {
+		return input.Value == 2_000_000 && input.Timestamp.Equal(cycleEnd.Add(-time.Second)) && input.IdempotencyKey != ""
+	})).Return(nil).Once()
+	freezeAt := cycleEnd.Add(48 * time.Hour)
+	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
+		OrganizationIDs: []string{organizationID},
+		Now:             freezeAt,
+	}))
+	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: freezeAt}))
+
+	finalizedAt := cycleEnd.Add(72 * time.Hour)
+	upsertTUMCycle(t, db, organizationID, anchor, cycleEnd, 2_100_000, &finalizedAt)
+	putDailySpend(t, db, organizationID, anchor, "1.255000")
+	_, err := usagerepo.New(db).UpsertStripeInvoice(t.Context(), usagerepo.UpsertStripeInvoiceParams{
+		StripeInvoiceID:      "invoice_original",
+		OrganizationID:       pgtype.Text{String: organizationID, Valid: true},
+		StripeCustomerID:     "cus_" + organizationID,
+		StripeSubscriptionID: "sub_" + organizationID,
+		ServicePeriodStart:   pgtype.Timestamptz{Time: anchor, InfinityModifier: pgtype.Finite, Valid: true},
+		ServicePeriodEnd:     pgtype.Timestamptz{Time: cycleEnd, InfinityModifier: pgtype.Finite, Valid: true},
+		InvoiceState:         "open",
+		FinalizedAt:          pgtype.Timestamptz{Time: cycleEnd.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	allocationStripe.invoices["invoice_original"].Status = "open"
+	allocationStripe.invoices["invoice_original"].FinalizedAt = cycleEnd.Add(time.Hour)
+
+	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
+		OrganizationIDs: []string{organizationID},
+		Now:             finalizedAt,
+	}))
+	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: finalizedAt}))
+
+	// Re-running both deterministic passes proves the immutable final source is
+	// allocated once even after the observation window has closed.
+	replayAt := finalizedAt.Add(24 * time.Hour)
+	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
+		OrganizationIDs: []string{organizationID},
+		Now:             replayAt,
+	}))
+	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: replayAt}))
+
+	cycles, err := usagerepo.New(db).ListBillingCycleUsage(t.Context(), organizationID)
+	require.NoError(t, err)
+	require.Len(t, cycles, 1)
+	require.Equal(t, int64(2_000_000), cycles[0].BilledTumTokens.Int64)
+	require.Equal(t, int64(2_100_000), cycles[0].TumTokens)
+
+	tumCarries, err := usagerepo.New(db).ListTUMCarryAllocationsFixture(t.Context(), pgtype.Text{String: organizationID, Valid: true})
+	require.NoError(t, err)
+	require.Len(t, tumCarries, 1)
+	require.Equal(t, int64(100_000), tumCarries[0].DeltaTokens.Int64)
+	require.Equal(t, "0.040000", numericString(t, tumCarries[0].AmountUsd))
+
+	allocations := listAllocationFixtures(t, db, organizationID)
+	amountsBySource := make(map[string][]string)
+	for _, allocation := range allocations {
+		require.Equal(t, "confirmed", allocation.DeliveryState)
+		amount := numericString(t, allocation.AmountUsd)
+		if amount == "0.250000" || amount == "0.040000" {
+			require.Equal(t, "invoice_carry", allocation.DestinationInvoiceID.String)
+		}
+		if amount != "0" {
+			amountsBySource[allocation.SourceKind] = append(amountsBySource[allocation.SourceKind], amount)
+		}
+	}
+	require.ElementsMatch(t, []string{"1.010000", "0.250000"}, amountsBySource["openrouter_daily_spend"])
+	require.Equal(t, []string{"0.040000"}, amountsBySource["tum_cycle"])
+
+	require.Len(t, allocationStripe.itemInputs, 3)
+	itemCents := make([]int64, 0, len(allocationStripe.itemInputs))
+	for _, input := range allocationStripe.itemInputs {
+		itemCents = append(itemCents, input.AmountCents)
+		if input.AmountCents == 25 || input.AmountCents == 4 {
+			require.Equal(t, "invoice_carry", input.InvoiceID)
+		}
+	}
+	require.ElementsMatch(t, []int64{101, 25, 4}, itemCents)
+	require.Empty(t, allocationStripe.creditInputs)
+	meterStripe.AssertExpectations(t)
 }
