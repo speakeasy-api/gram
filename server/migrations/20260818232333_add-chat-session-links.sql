@@ -21,9 +21,9 @@ CREATE TABLE "chat_session_links" (
 );
 -- Create index "chat_session_links_organization_project_idx" to table: "chat_session_links"
 CREATE INDEX "chat_session_links_organization_project_idx" ON "chat_session_links" ("organization_id", "project_id");
--- Create index "chat_session_links_parent_child_key" to table: "chat_session_links"
-CREATE UNIQUE INDEX "chat_session_links_parent_child_key" ON "chat_session_links" ("parent_chat_id", "child_chat_id") WHERE (child_chat_id IS NOT NULL);
 -- Create index "chat_session_links_project_child_idx" to table: "chat_session_links"
 CREATE INDEX "chat_session_links_project_child_idx" ON "chat_session_links" ("project_id", "child_chat_id") WHERE (child_chat_id IS NOT NULL);
+-- Create index "chat_session_links_project_parent_child_key" to table: "chat_session_links"
+CREATE UNIQUE INDEX "chat_session_links_project_parent_child_key" ON "chat_session_links" ("project_id", "parent_chat_id", "child_chat_id") WHERE (child_chat_id IS NOT NULL);
 -- Create index "chat_session_links_project_parent_idx" to table: "chat_session_links"
 CREATE INDEX "chat_session_links_project_parent_idx" ON "chat_session_links" ("project_id", "parent_chat_id");
