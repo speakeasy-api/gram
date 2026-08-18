@@ -596,44 +596,6 @@ func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, 
 	return items, nil
 }
 
-const listOrganizationUsersForHealthNotification = `-- name: ListOrganizationUsersForHealthNotification :many
-SELECT users.id, users.email
-FROM organization_user_relationships AS our
-JOIN users
-  ON users.id = our.user_id
-WHERE our.organization_id = $1
-  AND our.deleted IS FALSE
-  AND users.deleted_at IS NULL
-  AND users.email <> ''
-ORDER BY users.email, users.id
-`
-
-type ListOrganizationUsersForHealthNotificationRow struct {
-	ID    string
-	Email string
-}
-
-// Authorization filtering is applied by the caller.
-func (q *Queries) ListOrganizationUsersForHealthNotification(ctx context.Context, organizationID string) ([]ListOrganizationUsersForHealthNotificationRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationUsersForHealthNotification, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrganizationUsersForHealthNotificationRow
-	for rows.Next() {
-		var i ListOrganizationUsersForHealthNotificationRow
-		if err := rows.Scan(&i.ID, &i.Email); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockCustomDomainByID = `-- name: LockCustomDomainByID :one
 SELECT id
 FROM custom_domains

@@ -68,9 +68,12 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
   )
+  -- A row written before attribution existed has no surface. Coalescing here
+  -- means filtering for 'unknown' finds those rows too, instead of returning
+  -- nothing and implying the organization has no unattributed history.
   AND (
     sqlc.narg(acting_surface)::text IS NULL
-    OR a.acting_surface = sqlc.narg(acting_surface)::text
+    OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
 ORDER BY a.seq DESC
 LIMIT 51;
@@ -117,9 +120,12 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 -- name: ListAuditSurfaceFacets :many
 -- Assistant activity events are excluded: facets power the platform audit
 -- feed, which hides them (see ListAuditLogs).
+-- Rows predating attribution have no surface and are counted as 'unknown',
+-- so the facet totals reconcile with the unfiltered feed rather than silently
+-- omitting an organization's older history.
 SELECT
-  acting_surface AS value,
-  acting_surface AS display_name,
+  COALESCE(acting_surface, 'unknown')::text AS value,
+  COALESCE(acting_surface, 'unknown')::text AS display_name,
   COUNT(*)::bigint AS count
 FROM audit_logs
 WHERE organization_id = @organization_id
@@ -128,8 +134,11 @@ WHERE organization_id = @organization_id
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
   )
-GROUP BY acting_surface
-ORDER BY count DESC, acting_surface ASC;
+-- Group on the coalesced value, not the column: an organization can hold both
+-- nulls from before attribution and rows the application wrote as 'unknown',
+-- and grouping on the raw column would return two facets with the same label.
+GROUP BY COALESCE(acting_surface, 'unknown')
+ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
 -- Assistant activity events are excluded: facets power the platform audit

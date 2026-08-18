@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -71,11 +72,13 @@ type WorkerOptions struct {
 	ChatMessageWriter   *chat.ChatMessageWriter
 	ChatClient          *chat.Client
 	OpenRouter          openrouter.Provisioner
+	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
 	SiteURL             *url.URL
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
 	RedisClient         *redis.Client
 	CacheAdapter        cache.Cache
 	EmailService        *email.Service
@@ -151,11 +154,13 @@ func ForDeploymentProcessing(
 		ChatMessageWriter:   nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
+		OpenRouterSpend:     nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
+		StripeClient:        nil,
 		RagService:          nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
@@ -209,11 +214,13 @@ func NewTemporalWorker(
 		ChatMessageWriter:         nil,
 		ChatClient:                nil,
 		OpenRouter:                nil,
+		OpenRouterSpend:           nil,
 		K8sClient:                 nil,
 		ExpectedTargetCNAME:       "",
 		SiteURL:                   nil,
 		BillingTracker:            nil,
 		BillingRepository:         nil,
+		StripeClient:              nil,
 		RedisClient:               nil,
 		PosthogClient:             nil,
 		FunctionsDeployer:         nil,
@@ -254,12 +261,14 @@ func NewTemporalWorker(
 			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
 			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
 			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
 			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -338,12 +347,14 @@ func NewTemporalWorker(
 		opts.AssetStorage,
 		opts.SlackClient,
 		opts.OpenRouter,
+		opts.OpenRouterSpend,
 		opts.ChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
+		opts.StripeClient,
 		opts.PosthogClient,
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
@@ -382,6 +393,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
+	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
@@ -391,6 +403,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.NotifyCustomDomainUnhealthy)
 	temporalWorker.RegisterActivity(activities.FindOrphanCustomDomainResources)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterDailySpend)
+	temporalWorker.RegisterActivity(activities.SettleStripeInvoiceAllocations)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
@@ -400,6 +414,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
@@ -506,6 +521,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
+	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -514,6 +530,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainUnhealthyNotifyWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterDailySpendWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
@@ -589,6 +606,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddOpenRouterDailySpendSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add openrouter daily spend schedule", attr.SlogError(err))
 	}
 
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {

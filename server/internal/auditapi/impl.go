@@ -320,10 +320,25 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		BeforeSnapshot:     row.BeforeSnapshot,
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
-		ActingSurface:      row.ActingSurface,
+		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
 		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// actingSurfaceOrUnknown resolves the stored surface for display.
+//
+// The column is nullable so that rows written before attribution existed need
+// no backfill. Those rows are reported as an unknown surface, which is what
+// they are; the API contract keeps the field always present so a client never
+// has to decide what a missing surface means.
+//
+func actingSurfaceOrUnknown(surface pgtype.Text) string {
+	if !surface.Valid || surface.String == "" {
+		return string(audit.SurfaceUnknown)
+	}
+
+	return surface.String
 }
 
 // facetOptions maps one facet query's rows onto the wire type.

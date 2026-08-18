@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
+import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
@@ -74,6 +75,11 @@ export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { markSetupStarted } = useOrgSetupStarted(orgSlug);
+
+  useEffect(() => {
+    markSetupStarted();
+  }, [markSetupStarted]);
 
   const {
     enabled: platformMcpDashboardEnabled,

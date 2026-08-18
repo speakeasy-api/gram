@@ -82,6 +82,7 @@ export function OrgSidebar({
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
   const secureActive = [
@@ -128,6 +129,7 @@ export function OrgSidebar({
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -193,6 +195,19 @@ export function OrgSidebar({
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
+                  ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
+                  true
+                    ? [
+                        {
+                          item: orgRoutes.externalServices,
+                          scope: orgReadOrAdmin,
+                        },
+                        {
+                          item: orgRoutes.encryptionKeys,
+                          scope: orgReadOrAdmin,
+                        },
+                      ]
+                    : []),
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
@@ -206,15 +221,6 @@ export function OrgSidebar({
                     : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
-                  ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
-                  true
-                    ? [
-                        {
-                          item: orgRoutes.externalServices,
-                          scope: orgReadOrAdmin,
-                        },
-                      ]
-                    : []),
                 ]}
               />
 

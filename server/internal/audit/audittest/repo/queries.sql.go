@@ -45,6 +45,7 @@ SELECT
   actor_id,
   actor_type,
   actor_display_name,
+  actor_slug,
   subject_id,
   subject_type,
   subject_display_name,
@@ -67,6 +68,7 @@ type GetLatestAuditLogByActionRow struct {
 	ActorID            string
 	ActorType          string
 	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
@@ -74,7 +76,7 @@ type GetLatestAuditLogByActionRow struct {
 	Metadata           []byte
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
-	ActingSurface      string
+	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
 }
 
@@ -88,6 +90,7 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 		&i.ActorID,
 		&i.ActorType,
 		&i.ActorDisplayName,
+		&i.ActorSlug,
 		&i.SubjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,

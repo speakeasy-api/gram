@@ -66,7 +66,7 @@ type InsertAuditLogParams struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
-	ActingSurface      string
+	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
 }
 
@@ -254,9 +254,12 @@ WHERE a.organization_id = $1
     $7::text IS NULL
     OR a.subject_id = $7::text
   )
+  -- A row written before attribution existed has no surface. Coalescing here
+  -- means filtering for 'unknown' finds those rows too, instead of returning
+  -- nothing and implying the organization has no unattributed history.
   AND (
     $8::text IS NULL
-    OR a.acting_surface = $8::text
+    OR COALESCE(a.acting_surface, 'unknown') = $8::text
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -290,7 +293,7 @@ type ListAuditLogsRow struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
-	ActingSurface      string
+	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	ProjectSlug        pgtype.Text
@@ -351,8 +354,8 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 
 const listAuditSurfaceFacets = `-- name: ListAuditSurfaceFacets :many
 SELECT
-  acting_surface AS value,
-  acting_surface AS display_name,
+  COALESCE(acting_surface, 'unknown')::text AS value,
+  COALESCE(acting_surface, 'unknown')::text AS display_name,
   COUNT(*)::bigint AS count
 FROM audit_logs
 WHERE organization_id = $1
@@ -361,8 +364,8 @@ WHERE organization_id = $1
     $2::uuid IS NULL
     OR project_id = $2::uuid
   )
-GROUP BY acting_surface
-ORDER BY count DESC, acting_surface ASC
+GROUP BY COALESCE(acting_surface, 'unknown')
+ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 `
 
 type ListAuditSurfaceFacetsParams struct {
@@ -378,6 +381,12 @@ type ListAuditSurfaceFacetsRow struct {
 
 // Assistant activity events are excluded: facets power the platform audit
 // feed, which hides them (see ListAuditLogs).
+// Rows predating attribution have no surface and are counted as 'unknown',
+// so the facet totals reconcile with the unfiltered feed rather than silently
+// omitting an organization's older history.
+// Group on the coalesced value, not the column: an organization can hold both
+// nulls from before attribution and rows the application wrote as 'unknown',
+// and grouping on the raw column would return two facets with the same label.
 func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfaceFacetsParams) ([]ListAuditSurfaceFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {

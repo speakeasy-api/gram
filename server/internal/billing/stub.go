@@ -194,7 +194,8 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"25 chat based credits / month",
 				"Slack community support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets:          []string{},
+			TumPricePerMillionUsd: nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -219,7 +220,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"$0.05 / month / additional 5000 tool calls",
 				"$11 per 10 additional chat based credits",
 			},
+			TumPricePerMillionUsd: nil,
 		},
+		Payg: NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          0,
@@ -239,7 +242,8 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets:          []string{},
+			TumPricePerMillionUsd: nil,
 		},
 	}, nil
 }
@@ -352,13 +356,15 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 	}
 
 	tier := must.Value(s.GetUsageTiers(context.Background())).Pro
+	credits := 0
+	includedCredits := tier.IncludedCredits
 	zero := &gen.PeriodUsage{
 		ToolCalls:                0,
 		IncludedToolCalls:        tier.IncludedToolCalls,
 		Servers:                  0,
 		IncludedServers:          tier.IncludedServers,
-		Credits:                  0,
-		IncludedCredits:          tier.IncludedCredits,
+		Credits:                  &credits,
+		IncludedCredits:          &includedCredits,
 		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0,
 	}

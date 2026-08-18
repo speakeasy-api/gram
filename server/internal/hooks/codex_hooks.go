@@ -388,6 +388,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		Cwd:                 strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -407,6 +408,9 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 			}
 			if metadata.Hostname == "" {
 				metadata.Hostname = cached.Hostname
+			}
+			if metadata.Cwd == "" {
+				metadata.Cwd = cached.Cwd
 			}
 		}
 	}

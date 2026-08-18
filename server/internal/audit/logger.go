@@ -29,7 +29,11 @@ type auditEntry struct {
 // the context at the moment of the write.
 func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) error {
 	identity := actingIdentityFromContext(ctx)
-	entry.Params.ActingSurface = string(identity.Surface)
+	// The column is nullable so that rows predating it need no backfill, but
+	// nothing written from here on is left null: an unattributable write
+	// records SurfaceUnknown explicitly. A null surface therefore means "older
+	// than attribution", which is a different statement from "unidentifiable".
+	entry.Params.ActingSurface = conv.ToPGText(string(identity.Surface))
 	// A call with no OAuth client records NULL, not an empty string: absent and
 	// blank are different answers to "which client acted".
 	entry.Params.ActingClientID = conv.ToPGTextEmpty(identity.ClientID)

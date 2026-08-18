@@ -36,7 +36,7 @@ const (
 // account types whose OpenRouter keys are polled for usage. Add a tier here
 // (e.g. "pro") to expand coverage — no schema, infra, or Datadog change
 // required as long as the per-org monitor selector matches.
-var openRouterCreditsMetricsAccountTypes = []string{"enterprise"}
+var openRouterCreditsMetricsAccountTypes = []string{"enterprise", "payg"}
 
 type OpenRouterCreditsMetricsClient struct {
 	TemporalEnv *tenv.Environment

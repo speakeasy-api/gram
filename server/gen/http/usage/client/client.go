@@ -29,6 +29,14 @@ type Client struct {
 	// setBillingMetadata endpoint.
 	SetBillingMetadataDoer goahttp.Doer
 
+	// GetBillingEmail Doer is the HTTP client used to make requests to the
+	// getBillingEmail endpoint.
+	GetBillingEmailDoer goahttp.Doer
+
+	// SetBillingEmail Doer is the HTTP client used to make requests to the
+	// setBillingEmail endpoint.
+	SetBillingEmailDoer goahttp.Doer
+
 	// GetUsageTiers Doer is the HTTP client used to make requests to the
 	// getUsageTiers endpoint.
 	GetUsageTiersDoer goahttp.Doer
@@ -40,6 +48,10 @@ type Client struct {
 	// CreateCheckout Doer is the HTTP client used to make requests to the
 	// createCheckout endpoint.
 	CreateCheckoutDoer goahttp.Doer
+
+	// CreateStripeCheckout Doer is the HTTP client used to make requests to the
+	// createStripeCheckout endpoint.
+	CreateStripeCheckoutDoer goahttp.Doer
 
 	// CreateTopUpCheckout Doer is the HTTP client used to make requests to the
 	// createTopUpCheckout endpoint.
@@ -68,9 +80,12 @@ func NewClient(
 		GetPeriodUsageDoer:           doer,
 		GetTokensUnderManagementDoer: doer,
 		SetBillingMetadataDoer:       doer,
+		GetBillingEmailDoer:          doer,
+		SetBillingEmailDoer:          doer,
 		GetUsageTiersDoer:            doer,
 		CreateCustomerSessionDoer:    doer,
 		CreateCheckoutDoer:           doer,
+		CreateStripeCheckoutDoer:     doer,
 		CreateTopUpCheckoutDoer:      doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
@@ -152,6 +167,54 @@ func (c *Client) SetBillingMetadata() goa.Endpoint {
 	}
 }
 
+// GetBillingEmail returns an endpoint that makes HTTP requests to the usage
+// service getBillingEmail server.
+func (c *Client) GetBillingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetBillingEmailRequest(c.encoder)
+		decodeResponse = DecodeGetBillingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetBillingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetBillingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getBillingEmail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetBillingEmail returns an endpoint that makes HTTP requests to the usage
+// service setBillingEmail server.
+func (c *Client) SetBillingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetBillingEmailRequest(c.encoder)
+		decodeResponse = DecodeSetBillingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetBillingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetBillingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "setBillingEmail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetUsageTiers returns an endpoint that makes HTTP requests to the usage
 // service getUsageTiers server.
 func (c *Client) GetUsageTiers() goa.Endpoint {
@@ -214,6 +277,30 @@ func (c *Client) CreateCheckout() goa.Endpoint {
 		resp, err := c.CreateCheckoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateStripeCheckout returns an endpoint that makes HTTP requests to the
+// usage service createStripeCheckout server.
+func (c *Client) CreateStripeCheckout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateStripeCheckoutRequest(c.encoder)
+		decodeResponse = DecodeCreateStripeCheckoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateStripeCheckoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateStripeCheckoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createStripeCheckout", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -78,22 +78,23 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 	g.SetLimit(openRouterCreditsPollConcurrency)
 	for i, row := range rows {
 		g.Go(func() error {
-			// Prefer the encrypted key material; rows minted before encrypted
-			// storage fall back to the plaintext column until the platform
-			// admin encrypt action scrubs them. Resolution failures are
-			// logged and skipped so one bad row does not blank the batch.
-			apiKey := row.ApiKey.String
-			if row.ApiKeyEncrypted.Valid {
-				decrypted, decErr := c.enc.Decrypt(row.ApiKeyEncrypted.String)
-				if decErr != nil {
-					c.logger.ErrorContext(gctx, "decrypt openrouter key for usage polling",
-						attr.SlogOrganizationID(row.OrganizationID),
-						attr.SlogOrganizationSlug(row.OrganizationSlug),
-						attr.SlogError(decErr),
-					)
-					return nil
-				}
-				apiKey = decrypted
+			// Resolution failures are logged and skipped so one bad row does
+			// not blank the batch.
+			if !row.ApiKeyEncrypted.Valid {
+				c.logger.ErrorContext(gctx, "openrouter key row holds no encrypted key material",
+					attr.SlogOrganizationID(row.OrganizationID),
+					attr.SlogOrganizationSlug(row.OrganizationSlug),
+				)
+				return nil
+			}
+			apiKey, decErr := c.enc.Decrypt(row.ApiKeyEncrypted.String)
+			if decErr != nil {
+				c.logger.ErrorContext(gctx, "decrypt openrouter key for usage polling",
+					attr.SlogOrganizationID(row.OrganizationID),
+					attr.SlogOrganizationSlug(row.OrganizationSlug),
+					attr.SlogError(decErr),
+				)
+				return nil
 			}
 			if apiKey == "" {
 				c.logger.ErrorContext(gctx, "openrouter key row holds no key material",

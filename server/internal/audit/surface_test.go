@@ -87,7 +87,12 @@ func TestLogger_StampsActingSurface(t *testing.T) {
 			record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAssetCreate)
 			require.NoError(t, err)
 
-			require.Equal(t, tt.surface, record.ActingSurface)
+			// The column is nullable only so that rows predating it need no
+			// backfill. Every row written through the logger carries a value,
+			// which is what lets a reader treat null as "older than
+			// attribution" rather than "this write was not attributed".
+			require.NotNil(t, record.ActingSurface, "a write through the logger must never leave the surface null")
+			require.Equal(t, tt.surface, *record.ActingSurface)
 			require.Equal(t, tt.clientID, record.ActingClientID)
 		})
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 type GetSetupHandoffToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
 	ProviderKey    string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
 	CatalogRef     string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`

@@ -2,9 +2,11 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -24,6 +26,10 @@ const (
 	// issues up to 12 cycles × 5 orgs of serial ClickHouse aggregate queries
 	// per attempt — far more work than the Polar refresh.
 	snapshotBillingCycleUsageStartToCloseTimeout = 5 * time.Minute
+	// One batch reports at most five organizations. Stripe permits only one
+	// concurrent meter write per customer and the client bounds each request
+	// at 30 seconds, so this leaves room for a fully serial degraded pass.
+	reportTUMUsageToStripeStartToCloseTimeout = 3 * time.Minute
 	// The PostHog forward only reads durable snapshots and posts events, so
 	// it keeps a short deadline of its own; letting it ride the wider Polar
 	// refresh deadline would inflate the batch worst-case window enough to
@@ -32,11 +38,11 @@ const (
 	forwardTokenUsageToPostHogStartToCloseTimeout = 60 * time.Second
 	refreshBillingUsageActivityMaximumAttempts    = 3
 	// Reserve more than the worst-case retry path for one batch: the Polar
-	// refresh (3 attempts × 2m), the cycle snapshot (3 attempts × 5m), and
-	// the PostHog usage forward (3 attempts × 60s), each with 10s/15s retry
-	// backoffs and Temporal jitter.
-	refreshBillingUsageBatchWorstCaseRetryWindow = 27 * time.Minute
-	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
+	// refresh (3 attempts × 2m), cycle snapshot (3 attempts × 5m), Stripe
+	// report (3 attempts × 3m), and PostHog forward (3 attempts × 60s), each
+	// with 10s/15s retry backoffs and Temporal jitter.
+	refreshBillingUsageBatchWorstCaseRetryWindow = 37 * time.Minute
+	refreshBillingUsageWorkflowRunTimeout        = 40 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )
 
@@ -161,6 +167,19 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 			failedOrgCount += len(batch)
 		}
 
+		// Metering consumes only the durable Postgres snapshot. A partial
+		// snapshot failure is safe: the next hourly pass derives the missing
+		// signed delta from the last committed total and prior intents.
+		reportCtx := workflow.WithStartToCloseTimeout(ctx, reportTUMUsageToStripeStartToCloseTimeout)
+		if err := workflow.ExecuteActivity(reportCtx, a.ReportTUMUsageToStripe, activities.ReportTUMUsageToStripeInput{
+			OrganizationIDs: batch,
+			Now:             workflow.Now(ctx).UTC(),
+		}).Get(ctx, nil); err != nil {
+			logger.Error("Failed to report TUM usage to Stripe", "error", err, "batch_start", i)
+			failedBatchCount++
+			failedOrgCount += failedTUMReportingOrganizationCount(err, len(batch))
+		}
+
 		// Forward the freshly snapshotted TUM usage to PostHog for GTM
 		// pricing analysis (AGE-2289). Reads only the durable snapshots, so
 		// it is cheap and safe even when the snapshot batch above partially
@@ -201,6 +220,20 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 	logger.Info("Billing usage refreshing completed successfully", "total_count", len(orgIDs))
 	return nil
+}
+
+func failedTUMReportingOrganizationCount(err error, fallback int) int {
+	var applicationErr *temporal.ApplicationError
+	if !errors.As(err, &applicationErr) || applicationErr.Type() != activities.ErrTypeTUMStripeReporting || !applicationErr.HasDetails() {
+		return fallback
+	}
+
+	var details activities.ReportTUMUsageToStripeFailureDetails
+	if detailErr := applicationErr.Details(&details); detailErr != nil || details.FailedOrganizationCount < 1 || details.FailedOrganizationCount > fallback {
+		return fallback
+	}
+
+	return details.FailedOrganizationCount
 }
 
 func shouldContinueRefreshBillingUsageAsNew(ctx workflow.Context) bool {

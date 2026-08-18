@@ -21,63 +21,85 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 )
 
 type Service struct {
-	tracer        trace.Tracer
-	logger        *slog.Logger
-	auth          *auth.Auth
-	authz         *authz.Engine
-	serverURL     *url.URL
-	db            *pgxpool.Pool
-	repo          *repo.Queries
-	billingRepo   billing.Repository
-	orgRepo       *orgRepo.Queries
-	telemetryRepo *telemetryrepo.Queries
-	auditLogger   *audit.Logger
-	posthogClient *posthog.Posthog
-	openRouter    openrouter.Provisioner
-	trial         trialemails.Notifier
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	auth            *auth.Auth
+	authz           *authz.Engine
+	serverURL       *url.URL
+	siteURL         *url.URL
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	billingRepo     billing.Repository
+	orgRepo         *orgRepo.Queries
+	telemetryRepo   *telemetryrepo.Queries
+	auditLogger     *audit.Logger
+	posthogClient   *posthog.Posthog
+	openRouter      openrouter.Provisioner
+	stripeClient    stripeclient.Client
+	stripeHandler   stripeWebhookHandler
+	stripeMetrics   stripeWebhookMetricsRecorder
+	featureFlags    feature.Provider
+	productFeatures productFeatureCacheUpdater
+	trial           trialemails.Notifier
+}
+
+type productFeatureCacheUpdater interface {
+	UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool)
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
-	return &Service{
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:        logger,
-		auth:          auth.New(logger, db, sessions, authzEngine),
-		authz:         authzEngine,
-		serverURL:     serverURL,
-		db:            db,
-		repo:          repo.New(db),
-		billingRepo:   billingRepo,
-		orgRepo:       orgRepo.New(db),
-		telemetryRepo: telemetryRepo,
-		auditLogger:   auditLogger,
-		posthogClient: posthogClient,
-		openRouter:    openRouter,
-		trial:         trialNotifier,
+	service := &Service{
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:          logger,
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		serverURL:       serverURL,
+		siteURL:         siteURL,
+		db:              db,
+		repo:            repo.New(db),
+		billingRepo:     billingRepo,
+		orgRepo:         orgRepo.New(db),
+		telemetryRepo:   telemetryRepo,
+		auditLogger:     auditLogger,
+		posthogClient:   posthogClient,
+		openRouter:      openRouter,
+		stripeClient:    stripeClient,
+		stripeHandler:   nil,
+		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
+		featureFlags:    featureFlags,
+		productFeatures: productFeatures,
+		trial:           trialNotifier,
 	}
+	service.stripeHandler = service.serviceStripeWebhookHandler
+	return service
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -91,6 +113,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, "POST", "/rpc/polar.webhook", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandlePolarWebhook).ServeHTTP(w, r)
 	})
+	if service.stripeClient != nil {
+		o11y.AttachHandler(mux, "POST", "/rpc/stripe.webhook", func(w http.ResponseWriter, r *http.Request) {
+			oops.ErrHandle(service.logger, service.handleStripeWebhook).ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -280,14 +307,22 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").LogError(ctx, s.logger)
 	}
 
+	// Polar credit meters are Speakeasy-internal; only expose them to
+	// platform admins. An org RBAC org:admin grant does not confer this.
+	var credits, includedCredits *int
+	if authCtx.IsAdmin {
+		credits = periodUsage.Credits
+		includedCredits = periodUsage.IncludedCredits
+	}
+
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
 	return &gen.PeriodUsage{
 		ToolCalls:                periodUsage.ToolCalls,
 		IncludedToolCalls:        periodUsage.IncludedToolCalls,
 		Servers:                  periodUsage.Servers,
 		IncludedServers:          periodUsage.IncludedServers,
-		Credits:                  periodUsage.Credits,
-		IncludedCredits:          periodUsage.IncludedCredits,
+		Credits:                  credits,
+		IncludedCredits:          includedCredits,
 		HasActiveSubscription:    periodUsage.HasActiveSubscription,
 		ActualEnabledServerCount: int(actualEnabledServerCount),
 	}, nil
