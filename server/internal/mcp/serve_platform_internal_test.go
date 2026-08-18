@@ -64,12 +64,12 @@ func TestHandlePlatformInitialize_EchoesEverySupportedVersion(t *testing.T) {
 func TestHandlePlatformInitialize_AnswersUnsupportedVersionWithNewestSupported(t *testing.T) {
 	t.Parallel()
 
-	supported := mcpversions.SupportedPlatformToolset()
-	newest := supported[len(supported)-1]
-
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing a new
+	// out-of-set requested version that keeps the fallback arm exercised.
 	answered, resolution := runPlatformInitialize(t, mcpversions.Version20260728)
-	require.Equal(t, newest, answered)
-	require.Equal(t, newest, resolution.InEffect)
+	require.Equal(t, mcpversions.Version20251125, answered)
+	require.Equal(t, mcpversions.Version20251125, resolution.InEffect)
 }
 
 // TestHandlePlatformInitialize_AnswersAbsentVersionWithDefault pins that the

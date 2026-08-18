@@ -773,18 +773,18 @@ func TestServePublic_InitializeAnswersUnsupportedVersionWithNewestSupported(t *t
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-down-mcp")
 
-	supported := mcpversions.SupportedHostedToolset()
-	newest := supported[len(supported)-1]
-
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing new
+	// out-of-set requested versions that keep the fallback arm exercised.
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20260728), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, newest, answeredProtocolVersion(t, w), "an unsupported requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unsupported requested version is answered with the newest supported one")
 
 	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion("1999-12-31"), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, newest, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest supported one")
 }
 
 // TestServePublic_InitializeAnswersAbsentVersionWithDefault pins that the

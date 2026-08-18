@@ -97,11 +97,13 @@ func TestNegotiateAnswersUnsupportedWithTheNewestSupported(t *testing.T) {
 	t.Parallel()
 
 	supported := mcpversions.SupportedHostedToolset()
-	newest := supported[len(supported)-1]
 
-	require.Equal(t, newest, mcpversions.Negotiate(mcpversions.Version20260728, supported), "known but unsupported")
-	require.Equal(t, newest, mcpversions.Negotiate("1999-12-31", supported), "well-formed but unrecognized")
-	require.Equal(t, newest, mcpversions.Negotiate("garbage", supported), "not a version at all")
+	// The expected value is pinned rather than derived from the set, so
+	// raising the ceiling breaks this test and forces choosing new out-of-set
+	// inputs that keep the fallback arm exercised.
+	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate(mcpversions.Version20260728, supported), "known but unsupported")
+	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate("1999-12-31", supported), "well-formed but unrecognized")
+	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate("garbage", supported), "not a version at all")
 }
 
 func TestNegotiateSanitizesRawClientInput(t *testing.T) {

@@ -319,7 +319,9 @@ func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) 
 		got[string(kv.Key)] = kv.Value.AsString()
 	}
 
-	supported := mcpversions.SupportedHostedToolset()
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing a new
+	// out-of-set stored version that keeps the downgrade arm exercised.
 	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, supported[len(supported)-1], got[string(attr.McpNegotiatedProtocolVersionKey)])
+	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }
