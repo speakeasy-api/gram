@@ -123,6 +123,25 @@ describe("connectionState", () => {
     expect(connectionState(nearingDeadline, NOW)).toBe("expiring");
   });
 
+  it("needs re-auth once the authorization deadline passes without a refresh grant", () => {
+    // The absolute authorization deadline is the point the user must consent
+    // again, and no token exchange moves it. Checked only inside the
+    // has-refresh-token branch, an upstream with a live access token and a
+    // lapsed authorization read as merely expiring — the one state that says
+    // "still works", for a connection that does not.
+    const lapsedAuthorization = session({
+      upstreams: [
+        upstream({
+          hasRefreshToken: false,
+          accessExpiresAt: at(HOUR),
+          refreshExpiresAt: undefined,
+          authorizationExpiresAt: at(-DAY),
+        }),
+      ],
+    });
+    expect(connectionState(lapsedAuthorization, NOW)).toBe("needs_reauth");
+  });
+
   it("does not warn on a non-expiring upstream", () => {
     // Upstreams like Slack issue tokens with no expiry; null must read as
     // "never expires", not as a deadline at the epoch.

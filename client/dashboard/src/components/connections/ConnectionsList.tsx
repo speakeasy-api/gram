@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import {
@@ -55,6 +55,28 @@ const CONNECTION_ROW_FRAME = "flex items-center gap-4 pr-3 pl-2";
  * push everything after it out of line.
  */
 const CONNECTION_ACTIONS_SLOT = "flex w-6 shrink-0 justify-end";
+
+/**
+ * How often the list re-reads the clock.
+ *
+ * Every reading on a row is time-derived — the state word, the activity phrase,
+ * the recency order, and which of the two tables a row belongs to. Computed once
+ * at mount, a page left open keeps showing a connection as live long after it
+ * went idle and keeps it above the inactive fold after it went dormant. A minute
+ * is finer than the narrowest window any of those thresholds uses.
+ */
+const CLOCK_TICK_MS = 60_000;
+
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  return now;
+}
 
 const GROUPING_HEADERS: Record<ConnectionGrouping, string> = {
   subject: "Person",
@@ -169,13 +191,16 @@ function GroupIcon({ group }: { group: ConnectionGroup }): JSX.Element {
 function ConnectionSubRow({
   session,
   grouping,
+  now,
   actions,
 }: {
   session: UserSession;
   grouping: ConnectionGrouping;
+  now: number;
   actions?: React.ReactNode;
 }): JSX.Element {
-  const presentation = CONNECTION_STATE_PRESENTATION[connectionState(session)];
+  const presentation =
+    CONNECTION_STATE_PRESENTATION[connectionState(session, now)];
   const childIsPerson = CHILD_OF[grouping] === "person";
   const label = childIsPerson
     ? subjectLabel(session)
@@ -215,7 +240,7 @@ function ConnectionSubRow({
           <span className="text-foreground truncate text-sm">{label}</span>
         </span>
 
-        <SimpleTooltip tooltip={connectionDeadlineLabel(session)}>
+        <SimpleTooltip tooltip={connectionDeadlineLabel(session, now)}>
           <span className="text-muted-foreground hidden truncate text-xs sm:block">
             {connectionActivityLabel(session.lastUsedAt)}
           </span>
@@ -252,11 +277,14 @@ function ConnectionSubRow({
 function ConnectionGroupRow({
   group,
   grouping,
+  now,
   canRevoke,
   onRevoked,
 }: {
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
+  /** Ticking clock, so a row's state ages with the page rather than freezing. */
+  now: number;
   canRevoke: boolean;
   onRevoked: () => void;
 }): JSX.Element {
@@ -287,7 +315,7 @@ function ConnectionGroupRow({
       : []),
   ];
 
-  const attention = groupAttentionState(group);
+  const attention = groupAttentionState(group, now);
   const attentionTone = attention
     ? CONNECTION_STATE_PRESENTATION[attention]
     : null;
@@ -391,8 +419,13 @@ function ConnectionGroupRow({
               key={session.id}
               session={session}
               grouping={grouping}
+              now={now}
               actions={
-                canRevoke ? (
+                // Gated on this session being revocable, not merely on the
+                // viewer's scope: a revoked or expired connection has nothing
+                // left to cut off, and offering the action opened a dialog that
+                // could only fail.
+                canRevoke && group.revocableIds.includes(session.id) ? (
                   <ConnectionRowActions
                     session={session}
                     onRevoked={onRevoked}
@@ -447,9 +480,11 @@ export function ConnectionsList({
    */
   clients?: UserSessionClient[];
 }): JSX.Element {
+  const now = useNow();
   const { active, inactive } = useMemo(
-    () => splitByActivity(groupConnections(sessions, grouping, { clients })),
-    [sessions, grouping, clients],
+    () =>
+      splitByActivity(groupConnections(sessions, grouping, { clients, now })),
+    [sessions, grouping, clients, now],
   );
 
   const rows = (groups: ConnectionGroup[]) => (
@@ -459,6 +494,7 @@ export function ConnectionsList({
           key={group.key}
           group={group}
           grouping={grouping}
+          now={now}
           canRevoke={canRevoke}
           onRevoked={onRevoked}
         />

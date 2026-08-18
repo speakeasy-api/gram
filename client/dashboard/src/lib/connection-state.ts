@@ -104,11 +104,17 @@ function upstreamNeedsReauth(
   upstream: UserSessionUpstream,
   now: number,
 ): boolean {
+  // The absolute authorization deadline binds either way: it is the point the
+  // user must consent again, and no token exchange moves it. Checked before the
+  // branch because it applies whether or not a refresh grant is held — inside
+  // the refresh branch only, an upstream with no refresh token whose
+  // authorization had lapsed still read as merely expiring.
+  const authRemaining = msUntil(upstream.authorizationExpiresAt, now);
+  if (authRemaining !== null && authRemaining <= 0) return true;
+
   if (upstream.hasRefreshToken) {
     const refreshRemaining = msUntil(upstream.refreshExpiresAt, now);
-    if (refreshRemaining !== null && refreshRemaining <= 0) return true;
-    const authRemaining = msUntil(upstream.authorizationExpiresAt, now);
-    return authRemaining !== null && authRemaining <= 0;
+    return refreshRemaining !== null && refreshRemaining <= 0;
   }
 
   const accessRemaining = msUntil(upstream.accessExpiresAt, now);
@@ -224,6 +230,12 @@ export function connectionActivityLabel(lastUsedAt: Instant): string {
 /**
  * Deadline phrasing for the whole connection: the soonest thing that will
  * interrupt it, named so an admin knows which clock is running out.
+ *
+ * A brokered connection is two legs, so the deadline is the earliest across
+ * both — the session's own refresh window and every upstream's. Reading only
+ * the session's clock reported "no expiry" for a connection whose upstream
+ * authorization lapsed tomorrow, which is precisely the case the label exists
+ * to warn about.
  */
 export function connectionDeadlineLabel(
   session: UserSession,
@@ -231,9 +243,10 @@ export function connectionDeadlineLabel(
 ): string {
   if (session.revokedAt) return "revoked";
 
-  const sessionRemaining = msUntil(session.refreshExpiresAt, now);
   const upstreams = session.upstreams ?? [];
 
+  // Named separately because it is not a deadline but a dead end: no refresh
+  // grant means nothing will mint another token when this one lapses.
   const withoutRefresh = upstreams.find(
     (upstream) => !upstream.hasRefreshToken && upstream.accessExpiresAt,
   );
@@ -242,11 +255,18 @@ export function connectionDeadlineLabel(
     if (remaining !== null && remaining <= 0) return "no refresh grant";
   }
 
-  if (sessionRemaining === null) return "no expiry";
-  const relative = formatDistanceToNow(new Date(session.refreshExpiresAt), {
+  const deadlines = [
+    msUntil(session.refreshExpiresAt, now),
+    ...upstreams.map((upstream) => upstreamDeadline(upstream, now)),
+  ].filter((value): value is number => value !== null);
+
+  if (deadlines.length === 0) return "no expiry";
+
+  const soonest = Math.min(...deadlines);
+  const relative = formatDistanceToNow(new Date(now + soonest), {
     addSuffix: true,
   });
-  return sessionRemaining <= 0 ? `expired ${relative}` : `expires ${relative}`;
+  return soonest <= 0 ? `expired ${relative}` : `expires ${relative}`;
 }
 
 /**

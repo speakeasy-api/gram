@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
@@ -52,8 +53,13 @@ export function ConnectionsListSection({
   emptyDescription?: string;
 }): JSX.Element {
   const [grouping, setGrouping] = useState<ConnectionGrouping>(defaultGrouping);
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canRevoke = hasScope("project:write");
+  // Scoped to the project these connections belong to, not the bare scope: a
+  // user with project:write somewhere in the org must not be offered revoke
+  // affordances here, where they would only fail at mutation time. Every
+  // surface embedding this section is scoped to the working project.
+  const canRevoke = hasScope("project:write", project.id);
 
   if (isPending) {
     return (

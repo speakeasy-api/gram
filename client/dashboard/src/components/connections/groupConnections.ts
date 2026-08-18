@@ -81,10 +81,18 @@ function groupKeysFor(
       if (upstreams.length === 0) {
         return [{ key: "__none__", label: "No upstream provider" }];
       }
-      return upstreams.map((upstream) => ({
-        key: upstream.remoteSessionIssuerId,
-        label: providerLabel(upstream.issuerSlug),
-      }));
+      // Deduplicated on issuer: one issuer can have several
+      // remote_session_clients attached, so a subject may hold two upstreams
+      // that resolve to the same provider. Ungrouped, that filed the session
+      // twice under one heading and double-counted its connections.
+      const byIssuer = new Map<string, string>();
+      for (const upstream of upstreams) {
+        byIssuer.set(
+          upstream.remoteSessionIssuerId,
+          providerLabel(upstream.issuerSlug),
+        );
+      }
+      return [...byIssuer].map(([key, label]) => ({ key, label }));
     }
   }
 }
