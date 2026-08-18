@@ -102,6 +102,12 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
+	// Refuse a revision this surface does not answer before doing any work; see
+	// [Service.enforceServedProtocolVersion].
+	if rejected, err := s.enforceServedProtocolVersion(ctx, w, r, &req, mcpversions.ServedPlatformToolset); rejected || err != nil {
+		return err
+	}
+
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
 	switch {
 	case body == nil && err == nil:

@@ -148,6 +148,12 @@ func handleToolsList(
 		}
 	}
 
+	if tools == nil {
+		// MCP list results carry an array, never null — a toolset that resolves
+		// to no tools still answers with an empty one.
+		tools = []*toolListEntry{}
+	}
+
 	result := &toolsListResult{
 		ID: req.ID,
 		Result: toolsListResultTools{

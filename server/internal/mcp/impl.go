@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -995,6 +996,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			)
 		}
 		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Refuse a revision this surface does not answer before doing any work; see
+	// [Service.enforceServedProtocolVersion].
+	if rejected, gateErr := s.enforceServedProtocolVersion(ctx, w, r, &req, mcpversions.ServedHostedToolset); rejected || gateErr != nil {
+		return gateErr
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
