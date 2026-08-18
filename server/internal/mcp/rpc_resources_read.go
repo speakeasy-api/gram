@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -133,7 +134,11 @@ func handleResourcesRead(
 	var functionMem *float64
 	var functionsExecutionTime *float64
 
-	mcpURL := payload.sessionID
+	var mcpURL string
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		mcpURL = requestContext.Host + requestContext.ReqURL
+	}
+
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
