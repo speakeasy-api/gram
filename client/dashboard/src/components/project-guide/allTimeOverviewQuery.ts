@@ -43,31 +43,17 @@ export function allTimeOverviewScope(args: {
 }
 
 /**
- * Whether the project has produced anything at all. Absent data is NOT empty:
- * the gate must not hand a beginner guide to a project whose state it could not
- * read.
- */
-export function isOverviewEmpty(
-  overview: GetProjectOverviewResult | undefined,
-): boolean {
-  if (!overview) return false;
-  const { activeServersCount, totalToolCalls, totalChats } = overview.summary;
-  return activeServersCount === 0 && totalToolCalls === 0 && totalChats === 0;
-}
-
-/**
  * The all-time overview under its own query key, so it never collides with the
  * dashboard's range-scoped copy.
  */
 export function useAllTimeProjectOverview(args: { enabled: boolean }): {
   data: GetProjectOverviewResult | undefined;
   isPending: boolean;
-  isError: boolean;
 } {
   const { orgSlug, projectSlug } = useSlugs();
   const client = useGramContext();
 
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending } = useQuery({
     ...buildProjectOverviewQuery(
       client,
       allTimeOverviewScope({
@@ -80,5 +66,5 @@ export function useAllTimeProjectOverview(args: { enabled: boolean }): {
     throwOnError: false,
   });
 
-  return { data, isPending, isError };
+  return { data, isPending };
 }

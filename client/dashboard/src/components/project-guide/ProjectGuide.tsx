@@ -1,7 +1,3 @@
-import {
-  dismissProjectGuide,
-  markProjectGuideStarted,
-} from "@/components/project-guide/projectGuideStores";
 import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
 import {
   PROJECT_GUIDE_JOURNEYS,
@@ -11,8 +7,6 @@ import {
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
-import { Button } from "@/components/ui/Button";
-import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -24,22 +18,17 @@ import { useState } from "react";
  * The step bodies are placeholders on this branch — the journeys land next.
  */
 export function ProjectGuide(): JSX.Element {
-  const { projectSlug } = useSlugs();
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const [expanded, setExpanded] = useState<JourneyId | null>(null);
 
   const toggle = (id: JourneyId) => {
     setExpanded((current) => (current === id ? null : id));
-    // Expanding a card is the first real interaction, and what tells the gate a
-    // run is under way. Writing this on render instead would flag every empty
-    // project on first load.
-    if (projectSlug) markProjectGuideStarted(projectSlug);
   };
 
   return (
     <div className="w-full pt-2 pb-6">
-      <div className="flex items-start justify-between gap-4 pb-6">
+      <div className="pb-6">
         <div className="flex flex-col gap-2">
           <span className="text-eyebrow">Get started</span>
           <h2 className="text-foreground font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
@@ -51,15 +40,6 @@ export function ProjectGuide(): JSX.Element {
             minutes.
           </p>
         </div>
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => {
-            if (projectSlug) dismissProjectGuide(projectSlug);
-          }}
-        >
-          Dismiss
-        </Button>
       </div>
 
       <div className="flex flex-col gap-4">
