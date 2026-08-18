@@ -863,6 +863,20 @@ func principalConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, err
 	return uuid.NullUUID{UUID: connectionID, Valid: true}, uuid.NullUUID{UUID: generation, Valid: true}, nil
 }
 
+// parseOptionalConnection reads the connection pair of a principal that may not
+// have one. A connection-less caller yields the nil pair without an error, so a
+// setup it started is identified by its user instead. A caller that claims a
+// connection is still held to a complete, parseable pair.
+func parseOptionalConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
+	if !principal.HasConnection() {
+		if principal.UserID == "" {
+			return uuid.Nil, uuid.Nil, fmt.Errorf("parse platform mcp registration connection: %w", ErrUnauthorized)
+		}
+		return uuid.Nil, uuid.Nil, nil
+	}
+	return parseConnection(principal)
+}
+
 func parseConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
 	connectionID, err := uuid.Parse(principal.ConnectionID)
 	if err != nil {

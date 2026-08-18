@@ -248,7 +248,10 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if s == nil || s.db == nil {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// A handoff issued by a connection-less surface carries no connection to
+	// bind the setup to. The dashboard completing it is authenticated by its own
+	// session, so the setup is identified by the acting user instead.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
