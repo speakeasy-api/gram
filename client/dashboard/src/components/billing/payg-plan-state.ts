@@ -10,6 +10,7 @@ import { isValidDate } from "@/lib/trial-status";
  */
 export type StripeSubscriptionLike = {
   status: string;
+  currentPeriodStart?: Date | null | undefined;
   currentPeriodEnd?: Date | null | undefined;
   trialEnd?: Date | null | undefined;
   cancelAtPeriodEnd?: boolean | undefined;

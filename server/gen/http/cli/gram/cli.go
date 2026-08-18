@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3289,6 +3289,9 @@ func ParseEndpoint(
 		usageGetStripeSubscriptionFlags            = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
 		usageGetStripeSubscriptionSessionTokenFlag = usageGetStripeSubscriptionFlags.String("session-token", "", "")
 
+		usageGetPaygBillingSummaryFlags            = flag.NewFlagSet("get-payg-billing-summary", flag.ExitOnError)
+		usageGetPaygBillingSummarySessionTokenFlag = usageGetPaygBillingSummaryFlags.String("session-token", "", "")
+
 		usageCreateStripePortalSessionFlags            = flag.NewFlagSet("create-stripe-portal-session", flag.ExitOnError)
 		usageCreateStripePortalSessionSessionTokenFlag = usageCreateStripePortalSessionFlags.String("session-token", "", "")
 
@@ -4166,6 +4169,7 @@ func ParseEndpoint(
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
 	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
 	usageGetStripeSubscriptionFlags.Usage = usageGetStripeSubscriptionUsage
+	usageGetPaygBillingSummaryFlags.Usage = usageGetPaygBillingSummaryUsage
 	usageCreateStripePortalSessionFlags.Usage = usageCreateStripePortalSessionUsage
 	usageCancelStripeSubscriptionFlags.Usage = usageCancelStripeSubscriptionUsage
 	usageResumeStripeSubscriptionFlags.Usage = usageResumeStripeSubscriptionUsage
@@ -6316,6 +6320,9 @@ func ParseEndpoint(
 			case "get-stripe-subscription":
 				epf = usageGetStripeSubscriptionFlags
 
+			case "get-payg-billing-summary":
+				epf = usageGetPaygBillingSummaryFlags
+
 			case "create-stripe-portal-session":
 				epf = usageCreateStripePortalSessionFlags
 
@@ -8399,6 +8406,9 @@ func ParseEndpoint(
 			case "get-stripe-subscription":
 				endpoint = c.GetStripeSubscription()
 				data, err = usagec.BuildGetStripeSubscriptionPayload(*usageGetStripeSubscriptionSessionTokenFlag)
+			case "get-payg-billing-summary":
+				endpoint = c.GetPaygBillingSummary()
+				data, err = usagec.BuildGetPaygBillingSummaryPayload(*usageGetPaygBillingSummarySessionTokenFlag)
 			case "create-stripe-portal-session":
 				endpoint = c.CreateStripePortalSession()
 				data, err = usagec.BuildCreateStripePortalSessionPayload(*usageCreateStripePortalSessionSessionTokenFlag)
@@ -22073,6 +22083,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create a Stripe Checkout link for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
+	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Get exact billable usage and estimated cost for the organization's live paid Stripe service period`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-portal-session: Create a Stripe customer portal session for the organization's PAYG subscription`)
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription`)
@@ -22299,6 +22310,24 @@ func usageGetStripeSubscriptionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-stripe-subscription --session-token \"abc123\"")
+}
+
+func usageGetPaygBillingSummaryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-payg-billing-summary", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get exact billable usage and estimated cost for the organization's live paid Stripe service period`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-payg-billing-summary --session-token \"abc123\"")
 }
 
 func usageCreateStripePortalSessionUsage() {

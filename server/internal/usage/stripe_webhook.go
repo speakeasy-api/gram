@@ -147,6 +147,14 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	}
 
 	if event.Type == "checkout.session.completed" && checkoutEligible {
+		// Serialize Stripe activation with legacy billing-metadata writes. Without
+		// this shared lock, a writer can read the old anchor, wait on the row lock,
+		// and overwrite the newly activated Stripe anchor after the webhook commits.
+		if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock billing metadata organization").LogError(ctx, logger)
+		}
+	}
+	if event.Type == "checkout.session.completed" && checkoutEligible {
 		if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
 		}

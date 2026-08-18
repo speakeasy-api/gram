@@ -22,6 +22,18 @@ type CapCopy = {
   slug: string;
   /** What stops when this cap is reached, and how to start it again. */
   paused: string;
+  /**
+   * How the cap's own month relates to the billing cycle. Only true of a key
+   * that has a cap set, so it is kept apart from `invoice` — a key with no cap
+   * has no month to reset.
+   */
+  capReset: string;
+  /**
+   * How this key's spend relates to the pay-as-you-go invoice. True whether or
+   * not a cap is set: an uncapped key still spends money, and this is what says
+   * whether that money reaches the invoice.
+   */
+  invoice: string;
 };
 
 /**
@@ -38,12 +50,19 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
     slug: "security",
     paused:
       "The automated analysis Gram runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",
+    capReset: "This monthly cap resets on the first of the month.",
+    invoice:
+      "Gram funds this inference, so it never reaches your invoice and isn't part of the estimate above.",
   },
   chat: {
     name: "Other inference",
     slug: "other",
     paused:
       "Assistants and the other AI-powered dashboard experiences are paused for the rest of the month. Raise the cap to start them again.",
+    capReset:
+      "This monthly cap resets on the first of the month, so it doesn't line up with the billing cycle above and isn't the figure in the estimate.",
+    invoice:
+      "This inference is billed to this organization as its own line on the invoice.",
   },
 };
 
@@ -99,6 +118,30 @@ export function inferenceCapPausedNote(
   keyType: InferenceSpendCapKeyType,
 ): string {
   return CAP_COPY[keyType].paused;
+}
+
+/**
+ * How this cap's monthly spend relates to the pay-as-you-go invoice, for a key
+ * that has a cap set: when the cap's month rolls over, and where the spend
+ * lands.
+ */
+export function inferenceCapBillingNote(
+  keyType: InferenceSpendCapKeyType,
+): string {
+  return `${CAP_COPY[keyType].capReset} ${CAP_COPY[keyType].invoice}`;
+}
+
+/**
+ * The invoice half alone, for a key with no cap set.
+ *
+ * The cap-reset sentence would contradict the "No cap is set" line it renders
+ * directly under, but where the spend lands is still worth saying — it is the
+ * only thing that tells the invoiced key from the one Gram funds.
+ */
+export function inferenceCapInvoiceNote(
+  keyType: InferenceSpendCapKeyType,
+): string {
+  return CAP_COPY[keyType].invoice;
 }
 
 /**

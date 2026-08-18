@@ -1,5 +1,7 @@
 import {
   crossedSpendCapThreshold,
+  inferenceCapBillingNote,
+  inferenceCapInvoiceNote,
   inferenceCapLabel,
   type SpendCapThreshold,
   spendCapFillPercent,
@@ -27,14 +29,22 @@ const usdMeter = new Intl.NumberFormat("en-US", {
  *
  * `title` is what a caller that names the cap itself doesn't want: the cap's
  * own control already names it in the label of the field that sets it, and
- * repeating it directly below reads as two separate things.
+ * repeating it directly below reads as two separate things. `billingNote` is
+ * the same split: a meter that sits under the invoice estimate has to say how
+ * these figures relate to it, while the control is nowhere near one.
+ *
+ * The note is picked here rather than passed in because which half of it is
+ * true depends on the branch below — copy that talks about the cap's month is
+ * a contradiction on a key that has no cap.
  */
 export function InferenceCapMeter({
   cap,
   title = true,
+  billingNote = false,
 }: {
   cap: InferenceSpendCap;
   title?: boolean;
+  billingNote?: boolean;
 }): JSX.Element {
   const label = inferenceCapLabel(cap.keyType);
   const spent = usdMeter.format(cap.creditsUsed);
@@ -42,8 +52,10 @@ export function InferenceCapMeter({
 
   // Without a cap the spend has nothing to be a proportion of, and a full-width
   // bar would read as a limit that was reached. The figure still shows: it is
-  // the only place this month's spend on this key appears. Nothing is added
-  // under it — every note this meter draws is about a cap's own month, which
+  // the only place this month's spend on this key appears. So does the invoice
+  // half of the billing note — an uncapped key still spends money, and whether
+  // that money reaches the invoice is exactly what the note is there to say.
+  // Only that half: the rest of it is about the cap's month rolling over, which
   // would contradict the "No cap is set." printed directly above.
   if (!(cap.monthlyCredits > 0)) {
     return (
@@ -52,6 +64,9 @@ export function InferenceCapMeter({
         <Text muted small className="tabular-nums">
           {spent} spent this month. No cap is set.
         </Text>
+        <Footnote
+          text={billingNote ? inferenceCapInvoiceNote(cap.keyType) : ""}
+        />
       </Stack>
     );
   }
@@ -62,6 +77,12 @@ export function InferenceCapMeter({
   );
   const percent = spendCapFillPercent(cap.creditsUsed, cap.monthlyCredits);
   const limit = usdMeter.format(cap.monthlyCredits);
+  const footnote = [
+    capNote(threshold, cap.disabled),
+    billingNote ? inferenceCapBillingNote(cap.keyType) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <Stack gap={2}>
@@ -87,7 +108,7 @@ export function InferenceCapMeter({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <Footnote text={capNote(threshold, cap.disabled)} />
+      <Footnote text={footnote} />
     </Stack>
   );
 }
@@ -95,8 +116,9 @@ export function InferenceCapMeter({
 /**
  * The line under a meter, dropped entirely when there is nothing to say.
  *
- * Below the first threshold there is no note, and an empty line there would
- * open a gap under the bar.
+ * Both branches render one, and both can end up with an empty string — below
+ * the first threshold there is no threshold note, and the cap's own control
+ * asks for no billing note at all — so an empty line must not take up space.
  */
 function Footnote({ text }: { text: string }): JSX.Element | null {
   if (text === "") return null;

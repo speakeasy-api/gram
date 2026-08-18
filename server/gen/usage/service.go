@@ -43,6 +43,9 @@ type Service interface {
 	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
 	// Get the live lifecycle state of the organization's Stripe PAYG subscription
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
+	// Get exact billable usage and estimated cost for the organization's live paid
+	// Stripe service period
+	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *PaygBillingSummary, err error)
 	// Create a Stripe customer portal session for the organization's PAYG
 	// subscription
 	CreateStripePortalSession(context.Context, *CreateStripePortalSessionPayload) (res string, err error)
@@ -76,7 +79,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [17]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -133,6 +136,12 @@ type GetInferenceSpendCapsPayload struct {
 	SessionToken *string
 }
 
+// GetPaygBillingSummaryPayload is the payload type of the usage service
+// getPaygBillingSummary method.
+type GetPaygBillingSummaryPayload struct {
+	SessionToken *string
+}
+
 // GetPeriodUsagePayload is the payload type of the usage service
 // getPeriodUsage method.
 type GetPeriodUsagePayload struct {
@@ -160,6 +169,27 @@ type InferenceSpendCap struct {
 	MonthlyCredits int
 	// Whether the platform-managed key is disabled
 	Disabled bool
+}
+
+// PaygBillingSummary is the result type of the usage service
+// getPaygBillingSummary method.
+type PaygBillingSummary struct {
+	// Start of the live paid Stripe service period
+	PeriodStart string
+	// End of the live paid Stripe service period (exclusive)
+	PeriodEnd string
+	// Tokens under management in the live paid service period
+	TumTokens int64
+	// Exact flat USD price per token under management
+	TumUnitPriceUsd string
+	// Exact estimated tokens-under-management cost in USD
+	TumCostUsd string
+	// Exact durable Other inference spend in USD through recorded_through
+	OtherInferenceSpendUsd string
+	// Most recent completed durable UTC spend day included in the estimate
+	RecordedThrough *string
+	// Exact estimated current-cycle total in USD through recorded_through
+	EstimatedTotalUsd string
 }
 
 // PeriodUsage is the result type of the usage service getPeriodUsage method.

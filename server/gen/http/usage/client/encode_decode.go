@@ -2771,6 +2771,237 @@ func DecodeGetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetPaygBillingSummaryRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getPaygBillingSummary"
+// endpoint
+func (c *Client) BuildGetPaygBillingSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPaygBillingSummaryUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getPaygBillingSummary", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPaygBillingSummaryRequest returns an encoder for requests sent to
+// the usage getPaygBillingSummary server.
+func EncodeGetPaygBillingSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetPaygBillingSummaryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getPaygBillingSummary", "*usage.GetPaygBillingSummaryPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetPaygBillingSummaryResponse returns a decoder for responses returned
+// by the usage getPaygBillingSummary endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetPaygBillingSummaryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPaygBillingSummaryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			res := NewGetPaygBillingSummaryPaygBillingSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPaygBillingSummaryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPaygBillingSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPaygBillingSummaryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPaygBillingSummaryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPaygBillingSummaryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPaygBillingSummaryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPaygBillingSummaryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPaygBillingSummaryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPaygBillingSummaryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getPaygBillingSummary", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPaygBillingSummaryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getPaygBillingSummary", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateStripePortalSessionRequest instantiates a HTTP request object
 // with method and path set to call the "usage" service
 // "createStripePortalSession" endpoint
