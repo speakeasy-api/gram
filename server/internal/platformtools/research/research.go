@@ -103,7 +103,7 @@ func NewSearchClient(completions CompletionProvider) *SearchClient {
 // model's own prose is discarded: the citations are the deliverable, and
 // keeping them free of model narration keeps this tool a search, not a
 // summarizer. No results with a nil error is a real answer.
-func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, error) {
+func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, SearchUsage, error) {
 	temperature := 0.0
 	response, err := c.completions.GetCompletion(ctx, openrouter.CompletionRequest{
 		OrgID:     orgID,
@@ -116,6 +116,7 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 			}),
 		},
 		Tools:       nil,
+		ToolChoice:  nil,
 		Temperature: &temperature,
 		Model:       searchModel,
 		Stream:      false,
@@ -131,21 +132,33 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		KeyType:        openrouter.KeyTypeChat,
 		KeySlot:        "",
 		JSONSchema:     nil,
-		// The answer text is discarded, so reasoning tokens would be pure
-		// waste.
-		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		// The answer text is discarded, so reasoning tokens are waste — but
+		// this route REJECTS a disabled setting outright ("Reasoning is
+		// mandatory for this endpoint"), so the override stays nil and the
+		// provider default stands. Do not "optimize" this back to
+		// effort none: it turns every search into a 400.
+		Reasoning:                 nil,
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 &openrouter.WebSearchOptions{MaxResults: maxResults},
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("run web search: %w", err)
+		return nil, SearchUsage{PromptTokens: 0, CompletionTokens: 0}, fmt.Errorf("run web search: %w", err)
 	}
 
-	// Checked before the loop, not inside it: a bound tested after the append
-	// always yields one result, so a cap of zero returned one.
+	// A search is a completion, and the run that asked for it pays for it.
+	// Returned rather than swallowed so the caller's own accounting is not
+	// short by every search it ran.
+	usage := SearchUsage{
+		PromptTokens:     int64(response.Usage.PromptTokens),
+		CompletionTokens: int64(response.Usage.CompletionTokens),
+	}
+
+	// Checked before the loop, not inside it: a cap of zero has to mean zero
+	// results, and a bound tested after the append always yields one.
 	if maxResults <= 0 {
-		return nil, nil
+		return nil, usage, nil
 	}
 
 	results := make([]SearchResult, 0, len(response.Annotations))
@@ -167,7 +180,26 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		}
 	}
 
-	return results, nil
+	// Zero usable citations is indistinguishable from the web plugin silently
+	// not applying (a provider without plugin support, an annotation shape
+	// change, the round-trip loss) — and a search that never touched the web
+	// must not read as "nothing indexed matched": the agent is instructed to
+	// treat an empty success as absence of coverage, which becomes a
+	// confident, wrong finding. Judged after filtering, because annotations
+	// that all fail the url_citation shape are the same nothing. The agent
+	// sees a tool error, and a run where every search fails this way trips
+	// the all-tools-failed guard rather than storing a report.
+	if len(results) == 0 {
+		return nil, usage, fmt.Errorf("web search returned no citations: the search plugin may not have applied; treat this as a failed search, not as absence of coverage")
+	}
+
+	return results, usage, nil
+}
+
+// SearchUsage is what one search cost, for the caller's own run accounting.
+type SearchUsage struct {
+	PromptTokens     int64
+	CompletionTokens int64
 }
 
 // callBudget counts a tool's calls per run, keyed by the assistant chat id.

@@ -5407,6 +5407,17 @@ CREATE TABLE IF NOT EXISTS mcp_approval_requests (
   evidence_version INTEGER NOT NULL DEFAULT 1,
   evidence_collected_at timestamptz,
 
+  -- When the permission-relevant evidence (OAuth scopes, authority mode,
+  -- maintainer set, published advisories) was last seen to differ from what
+  -- the latest approval rested on. NULL means no outstanding change. Set by
+  -- change detection; cleared only by recording a new decision, which freezes
+  -- a fresh snapshot — the change stays flagged until an admin re-decides.
+  evidence_changed_at timestamptz,
+  -- Fingerprint of the changed evidence that has already been announced, so a
+  -- daily recheck flags each distinct change once instead of re-notifying on
+  -- every sweep.
+  notified_change_fingerprint TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -5601,6 +5612,13 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS mcp_approval_requests_artifact_ref_idx
 ON mcp_approval_requests (artifact_ref)
 WHERE deleted IS FALSE AND artifact_ref IS NOT NULL;
+
+-- Serves the daily change-detection sweep, which scans approved reviews
+-- across every project in keyset order. Partial and id-ordered so a page is
+-- an index range rather than a walk over every review in the installation.
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_approved_id_idx
+ON mcp_approval_requests (id)
+WHERE deleted IS FALSE AND status = 'approved';
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_request_requesters_request_id_user_id_key
 ON mcp_approval_request_requesters (mcp_approval_request_id, user_id)

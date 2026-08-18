@@ -103,17 +103,20 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
 	)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
+	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
-		Store:         platformmcp.NewPostgresOAuthStore(config.DB),
+		Store:         oauthStore,
 		Identity:      config.Identity,
 		Gate:          gate,
 		Authorizer:    authorizer,
 		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
+		Telemetry:     oauthTelemetry,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -218,7 +221,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
 		fixtureConfig.CatalogDescriptor(),
-	)
+	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -269,17 +272,20 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
 	)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
+	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
-		Store:         platformmcp.NewPostgresOAuthStore(config.DB),
+		Store:         oauthStore,
 		Identity:      config.Identity,
 		Gate:          gate,
 		Authorizer:    authorizer,
 		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
+		Telemetry:     oauthTelemetry,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
@@ -369,7 +375,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
 		platformmcp.CatalogDescriptor{},
-	)
+	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))

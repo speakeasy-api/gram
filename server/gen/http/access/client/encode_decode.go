@@ -4555,9 +4555,10 @@ func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInve
 		return nil
 	}
 	res := &access.ShadowMCPInventoryApprovalRequest{
-		ID:             *v.ID,
-		Status:         *v.Status,
-		RequesterCount: *v.RequesterCount,
+		ID:                *v.ID,
+		Status:            *v.Status,
+		RequesterCount:    *v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
 	}
 
 	return res

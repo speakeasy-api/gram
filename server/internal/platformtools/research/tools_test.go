@@ -24,6 +24,7 @@ import (
 type fakeCompletions struct {
 	request     openrouter.CompletionRequest
 	annotations []openrouter.ResponseAnnotation
+	usage       openrouter.Usage
 	err         error
 }
 
@@ -33,7 +34,11 @@ func (f *fakeCompletions) GetCompletion(_ context.Context, req openrouter.Comple
 		return nil, f.err
 	}
 
-	return &openrouter.CompletionResponse{Annotations: f.annotations, Content: "prose the tool must discard"}, nil
+	return &openrouter.CompletionResponse{
+		Annotations: f.annotations,
+		Usage:       f.usage,
+		Content:     "prose the tool must discard",
+	}, nil
 }
 
 func authedContext(t *testing.T) context.Context {
@@ -98,6 +103,44 @@ func TestWebSearch(t *testing.T) {
 	require.NotNil(t, completions.request.WebSearch)
 	require.Equal(t, 5, completions.request.WebSearch.MaxResults)
 	require.Equal(t, "org-1", completions.request.OrgID)
+	// The search route rejects a disabled reasoning setting with a 400, so
+	// the override must stay unset.
+	require.Nil(t, completions.request.Reasoning)
+}
+
+// A search is a billed completion the tool runs on the caller's behalf, so
+// the caller can collect what its searches cost. Draining forgets it: this
+// tool outlives every run that uses it.
+func TestWebSearch_ReportsWhatItsSearchesCost(t *testing.T) {
+	t.Parallel()
+
+	completions := &fakeCompletions{
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{
+				URL: "https://example.com/a", Title: "a", Content: "…",
+			}},
+		},
+		usage: openrouter.Usage{PromptTokens: 1200, CompletionTokens: 340},
+	}
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
+
+	var out bytes.Buffer
+	env := toolconfig.ToolCallEnv{GramChatID: "report-1"}
+	require.NoError(t, tool.Call(authedContext(t), env, strings.NewReader(`{"query": "one"}`), &out))
+	out.Reset()
+	require.NoError(t, tool.Call(authedContext(t), env, strings.NewReader(`{"query": "two"}`), &out))
+
+	prompt, completion := tool.DrainUsage("report-1")
+	require.Equal(t, int64(2400), prompt, "both searches count")
+	require.Equal(t, int64(680), completion)
+
+	prompt, completion = tool.DrainUsage("report-1")
+	require.Zero(t, prompt, "drained usage is not counted twice")
+	require.Zero(t, completion)
+
+	prompt, completion = tool.DrainUsage("another-report")
+	require.Zero(t, prompt, "and one run never collects another's spend")
+	require.Zero(t, completion)
 }
 
 // Searches are billed completions, and the loop that issues them chooses its
@@ -140,7 +183,16 @@ func TestWebSearch_BoundsSearchesPerRun(t *testing.T) {
 func TestWebSearch_ClampsMaxResults(t *testing.T) {
 	t.Parallel()
 
-	completions := &fakeCompletions{}
+	completions := &fakeCompletions{
+		// One real citation: a zero-annotation response is a failed search by
+		// contract (the plugin may not have applied), which is not what this
+		// test is about.
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{
+				URL: "https://somevendor.io/", Title: "SomeVendor", Content: "…",
+			}},
+		},
+	}
 	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
 
 	_, err := runSearch(t, authedContext(t), tool, `{"query": "q", "max_results": 50}`)
@@ -687,6 +739,40 @@ func TestURLMenu_CanonicalizesFragments(t *testing.T) {
 	menu.Allow("chat-1", "https://:443/path")
 	_, ok = menu.Allowed("chat-1", "https://:443/path")
 	require.False(t, ok)
+}
+
+// A search whose annotations all fail the citation shape has learned nothing
+// from the web, and must say so rather than reading as absence of coverage.
+func TestWebSearch_AllInvalidAnnotationsIsAFailedSearch(t *testing.T) {
+	t.Parallel()
+
+	completions := &fakeCompletions{
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "file_citation", URLCitation: nil},
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{URL: "", Title: "broken", Content: ""}},
+		},
+	}
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
+
+	_, err := runSearch(t, authedContext(t), tool, `{"query": "q"}`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no citations")
+}
+
+// A same-host redirect onto a different port is a different service, not a
+// same-site move: it must clear the menu like any cross-site hop.
+func TestFetchPage_RefusesASameHostPortChangeRedirect(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://"+r.Host[:strings.LastIndex(r.Host, ":")]+":1/", http.StatusFound)
+	}))
+	t.Cleanup(server.Close)
+
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not among this run's observed sources")
 }
 
 // One run's fetch budget is bounded; a fresh run has its own.

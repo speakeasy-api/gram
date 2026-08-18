@@ -193,6 +193,10 @@ type UnmarkRiskResultsFalsePositiveRequestBody struct {
 type CreateRiskPolicyBypassRequestRequestBody struct {
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string `form:"request_token" json:"request_token" xml:"request_token"`
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeRequestBody is the type of the "risk" service
@@ -10984,6 +10988,7 @@ func NewUnmarkRiskResultsFalsePositiveRequestBody(p *risk.UnmarkRiskResultsFalse
 func NewCreateRiskPolicyBypassRequestRequestBody(p *risk.CreateRiskPolicyBypassRequestPayload) *CreateRiskPolicyBypassRequestRequestBody {
 	body := &CreateRiskPolicyBypassRequestRequestBody{
 		RequestToken: p.RequestToken,
+		Note:         p.Note,
 	}
 	return body
 }

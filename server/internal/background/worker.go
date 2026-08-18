@@ -75,6 +75,10 @@ type WorkerOptions struct {
 	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+
+	// GitHubEvidenceToken authenticates the recheck sweep's repository
+	// lookups; empty falls back to GitHub's small unauthenticated budget.
+	GitHubEvidenceToken string
 	SiteURL             *url.URL
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
@@ -157,6 +161,7 @@ func ForDeploymentProcessing(
 		OpenRouterSpend:     nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		GitHubEvidenceToken: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
@@ -217,6 +222,7 @@ func NewTemporalWorker(
 		OpenRouterSpend:           nil,
 		K8sClient:                 nil,
 		ExpectedTargetCNAME:       "",
+		GitHubEvidenceToken:       "",
 		SiteURL:                   nil,
 		BillingTracker:            nil,
 		BillingRepository:         nil,
@@ -265,6 +271,7 @@ func NewTemporalWorker(
 			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
@@ -383,6 +390,7 @@ func NewTemporalWorker(
 		judgeRateLimiter,
 		opts.BuiltinPresets,
 		opts.TrialEmailsService,
+		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
 	)
@@ -481,6 +489,8 @@ func NewTemporalWorker(
 	// Trial expiry activities
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
+	temporalWorker.RegisterActivity(activities.RunMcpResearch)
+	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -595,6 +605,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
+	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows

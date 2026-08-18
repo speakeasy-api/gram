@@ -1474,6 +1474,247 @@ func DecodeRefreshEvidenceResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildStartResearchRequest instantiates a HTTP request object with method and
+// path set to call the "mcpApproval" service "startResearch" endpoint
+func (c *Client) BuildStartResearchRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StartResearchMcpApprovalPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpApproval", "startResearch", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeStartResearchRequest returns an encoder for requests sent to the
+// mcpApproval startResearch server.
+func EncodeStartResearchRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpapproval.StartResearchPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpApproval", "startResearch", "*mcpapproval.StartResearchPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeStartResearchResponse returns a decoder for responses returned by the
+// mcpApproval startResearch endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeStartResearchResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeStartResearchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StartResearchResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			res := NewStartResearchResearchReportOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body StartResearchUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body StartResearchForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body StartResearchBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body StartResearchNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body StartResearchConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body StartResearchUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StartResearchInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body StartResearchInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+				}
+				err = ValidateStartResearchInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+				}
+				return nil, NewStartResearchInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body StartResearchUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+				}
+				err = ValidateStartResearchUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+				}
+				return nil, NewStartResearchUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpApproval", "startResearch", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body StartResearchGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "startResearch", err)
+			}
+			err = ValidateStartResearchGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "startResearch", err)
+			}
+			return nil, NewStartResearchGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpApproval", "startResearch", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRecordDecisionRequest instantiates a HTTP request object with method
 // and path set to call the "mcpApproval" service "recordDecision" endpoint
 func (c *Client) BuildRecordDecisionRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1721,16 +1962,17 @@ func DecodeRecordDecisionResponse(decoder func(*http.Response) goahttp.Decoder, 
 // type *ApprovalRequestSummaryResponseBody.
 func unmarshalApprovalRequestSummaryResponseBodyToMcpapprovalApprovalRequestSummary(v *ApprovalRequestSummaryResponseBody) *mcpapproval.ApprovalRequestSummary {
 	res := &mcpapproval.ApprovalRequestSummary{
-		ID:             *v.ID,
-		TargetKind:     *v.TargetKind,
-		TargetRaw:      *v.TargetRaw,
-		ServerSlug:     v.ServerSlug,
-		ArtifactRef:    v.ArtifactRef,
-		VersionPinned:  *v.VersionPinned,
-		Status:         *v.Status,
-		RequesterCount: *v.RequesterCount,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                *v.ID,
+		TargetKind:        *v.TargetKind,
+		TargetRaw:         *v.TargetRaw,
+		ServerSlug:        v.ServerSlug,
+		ArtifactRef:       v.ArtifactRef,
+		VersionPinned:     *v.VersionPinned,
+		Status:            *v.Status,
+		RequesterCount:    *v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
 	}
 
 	return res
@@ -1767,6 +2009,96 @@ func unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(v *Appro
 	res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))
 	for i, val := range v.GrantedPrincipalUrns {
 		res.GrantedPrincipalUrns[i] = val
+	}
+
+	return res
+}
+
+// unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff builds a value of
+// type *mcpapproval.EvidenceDiff from a value of type
+// *EvidenceDiffResponseBody.
+func unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(v *EvidenceDiffResponseBody) *mcpapproval.EvidenceDiff {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceDiff{
+		Changed: *v.Changed,
+	}
+	if v.ScopesAdded != nil {
+		res.ScopesAdded = make([]string, len(v.ScopesAdded))
+		for i, val := range v.ScopesAdded {
+			res.ScopesAdded[i] = val
+		}
+	}
+	if v.ScopesRemoved != nil {
+		res.ScopesRemoved = make([]string, len(v.ScopesRemoved))
+		for i, val := range v.ScopesRemoved {
+			res.ScopesRemoved[i] = val
+		}
+	}
+	if v.SecretsAdded != nil {
+		res.SecretsAdded = make([]string, len(v.SecretsAdded))
+		for i, val := range v.SecretsAdded {
+			res.SecretsAdded[i] = val
+		}
+	}
+	if v.SecretsRemoved != nil {
+		res.SecretsRemoved = make([]string, len(v.SecretsRemoved))
+		for i, val := range v.SecretsRemoved {
+			res.SecretsRemoved[i] = val
+		}
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*mcpapproval.EvidenceFieldChange, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange(val)
+		}
+	}
+	if v.AdvisoriesAdded != nil {
+		res.AdvisoriesAdded = make([]*mcpapproval.EvidenceAdvisoryChange, len(v.AdvisoriesAdded))
+		for i, val := range v.AdvisoriesAdded {
+			if val == nil {
+				res.AdvisoriesAdded[i] = nil
+				continue
+			}
+			res.AdvisoriesAdded[i] = unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange
+// builds a value of type *mcpapproval.EvidenceFieldChange from a value of type
+// *EvidenceFieldChangeResponseBody.
+func unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange(v *EvidenceFieldChangeResponseBody) *mcpapproval.EvidenceFieldChange {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceFieldChange{
+		Field:  *v.Field,
+		Before: *v.Before,
+		After:  *v.After,
+	}
+
+	return res
+}
+
+// unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange
+// builds a value of type *mcpapproval.EvidenceAdvisoryChange from a value of
+// type *EvidenceAdvisoryChangeResponseBody.
+func unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange(v *EvidenceAdvisoryChangeResponseBody) *mcpapproval.EvidenceAdvisoryChange {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceAdvisoryChange{
+		ID:       *v.ID,
+		Summary:  v.Summary,
+		Severity: v.Severity,
 	}
 
 	return res

@@ -25,6 +25,7 @@ type Server struct {
 	CreateRequest      http.Handler
 	Promote            http.Handler
 	RefreshEvidence    http.Handler
+	StartResearch      http.Handler
 	RecordDecision     http.Handler
 }
 
@@ -61,6 +62,7 @@ func New(
 			{"CreateRequest", "POST", "/rpc/mcpApproval.createRequest"},
 			{"Promote", "POST", "/rpc/mcpApproval.promote"},
 			{"RefreshEvidence", "POST", "/rpc/mcpApproval.refreshEvidence"},
+			{"StartResearch", "POST", "/rpc/mcpApproval.startResearch"},
 			{"RecordDecision", "POST", "/rpc/mcpApproval.recordDecision"},
 		},
 		ListRequests:       NewListRequestsHandler(e.ListRequests, mux, decoder, encoder, errhandler, formatter),
@@ -69,6 +71,7 @@ func New(
 		CreateRequest:      NewCreateRequestHandler(e.CreateRequest, mux, decoder, encoder, errhandler, formatter),
 		Promote:            NewPromoteHandler(e.Promote, mux, decoder, encoder, errhandler, formatter),
 		RefreshEvidence:    NewRefreshEvidenceHandler(e.RefreshEvidence, mux, decoder, encoder, errhandler, formatter),
+		StartResearch:      NewStartResearchHandler(e.StartResearch, mux, decoder, encoder, errhandler, formatter),
 		RecordDecision:     NewRecordDecisionHandler(e.RecordDecision, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -84,6 +87,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRequest = m(s.CreateRequest)
 	s.Promote = m(s.Promote)
 	s.RefreshEvidence = m(s.RefreshEvidence)
+	s.StartResearch = m(s.StartResearch)
 	s.RecordDecision = m(s.RecordDecision)
 }
 
@@ -98,6 +102,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRequestHandler(mux, h.CreateRequest)
 	MountPromoteHandler(mux, h.Promote)
 	MountRefreshEvidenceHandler(mux, h.RefreshEvidence)
+	MountStartResearchHandler(mux, h.StartResearch)
 	MountRecordDecisionHandler(mux, h.RecordDecision)
 }
 
@@ -401,6 +406,59 @@ func NewRefreshEvidenceHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "refreshEvidence")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpApproval")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStartResearchHandler configures the mux to serve the "mcpApproval"
+// service "startResearch" endpoint.
+func MountStartResearchHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpApproval.startResearch", f)
+}
+
+// NewStartResearchHandler creates a HTTP handler which loads the HTTP request
+// and calls the "mcpApproval" service "startResearch" endpoint.
+func NewStartResearchHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStartResearchRequest(mux, decoder)
+		encodeResponse = EncodeStartResearchResponse(encoder)
+		encodeError    = EncodeStartResearchError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "startResearch")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpApproval")
 		payload, err := decodeRequest(r)
 		if err != nil {

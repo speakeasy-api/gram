@@ -171,15 +171,18 @@ function TopUsersTable({
       render: (user) => (
         <Text variant="small">{usageCountLabel(user.observedUseCount)}</Text>
       ),
-      width: "0.6fr",
+      width: "0.5fr",
     },
     {
+      // Wider than the call count it sits beside: this table shares a row
+      // with the declared tools, and a timestamp that wraps costs every row
+      // a second line.
       key: "lastCalled",
       header: "Last called",
       render: (user) => (
         <Text variant="small">{formatShortDate(user.lastCalled)}</Text>
       ),
-      width: "0.6fr",
+      width: "0.9fr",
     },
   ];
 
@@ -475,6 +478,28 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     setUsersCursor(nextUsersCursor);
   };
 
+  // Built once and rendered wherever the review puts it: inside the evidence
+  // for a server that has one, standalone under its own heading for a server
+  // that does not.
+  const usersPanel =
+    usersQuery.isLoading && !hasLoadedUserPages ? (
+      <SkeletonTable />
+    ) : usersQuery.error && !hasLoadedUserPages ? (
+      <div className="bg-background flex min-h-24 flex-col items-center justify-center gap-1 px-4 py-6 text-center">
+        <Text variant="body" className="font-medium">
+          Users could not be loaded
+        </Text>
+      </div>
+    ) : (
+      <TopUsersTable
+        hasMore={Boolean(nextUsersCursor)}
+        isLoading={isLoadingMoreUsers}
+        onLoadMore={loadMoreUsers}
+        onOpenUser={onOpenUser}
+        users={displayedUsers}
+      />
+    );
+
   const saveServerName = async (name: string) => {
     if (!server) return false;
 
@@ -541,7 +566,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Body fullHeight className="pb-8">
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title>{serverNameTitle}</Page.Section.Title>
+            {/* No area eyebrow: "SECURE" over a server under review reads as
+                a verdict about the server, not as the app section. */}
+            <Page.Section.Title area="">{serverNameTitle}</Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
             </Page.Section.Description>
@@ -568,7 +595,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                   </Text>
                 </div>
               ) : (
-                <div className="flex min-h-0 flex-col gap-6">
+                <div className="flex min-h-0 flex-col gap-6 pb-8">
+                  {/* pb-8: the last thing on this page is a disclosure
+                      toggle, and a control flush against the bottom edge
+                      reads as cut off rather than as the end of the page. */}
                   <DecideAccessSheet
                     target={decideTarget}
                     open={decideTarget !== null}
@@ -586,45 +616,41 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     policyState={policyState}
                     server={server}
                   />
-                  <section className="space-y-3">
-                    <div>
-                      <Text variant="subheading">Access review</Text>
-                      <Text muted small>
-                        The evidence, requesters, and decision history for this
-                        server. Decisions here are what allow or block it.
-                      </Text>
-                    </div>
-                    {server.approvalRequest ? (
-                      <ApprovalReview requestId={server.approvalRequest.id} />
-                    ) : (
-                      <EnsureServerReview
-                        canonicalServerUrl={server.canonicalServerUrl}
-                      />
-                    )}
-                  </section>
                   <section className="min-h-0 space-y-3">
-                    <div>
-                      <Text variant="subheading">Top users</Text>
-                      <Text muted small>
-                        Users with observed calls to this Shadow MCP server.
-                      </Text>
-                    </div>
-                    {usersQuery.isLoading && !hasLoadedUserPages ? (
-                      <SkeletonTable />
-                    ) : usersQuery.error && !hasLoadedUserPages ? (
-                      <div className="bg-background flex min-h-24 flex-col items-center justify-center gap-1 px-4 py-6 text-center">
-                        <Text variant="body" className="font-medium">
-                          Users could not be loaded
-                        </Text>
-                      </div>
-                    ) : (
-                      <TopUsersTable
-                        hasMore={Boolean(nextUsersCursor)}
-                        isLoading={isLoadingMoreUsers}
-                        onLoadMore={loadMoreUsers}
-                        onOpenUser={onOpenUser}
-                        users={displayedUsers}
+                    {/* The review owns its own heading: the request's status
+                        shares that row, and only the review has it. Observed
+                        traffic goes in with the evidence rather than trailing
+                        it as a section of its own — who calls the server is
+                        one of the questions a reviewer is asking. */}
+                    {server.approvalRequest ? (
+                      <ApprovalReview
+                        requestId={server.approvalRequest.id}
+                        title="Access review"
+                        description="Evidence, requesters, and decision history. Decisions here allow or block this server."
+                        usage={usersPanel}
                       />
+                    ) : (
+                      <>
+                        <div>
+                          <Text variant="subheading">Access review</Text>
+                          <Text muted small>
+                            Evidence, requesters, and decision history.
+                            Decisions here allow or block this server.
+                          </Text>
+                        </div>
+                        <EnsureServerReview
+                          canonicalServerUrl={server.canonicalServerUrl}
+                        />
+                        <div>
+                          <Text variant="subheading">
+                            Who is currently using it?
+                          </Text>
+                          <Text muted small>
+                            Users with observed calls to this Shadow MCP server.
+                          </Text>
+                        </div>
+                        {usersPanel}
+                      </>
                     )}
                   </section>
                 </div>
