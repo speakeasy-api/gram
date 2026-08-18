@@ -195,7 +195,11 @@ export function RecordNav({
                   </Link>
                 )}
               </SidebarMenuButton>
-              {projectCount !== undefined && projectCount > 1 && (
+              {/* Dropped at exactly one, and only there. That is the case the
+                  item's target already answers, so a "1" beside a link that
+                  opens the project itself counts a list the operator will never
+                  see. Zero is a fact about the record and keeps its badge. */}
+              {projectCount !== undefined && projectCount !== 1 && (
                 <SidebarMenuBadge>{projectCount}</SidebarMenuBadge>
               )}
             </SidebarMenuItem>

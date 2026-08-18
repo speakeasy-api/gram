@@ -439,6 +439,10 @@ export type AdminProject = {
   id: string;
   name: string;
   slug: string;
+  // Both server models: every mcp_servers row, plus every mcp_enabled toolset
+  // no such row points at. Required on the wire, so 0 is an answer rather than
+  // an omission. AGE-3276.
+  mcp_server_count: number;
   created_at: string;
   updated_at: string;
 };

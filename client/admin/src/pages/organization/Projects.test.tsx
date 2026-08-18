@@ -32,7 +32,12 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 });
 
 const ORG = anOrganization();
-const PROJECT = aProject({ created_at: "2026-01-03T00:00:00Z" });
+const PROJECT = aProject({
+  created_at: "2026-01-03T00:00:00Z",
+  // Not 0 and not 1: a cell that read the wrong field, or counted the rows,
+  // would land on one of those.
+  mcp_server_count: 7,
+});
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
@@ -102,13 +107,88 @@ describe("Projects", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "ID", "Created"]);
+    ).toEqual(["Name", "Slug", "MCP Servers", "Created"]);
     expect(cellsOf(rowFor(link))).toEqual([
       PROJECT.name,
       PROJECT.slug,
-      PROJECT.id,
+      String(PROJECT.mcp_server_count),
       shortDate(PROJECT.created_at),
     ]);
+  });
+
+  it("counts a project with no MCP servers rather than leaving the cell blank", async () => {
+    mocks.listOrganizationProjects.mockImplementation(() =>
+      Promise.resolve({ projects: [aProject({ mcp_server_count: 0 })] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+
+    const link = await screen.findByRole("link", { name: PROJECT.name });
+    // A blank cell reads as a project nobody has measured. None is an answer
+    // about a project that has been, and it is the answer an operator looking
+    // for unused projects is scanning for.
+    expect(cellsOf(rowFor(link))[2]).toBe("0");
+  });
+
+  it("draws the projects oldest first, whatever order the endpoint sent", async () => {
+    // Shuffled on the wire. `organization.projects` promises no order, so a
+    // view that renders what it was handed shows one organization two ways on
+    // two reads.
+    const middle = aProject({
+      id: "proj_2",
+      name: "Middle Project",
+      slug: "middle-project",
+      created_at: "2026-01-05T00:00:00Z",
+    });
+    const newest = aProject({
+      id: "proj_3",
+      name: "Newest Project",
+      slug: "newest-project",
+      created_at: "2026-02-01T00:00:00Z",
+    });
+    mocks.listOrganizationProjects.mockImplementation(() =>
+      Promise.resolve({ projects: [newest, PROJECT, middle] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+    await screen.findByRole("link", { name: PROJECT.name });
+
+    expect(
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => cellsOf(row)[0]),
+    ).toEqual([PROJECT.name, middle.name, newest.name]);
+  });
+
+  it("counts the projects above the table, and says nothing while there is nothing to count", async () => {
+    const second = aProject({
+      id: "proj_2",
+      name: "Second Project",
+      slug: "second-project",
+    });
+    mocks.listOrganizationProjects.mockImplementation(() =>
+      Promise.resolve({ projects: [PROJECT, second] }),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+
+    expect(await screen.findByText("2 projects")).toBeTruthy();
+  });
+
+  it("says one project in the singular", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+
+    expect(await screen.findByText("1 project")).toBeTruthy();
+    expect(screen.queryByText("1 projects")).toBeNull();
   });
 
   it("draws no checkbox on a table that did not ask for one", async () => {
@@ -245,6 +325,9 @@ describe("Projects", () => {
     expect(
       await screen.findByText("No projects in this organization"),
     ).toBeTruthy();
+    // No "0 projects" line above it. The sentence in the table already says
+    // that, and a count of nothing beside it says it twice.
+    expect(screen.queryByText("0 projects")).toBeNull();
   });
 
   it("says it is loading rather than that there are none while the read is paused", async () => {
