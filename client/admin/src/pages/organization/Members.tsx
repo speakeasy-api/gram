@@ -45,8 +45,13 @@ const memberColumn = createColumnHelper<
 const MEMBER_COLUMNS = memberColumn.columns([
   memberColumn.accessor("display_name", {
     header: "Member",
+    // Wrapping, against the table's own `whitespace-nowrap`. A name and an
+    // email have no length the column can be sized for, and the border around
+    // the table clips rather than scrolls, so a squeezed column has to fold the
+    // text instead of pushing it out of reach.
+    meta: { cellClassName: "whitespace-normal" },
     cell: ({ row }) => (
-      <span className="flex items-center gap-2 text-sm whitespace-nowrap">
+      <span className="flex items-center gap-2 text-sm">
         <span
           aria-hidden="true"
           className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium"
@@ -59,6 +64,9 @@ const MEMBER_COLUMNS = memberColumn.columns([
   }),
   memberColumn.accessor("email", {
     header: "Email",
+    // `break-all` rather than `break-words`: an email is one word, so a rule
+    // that only breaks between words never fires on it.
+    meta: { cellClassName: "whitespace-normal break-all" },
     cell: ({ row }) => (
       <span className="text-muted-foreground text-sm">
         {row.original.email}

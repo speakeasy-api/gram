@@ -32,6 +32,10 @@ function projectColumns(idOrSlug: string) {
   return projectColumn.columns([
     projectColumn.accessor("name", {
       header: "Name",
+      // Wrapping, against the table's own `whitespace-nowrap`, for the reason
+      // the Members view gives: the border clips rather than scrolls, so a
+      // squeezed column folds its text instead of hiding it.
+      meta: { cellClassName: "whitespace-normal" },
       // The link, not the row, carries the keyboard path and the accessible
       // name. It also lets the operator open the project in a new tab.
       //
@@ -53,6 +57,8 @@ function projectColumns(idOrSlug: string) {
     }),
     projectColumn.accessor("slug", {
       header: "Slug",
+      // `break-all`, because a slug is one word to a word-breaking rule.
+      meta: { cellClassName: "whitespace-normal break-all" },
       cell: ({ row }) => <span className="text-sm">{row.original.slug}</span>,
     }),
     projectColumn.accessor("mcp_server_count", {
