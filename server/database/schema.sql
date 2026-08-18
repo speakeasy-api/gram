@@ -6507,6 +6507,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
   active_generation uuid NOT NULL DEFAULT generate_uuidv7(),
   authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   reauthorized_at timestamptz,
+  authorization_expires_at timestamptz,
+  reauthorization_required_at timestamptz,
+  reauthorization_reason TEXT,
   revoked_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -6514,6 +6517,22 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
 
   CONSTRAINT platform_mcp_connections_pkey PRIMARY KEY (id),
   CONSTRAINT platform_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT platform_mcp_connections_reauthorization_state_check CHECK (
+    (reauthorization_required_at IS NULL AND reauthorization_reason IS NULL)
+    OR (
+      reauthorization_required_at IS NOT NULL
+      AND reauthorization_reason IS NOT NULL
+      AND reauthorization_reason IN (
+        'refresh_idle_expired',
+        'authorization_expired',
+        'refresh_reuse',
+        'connection_revoked',
+        'client_revoked',
+        'authorization_lost',
+        'security_reset'
+      )
+    )
+  ),
   CONSTRAINT platform_mcp_connections_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_connections_oauth_client_id_fkey
