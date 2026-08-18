@@ -448,13 +448,19 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 
 	newlyEnabled := []productfeatures.Feature(nil)
-	if _, err := trialsrepo.New(tx).GetTrial(ctx, organizationID); errors.Is(err, pgx.ErrNoRows) {
+	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		newlyEnabled, err = productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
 		if err != nil {
 			return stripeWebhookResult{}, fmt.Errorf("seed PAYG entitlements: %w", err)
 		}
 	} else if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("read trial state for PAYG activation: %w", err)
+	} else if trial.DemotedAt.Valid {
+		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
+			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
+		}
+		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
 	}
 
 	anchorDay := conv.SafeInt32(checkout.BillingCycleAnchor.UTC().Day())

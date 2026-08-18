@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -213,11 +215,32 @@ func seedDemotedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	return endsAt
 }
 
+func seedDisabledTrialRuntimeFeatures(t *testing.T, ctx context.Context, svc *Service, conn *pgxpool.Pool, orgID string) {
+	t.Helper()
+	q := featurerepo.New(conn)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.False(t, enabled)
+	}
+}
+
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, provisioner := newRearmService(t)
 	seedDemotedTrial(t, ctx, conn, "org_rearm", "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, "org_rearm")
 	beforeTrial := readTrial(t, ctx, conn, "org_rearm")
 	beforeOrg := readOrgState(t, ctx, conn, "org_rearm")
 
@@ -237,6 +260,11 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	state := readOrgState(t, ctx, conn, "org_rearm")
 	require.Equal(t, "enterprise", state.GramAccountType)
 	require.True(t, state.Whitelisted, "a re-armed organization must be whitelisted again")
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, "org_rearm", feature)
+		require.NoError(t, err)
+		require.Truef(t, enabled, "re-arm should restore %s", feature)
+	}
 
 	after := readTrial(t, ctx, conn, "org_rearm")
 	require.False(t, after.DemotedAt.Valid, "re-arming must clear demoted_at")
