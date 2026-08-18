@@ -3,6 +3,7 @@ package usage
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -97,6 +98,33 @@ var BillingEmail = Type("BillingEmail", func() {
 	Attribute("email", String, "The configured billing notification email. Omitted when organization administrators receive billing notifications.", func() {
 		Format(FormatEmail)
 	})
+})
+
+// SpendCap is the monthly USD ceiling enforced by one of the organization's
+// platform-managed inference keys.
+var SpendCap = Type("SpendCap", func() {
+	Attribute("key_type", String, "The platform-managed inference key whose cap is reported", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
+		Minimum(constants.MinimumPaygSpendCapUSD)
+		Maximum(constants.MaximumPaygSpendCapUSD)
+	})
+
+	Required("key_type", "monthly_credits")
+})
+
+// InferenceSpendCap reports current usage and the enforced monthly ceiling for
+// one materialized platform-managed inference key.
+var InferenceSpendCap = Type("InferenceSpendCap", func() {
+	Attribute("key_type", String, "The platform-managed inference function", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("credits_used", Float64, "Monthly usage in USD")
+	Attribute("monthly_credits", Int, "The enforced monthly spend cap in USD")
+	Attribute("disabled", Boolean, "Whether the platform-managed key is disabled")
+
+	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
 var _ = Service("usage", func() {
@@ -220,6 +248,54 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "setBillingEmail")
 		Meta("openapi:extension:x-speakeasy-name-override", "setBillingEmail")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingEmail"}`)
+	})
+
+	Method("setSpendCap", func() {
+		Description("Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("key_type", String, "The platform-managed inference key to update. Defaults to chat for compatibility.", func() {
+				Enum("chat", "internal")
+			})
+			Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
+			})
+			Required("monthly_credits")
+		})
+
+		Result(SpendCap)
+
+		HTTP(func() {
+			POST("/rpc/usage.setSpendCap")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setSpendCap"}`)
+	})
+
+	Method("getInferenceSpendCaps", func() {
+		Description("List current usage and caps for the organization's materialized platform-managed inference keys")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ArrayOf(InferenceSpendCap))
+
+		HTTP(func() {
+			GET("/rpc/usage.getInferenceSpendCaps")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getInferenceSpendCaps"}`)
 	})
 
 	Method("getUsageTiers", func() {

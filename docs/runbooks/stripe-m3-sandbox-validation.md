@@ -249,7 +249,8 @@ Cancel the current sandbox subscription. Wait for
 - the stored subscription ID and exact Stripe anchor are cleared, while the
   Stripe customer remains;
 - the Other inference key is disabled locally and upstream;
-- the Security inference key is unchanged.
+- the Security inference key stays enabled with a $5 monthly cap, while its
+  last chosen PAYG cap remains available for restoration.
 
 Use the deterministic lifecycle test above to replay the exact signed event and
 confirm receipt, audit, metric, and upstream effects do not repeat. In the
@@ -258,7 +259,8 @@ Checkout and confirm the replacement remains active.
 
 Complete Checkout again with the same customer. The PAYG activation event must
 cause current-state reconciliation to re-enable the same Other inference key
-with its PAYG limit; the Security inference key remains untouched.
+with a $100 monthly cap and restore the Security inference key to its most
+recent chosen cap, or $100 when no chosen cap exists.
 
 The voluntary cancellation proves Gram's terminal event behavior. Separately,
 confirm the sandbox Dashboard still has the required Smart Retries end action:

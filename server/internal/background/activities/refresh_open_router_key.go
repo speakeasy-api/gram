@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -43,8 +44,8 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 	if err := keyType.Validate(); err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid openrouter key type").LogError(ctx, o.logger)
 	}
-	if keyType == openrouter.KeyTypeChat {
-		return withOpenRouterChatKeyBillingLock(ctx, o.logger, o.db, args.OrgID, func(queries *repo.Queries) error {
+	return withOpenRouterKeyBillingConnectionLock(ctx, o.logger, o.db, args.OrgID, keyType, func(conn *pgxpool.Conn, queries *repo.Queries) error {
+		if keyType == openrouter.KeyTypeChat {
 			projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrgID)
 			if err != nil {
 				return fmt.Errorf("read billing state before OpenRouter chat key refresh: %w", err)
@@ -61,24 +62,22 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 				// not reinstate it after that committed transition.
 				return nil
 			}
+		}
 
-			return o.refresh(ctx, args, keyType)
-		})
-	}
+		dbProvisioner, ok := o.openRouter.(openRouterKeyBillingDBProvisioner)
+		if !ok {
+			return errors.New("OpenRouter key provisioner cannot use the locked database session")
+		}
+		limit, err := dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, args.OrgID, keyType, args.Limit)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)
+		}
 
-	return o.refresh(ctx, args, keyType)
-}
+		o.logger.InfoContext(ctx, "refreshed openrouter key limit",
+			attr.SlogOpenRouterKeyLimit(limit),
+			attr.SlogOpenRouterKeyType(string(keyType)),
+		)
 
-func (o *RefreshOpenRouterKey) refresh(ctx context.Context, args RefreshOpenRouterKeyArgs, keyType openrouter.KeyType) error {
-	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID, keyType, args.Limit)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)
-	}
-
-	o.logger.InfoContext(ctx, "refreshed openrouter key limit",
-		attr.SlogOpenRouterKeyLimit(limit),
-		attr.SlogOpenRouterKeyType(string(keyType)),
-	)
-
-	return nil
+		return nil
+	})
 }

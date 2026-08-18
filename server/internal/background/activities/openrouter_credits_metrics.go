@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -13,6 +14,7 @@ import (
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 const (
@@ -104,41 +106,53 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				return nil
 			}
 
-			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, apiKey)
-			if err != nil {
-				// Skip on a per-org failure so one bad key does not blank the
-				// whole batch. The error is logged for diagnosis and swallowed
-				// so the errgroup does not cancel sibling polls.
-				c.logger.ErrorContext(gctx, "fetch openrouter key usage",
-					attr.SlogOrganizationID(row.OrganizationID),
-					attr.SlogOrganizationSlug(row.OrganizationSlug),
-					attr.SlogError(err),
-				)
+			keyType := openrouter.KeyType(row.KeyType)
+			if err := withOpenRouterKeyBillingConnectionLock(gctx, c.logger, c.db, row.OrganizationID, keyType, func(conn *pgxpool.Conn, _ *repo.Queries) error {
+				dbProvisioner, ok := c.openRouter.(openRouterKeyBillingDBProvisioner)
+				if !ok {
+					return errors.New("OpenRouter key provisioner cannot use the locked database session")
+				}
+				currentKey, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(gctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+					OrganizationID: row.OrganizationID,
+					KeyType:        row.KeyType,
+				})
+				if err != nil {
+					return fmt.Errorf("refresh openrouter key snapshot: %w", err)
+				}
+				if currentKey.Disabled {
+					return nil
+				}
+
+				// Re-read the key after taking the lock, then keep the lock across the
+				// upstream read and mirror reconciliation. A batch snapshot taken
+				// before a cap PATCH therefore cannot overwrite the newer cap or erase
+				// the generation used to finish the operation's audit.
+				used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, apiKey)
+				if err != nil {
+					return fmt.Errorf("fetch openrouter key usage: %w", err)
+				}
+				effectiveLimit, err := dbProvisioner.ReconcileMonthlyCreditsWithDB(gctx, conn, row.OrganizationID, keyType, currentKey.MonthlyCredits, upstreamLimit)
+				if err != nil {
+					return fmt.Errorf("reconcile openrouter monthly credits: %w", err)
+				}
+
+				results[i] = OpenRouterCreditsMetric{
+					OrganizationID:   row.OrganizationID,
+					OrganizationSlug: row.OrganizationSlug,
+					AccountType:      row.GramAccountType,
+					KeyType:          row.KeyType,
+					CreditsUsed:      used,
+					CreditLimit:      effectiveLimit,
+				}
 				return nil
-			}
-
-			// Self-heal drift introduced by out-of-band edits on the OpenRouter
-			// dashboard so the same tick reports a consistent ratio. A failed
-			// write is swallowed for the same reason GetKeyUsage failures are
-			// — one bad org should not blank the batch — and we fall back to
-			// the cached DB value for this tick.
-			effectiveLimit, err := c.openRouter.ReconcileMonthlyCredits(gctx, row.OrganizationID, openrouter.KeyType(row.KeyType), row.MonthlyCredits, upstreamLimit)
-			if err != nil {
-				c.logger.ErrorContext(gctx, "reconcile openrouter monthly credits",
+			}); err != nil {
+				// Skip on a per-key failure so one bad row does not blank the
+				// whole batch. The next five-minute tick retries it.
+				c.logger.ErrorContext(gctx, "collect openrouter key credits",
 					attr.SlogOrganizationID(row.OrganizationID),
 					attr.SlogOrganizationSlug(row.OrganizationSlug),
 					attr.SlogError(err),
 				)
-				effectiveLimit = row.MonthlyCredits
-			}
-
-			results[i] = OpenRouterCreditsMetric{
-				OrganizationID:   row.OrganizationID,
-				OrganizationSlug: row.OrganizationSlug,
-				AccountType:      row.GramAccountType,
-				KeyType:          row.KeyType,
-				CreditsUsed:      used,
-				CreditLimit:      effectiveLimit,
 			}
 			return nil
 		})

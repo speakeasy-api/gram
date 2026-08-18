@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -83,12 +84,18 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// stamp back and leaves the trial armed for the next sweep, which a lockdown
 	// after the commit would not get: a stamped row drops out of the sweep.
 	//
-	// DisableAPIKey writes its own disabled flag on the pool rather than on
-	// dbtx, so a key already taken down stays down through that rollback. The
-	// organization reads as enterprise with a dead key until the next sweep
-	// completes the demotion.
+	// DisableAPIKeyWithDB writes its disabled flag on the locked key session,
+	// outside dbtx, so a key already taken down stays down through an
+	// organization-transaction rollback. The organization reads as enterprise
+	// with a dead key until the next sweep completes the demotion.
 	for _, keyType := range openrouter.AllKeyTypes {
-		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
+		if err := keybillinglock.With(ctx, d.logger, d.db, args.OrganizationID, keyType, func(conn *pgxpool.Conn) error {
+			dbProvisioner, ok := d.openRouter.(openRouterKeyBillingDBProvisioner)
+			if !ok {
+				return errors.New("OpenRouter key provisioner cannot use the locked database session")
+			}
+			return dbProvisioner.DisableAPIKeyWithDB(ctx, conn, args.OrganizationID, keyType)
+		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}
 	}

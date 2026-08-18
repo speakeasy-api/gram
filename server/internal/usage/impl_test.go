@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -86,7 +87,16 @@ func (m *mockBillingRepo) GetCustomer(ctx context.Context, orgID string) (*billi
 }
 
 func (m *mockBillingRepo) GetCustomerTier(ctx context.Context, orgID string) (*billing.Tier, bool, error) {
-	return nil, false, fmt.Errorf("not implemented")
+	args := m.Called(ctx, orgID)
+	var tier *billing.Tier
+	if args.Get(0) != nil {
+		var ok bool
+		tier, ok = args.Get(0).(*billing.Tier)
+		if !ok {
+			return nil, false, fmt.Errorf("mock: unexpected type %T", args.Get(0))
+		}
+	}
+	return tier, args.Bool(1), args.Error(2)
 }
 
 func (m *mockBillingRepo) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
@@ -137,6 +147,45 @@ func (m *mockBillingRepo) CancelSubscriptionAtPeriodEnd(ctx context.Context, sub
 
 var _ billing.Repository = (*mockBillingRepo)(nil)
 
+type recordingOpenRouterProvisioner struct {
+	refreshCalls []openrouter.KeyType
+}
+
+func (*recordingOpenRouterProvisioner) ProvisionAPIKey(context.Context, string, openrouter.KeyType) (string, error) {
+	return "", fmt.Errorf("not implemented")
+}
+
+func (p *recordingOpenRouterProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, keyType openrouter.KeyType, _ *int) (int, error) {
+	p.refreshCalls = append(p.refreshCalls, keyType)
+	return 0, nil
+}
+
+func (p *recordingOpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+}
+
+func (*recordingOpenRouterProvisioner) DisableAPIKey(context.Context, string, openrouter.KeyType) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (*recordingOpenRouterProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
+	return 0, 0, fmt.Errorf("not implemented")
+}
+
+func (*recordingOpenRouterProvisioner) GetKeyUsage(context.Context, string) (float64, *int64, error) {
+	return 0, nil, fmt.Errorf("not implemented")
+}
+
+func (*recordingOpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, *int64) (int64, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+
+func (*recordingOpenRouterProvisioner) GetModelUsage(context.Context, string, string, openrouter.KeyType) (*openrouter.ModelUsage, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+var _ openrouter.Provisioner = (*recordingOpenRouterProvisioner)(nil)
+
 // --- test helpers ---
 
 func mustParseURL(t *testing.T, s string) *url.URL {
@@ -159,11 +208,13 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	return &Service{
 		tracer:        tp.Tracer("test"),
 		logger:        logger,
+		db:            db,
 		authz:         authzEngine,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
 		posthogClient: posthog.New(t.Context(), logger, "", "", ""),
+		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  nil,
 		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
@@ -401,7 +452,6 @@ func newSubscriptionWebhookService(t *testing.T, orgID, eventType string) (*Serv
 		Name:       "Trial Org",
 		Email:      "person@example.com",
 	}
-
 	billingMock := &mockBillingRepo{}
 	billingMock.On("ValidateAndParseWebhookEvent", mock.Anything, mock.Anything, mock.Anything).
 		Return(payload, nil)
@@ -458,6 +508,38 @@ func TestHandlePolarWebhook_TrialInactiveFailureDoesNotFailWebhook(t *testing.T)
 	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
 	require.NoError(t, svc.HandlePolarWebhook(httptest.NewRecorder(), req))
 	require.Equal(t, []string{orgID}, notifier.inactive)
+}
+
+func TestHandlePolarWebhook_ReconcilesKeysWhenAccountTypeAlreadyApplied(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-polar-retry-" + uuid.NewString()[:8]
+	payload := &billing.PolarWebhookPayload{Type: "subscription.active"}
+	payload.Data.Customer = &billing.WebhookCustomer{ExternalID: orgID}
+
+	tier := billing.TierBase
+	billingMock := &mockBillingRepo{}
+	billingMock.On("ValidateAndParseWebhookEvent", mock.Anything, mock.Anything, mock.Anything).
+		Return(payload, nil)
+	billingMock.On("InvalidateBillingCustomerCaches", mock.Anything, orgID).Return(nil)
+	billingMock.On("GetCustomerTier", mock.Anything, orgID).Return(&tier, true, nil)
+	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(nil, fmt.Errorf("stop after key reconciliation"))
+
+	svc := newTestService(t, billingMock, orgID, 0)
+	require.NoError(t, orgRepo.New(svc.db).CreateOrganizationMetadata(t.Context(), orgRepo.CreateOrganizationMetadataParams{
+		ID:   orgID,
+		Name: "Polar Retry Org",
+		Slug: orgID,
+	}))
+	provisioner := &recordingOpenRouterProvisioner{refreshCalls: nil}
+	svc.openRouter = provisioner
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	err := svc.HandlePolarWebhook(httptest.NewRecorder(), req)
+	require.Error(t, err)
+
+	require.ElementsMatch(t, openrouter.AllKeyTypes, provisioner.refreshCalls,
+		"a retried event must reconcile every key even when the tier is already persisted")
 }
 
 func TestCreateTopUpCheckout_BillingErrorMapsToCodeUnexpected(t *testing.T) {

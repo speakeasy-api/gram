@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   hasScope: vi.fn(),
   session: vi.fn(),
+  inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
 }));
 
@@ -46,6 +47,23 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
 // about which sections the page reaches for a given tier.
 vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
+  invalidateAllGetCreditUsage: vi.fn(),
+}));
+// The inference caps back the caps section, so which tiers reach them is part
+// of what these tests are about.
+vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
+  useGetInferenceSpendCaps: () =>
+    mocks.inferenceCaps() as { data: undefined; isError: boolean },
+  invalidateAllGetInferenceSpendCaps: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
+  useSetSpendCapMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => ({ data: undefined }),
@@ -109,6 +127,9 @@ const cta = () => screen.queryByRole("button", { name: /add payment method/i });
 const billingEmailField = () =>
   screen.queryByLabelText(/billing notification email/i);
 
+const inferenceCapsSection = () =>
+  screen.queryByRole("heading", { name: /inference caps/i });
+
 /** The billing email section invalidates its query through the client. */
 function renderBilling() {
   const client = new QueryClient({
@@ -127,6 +148,7 @@ describe("Billing", () => {
     mocks.productTier.mockReturnValue("base");
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
+    mocks.inferenceCaps.mockReturnValue({ data: undefined, isError: false });
     mocks.session.mockReturnValue({
       trial: {
         startedAt: new Date(Date.now() - 2 * DAY),
@@ -215,6 +237,41 @@ describe("Billing", () => {
       expect(billingEmailField()).toBeNull();
     },
   );
+
+  // The inference caps are a pay-as-you-go control. A trialing enterprise org
+  // is on its way onto PAYG, so it gets them locked rather than hidden — and
+  // the TUM early return is the path that org takes.
+  it.each<ProductTier>(["payg", "enterprise"])(
+    "places the inference caps on the %s view",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+
+      renderBilling();
+
+      expect(inferenceCapsSection()).not.toBeNull();
+    },
+  );
+
+  it("shows no inference caps on the pre-checkout view", () => {
+    mocks.productTier.mockReturnValue("base");
+
+    renderBilling();
+
+    expect(inferenceCapsSection()).toBeNull();
+    // A tier with no pay-as-you-go bill has nothing to cap, so it never asks.
+    expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+  });
+
+  it("shows no inference caps to enterprise without an active trial", () => {
+    mocks.productTier.mockReturnValue("enterprise");
+    mocks.session.mockReturnValue({ trial: null });
+
+    renderBilling();
+
+    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(inferenceCapsSection()).toBeNull();
+    expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+  });
 
   it("shows no checkout CTA once the trial has ended", () => {
     mocks.session.mockReturnValue({

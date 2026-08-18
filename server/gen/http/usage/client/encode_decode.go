@@ -16,6 +16,7 @@ import (
 
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPeriodUsageRequest instantiates a HTTP request object with method
@@ -1177,6 +1178,477 @@ func DecodeSetBillingEmailResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSetSpendCapRequest instantiates a HTTP request object with method and
+// path set to call the "usage" service "setSpendCap" endpoint
+func (c *Client) BuildSetSpendCapRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSpendCapUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "setSpendCap", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSpendCapRequest returns an encoder for requests sent to the usage
+// setSpendCap server.
+func EncodeSetSpendCapRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.SetSpendCapPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "setSpendCap", "*usage.SetSpendCapPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetSpendCapRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("usage", "setSpendCap", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSpendCapResponse returns a decoder for responses returned by the
+// usage setSpendCap endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSetSpendCapResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSpendCapResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSpendCapResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			res := NewSetSpendCapSpendCapOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSpendCapUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSpendCapForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSpendCapBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSpendCapNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSpendCapConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSpendCapUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSpendCapInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSpendCapInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+				}
+				err = ValidateSetSpendCapInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+				}
+				return nil, NewSetSpendCapInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSpendCapUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+				}
+				err = ValidateSetSpendCapUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+				}
+				return nil, NewSetSpendCapUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "setSpendCap", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSpendCapGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "setSpendCap", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetInferenceSpendCapsRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getInferenceSpendCaps"
+// endpoint
+func (c *Client) BuildGetInferenceSpendCapsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInferenceSpendCapsUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getInferenceSpendCaps", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetInferenceSpendCapsRequest returns an encoder for requests sent to
+// the usage getInferenceSpendCaps server.
+func EncodeGetInferenceSpendCapsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetInferenceSpendCapsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getInferenceSpendCaps", "*usage.GetInferenceSpendCapsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetInferenceSpendCapsResponse returns a decoder for responses returned
+// by the usage getInferenceSpendCaps endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetInferenceSpendCapsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetInferenceSpendCapsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*InferenceSpendCapResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := ValidateInferenceSpendCapResponse(e); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			res := NewGetInferenceSpendCapsInferenceSpendCapOK(body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInferenceSpendCapsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInferenceSpendCapsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInferenceSpendCapsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInferenceSpendCapsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInferenceSpendCapsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInferenceSpendCapsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInferenceSpendCapsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInferenceSpendCapsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+				}
+				err = ValidateGetInferenceSpendCapsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+				}
+				return nil, NewGetInferenceSpendCapsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInferenceSpendCapsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+				}
+				err = ValidateGetInferenceSpendCapsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+				}
+				return nil, NewGetInferenceSpendCapsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendCaps", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetInferenceSpendCapsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendCaps", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetUsageTiersRequest instantiates a HTTP request object with method and
 // path set to call the "usage" service "getUsageTiers" endpoint
 func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2320,6 +2792,20 @@ func unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(v *TUMPeriodDayRespons
 	res := &usage.TUMPeriodDay{
 		Date:   *v.Date,
 		Tokens: *v.Tokens,
+	}
+
+	return res
+}
+
+// unmarshalInferenceSpendCapResponseToUsageInferenceSpendCap builds a value of
+// type *usage.InferenceSpendCap from a value of type
+// *InferenceSpendCapResponse.
+func unmarshalInferenceSpendCapResponseToUsageInferenceSpendCap(v *InferenceSpendCapResponse) *usage.InferenceSpendCap {
+	res := &usage.InferenceSpendCap{
+		KeyType:        *v.KeyType,
+		CreditsUsed:    *v.CreditsUsed,
+		MonthlyCredits: *v.MonthlyCredits,
+		Disabled:       *v.Disabled,
 	}
 
 	return res
