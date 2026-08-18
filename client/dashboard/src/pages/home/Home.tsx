@@ -3,22 +3,21 @@ import { ProjectGuide } from "@/components/project-guide/ProjectGuide";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
-import { Skeleton } from "@/components/ui/Skeleton";
 import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
 } from "@/components/brand-mesh";
 import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
-import { useProjectGuide } from "@/hooks/useProjectGuide";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { Navigate } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 
 export default function Home(): JSX.Element {
   const { hasAnyScope, isLoading } = useRBAC();
   const routes = useRoutes();
-  const { status: projectGuideStatus } = useProjectGuide();
+  const [searchParams] = useSearchParams();
+  const showGuide = searchParams.has("showGuide");
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 
@@ -38,17 +37,7 @@ export default function Home(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="project:read" level="page">
-          {projectGuideStatus === "pending" ? (
-            // Neither surface yet: defaulting to the dashboard would flash it
-            // and then swap in the guide, on exactly the projects the guide is
-            // for.
-            <div
-              data-testid="project-guide-pending"
-              className="w-full pt-2 pb-6"
-            >
-              <Skeleton className="h-64 w-full" />
-            </div>
-          ) : projectGuideStatus === "guide" ? (
+          {showGuide ? (
             <ProjectGuide />
           ) : (
             <>
