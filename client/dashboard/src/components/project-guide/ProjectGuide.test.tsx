@@ -11,30 +11,19 @@ const statusByJourney = vi.hoisted(
       },
     }) as { current: Record<JourneyId, JourneyStatus> },
 );
-const markStarted = vi.hoisted(() => vi.fn());
-const dismiss = vi.hoisted(() => vi.fn());
 const progressPending = vi.hoisted(() => ({ current: false }));
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "proj" }),
-}));
 vi.mock("./useProjectGuideProgress", () => ({
   useProjectGuideProgress: () => ({
     statusByJourney: statusByJourney.current,
     isPending: progressPending.current,
   }),
 }));
-vi.mock("./projectGuideStores", () => ({
-  markProjectGuideStarted: markStarted,
-  dismissProjectGuide: dismiss,
-}));
 
 import { ProjectGuide } from "./ProjectGuide.tsx";
 
 afterEach(() => {
   cleanup();
-  markStarted.mockClear();
-  dismiss.mockClear();
   progressPending.current = false;
   statusByJourney.current = {
     "third-party-mcp": "not-started",
@@ -75,12 +64,11 @@ describe("ProjectGuide", () => {
     ).toHaveLength(2);
   });
 
-  it("expands a card in place and marks the guide in progress", () => {
+  it("expands a card in place", () => {
     render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern third-party MCP usage/ }),
     );
-    expect(markStarted).toHaveBeenCalledWith("proj");
     expect(screen.getByTestId("journey-body")).toBeTruthy();
     expect(screen.getByText("Pick a server")).toBeTruthy();
     expect(screen.getByText("Pick a server").getAttribute("aria-current")).toBe(
@@ -154,11 +142,5 @@ describe("ProjectGuide", () => {
     );
 
     expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(0);
-  });
-
-  it("dismisses to the normal project home", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(dismiss).toHaveBeenCalledWith("proj");
   });
 });
