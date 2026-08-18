@@ -179,6 +179,27 @@ type GetStripeSubscriptionResponseBody struct {
 	PaymentFailed bool `form:"payment_failed" json:"payment_failed" xml:"payment_failed"`
 }
 
+// GetPaygBillingSummaryResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body.
+type GetPaygBillingSummaryResponseBody struct {
+	// Start of the live paid Stripe service period
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the live paid Stripe service period (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management in the live paid service period
+	TumTokens int64 `form:"tum_tokens" json:"tum_tokens" xml:"tum_tokens"`
+	// Exact flat USD price per token under management
+	TumUnitPriceUsd string `form:"tum_unit_price_usd" json:"tum_unit_price_usd" xml:"tum_unit_price_usd"`
+	// Exact estimated tokens-under-management cost in USD
+	TumCostUsd string `form:"tum_cost_usd" json:"tum_cost_usd" xml:"tum_cost_usd"`
+	// Exact durable Other inference spend in USD through recorded_through
+	OtherInferenceSpendUsd string `form:"other_inference_spend_usd" json:"other_inference_spend_usd" xml:"other_inference_spend_usd"`
+	// Most recent completed durable UTC spend day included in the estimate
+	RecordedThrough *string `form:"recorded_through,omitempty" json:"recorded_through,omitempty" xml:"recorded_through,omitempty"`
+	// Exact estimated current-cycle total in USD through recorded_through
+	EstimatedTotalUsd string `form:"estimated_total_usd" json:"estimated_total_usd" xml:"estimated_total_usd"`
+}
+
 // CancelStripeSubscriptionResponseBody is the type of the "usage" service
 // "cancelStripeSubscription" endpoint HTTP response body.
 type CancelStripeSubscriptionResponseBody struct {
@@ -2442,6 +2463,194 @@ type GetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetPaygBillingSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryForbiddenResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetPaygBillingSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryBadRequestResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "bad_request" error.
+type GetPaygBillingSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryNotFoundResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "not_found"
+// error.
+type GetPaygBillingSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryConflictResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "conflict" error.
+type GetPaygBillingSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryUnsupportedMediaResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetPaygBillingSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryInvalidResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "invalid" error.
+type GetPaygBillingSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryInvariantViolationResponseBody is the type of the
+// "usage" service "getPaygBillingSummary" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetPaygBillingSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryUnexpectedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unexpected" error.
+type GetPaygBillingSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryGatewayErrorResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetPaygBillingSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateStripePortalSessionUnauthorizedResponseBody is the type of the "usage"
 // service "createStripePortalSession" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -3398,6 +3607,22 @@ func NewGetStripeSubscriptionResponseBody(res *usage.StripeSubscription) *GetStr
 		CancelAt:           res.CancelAt,
 		CanceledAt:         res.CanceledAt,
 		PaymentFailed:      res.PaymentFailed,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryResponseBody builds the HTTP response body from the
+// result of the "getPaygBillingSummary" endpoint of the "usage" service.
+func NewGetPaygBillingSummaryResponseBody(res *usage.PaygBillingSummary) *GetPaygBillingSummaryResponseBody {
+	body := &GetPaygBillingSummaryResponseBody{
+		PeriodStart:            res.PeriodStart,
+		PeriodEnd:              res.PeriodEnd,
+		TumTokens:              res.TumTokens,
+		TumUnitPriceUsd:        res.TumUnitPriceUsd,
+		TumCostUsd:             res.TumCostUsd,
+		OtherInferenceSpendUsd: res.OtherInferenceSpendUsd,
+		RecordedThrough:        res.RecordedThrough,
+		EstimatedTotalUsd:      res.EstimatedTotalUsd,
 	}
 	return body
 }
@@ -5170,6 +5395,156 @@ func NewGetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetPaygBillingSummaryUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnauthorizedResponseBody {
+	body := &GetPaygBillingSummaryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryForbiddenResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryForbiddenResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryForbiddenResponseBody {
+	body := &GetPaygBillingSummaryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryBadRequestResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryBadRequestResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryBadRequestResponseBody {
+	body := &GetPaygBillingSummaryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryNotFoundResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryNotFoundResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryNotFoundResponseBody {
+	body := &GetPaygBillingSummaryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryConflictResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryConflictResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryConflictResponseBody {
+	body := &GetPaygBillingSummaryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getPaygBillingSummary" endpoint of the
+// "usage" service.
+func NewGetPaygBillingSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnsupportedMediaResponseBody {
+	body := &GetPaygBillingSummaryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryInvalidResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryInvalidResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryInvalidResponseBody {
+	body := &GetPaygBillingSummaryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getPaygBillingSummary" endpoint of the
+// "usage" service.
+func NewGetPaygBillingSummaryInvariantViolationResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryInvariantViolationResponseBody {
+	body := &GetPaygBillingSummaryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnexpectedResponseBody {
+	body := &GetPaygBillingSummaryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryGatewayErrorResponseBody {
+	body := &GetPaygBillingSummaryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateStripePortalSessionUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "createStripePortalSession" endpoint of
 // the "usage" service.
@@ -5865,6 +6240,15 @@ func NewCreateStripeCheckoutPayload(sessionToken *string) *usage.CreateStripeChe
 // endpoint payload.
 func NewGetStripeSubscriptionPayload(sessionToken *string) *usage.GetStripeSubscriptionPayload {
 	v := &usage.GetStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetPaygBillingSummaryPayload builds a usage service getPaygBillingSummary
+// endpoint payload.
+func NewGetPaygBillingSummaryPayload(sessionToken *string) *usage.GetPaygBillingSummaryPayload {
+	v := &usage.GetPaygBillingSummaryPayload{}
 	v.SessionToken = sessionToken
 
 	return v

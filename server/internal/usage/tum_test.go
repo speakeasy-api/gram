@@ -576,7 +576,7 @@ func TestSetBillingMetadata_UpsertAndAudit(t *testing.T) {
 	require.InDelta(t, float64(25), afterSnapshot["tunneled_mcp_server_limit"], 0)
 }
 
-func TestSetBillingMetadata_PreservesPaygBillingEmail(t *testing.T) {
+func TestSetBillingMetadata_PreservesPaygStripeOwnedFields(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org-tum-payg-email-owner"
@@ -584,6 +584,11 @@ func TestSetBillingMetadata_PreservesPaygBillingEmail(t *testing.T) {
 	require.NoError(t, orgRepo.New(db).SetAccountType(t.Context(), orgRepo.SetAccountTypeParams{
 		GramAccountType: string(billing.TierPayg),
 		ID:              orgID,
+	}))
+	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(t.Context(), repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
+		OrganizationID:       orgID,
+		StripeCustomerID:     pgtype.Text{String: "cus_tum_payg", Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: "sub_tum_payg", Valid: true},
 	}))
 
 	configuredEmail := "payg-billing@example.test"
@@ -606,10 +611,33 @@ func TestSetBillingMetadata_PreservesPaygBillingEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.AlertEmail)
 	require.Equal(t, configuredEmail, *result.AlertEmail)
+	require.Equal(t, 1, result.BillingCycleAnchorDay)
 
 	stored, err := repo.New(db).GetBillingMetadata(t.Context(), orgID)
 	require.NoError(t, err)
 	require.Equal(t, configuredEmail, stored.AlertEmail.String)
+	require.Equal(t, int32(1), stored.BillingCycleAnchorDay)
+}
+
+func TestSetBillingMetadata_InitializesLegacyPaygMetadata(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-tum-legacy-payg"
+	svc, db, _, _ := newTUMTestService(t, orgID)
+	require.NoError(t, orgRepo.New(db).SetAccountType(t.Context(), orgRepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierPayg),
+		ID:              orgID,
+	}))
+
+	configuredEmail := "legacy-payg@example.test"
+	result, err := svc.SetBillingMetadata(testAdminAuthContext(orgID), &gen.SetBillingMetadataPayload{
+		AlertEmail:            &configuredEmail,
+		BillingCycleAnchorDay: 12,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 12, result.BillingCycleAnchorDay)
+	require.NotNil(t, result.AlertEmail)
+	require.Equal(t, configuredEmail, *result.AlertEmail)
 }
 
 func TestSetBillingMetadata_RejectsOversizedTunneledMcpServerLimit(t *testing.T) {

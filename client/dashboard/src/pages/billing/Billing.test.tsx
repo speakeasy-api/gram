@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
   session: vi.fn(),
   subscription: vi.fn(),
+  periodUsage: vi.fn(),
+  paygBillingSummary: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
 }));
@@ -99,8 +101,14 @@ vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
     isError: false,
   }),
 }));
+// Polar period usage bills nothing for pay as you go, so which tiers reach it
+// is part of what these tests are about — the call is recorded, not dropped.
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
-  useGetPeriodUsage: () => ({ data: undefined }),
+  useGetPeriodUsage: () => mocks.periodUsage() as { data: undefined },
+}));
+vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
+  useGetPaygBillingSummary: () =>
+    mocks.paygBillingSummary() as { data: undefined; isError: boolean },
 }));
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
   useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
@@ -166,6 +174,14 @@ const inferenceCapsSection = () =>
 
 const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
 
+// Both usage sections are titled "Usage"; their descriptions are what say which
+// billing model the figures below them come from.
+const paygUsageSection = () =>
+  screen.queryByText(/current pay-as-you-go billing cycle/i);
+
+const polarUsageSection = () =>
+  screen.queryByText(/summary of your organization's usage this period/i);
+
 const portalButton = () =>
   screen.queryByRole("button", { name: "Manage billing" });
 
@@ -208,6 +224,11 @@ describe("Billing", () => {
       isError: false,
       isFetching: false,
       refetch: vi.fn(),
+    });
+    mocks.periodUsage.mockReturnValue({ data: undefined });
+    mocks.paygBillingSummary.mockReturnValue({
+      data: undefined,
+      isError: false,
     });
     const legacyTierLimits = {
       basePrice: 0,
@@ -375,6 +396,48 @@ describe("Billing", () => {
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+  });
+
+  // Pay as you go bills through Stripe. The Polar usage meters describe a
+  // period it isn't billed on, so the tier swaps the whole section — two
+  // disagreeing totals on one billing page is worse than one.
+  it("puts the pay as you go cycle usage on the payg view", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+
+    renderBilling();
+
+    expect(paygUsageSection()).not.toBeNull();
+    expect(polarUsageSection()).toBeNull();
+    expect(mocks.periodUsage).not.toHaveBeenCalled();
+  });
+
+  it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
+    "keeps the %s view on the existing usage meters",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+
+      renderBilling();
+
+      expect(polarUsageSection()).not.toBeNull();
+      expect(paygUsageSection()).toBeNull();
+      expect(mocks.periodUsage).toHaveBeenCalled();
+      expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+      expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+    },
+  );
+
+  // Enterprise contracts bill on tokens under management through the TUM view,
+  // which owns its own figures — neither usage section belongs there.
+  it("keeps the enterprise view on the TUM figures", () => {
+    mocks.productTier.mockReturnValue("enterprise");
+
+    renderBilling();
+
+    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(paygUsageSection()).toBeNull();
+    expect(polarUsageSection()).toBeNull();
+    expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
   });
 
   it("shows no checkout CTA once the trial has ended", () => {

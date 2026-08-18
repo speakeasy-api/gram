@@ -250,6 +250,21 @@ func BuildGetStripeSubscriptionPayload(usageGetStripeSubscriptionSessionToken st
 	return v, nil
 }
 
+// BuildGetPaygBillingSummaryPayload builds the payload for the usage
+// getPaygBillingSummary endpoint from CLI flags.
+func BuildGetPaygBillingSummaryPayload(usageGetPaygBillingSummarySessionToken string) (*usage.GetPaygBillingSummaryPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetPaygBillingSummarySessionToken != "" {
+			sessionToken = &usageGetPaygBillingSummarySessionToken
+		}
+	}
+	v := &usage.GetPaygBillingSummaryPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateStripePortalSessionPayload builds the payload for the usage
 // createStripePortalSession endpoint from CLI flags.
 func BuildCreateStripePortalSessionPayload(usageCreateStripePortalSessionSessionToken string) (*usage.CreateStripePortalSessionPayload, error) {

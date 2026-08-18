@@ -31,6 +31,7 @@ type Server struct {
 	CreateCheckout            http.Handler
 	CreateStripeCheckout      http.Handler
 	GetStripeSubscription     http.Handler
+	GetPaygBillingSummary     http.Handler
 	CreateStripePortalSession http.Handler
 	CancelStripeSubscription  http.Handler
 	ResumeStripeSubscription  http.Handler
@@ -76,6 +77,7 @@ func New(
 			{"CreateCheckout", "POST", "/rpc/usage.createCheckout"},
 			{"CreateStripeCheckout", "POST", "/rpc/usage.createStripeCheckout"},
 			{"GetStripeSubscription", "GET", "/rpc/usage.getStripeSubscription"},
+			{"GetPaygBillingSummary", "GET", "/rpc/usage.getPaygBillingSummary"},
 			{"CreateStripePortalSession", "POST", "/rpc/usage.createStripePortalSession"},
 			{"CancelStripeSubscription", "POST", "/rpc/usage.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/rpc/usage.resumeStripeSubscription"},
@@ -93,6 +95,7 @@ func New(
 		CreateCheckout:            NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
 		CreateStripeCheckout:      NewCreateStripeCheckoutHandler(e.CreateStripeCheckout, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscription:     NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:     NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
 		CreateStripePortalSession: NewCreateStripePortalSessionHandler(e.CreateStripePortalSession, mux, decoder, encoder, errhandler, formatter),
 		CancelStripeSubscription:  NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ResumeStripeSubscription:  NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
@@ -117,6 +120,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateCheckout = m(s.CreateCheckout)
 	s.CreateStripeCheckout = m(s.CreateStripeCheckout)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
+	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
 	s.CreateStripePortalSession = m(s.CreateStripePortalSession)
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
 	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
@@ -140,6 +144,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateCheckoutHandler(mux, h.CreateCheckout)
 	MountCreateStripeCheckoutHandler(mux, h.CreateStripeCheckout)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
+	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
 	MountCreateStripePortalSessionHandler(mux, h.CreateStripePortalSession)
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
 	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
@@ -758,6 +763,59 @@ func NewGetStripeSubscriptionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getStripeSubscription")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPaygBillingSummaryHandler configures the mux to serve the "usage"
+// service "getPaygBillingSummary" endpoint.
+func MountGetPaygBillingSummaryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getPaygBillingSummary", f)
+}
+
+// NewGetPaygBillingSummaryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getPaygBillingSummary" endpoint.
+func NewGetPaygBillingSummaryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPaygBillingSummaryRequest(mux, decoder)
+		encodeResponse = EncodeGetPaygBillingSummaryResponse(encoder)
+		encodeError    = EncodeGetPaygBillingSummaryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPaygBillingSummary")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

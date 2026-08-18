@@ -90,21 +90,27 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	}
 
 	alertEmail := conv.PtrToPGText(payload.AlertEmail)
+	billingCycleAnchorDay := conv.SafeInt32(payload.BillingCycleAnchorDay)
 	organization, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization billing type").LogError(ctx, s.logger)
 	}
-	if organization.GramAccountType == string(billing.TierPayg) {
+	if organization.GramAccountType == string(billing.TierPayg) && snapshotBefore != nil {
 		// PAYG billing email is owned by SetBillingEmail. Preserve the value read
 		// under the shared lock so the legacy TUM writer cannot overwrite it.
 		alertEmail = before.AlertEmail
+		if before.StripeSubscriptionID.Valid {
+			// Stripe owns subscribed PAYG cycle boundaries. Preserve its projected
+			// anchor day so this legacy admin writer cannot split estimates from metering.
+			billingCycleAnchorDay = before.BillingCycleAnchorDay
+		}
 	}
 
 	row, err := qtx.UpsertBillingMetadata(ctx, repo.UpsertBillingMetadataParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		TumMonthlyTokenLimit:   tokenLimit,
 		AlertEmail:             alertEmail,
-		BillingCycleAnchorDay:  conv.SafeInt32(payload.BillingCycleAnchorDay),
+		BillingCycleAnchorDay:  billingCycleAnchorDay,
 		TunneledMcpServerLimit: tunneledMcpServerLimit,
 	})
 	if err != nil {
