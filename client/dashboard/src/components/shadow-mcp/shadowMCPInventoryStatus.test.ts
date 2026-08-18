@@ -5,7 +5,9 @@ import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
+  shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
+  shadowMCPInventoryStatusLabel,
   shadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
@@ -181,6 +183,73 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(server({ access: "none" }), "none"),
     ).toBe("Not blocking");
+  });
+
+  it("credits a denied review alongside the policy in the blocked source", () => {
+    const denied = {
+      id: "request-1",
+      status: "denied" as const,
+      requesterCount: 0,
+      evidenceChangedAt: undefined,
+    };
+    // block_all: the policy already blocks and the deny compounds it.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked", approvalRequest: denied }),
+        "blocking",
+        "block_all",
+      ),
+    ).toBe("Blocked by policy & review");
+    // The frontend-only blocking branch (access still "none") credits it too.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "none", approvalRequest: denied }),
+        "blocking",
+      ),
+    ).toBe("Blocked by policy & review");
+    // allow_all: the block is the review's doing, so it stands alone.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked", approvalRequest: denied }),
+        "blocking",
+        "allow_all",
+      ),
+    ).toBe("Blocked by review");
+  });
+
+  it("surfaces a targeted block as restricted rather than blocked", () => {
+    const restricted = server({ access: "restricted" });
+    expect(shadowMCPInventoryStatus(restricted, "blocking")).toBe("restricted");
+    expect(shadowMCPInventoryStatusLabel("restricted")).toBe("Restricted");
+    expect(shadowMCPInventoryStatusBadgeVariant("restricted")).toBe("warning");
+    expect(
+      shadowMCPInventoryStatusDescription(restricted, "blocking", "block_all"),
+    ).toBe("Blocked for some users");
+  });
+
+  it("leaves the blocked source unchanged when a review approved or is absent", () => {
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({
+          access: "blocked",
+          approvalRequest: {
+            id: "request-2",
+            status: "approved" as const,
+            requesterCount: 0,
+            evidenceChangedAt: undefined,
+          },
+        }),
+        "blocking",
+        "block_all",
+      ),
+    ).toBe("Blocked by policy");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked" }),
+        "blocking",
+        "allow_all",
+      ),
+    ).toBe("Blocked by rule");
   });
 });
 

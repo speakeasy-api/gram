@@ -12,6 +12,7 @@ export type ShadowMCPPolicyState =
 export type ShadowMCPInventoryStatus =
   | "allowed"
   | "blocked"
+  | "restricted"
   | "observed"
   | "pending"
   | "unavailable";
@@ -86,6 +87,7 @@ export function shadowMCPInventoryStatus(
   if (server.requestCount > 0) return "pending";
   if (server.access === "allowed") return "allowed";
   if (server.access === "blocked") return "blocked";
+  if (server.access === "restricted") return "restricted";
   if (policyState === "unavailable") return "unavailable";
   if (policyState === "blocking") return "blocked";
   return "observed";
@@ -99,6 +101,8 @@ export function shadowMCPInventoryStatusLabel(
       return "Allowed";
     case "blocked":
       return "Blocked";
+    case "restricted":
+      return "Restricted";
     case "observed":
       return "Observed";
     case "pending":
@@ -116,6 +120,8 @@ export function shadowMCPInventoryStatusBadgeVariant(
       return "success";
     case "blocked":
       return "destructive";
+    case "restricted":
+      return "warning";
     case "observed":
       return "neutral";
     case "pending":
@@ -139,11 +145,28 @@ export function shadowMCPInventoryStatusDescription(
       : "Allowed by URL rule";
   }
   if (server.access === "blocked") {
+    // A denied review is a distinct reason from the policy default. Under
+    // allow_all the block *is* the review's doing; under block_all the policy
+    // already blocks it and the deny compounds that.
+    if (server.approvalRequest?.status === "denied") {
+      return disposition === "allow_all"
+        ? "Blocked by review"
+        : "Blocked by policy & review";
+    }
     return disposition === "allow_all"
       ? "Blocked by rule"
       : "Blocked by policy";
   }
+  if (server.access === "restricted") {
+    // A targeted policy blocks the server for its audience only, so it is not
+    // blocked for the whole project.
+    return "Blocked for some users";
+  }
   if (policyState === "unavailable") return "Policy status unavailable";
-  if (policyState === "blocking") return "Blocked by policy";
+  if (policyState === "blocking") {
+    return server.approvalRequest?.status === "denied"
+      ? "Blocked by policy & review"
+      : "Blocked by policy";
+  }
   return "Not blocking";
 }

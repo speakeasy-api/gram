@@ -75383,6 +75383,7 @@ components:
                         - none
                         - allowed
                         - blocked
+                        - restricted
                 allowed_policy_ids:
                     type: array
                     items:

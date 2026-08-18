@@ -34,9 +34,17 @@ const (
 	shadowMCPInventoryUsageTraceLimit   = 50000
 	shadowMCPInventoryPageLookaheadSize = 1
 
-	shadowMCPInventoryAccessNone    = "none"
-	shadowMCPInventoryAccessAllowed = "allowed"
-	shadowMCPInventoryAccessBlocked = "blocked"
+	shadowMCPInventoryAccessNone       = "none"
+	shadowMCPInventoryAccessAllowed    = "allowed"
+	shadowMCPInventoryAccessBlocked    = "blocked"
+	shadowMCPInventoryAccessRestricted = "restricted"
+
+	// shadowMCPInventoryAudienceEveryone is the risk_policies.audience_type
+	// value for a policy that applies to every user, as opposed to "targeted",
+	// which applies to a named subset. A targeted blocking policy blocks a
+	// server for some users but not all, which the inventory surfaces as
+	// restricted rather than blocked.
+	shadowMCPInventoryAudienceEveryone = "everyone"
 
 	shadowMCPInventoryBypassStatusRequested = "requested"
 	shadowMCPInventoryBypassStatusApproved  = "approved"
@@ -842,10 +850,24 @@ type shadowMCPInventoryPolicyState struct {
 	// default. When only allow_all blocking policies exist, rows are blocked
 	// solely by risk_policy:block grants (blockedPolicyIDs).
 	hasBlockAllPolicy bool
-	allowedPolicyIDs  map[string][]string
-	blockedPolicyIDs  map[string][]string
-	requestsByURL     map[string]shadowMCPInventoryRequestState
-	approvalsByURL    map[string]*gen.ShadowMCPInventoryApprovalRequest
+
+	// hasEveryoneBlockAllPolicy is set when a deny-by-default policy applies to
+	// every user (audience_type everyone). It separates a project-wide block
+	// from one a targeted policy imposes on a subset: without an everyone-scoped
+	// source, a deny-by-default block is restricted (blocked for some) rather
+	// than blocked.
+	hasEveryoneBlockAllPolicy bool
+
+	allowedPolicyIDs map[string][]string
+	blockedPolicyIDs map[string][]string
+
+	// everyoneBlockedURLs holds the URLs an allow_all policy that applies to
+	// every user blocks via a risk_policy:block grant. A URL blocked only by
+	// targeted allow_all policies is restricted, not blocked.
+	everyoneBlockedURLs map[string]struct{}
+
+	requestsByURL  map[string]shadowMCPInventoryRequestState
+	approvalsByURL map[string]*gen.ShadowMCPInventoryApprovalRequest
 }
 
 type shadowMCPInventoryRowState struct {
@@ -865,12 +887,14 @@ type shadowMCPInventoryRequestState struct {
 
 func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURLs []string) (shadowMCPInventoryPolicyState, error) {
 	state := shadowMCPInventoryPolicyState{
-		hasBlockingPolicy: false,
-		hasBlockAllPolicy: false,
-		allowedPolicyIDs:  map[string][]string{},
-		blockedPolicyIDs:  map[string][]string{},
-		requestsByURL:     map[string]shadowMCPInventoryRequestState{},
-		approvalsByURL:    map[string]*gen.ShadowMCPInventoryApprovalRequest{},
+		hasBlockingPolicy:         false,
+		hasBlockAllPolicy:         false,
+		hasEveryoneBlockAllPolicy: false,
+		allowedPolicyIDs:          map[string][]string{},
+		blockedPolicyIDs:          map[string][]string{},
+		everyoneBlockedURLs:       map[string]struct{}{},
+		requestsByURL:             map[string]shadowMCPInventoryRequestState{},
+		approvalsByURL:            map[string]*gen.ShadowMCPInventoryApprovalRequest{},
 	}
 	if len(canonicalURLs) == 0 {
 		return state, nil
@@ -933,16 +957,23 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			if err != nil {
 				return state, fmt.Errorf("listing block grants for shadow mcp policy: %w", err)
 			}
+			everyoneAudience := policy.AudienceType == shadowMCPInventoryAudienceEveryone
 			for _, grant := range blockGrants {
 				serverURL := grant.Selector[authz.SelectorKeyServerURL]
 				if _, ok := canonicalURLSet[serverURL]; !ok {
 					continue
 				}
 				state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
+				if everyoneAudience {
+					state.everyoneBlockedURLs[serverURL] = struct{}{}
+				}
 			}
 			continue
 		}
 		state.hasBlockAllPolicy = true
+		if policy.AudienceType == shadowMCPInventoryAudienceEveryone {
+			state.hasEveryoneBlockAllPolicy = true
+		}
 
 		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
 			OrganizationID: organizationID,
@@ -1020,12 +1051,20 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 	requestState := s.requestsByURL[canonicalURL]
 	allowedPolicyIDs := s.allowedPolicyIDs[canonicalURL]
 	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0
+	_, blockedForEveryoneList := s.everyoneBlockedURLs[canonicalURL]
+	// A block sourced from an everyone-audience policy stops every user; one
+	// sourced only from targeted policies stops a subset, which reads as
+	// restricted rather than blocked.
+	blockedForEveryone := s.hasEveryoneBlockAllPolicy || blockedForEveryoneList
+	blockedForSome := s.hasBlockAllPolicy || onBlockedList
 	access := shadowMCPInventoryAccessNone
 	switch {
 	case len(allowedPolicyIDs) > 0:
 		access = shadowMCPInventoryAccessAllowed
-	case s.hasBlockAllPolicy || onBlockedList:
+	case blockedForEveryone:
 		access = shadowMCPInventoryAccessBlocked
+	case blockedForSome:
+		access = shadowMCPInventoryAccessRestricted
 	case s.hasBlockingPolicy:
 		// Only allow_all blocking policies exist and this URL is not on any
 		// blocked list: the default disposition permits it.
