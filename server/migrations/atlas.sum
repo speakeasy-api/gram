@@ -1,4 +1,4 @@
-h1:Kqx610Tu5UOkM9EKdr+UYs0Sfo5tPyckeEV0l5fuk5w=
+h1:pPGq4I6/dFUmJGqhGxFHklP3c7yl/c3DwXSFGWLY4Is=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -351,4 +351,4 @@ h1:Kqx610Tu5UOkM9EKdr+UYs0Sfo5tPyckeEV0l5fuk5w=
 20260818003149_platform-mcp-auth-state.sql h1:/43k71KTF8KXbOL/H1cNWD8UD2Brplx9yr+bCtbjdAs=
 20260818084059_audit-logs-add-acting-surface.sql h1:oAWlHYz8B3yYoaS8x5IYSvT7Y/MPBnNS50ACQoaEZ5c=
 20260818093227_platform-mcp-connectionless-surfaces.sql h1:dPsVJ4U8Ck18wb+vlUnHguxBW/cbDmzAejccBs9x/2w=
-20260818115150_platform-mcp-connectionless-onboarding-evidence.sql h1:L1ucghhX4rlJEh1WIn0vLlPHHjLrr+xvw+CSS3MtPkg=
+20260818120338_platform-mcp-connectionless-onboarding-evidence.sql h1:lqj04eu/HU5o6JUiKrWSKEzZkmMLO+17RjFfBckmYJQ=

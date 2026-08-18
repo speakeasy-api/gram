@@ -6718,8 +6718,10 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
       'read_only_cohort'
     )
     OR (connection_id IS NOT NULL AND connection_generation IS NOT NULL)
-    -- A connection-less surface records the same evidence against its user.
-    OR user_id IS NOT NULL
+    -- A connection-less surface records the same evidence against its user, and
+    -- is connection-free on both columns: a row with a half-set pair would fall
+    -- between the two unique indexes below and have no idempotency grain.
+    OR (user_id IS NOT NULL AND connection_id IS NULL AND connection_generation IS NULL)
   ),
   CONSTRAINT platform_mcp_onboarding_milestones_first_value_target_check CHECK (
     milestone <> 'first_value_achieved'
