@@ -16,7 +16,7 @@ Every application template has:
 
    ```bash
    mise exec -- go run ./server/cmd/sync-loops-email-templates --validate-only
-   mise exec -- go test ./server/internal/email/... ./server/cmd/sync-loops-email-templates
+   mise run test:server ./internal/email/... ./cmd/sync-loops-email-templates
    ```
 
 Validation requires the manifest variable list to match the Go `Variables()`

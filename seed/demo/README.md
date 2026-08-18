@@ -132,7 +132,7 @@ merge-blocking guard for every seed change, run by the standalone
     mise run test:server -tags=demoseed_safety ./internal/demoseed/...
 
 It is build-tagged out of the sharded server suite, so a plain
-`go test ./server/internal/demoseed/` reporting "no test files" is expected.
+`mise run test:server ./internal/demoseed/` reporting "no test files" is expected.
 
 How it works: a fake "customer" tenant is provisioned by running the seed
 retargeted at `otherTenantSpec`, so the customer has rows in exactly the

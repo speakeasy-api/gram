@@ -93,7 +93,8 @@ normal tunneled MCP endpoint seeded in the dashboard.
 ## Tests
 
 ```bash
-go test ./tunnel/... ./server/internal/tunneledmcp/...
+mise exec -- go test ./tunnel/...
+mise run test:server ./internal/tunneledmcp/...
 ```
 
 `server/internal/mcp` covers the production MCP serve path that routes tunneled
