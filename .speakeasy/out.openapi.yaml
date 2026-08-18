@@ -56479,6 +56479,10 @@ components:
         id:
           type: string
           description: The ID of the project
+        mcp_server_count:
+          type: integer
+          description: Number of MCP servers in the project, counting both toolset-backed servers and mcp_servers rows.
+          format: int64
         name:
           type: string
           description: The name of the project
@@ -56494,6 +56498,7 @@ components:
         - id
         - name
         - slug
+        - mcp_server_count
         - created_at
         - updated_at
     AdminProjectDetail:
