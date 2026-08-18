@@ -101,7 +101,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
-		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved)",
+		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
@@ -141,7 +141,7 @@ func UsageCommands() []string {
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -412,6 +412,12 @@ func ParseEndpoint(
 		agentReportSessionMovedApikeyTokenFlag  = agentReportSessionMovedFlags.String("apikey-token", "", "")
 		agentReportSessionMovedSerialNumberFlag = agentReportSessionMovedFlags.String("serial-number", "", "")
 		agentReportSessionMovedHostnameFlag     = agentReportSessionMovedFlags.String("hostname", "", "")
+
+		agentCreateSessionHandoffFlags            = flag.NewFlagSet("create-session-handoff", flag.ExitOnError)
+		agentCreateSessionHandoffBodyFlag         = agentCreateSessionHandoffFlags.String("body", "REQUIRED", "")
+		agentCreateSessionHandoffApikeyTokenFlag  = agentCreateSessionHandoffFlags.String("apikey-token", "", "")
+		agentCreateSessionHandoffSerialNumberFlag = agentCreateSessionHandoffFlags.String("serial-number", "", "")
+		agentCreateSessionHandoffHostnameFlag     = agentCreateSessionHandoffFlags.String("hostname", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
@@ -1741,6 +1747,11 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
 
+		pluginsDownloadPlatformMCPPluginFlags                = flag.NewFlagSet("download-platform-mcp-plugin", flag.ExitOnError)
+		pluginsDownloadPlatformMCPPluginPlatformFlag         = pluginsDownloadPlatformMCPPluginFlags.String("platform", "REQUIRED", "")
+		pluginsDownloadPlatformMCPPluginSessionTokenFlag     = pluginsDownloadPlatformMCPPluginFlags.String("session-token", "", "")
+		pluginsDownloadPlatformMCPPluginProjectSlugInputFlag = pluginsDownloadPlatformMCPPluginFlags.String("project-slug-input", "", "")
+
 		pluginsDownloadObservabilityPluginFlags                = flag.NewFlagSet("download-observability-plugin", flag.ExitOnError)
 		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
@@ -1749,6 +1760,13 @@ func ParseEndpoint(
 		pluginsDownloadCodexInstallScriptFlags                = flag.NewFlagSet("download-codex-install-script", flag.ExitOnError)
 		pluginsDownloadCodexInstallScriptSessionTokenFlag     = pluginsDownloadCodexInstallScriptFlags.String("session-token", "", "")
 		pluginsDownloadCodexInstallScriptProjectSlugInputFlag = pluginsDownloadCodexInstallScriptFlags.String("project-slug-input", "", "")
+
+		pluginsGetPlatformMCPPackageStatusFlags            = flag.NewFlagSet("get-platform-mcp-package-status", flag.ExitOnError)
+		pluginsGetPlatformMCPPackageStatusSessionTokenFlag = pluginsGetPlatformMCPPackageStatusFlags.String("session-token", "", "")
+
+		pluginsRepairPlatformMCPPackageFlags                = flag.NewFlagSet("repair-platform-mcp-package", flag.ExitOnError)
+		pluginsRepairPlatformMCPPackageSessionTokenFlag     = pluginsRepairPlatformMCPPackageFlags.String("session-token", "", "")
+		pluginsRepairPlatformMCPPackageProjectSlugInputFlag = pluginsRepairPlatformMCPPackageFlags.String("project-slug-input", "", "")
 
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
@@ -3486,6 +3504,7 @@ func ParseEndpoint(
 	agentUpdateConfigurationFlags.Usage = agentUpdateConfigurationUsage
 	agentGetSessionMetaFlags.Usage = agentGetSessionMetaUsage
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
+	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
 
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
@@ -3812,8 +3831,11 @@ func ParseEndpoint(
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
+	pluginsDownloadPlatformMCPPluginFlags.Usage = pluginsDownloadPlatformMCPPluginUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
+	pluginsGetPlatformMCPPackageStatusFlags.Usage = pluginsGetPlatformMCPPackageStatusUsage
+	pluginsRepairPlatformMCPPackageFlags.Usage = pluginsRepairPlatformMCPPackageUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 	pluginsGetMarketplaceSettingsFlags.Usage = pluginsGetMarketplaceSettingsUsage
@@ -4478,6 +4500,9 @@ func ParseEndpoint(
 
 			case "report-session-moved":
 				epf = agentReportSessionMovedFlags
+
+			case "create-session-handoff":
+				epf = agentCreateSessionHandoffFlags
 
 			}
 
@@ -5377,11 +5402,20 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
 
+			case "download-platform-mcp-plugin":
+				epf = pluginsDownloadPlatformMCPPluginFlags
+
 			case "download-observability-plugin":
 				epf = pluginsDownloadObservabilityPluginFlags
 
 			case "download-codex-install-script":
 				epf = pluginsDownloadCodexInstallScriptFlags
+
+			case "get-platform-mcp-package-status":
+				epf = pluginsGetPlatformMCPPackageStatusFlags
+
+			case "repair-platform-mcp-package":
+				epf = pluginsRepairPlatformMCPPackageFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -6512,6 +6546,9 @@ func ParseEndpoint(
 			case "report-session-moved":
 				endpoint = c.ReportSessionMoved()
 				data, err = agentc.BuildReportSessionMovedPayload(*agentReportSessionMovedBodyFlag, *agentReportSessionMovedApikeyTokenFlag, *agentReportSessionMovedSerialNumberFlag, *agentReportSessionMovedHostnameFlag)
+			case "create-session-handoff":
+				endpoint = c.CreateSessionHandoff()
+				data, err = agentc.BuildCreateSessionHandoffPayload(*agentCreateSessionHandoffBodyFlag, *agentCreateSessionHandoffApikeyTokenFlag, *agentCreateSessionHandoffSerialNumberFlag, *agentCreateSessionHandoffHostnameFlag)
 			}
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7428,12 +7465,21 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
+			case "download-platform-mcp-plugin":
+				endpoint = c.DownloadPlatformMCPPlugin()
+				data, err = pluginsc.BuildDownloadPlatformMCPPluginPayload(*pluginsDownloadPlatformMCPPluginPlatformFlag, *pluginsDownloadPlatformMCPPluginSessionTokenFlag, *pluginsDownloadPlatformMCPPluginProjectSlugInputFlag)
 			case "download-observability-plugin":
 				endpoint = c.DownloadObservabilityPlugin()
 				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
 			case "download-codex-install-script":
 				endpoint = c.DownloadCodexInstallScript()
 				data, err = pluginsc.BuildDownloadCodexInstallScriptPayload(*pluginsDownloadCodexInstallScriptSessionTokenFlag, *pluginsDownloadCodexInstallScriptProjectSlugInputFlag)
+			case "get-platform-mcp-package-status":
+				endpoint = c.GetPlatformMCPPackageStatus()
+				data, err = pluginsc.BuildGetPlatformMCPPackageStatusPayload(*pluginsGetPlatformMCPPackageStatusSessionTokenFlag)
+			case "repair-platform-mcp-package":
+				endpoint = c.RepairPlatformMCPPackage()
+				data, err = pluginsc.BuildRepairPlatformMCPPackagePayload(*pluginsRepairPlatformMCPPackageSessionTokenFlag, *pluginsRepairPlatformMCPPackageProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -9273,7 +9319,7 @@ func adminGetOrganizationStatsUsage() {
 
 // agentUsage displays the usage of the agent command and its subcommands.
 func agentUsage() {
-	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.`)
+	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
@@ -9282,6 +9328,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
+	fmt.Fprintln(os.Stderr, `    create-session-handoff: Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
@@ -9408,6 +9455,30 @@ func agentReportSessionMovedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+}
+
+func agentCreateSessionHandoffUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent create-session-handoff", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -serial-number STRING")
+	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
+	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent create-session-handoff --body '{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
 }
 
 // aiIntegrationsUsage displays the usage of the ai-integrations command and
@@ -15268,8 +15339,11 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
+	fmt.Fprintln(os.Stderr, `    download-platform-mcp-plugin: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
+	fmt.Fprintln(os.Stderr, `    get-platform-mcp-package-status: Get the organization-scoped Platform MCP package and canonical default-project marketplace status.`)
+	fmt.Fprintln(os.Stderr, `    repair-platform-mcp-package: Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr, `    get-marketplace-settings: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
@@ -15500,6 +15574,28 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func pluginsDownloadPlatformMCPPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-platform-mcp-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -platform STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -platform STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-platform-mcp-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func pluginsDownloadObservabilityPluginUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-observability-plugin", os.Args[0])
@@ -15540,6 +15636,44 @@ func pluginsDownloadCodexInstallScriptUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-codex-install-script --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetPlatformMCPPackageStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-platform-mcp-package-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization-scoped Platform MCP package and canonical default-project marketplace status.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-platform-mcp-package-status --session-token \"abc123\"")
+}
+
+func pluginsRepairPlatformMCPPackageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins repair-platform-mcp-package", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins repair-platform-mcp-package --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPublishStatusUsage() {
