@@ -240,6 +240,43 @@ func (s *Service) requireFeature(ctx context.Context, organizationID string) err
 	return nil
 }
 
+// requireResearchEnabled enforces the research-specific gates on top of the
+// approval rollout: the kill switch first — affirmatively on stops research
+// everywhere without touching any rollout targeting — then the research
+// rollout flag, org-group targeted and failing closed like the approval
+// flag. Research spends against the org's chat key on the open web, so it
+// rolls out to a narrower set than the approval workflow it belongs to.
+func (s *Service) requireResearchEnabled(ctx context.Context, organizationID string) error {
+	var groups map[string]string
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization slug for mcp research flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	// The kill switch fails open on evaluation errors — only an affirmative
+	// on kills — which is safe because the rollout flag below independently
+	// fails closed.
+	killed, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "mcp research kill-switch check failed; continuing to rollout check", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else if killed {
+		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily disabled")
+	}
+
+	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearch, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "mcp research flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
+	}
+
+	return nil
+}
+
 // member resolves the caller's project without demanding a scope. Raising a
 // request deliberately carries no RBAC grant: the people asking typically
 // cannot reach the dashboard, and a scope for it would either be ungranted
@@ -827,6 +864,13 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, err
 	}
 
+	if err := s.requireFeature(ctx, orgID); err != nil {
+		return nil, err
+	}
+	if err := s.requireResearchEnabled(ctx, orgID); err != nil {
+		return nil, err
+	}
+
 	requestID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
@@ -836,7 +880,8 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 
 	// Resolved with the project id in the predicate, so a caller who learns an
 	// id from a dashboard URL cannot research another tenant's request.
-	if _, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID}); err != nil {
+	request, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
 		}
@@ -916,6 +961,22 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating research report").LogError(ctx, s.logger)
+	}
+
+	var actorEmail *string
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		actorEmail = authCtx.Email
+	}
+	if err := s.audit.LogMCPApprovalRequestResearchStart(ctx, dbtx, audit.LogMCPApprovalRequestResearchStartEvent{
+		OrganizationID:   orgID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, requestedBy),
+		ActorDisplayName: actorEmail,
+		ActorSlug:        nil,
+		RequestURN:       urn.NewMCPApprovalRequest(requestID),
+		TargetRaw:        request.TargetRaw,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error auditing research start").LogError(ctx, s.logger)
 	}
 
 	// Committed before the enqueue, never inside it: the workflow reads this
