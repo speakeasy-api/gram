@@ -99,8 +99,10 @@ function ResultItem({
 function McpServersGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const gramProject = useProjectSlugForRequests();
-  const { data: toolsetsData } = useListToolsetsSuspense();
-  // Key by project so a cached list can't outlive a project switch.
+  // Both lists are keyed by project: the SDK folds gramProject into the query
+  // key, so omitting it shares one cache entry across every project and a
+  // switch renders the previous project's rows until the refetch lands.
+  const { data: toolsetsData } = useListToolsetsSuspense({ gramProject });
   const { data: mcpServersData } = useMcpServersSuspense({ gramProject });
   const toolsets = toolsetsData.toolsets ?? [];
   const mcpServers = useMemo(
