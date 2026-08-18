@@ -532,14 +532,9 @@ export function PlatformMCPOnboardingContent({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <Page.Section>
-        <Page.Section.Title stage="preview">
-          Speakeasy AICP Platform MCP
-        </Page.Section.Title>
+        <Page.Section.Title stage="preview">Platform MCP</Page.Section.Title>
         <Page.Section.Description className="max-w-3xl">
-          Use an AI agent to add a reviewed MCP server to a project: connect the
-          agent, choose a reviewed MCP server from the MCP Catalogue, complete
-          any required setup, then make the server available through that
-          project&apos;s existing Default plugin.
+          Manage MCPs, Risk Policies and explore logs in your favorite agent.
         </Page.Section.Description>
         {showManagement ? (
           <Page.Section.Body>
@@ -571,9 +566,7 @@ export function PlatformMCPOnboardingContent({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Text variant="subheading" id="platform-mcp-setup">
-              {showManagement
-                ? "Set up another agent"
-                : "Set up Speakeasy AICP Platform MCP"}
+              {showManagement ? "Set up another agent" : "Set up Platform MCP"}
             </Text>
             <Text muted small className="mt-2 max-w-2xl">
               {showManagement
@@ -1406,7 +1399,7 @@ function PlatformMCPSetupSheet({
         className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
       >
         <SheetHeader className="sr-only">
-          <SheetTitle>Set up Speakeasy AICP Platform MCP</SheetTitle>
+          <SheetTitle>Set up Platform MCP</SheetTitle>
           <SheetDescription>
             Complete Platform MCP setup one lifecycle step at a time.
           </SheetDescription>
