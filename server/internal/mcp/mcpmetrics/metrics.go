@@ -1,4 +1,4 @@
-package mcp
+package mcpmetrics
 
 import (
 	"context"
@@ -9,43 +9,54 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
-// oauthFlowStage is the closed set of coarse stages at which a user-facing
+// OAuthFlowStage is the closed set of coarse stages at which a user-facing
 // OAuth flow can terminally resolve to a non-completion outcome (failed or
 // declined). It names the handler leg where the flow ended. Kept as a bounded
 // enum — and deliberately decoupled from the free-form reason strings the
 // handlers log — so the `gram.oauth.flow_stage` metric dimension stays
 // low-cardinality. Add a value here only when a new terminal point is
 // instrumented.
-type oauthFlowStage string
+type OAuthFlowStage string
 
 const (
-	// oauthFlowStageAuthorize: the flow died in /authorize after the challenge
+	// OAuthFlowStageAuthorize: the flow died in /authorize after the challenge
 	// was minted (e.g. building the IDP authorization URL failed, which
 	// surfaces a misconfigured IDP).
-	oauthFlowStageAuthorize oauthFlowStage = "authorize"
-	// oauthFlowStageIDPCallback: the flow ended on the private-toolset IDP
+	OAuthFlowStageAuthorize OAuthFlowStage = "authorize"
+	// OAuthFlowStageIDPCallback: the flow ended on the private-toolset IDP
 	// return leg (HandleIDPCallback) — an IDP error, a failed code exchange,
 	// an org-membership denial, or the user cancelling at the IDP.
-	oauthFlowStageIDPCallback oauthFlowStage = "idp_callback"
-	// oauthFlowStageConsent: the flow ended at the consent step (HandleConsent
+	OAuthFlowStageIDPCallback OAuthFlowStage = "idp_callback"
+	// OAuthFlowStageConsent: the flow ended at the consent step (HandleConsent
 	// POST) — the user declined, or the approval could not be persisted.
-	oauthFlowStageConsent oauthFlowStage = "consent"
-	// oauthFlowStageToken: the authorization_code token exchange was rejected
+	OAuthFlowStageConsent OAuthFlowStage = "consent"
+	// OAuthFlowStageToken: the authorization_code token exchange was rejected
 	// (HandleToken). Refresh-token grants are NOT part of a flow and never
 	// record here.
-	oauthFlowStageToken oauthFlowStage = "token"
+	OAuthFlowStageToken OAuthFlowStage = "token"
 )
 
-type metrics struct {
+// Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
+// every Record method becomes a no-op — and each method is also
+// nil-instrument-safe, so a partially constructed value still records what
+// it can.
+type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces
 	// are sampled and so cannot be counted, and separate from
 	// mcpRequestDuration because that histogram carries a per-server URL
 	// dimension this must not be multiplied by.
 	mcpInitializeCounter metric.Int64Counter
+
+	// requestCensus is the unsampled per-request census (mcp.request) emitted
+	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
+	// remote/tunnel /x/mcp backends publish the same instrument from the
+	// proxy's request interceptor, which constructs its own [RequestCounter].
+	requestCensus *RequestCounter
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
@@ -71,7 +82,11 @@ type metrics struct {
 	oauthFlowDeclinedCounter  metric.Int64Counter
 }
 
-func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
+// NewMetrics constructs every instrument the mcp service publishes. Each
+// instrument creation failure is logged and leaves that instrument nil; the
+// Record methods handle nil instruments so partial construction still
+// produces a usable value.
+func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	mcpToolCallCounter, err := meter.Int64Counter(
 		"mcp.tool.call",
 		metric.WithDescription("MCP tool call"),
@@ -136,10 +151,11 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth flow declined counter", attr.SlogError(err))
 	}
 
-	return &metrics{
+	return &Metrics{
 		mcpToolCallCounter:        mcpToolCallCounter,
 		mcpRequestDuration:        mcpRequestDuration,
 		mcpInitializeCounter:      mcpInitializeCounter,
+		requestCensus:             NewRequestCounter(meter, logger),
 		oauthFlowStartedCounter:   oauthFlowStartedCounter,
 		oauthFlowCompletedCounter: oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:    oauthFlowFailedCounter,
@@ -147,8 +163,8 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 	}
 }
 
-func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
-	if m.mcpToolCallCounter == nil {
+func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
+	if m == nil || m.mcpToolCallCounter == nil {
 		return
 	}
 
@@ -176,7 +192,7 @@ func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 // Both are always recorded, so a breakdown by version accounts for every
 // handshake — including clients that named an unknown revision or none at all,
 // which are the two cohorts most likely to break under a version ceiling.
-func (m *metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated string) {
+func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated string) {
 	if m == nil || m.mcpInitializeCounter == nil {
 		return
 	}
@@ -187,13 +203,32 @@ func (m *metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 	))
 }
 
-func (m *metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
-	if m.mcpRequestDuration == nil {
+// RecordMCPRequest counts one dispatched MCP request on the per-request
+// census, dimensioned by clamped protocol revision, clamped method, and
+// surface. The census semantics — what counts, what the version dimension
+// means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
+// are documented on [RequestCounter.Record], which the remote proxy's
+// interceptor invokes directly for the /x/mcp traffic that never reaches the
+// mcp dispatch.
+func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
+	if m == nil {
+		return
+	}
+
+	m.requestCensus.Record(ctx, protocolVersion, method, surface)
+}
+
+// RecordMCPRequestDuration records one dispatched request's duration. The
+// method label is clamped to the known method set: it is client-supplied
+// JSON-RPC input, and unclamped it would let a client mint unbounded series
+// against a histogram that already carries a per-server URL dimension.
+func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
+	if m == nil || m.mcpRequestDuration == nil {
 		return
 	}
 
 	kv := []attribute.KeyValue{
-		attr.McpMethod(mcpMethod),
+		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
 	}
 
@@ -212,8 +247,8 @@ func oauthFlowDimensions(issuerID, mcpSlug string) []attribute.KeyValue {
 
 // RecordOAuthFlowStarted records that a user-facing OAuth flow was initiated
 // — emitted once per minted challenge at /authorize.
-func (m *metrics) RecordOAuthFlowStarted(ctx context.Context, issuerID, mcpSlug string) {
-	if m.oauthFlowStartedCounter == nil {
+func (m *Metrics) RecordOAuthFlowStarted(ctx context.Context, issuerID, mcpSlug string) {
+	if m == nil || m.oauthFlowStartedCounter == nil {
 		return
 	}
 	m.oauthFlowStartedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
@@ -221,8 +256,8 @@ func (m *metrics) RecordOAuthFlowStarted(ctx context.Context, issuerID, mcpSlug 
 
 // RecordOAuthFlowCompleted records that a user-facing OAuth flow resolved
 // successfully — emitted when the authorization_code token exchange succeeds.
-func (m *metrics) RecordOAuthFlowCompleted(ctx context.Context, issuerID, mcpSlug string) {
-	if m.oauthFlowCompletedCounter == nil {
+func (m *Metrics) RecordOAuthFlowCompleted(ctx context.Context, issuerID, mcpSlug string) {
+	if m == nil || m.oauthFlowCompletedCounter == nil {
 		return
 	}
 	m.oauthFlowCompletedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
@@ -234,8 +269,8 @@ func (m *metrics) RecordOAuthFlowCompleted(ctx context.Context, issuerID, mcpSlu
 // Not emitted for pre-mint /authorize rejections (no started counted), for
 // deliberate user declines (see RecordOAuthFlowDeclined), or for refresh_token
 // grants (not part of a flow).
-func (m *metrics) RecordOAuthFlowFailed(ctx context.Context, issuerID, mcpSlug string, stage oauthFlowStage) {
-	if m.oauthFlowFailedCounter == nil {
+func (m *Metrics) RecordOAuthFlowFailed(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
+	if m == nil || m.oauthFlowFailedCounter == nil {
 		return
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
@@ -247,8 +282,8 @@ func (m *metrics) RecordOAuthFlowFailed(ctx context.Context, issuerID, mcpSlug s
 // access_denied), tagged with the coarse stage. The machinery worked; this is
 // a user choice, not an errant config — kept separate from failed so the
 // alertable failure signal stays clean.
-func (m *metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug string, stage oauthFlowStage) {
-	if m.oauthFlowDeclinedCounter == nil {
+func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
+	if m == nil || m.oauthFlowDeclinedCounter == nil {
 		return
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
