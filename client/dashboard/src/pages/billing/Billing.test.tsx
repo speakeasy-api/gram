@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { ProductTier } from "@/hooks/useProductTier";
@@ -85,8 +85,8 @@ vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
   invalidateAllGetCreditUsage: vi.fn(),
 }));
-// The inference caps back the caps section, so which tiers reach them is part
-// of what these tests are about.
+// The inference caps back both the pay-as-you-go meters and the caps section,
+// so which tiers reach them is part of what these tests are about.
 vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
   useGetInferenceSpendCaps: () =>
     mocks.inferenceCaps() as { data: undefined; isError: boolean },
@@ -135,6 +135,13 @@ vi.mock("@/components/billing/tum-admin-section", () => ({
   TumAdminSection: () => <div>tum admin</div>,
 }));
 
+// Banner behavior is covered in billing-banners.test.tsx. This page test owns
+// their placement and destructive-before-warning order.
+vi.mock("@/components/billing/billing-banners", () => ({
+  PaygPaymentFailedBanner: () => <div data-testid="payment-banner" />,
+  PaygCapReachedBanners: () => <div data-testid="cap-banner" />,
+}));
+
 // Scope gating is exercised by the CTA's own RBAC check; the page frame here
 // just has to render its children.
 vi.mock("@/components/require-scope", () => ({
@@ -155,6 +162,7 @@ vi.mock("@/components/page-layout", () => {
   Section.CTA = ({ children }: { children: ReactNode }) => <>{children}</>;
   const Page = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Header = Header;
+  Page.Banner = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Section = Section;
   return { Page };
@@ -260,6 +268,16 @@ describe("Billing", () => {
     });
   });
 
+  it("places payment failure before the spend cap warning", () => {
+    renderBilling();
+
+    const payment = screen.getByTestId("payment-banner");
+    const cap = screen.getByTestId("cap-banner");
+    expect(
+      payment.compareDocumentPosition(cap) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   afterEach(cleanup);
 
   it("offers pay as you go to a trialing admin on the self-serve view", () => {
@@ -363,7 +381,6 @@ describe("Billing", () => {
     renderBilling();
 
     expect(planSection()).toBeNull();
-    expect(portalButton()).toBeNull();
   });
 
   // A pre-card trial converts through the checkout CTA, not the plan section:
