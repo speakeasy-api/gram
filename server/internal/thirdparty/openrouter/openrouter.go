@@ -227,7 +227,7 @@ func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
 }
 
 // DefaultCreditLimit applies the complete mint-time policy after the caller
-// has resolved whether the organization has an active trial.
+// has resolved whether the organization is still trial-tier.
 func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
 	if IsSpecialLimitOrg(orgID) {
 		return 500, true
@@ -238,8 +238,12 @@ func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limi
 	return AccountTypeCreditLimit(tier)
 }
 
-// ResolveDefaultCreditLimit reads the active-trial state and applies the full
-// mint-time policy shared by provisioning and legacy-key repair.
+// ResolveDefaultCreditLimit reads whether the organization is still trial-tier
+// and applies the full mint-time policy shared by provisioning and
+// legacy-key repair. The clock is not the source of truth: an un-demoted,
+// unconverted trial row is still trial-tier until the demotion sweeper
+// stamps demoted_at. A read failure falls through to the account type rather
+// than capping a paying customer on a transient database error.
 func ResolveDefaultCreditLimit(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -251,10 +255,10 @@ func ResolveDefaultCreditLimit(
 		return DefaultCreditLimit(orgID, tier, false)
 	}
 
-	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, orgID)
-	activeTrial := err == nil
+	trial, err := trialsRepo.New(dbtx).GetTrial(ctx, orgID)
+	activeTrial := err == nil && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
+		logger.WarnContext(ctx, "error reading trial; using the account type credit limit",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
