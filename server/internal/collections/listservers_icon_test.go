@@ -25,13 +25,14 @@ func createLogoAsset(t *testing.T, ctx context.Context, ti *testInstance) uuid.U
 	require.NotNil(t, authCtx.ProjectID)
 
 	asset, err := assetsRepo.New(ti.conn).CreateAsset(ctx, assetsRepo.CreateAssetParams{
-		Name:          "logo-" + uuid.New().String()[:8] + ".png",
-		Url:           "https://example.com/logo.png",
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        uuid.New().String(),
-		Kind:          "image",
-		ContentType:   "image/png",
-		ContentLength: 1024,
+		Name:           "logo-" + uuid.New().String()[:8] + ".png",
+		Url:            "https://example.com/logo.png",
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         uuid.New().String(),
+		Kind:           "image",
+		ContentType:    "image/png",
+		ContentLength:  1024,
 	})
 	require.NoError(t, err)
 	return asset.ID
