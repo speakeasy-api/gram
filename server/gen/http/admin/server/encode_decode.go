@@ -3413,11 +3413,12 @@ func marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody(v 
 // *AdminProjectResponseBody from a value of type *admin.AdminProject.
 func marshalAdminAdminProjectToAdminProjectResponseBody(v *admin.AdminProject) *AdminProjectResponseBody {
 	res := &AdminProjectResponseBody{
-		ID:        v.ID,
-		Name:      v.Name,
-		Slug:      v.Slug,
-		CreatedAt: v.CreatedAt,
-		UpdatedAt: v.UpdatedAt,
+		ID:             v.ID,
+		Name:           v.Name,
+		Slug:           v.Slug,
+		McpServerCount: v.McpServerCount,
+		CreatedAt:      v.CreatedAt,
+		UpdatedAt:      v.UpdatedAt,
 	}
 
 	return res

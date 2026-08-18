@@ -3353,6 +3353,9 @@ type AdminProjectResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the project
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Number of MCP servers in the project, counting both toolset-backed servers
+	// and mcp_servers rows.
+	McpServerCount int `form:"mcp_server_count" json:"mcp_server_count" xml:"mcp_server_count"`
 	// The creation date of the project.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the project.
