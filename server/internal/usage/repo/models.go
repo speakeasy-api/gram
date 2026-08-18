@@ -41,3 +41,53 @@ type BillingMetadatum struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 }
+
+type StripeInvoiceAllocation struct {
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+	SourceKind              string
+	SourceKey               string
+	Seq                     int32
+	SourceDay               pgtype.Date
+	SourcePeriodStart       pgtype.Timestamptz
+	SourcePeriodEnd         pgtype.Timestamptz
+	SourceSnapshotUsd       pgtype.Numeric
+	DeltaTokens             pgtype.Int8
+	OriginalTumUnitPriceUsd pgtype.Numeric
+	AmountUsd               pgtype.Numeric
+	OriginalInvoiceID       pgtype.Text
+	DestinationInvoiceID    pgtype.Text
+	StripeInvoiceItemID     pgtype.Text
+	StripeCreditNoteID      pgtype.Text
+	IdempotencyKey          string
+	DeliveryState           string
+	FirstAttemptedAt        pgtype.Timestamptz
+	LastAttemptedAt         pgtype.Timestamptz
+	ConfirmedAt             pgtype.Timestamptz
+	AmbiguousAt             pgtype.Timestamptz
+	ReconciledAt            pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type StripeMeterReport struct {
+	ID                   uuid.UUID
+	OrganizationID       pgtype.Text
+	BillingCycleUsageID  uuid.NullUUID
+	CycleStart           pgtype.Timestamptz
+	CycleEnd             pgtype.Timestamptz
+	Seq                  int32
+	StripeCustomerID     pgtype.Text
+	StripeMeterEventName pgtype.Text
+	StripeIdentifier     pgtype.Text
+	DeltaTokens          int64
+	EventTimestamp       pgtype.Timestamptz
+	DeliveryState        string
+	FirstAttemptedAt     pgtype.Timestamptz
+	LastAttemptedAt      pgtype.Timestamptz
+	ConfirmedAt          pgtype.Timestamptz
+	AmbiguousAt          pgtype.Timestamptz
+	ReconciledAt         pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}

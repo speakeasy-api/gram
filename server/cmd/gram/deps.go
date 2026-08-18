@@ -573,6 +573,7 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:     c.String("stripe-price-id-tum"),
+		MeterIDTUM:     c.String("stripe-meter-id-tum"),
 		MeterEventName: c.String("stripe-meter-event-name"),
 	}
 	if err := catalog.Validate(); err != nil {

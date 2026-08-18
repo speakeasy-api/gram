@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
@@ -114,6 +115,7 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	reportTUMUsageToStripe          *activities.ReportTUMUsageToStripe
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
@@ -180,6 +182,7 @@ func NewActivities(
 	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
+	stripeClient stripeclient.Client,
 	posthogClient *posthog.Posthog,
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
@@ -325,6 +328,7 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
@@ -542,6 +546,10 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ReportTUMUsageToStripe(ctx context.Context, input activities.ReportTUMUsageToStripeInput) error {
+	return a.reportTUMUsageToStripe.Do(ctx, input)
 }
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {

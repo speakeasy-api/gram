@@ -30,13 +30,21 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
+var errMissingMeterEventName = errors.New("meter event name is required")
+
 var errMissingBillingCycleAnchor = errors.New("billing cycle anchor is required")
 
 var errMissingCheckoutExpiration = errors.New("checkout expiration is required")
 
 // Catalog contains the Stripe object identifiers used by PAYG billing.
 type Catalog struct {
-	PriceIDTUM     string
+	// PriceIDTUM identifies the Stripe price included in PAYG subscriptions.
+	PriceIDTUM string
+
+	// MeterIDTUM identifies the Stripe meter queried during reconciliation.
+	MeterIDTUM string
+
+	// MeterEventName identifies the event stream used when reporting TUM deltas.
 	MeterEventName string
 }
 
@@ -44,6 +52,9 @@ type Catalog struct {
 func (c Catalog) Validate() error {
 	if !IsConfigured(c.PriceIDTUM) {
 		return errors.New("missing TUM price id in catalog")
+	}
+	if !IsConfigured(c.MeterIDTUM) {
+		return errors.New("missing TUM meter id in catalog")
 	}
 	if !IsConfigured(c.MeterEventName) {
 		return errors.New("missing meter event name in catalog")
@@ -62,6 +73,7 @@ type Client interface {
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
 	CreateMeterEvent(context.Context, CreateMeterEventInput) error
+	GetMeterEventSummary(context.Context, GetMeterEventSummaryInput) (float64, error)
 	VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error)
 	Catalog() Catalog
 }
@@ -131,10 +143,32 @@ type CheckoutSessionState struct {
 
 // CreateMeterEventInput reports a TUM delta for one Stripe customer.
 type CreateMeterEventInput struct {
-	CustomerID     string
-	Value          int64
-	Timestamp      time.Time
+	// CustomerID identifies the Stripe customer receiving the usage.
+	CustomerID string
+
+	// EventName is the immutable event stream captured with the delivery intent.
+	EventName string
+
+	// Value is the signed TUM delta.
+	Value int64
+
+	// Timestamp places the event inside its billing cycle.
+	Timestamp time.Time
+
+	// IdempotencyKey is also used as Stripe's meter-event identifier.
 	IdempotencyKey string
+}
+
+// GetMeterEventSummaryInput identifies a customer's half-open metering interval.
+type GetMeterEventSummaryInput struct {
+	// CustomerID identifies the Stripe customer whose meter is queried.
+	CustomerID string
+
+	// Start is the inclusive, minute-aligned interval boundary.
+	Start time.Time
+
+	// End is the exclusive, minute-aligned interval boundary.
+	End time.Time
 }
 
 // WebhookEvent is the verified Stripe event envelope consumed by webhook handlers.
@@ -163,6 +197,7 @@ type stripeAPI interface {
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
 	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
+	listMeterEventSummaries(context.Context, *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error]
 }
 
 type sdkAPI struct {
@@ -199,6 +234,10 @@ func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.Billing
 		return nil, fmt.Errorf("stripe SDK create meter event: %w", err)
 	}
 	return event, nil
+}
+
+func (s *sdkAPI) listMeterEventSummaries(ctx context.Context, params *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error] {
+	return s.client.V1BillingMeterEventSummaries.List(ctx, params).All(ctx)
 }
 
 type client struct {
@@ -339,9 +378,12 @@ func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInp
 	if input.IdempotencyKey == "" {
 		return errMissingIdempotencyKey
 	}
+	if !IsConfigured(input.EventName) {
+		return errMissingMeterEventName
+	}
 
 	params := new(stripesdk.BillingMeterEventCreateParams)
-	params.EventName = stripesdk.String(c.catalog.MeterEventName)
+	params.EventName = stripesdk.String(input.EventName)
 	params.Identifier = stripesdk.String(input.IdempotencyKey)
 	params.Payload = map[string]string{
 		meterCustomerPayloadKey: input.CustomerID,
@@ -356,6 +398,33 @@ func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInp
 		return fmt.Errorf("create Stripe meter event: %w", err)
 	}
 	return nil
+}
+
+// GetMeterEventSummary returns Stripe's eventually consistent observed total.
+// Callers decide whether the value is sufficiently settled for reconciliation.
+func (c *client) GetMeterEventSummary(ctx context.Context, input GetMeterEventSummaryInput) (float64, error) {
+	if !input.Start.Equal(input.Start.Truncate(time.Minute)) || !input.End.Equal(input.End.Truncate(time.Minute)) {
+		return 0, errors.New("meter event summary bounds must be minute-aligned")
+	}
+	if !input.End.After(input.Start) {
+		return 0, errors.New("meter event summary end must be after start")
+	}
+
+	params := new(stripesdk.BillingMeterEventSummaryListParams)
+	params.ID = stripesdk.String(c.catalog.MeterIDTUM)
+	params.Customer = stripesdk.String(input.CustomerID)
+	params.StartTime = new(input.Start.Unix())
+	params.EndTime = new(input.End.Unix())
+	params.Limit = stripesdk.Int64(100)
+
+	var total float64
+	for summary, err := range c.api.listMeterEventSummaries(ctx, params) {
+		if err != nil {
+			return 0, fmt.Errorf("list Stripe meter event summaries: %w", err)
+		}
+		total += summary.AggregatedValue
+	}
+	return total, nil
 }
 
 func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error) {
@@ -454,6 +523,11 @@ func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInp
 	return nil
 }
 
+func (s *stubClient) GetMeterEventSummary(ctx context.Context, _ GetMeterEventSummaryInput) (float64, error) {
+	s.logger.DebugContext(ctx, "stub Stripe meter event summary skipped")
+	return 0, nil
+}
+
 func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
 	return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 }
@@ -461,6 +535,7 @@ func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
 func (s *stubClient) Catalog() Catalog {
 	return Catalog{
 		PriceIDTUM:     "",
+		MeterIDTUM:     "",
 		MeterEventName: "",
 	}
 }

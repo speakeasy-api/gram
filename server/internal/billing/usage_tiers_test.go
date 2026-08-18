@@ -30,6 +30,7 @@ func TestNewPaygTierLimits(t *testing.T) {
 	require.Zero(t, want.PricePerAdditionalServer)
 	require.NotNil(t, want.TumPricePerMillionUsd)
 	require.Equal(t, billing.TUMPricePerMillionUSD, *want.TumPricePerMillionUsd)
+	require.Equal(t, "0.00000035", billing.TUMUnitPriceUSD)
 	require.Equal(t, []string{
 		"Other inference billed at provider cost",
 		"Security inference funded by Speakeasy",
