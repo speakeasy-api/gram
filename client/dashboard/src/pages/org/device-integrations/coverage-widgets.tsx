@@ -305,11 +305,6 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
         />
-        <Page.Toolbar.Count>
-          {/* The "+" keeps the count honest while unloaded pages remain. */}
-          {filteredDevices.length}
-          {hasMore ? "+" : ""} devices
-        </Page.Toolbar.Count>
       </Page.Toolbar>
       <Table
         columns={columns}

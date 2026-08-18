@@ -13,6 +13,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useRBAC } from "@/hooks/useRBAC";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
+import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 
 const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
   { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
@@ -37,8 +38,11 @@ export function ConnectionsListSection({
   defaultGrouping = "subject",
   emptyHeading = "No connections yet",
   emptyDescription = "Connections agents establish will appear here.",
+  clients,
 }: {
   sessions: UserSession[];
+  /** Registrations for this scope; surfaced by the client grouping. */
+  clients?: UserSessionClient[];
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -79,7 +83,7 @@ export function ConnectionsListSection({
     );
   }
 
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && (clients ?? []).length === 0) {
     return (
       <InlineEmptyState
         icon="unplug"
@@ -90,7 +94,10 @@ export function ConnectionsListSection({
   }
 
   return (
-    <Stack gap={3}>
+    // Wider than the gaps inside the table: the control changes what the whole
+    // list is, so it has to read as sitting above the table rather than as its
+    // first row.
+    <Stack gap={6}>
       <Stack direction="horizontal" justify="end">
         <SegmentedControl
           value={grouping}
@@ -103,6 +110,7 @@ export function ConnectionsListSection({
         grouping={grouping}
         canRevoke={canRevoke}
         onRevoked={onRevoked}
+        clients={clients}
       />
     </Stack>
   );

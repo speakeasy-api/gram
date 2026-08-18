@@ -10,10 +10,14 @@ import {
   useUserSessionsInfinite,
 } from "@gram/client/react-query/userSessions.js";
 
+import { Link, useLocation } from "react-router";
+
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { UserSessionClientsList } from "./UserSessionClientsList";
 import { useDrainedPages, PAGE_FETCH_LIMIT } from "./useDrainedPages";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
@@ -29,10 +33,21 @@ import { ConnectionsListSection } from "@/components/connections/ConnectionsList
  */
 export function ClientsAndSessionsTab({
   issuerId,
+  authTabPath = "settings",
 }: {
   issuerId: string | undefined;
+  /**
+   * Sibling tab where authentication is configured, for the no-issuer empty
+   * state to point at. Differs between the two server pages this tab is shared
+   * by — the toolset-backed one has a dedicated Authentication tab, while the
+   * mcp_servers-backed one keeps auth inside Settings — so the destination is
+   * the caller's to name rather than something this component can infer.
+   */
+  authTabPath?: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const { pathname } = useLocation();
+  const authTabHref = pathname.replace(/[^/]+\/?$/, authTabPath);
   // Both queries treat a missing user_session_issuer_id as "don't filter by
   // issuer", so leaving them enabled on a server with no issuer would list the
   // whole project's sessions and clients under one server's tab. The hooks
@@ -84,26 +99,37 @@ export function ClientsAndSessionsTab({
   // sessions the backend already deleted. Only the filter pointing at the
   // revoked client is cleared; revoking some other client leaves the current
   // drill-down where the operator put it.
-  const onClientRevoked = () => {
+  // Revoking a registration cascades to every session it issued, and revoking a
+  // session changes the tally the registration reports, so both directions have
+  // to refresh both listings.
+  const onClientOrSessionRevoked = () => {
     void clientsQuery.refetch();
-    void invalidateAllUserSessions(queryClient, { refetchType: "all" });
-  };
-
-  // The clients table reports a live-session tally per client, which a session
-  // revoke just decremented. It has no way to learn that on its own, so it
-  // would keep advertising a session that no longer exists.
-  const onSessionRevoked = () => {
     void sessionsQuery.refetch();
+    void invalidateAllUserSessions(queryClient, { refetchType: "all" });
     void invalidateAllUserSessionClients(queryClient, { refetchType: "all" });
   };
 
   if (!issuerId) {
     return (
-      <Text muted small>
-        This server has no session issuer, so no clients can register against it
-        and no sessions can be established. Configure authentication to start
-        accepting OAuth connections.
-      </Text>
+      <InlineEmptyState
+        icon="unplug"
+        heading="No connections can be made yet"
+        description="This server has no session issuer, so no client can register against it and no session can be established. Turn on authentication to start accepting OAuth connections."
+        action={
+          // The last path segment is swapped rather than using a `../` link:
+          // these tabs are a switch on a route param, not nested routes, so
+          // both route- and path-relative `..` climb past the server slug and
+          // land on the MCP index.
+          <Link to={authTabHref} className="hover:no-underline">
+            <Button variant="secondary" size="sm">
+              <Button.Text>Configure authentication</Button.Text>
+              <Button.RightIcon>
+                <Icon name="arrow-right" size="small" />
+              </Button.RightIcon>
+            </Button>
+          </Link>
+        }
+      />
     );
   }
 
@@ -155,30 +181,19 @@ export function ClientsAndSessionsTab({
           <ViewOrgSessionsButton />
         </Stack>
 
+        {/* Registrations are handed in rather than listed separately: the
+            client grouping is the same inventory, and a registration with no
+            connections still appears there so it stays visible and revocable. */}
         <ConnectionsListSection
           sessions={sessions}
-          isPending={sessionsQuery.isPending}
-          isError={sessionsQuery.isError && sessions.length === 0}
-          onRetry={() => void sessionsQuery.refetch()}
-          onRevoked={onSessionRevoked}
-        />
-      </Stack>
-
-      <Stack gap={3}>
-        <Stack gap={1}>
-          <Text variant="subheading">Registered clients</Text>
-          <Text small muted>
-            MCP Clients, agents, and other applications that are registered for
-            creating sessions. Revoking a registration cuts off every connection
-            it established.
-          </Text>
-        </Stack>
-        <UserSessionClientsList
           clients={clients}
-          isPending={clientsQuery.isPending}
-          isError={clientsQuery.isError && clients.length === 0}
-          onRetry={() => void clientsQuery.refetch()}
-          onClientRevoked={onClientRevoked}
+          isPending={sessionsQuery.isPending || clientsQuery.isPending}
+          isError={sessionsQuery.isError && sessions.length === 0}
+          onRetry={() => {
+            void sessionsQuery.refetch();
+            void clientsQuery.refetch();
+          }}
+          onRevoked={onClientOrSessionRevoked}
         />
       </Stack>
     </Stack>

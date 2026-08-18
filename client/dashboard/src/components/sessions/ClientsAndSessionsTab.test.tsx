@@ -325,28 +325,38 @@ describe("ClientsAndSessionsTab", () => {
     expect(invalidateAllUserSessionClients).toHaveBeenCalled();
   });
 
-  it("still lists registered clients alongside the connections", () => {
+  it("surfaces a registration with no connections under client grouping", () => {
+    // The registrations table used to be the only place an unused client was
+    // visible. Folding it into the grouping must not make it disappear —
+    // otherwise a registered-but-idle client could never be found or revoked.
+    useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(
-      queryResult([client({ clientName: "Registered Client" })]),
+      queryResult([client({ clientName: "Never Used Client" })]),
     );
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText("Registered Client")).toBeDefined();
+    fireEvent.click(screen.getByText("Client"));
+
+    expect(screen.getByText("Never Used Client")).toBeDefined();
+    expect(
+      screen.getByText(/registered but holds no connections/i),
+    ).toBeDefined();
   });
 
-  it("reports each client's real session tally without a drill-down target", () => {
-    // Retiring the drill-down made the count cell render as plain text. The
-    // zero case and the no-drill-down case share that branch, so the tally has
-    // to come from the data rather than from the branch that produced it.
+  it("offers revoking the registration itself, not just its sessions", () => {
+    // Revoking live sessions and revoking the registration are different acts:
+    // only the latter stops future connections. Both have to be reachable.
+    useUserSessionsInfinite.mockReturnValue(queryResult([session({})]));
     useUserSessionClientsInfinite.mockReturnValue(
-      queryResult([
-        client({ clientName: "Busy Client", activeSessionCount: 3 }),
-      ]),
+      queryResult([client({ clientName: "Test Client" })]),
     );
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText("3")).toBeDefined();
+    fireEvent.click(screen.getByText("Client"));
+
+    expect(screen.getByText("Revoke registration")).toBeDefined();
+    expect(screen.getByText("Revoke all")).toBeDefined();
   });
 });

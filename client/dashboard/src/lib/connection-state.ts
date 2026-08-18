@@ -40,6 +40,14 @@ const LIVE_WINDOW_MS = 15 * 60 * 1000;
  */
 const EXPIRING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * How long a connection can go untouched before it reads as dormant rather than
+ * merely quiet. A week spans the working rhythm of a tool someone reaches for
+ * occasionally, so crossing it means the connection is being carried rather than
+ * used — worth keeping, worth demoting.
+ */
+const DORMANT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const CONNECTION_STATE_PRESENTATION: Record<
   ConnectionState,
   { label: string; tone: ConnectionTone; toneClass: string }
@@ -166,6 +174,44 @@ export function connectionState(
 }
 
 /**
+ * When a connection last carried traffic, as an epoch millisecond value, or null
+ * when there is no record. Sorting keys off this, so it is extracted once rather
+ * than reparsed per comparison.
+ */
+export function connectionLastUsedAt(session: UserSession): number | null {
+  const value = session.lastUsedAt;
+  if (!value) return null;
+  const at =
+    value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isNaN(at) ? null : at;
+}
+
+/**
+ * Whether a connection has stopped doing work — either because nobody is using
+ * it, or because it can no longer be used.
+ *
+ * Two causes, one bucket, because the consequence is the same: the connection is
+ * not carrying traffic and is not going to start on its own. `expiring` stays
+ * active, since it still works and is precisely the thing an admin can still fix
+ * in time.
+ *
+ * A session with no recorded use counts as dormant. `connectionState` treats the
+ * same absence as merely unknown, which is right when picking a health label —
+ * but here the question is whether we have evidence of traffic, and we do not.
+ */
+export function connectionIsInactive(
+  session: UserSession,
+  now: number = Date.now(),
+): boolean {
+  const state = connectionState(session, now);
+  if (state === "revoked" || state === "needs_reauth") return true;
+
+  const lastUsedAt = connectionLastUsedAt(session);
+  if (lastUsedAt === null) return true;
+  return now - lastUsedAt > DORMANT_WINDOW_MS;
+}
+
+/**
  * Activity phrasing for a connection. Distinguishes "we know it has not been
  * used" from "we have no record", because a session that predates last_used_at
  * would otherwise read as permanently dormant.
@@ -201,4 +247,22 @@ export function connectionDeadlineLabel(
     addSuffix: true,
   });
   return sessionRemaining <= 0 ? `expired ${relative}` : `expires ${relative}`;
+}
+
+/**
+ * Plain-language status for a single upstream, for the detail view where each
+ * provider is listed on its own rather than folded into a connection's state.
+ */
+export function upstreamStateLabel(
+  upstream: UserSessionUpstream,
+  now: number = Date.now(),
+): string {
+  if (upstreamNeedsReauth(upstream, now)) return "needs re-authorization";
+
+  const remaining = upstreamDeadline(upstream, now);
+  if (remaining === null) return "connected";
+  if (remaining <= EXPIRING_WINDOW_MS) {
+    return `expires ${formatDistanceToNow(new Date(now + remaining), { addSuffix: true })}`;
+  }
+  return "connected";
 }

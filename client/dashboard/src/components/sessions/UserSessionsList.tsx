@@ -250,10 +250,6 @@ export function UserSessionsList({
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
         />
-        <Toolbar.Count>
-          {sortedSessions.length} session
-          {sortedSessions.length === 1 ? "" : "s"}
-        </Toolbar.Count>
       </Toolbar>
 
       <ListStateBoundary
