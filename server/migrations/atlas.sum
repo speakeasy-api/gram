@@ -1,4 +1,4 @@
-h1:PDO6D2lqfGcZAEnnvy3agnRwoRPn0PuWTO9GaF3ckIo=
+h1:AaJBHu5EUJvR1opYMwcjsW+pciLH5c9lJOdOpTiMJfM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -355,4 +355,4 @@ h1:PDO6D2lqfGcZAEnnvy3agnRwoRPn0PuWTO9GaF3ckIo=
 20260818183520_http-tool-definitions-project-id-index.sql h1:X4dI05qrxUpgNaQquYPJWUbWxHmCNXNWKXLuuc2lO8k=
 20260818190528_remote-session-issuers-add-code-challenge-methods-supported.sql h1:OPMkLq4PyRSo/rSAJBXDFigYnRsbRX1gWxoy5yS2SjQ=
 20260818203516_mcp-approval-evidence-change-detection.sql h1:yNs/1liPkJfSG3clzyfd+6zGfhYbWVHVFo4rUfXOQ3Q=
-20260818232009_add-chat-session-links.sql h1:vQOfUAoReMW4DlRn1ArgkN7Fcyq1iTG9V/xEvClulVc=
+20260818232333_add-chat-session-links.sql h1:pe/j8at4rek3EGxzNY9FgibVjHT0Bt31amT/tp5ftNg=

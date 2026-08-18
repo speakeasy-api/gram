@@ -7197,10 +7197,13 @@ ON chat_session_links (project_id, parent_chat_id);
 CREATE INDEX IF NOT EXISTS chat_session_links_project_child_idx
 ON chat_session_links (project_id, child_chat_id) WHERE child_chat_id IS NOT NULL;
 
--- Daemon retries of the same move must not double-edge. NULL-child edges may
--- repeat freely: each unknowable-continuation move is a distinct event.
-CREATE UNIQUE INDEX IF NOT EXISTS chat_session_links_parent_child_key
-ON chat_session_links (parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL;
+-- Daemon retries of the same move must not double-edge. Scoped by project:
+-- both chat ids derive from client-supplied session ids, so two tenants can
+-- legitimately report identical id pairs — one tenant's edge must never
+-- suppress another's. NULL-child edges may repeat freely: each
+-- unknowable-continuation move is a distinct event.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_session_links_project_parent_child_key
+ON chat_session_links (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL;
 
 -- Serves both cascade paths, mirroring session_handoff_links: organization
 -- deletes scan the leading column, project deletes the full pair.
