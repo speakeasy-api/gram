@@ -48,7 +48,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 		return Principal{}, ErrUnavailable
 	}
 
-	claims, err := a.signer.Validate(token, a.audience)
+	claims, err := a.signer.ValidateExactAudience(token, a.audience)
 	if err != nil || claims.Issuer != a.issuer {
 		return Principal{}, ErrUnauthorized
 	}

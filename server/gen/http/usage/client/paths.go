@@ -22,6 +22,16 @@ func SetBillingMetadataUsagePath() string {
 	return "/rpc/usage.setBillingMetadata"
 }
 
+// GetBillingEmailUsagePath returns the URL path to the usage service getBillingEmail HTTP endpoint.
+func GetBillingEmailUsagePath() string {
+	return "/rpc/usage.getBillingEmail"
+}
+
+// SetBillingEmailUsagePath returns the URL path to the usage service setBillingEmail HTTP endpoint.
+func SetBillingEmailUsagePath() string {
+	return "/rpc/usage.setBillingEmail"
+}
+
 // GetUsageTiersUsagePath returns the URL path to the usage service getUsageTiers HTTP endpoint.
 func GetUsageTiersUsagePath() string {
 	return "/rpc/usage.getUsageTiers"
@@ -35,6 +45,11 @@ func CreateCustomerSessionUsagePath() string {
 // CreateCheckoutUsagePath returns the URL path to the usage service createCheckout HTTP endpoint.
 func CreateCheckoutUsagePath() string {
 	return "/rpc/usage.createCheckout"
+}
+
+// CreateStripeCheckoutUsagePath returns the URL path to the usage service createStripeCheckout HTTP endpoint.
+func CreateStripeCheckoutUsagePath() string {
+	return "/rpc/usage.createStripeCheckout"
 }
 
 // CreateTopUpCheckoutUsagePath returns the URL path to the usage service createTopUpCheckout HTTP endpoint.

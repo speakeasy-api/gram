@@ -67,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
@@ -91,6 +92,8 @@ type Activities struct {
 	db                              *pgxpool.Pool
 	temporalEnv                     *tenv.Environment
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
+	collectOpenRouterDailySpend     *activities.CollectOpenRouterDailySpend
+	settleStripeInvoiceAllocations  *activities.SettleStripeInvoiceAllocations
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
@@ -113,9 +116,11 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	reportTUMUsageToStripe          *activities.ReportTUMUsageToStripe
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
+	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -172,12 +177,14 @@ func NewActivities(
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
 	openrouterProvisioner openrouter.Provisioner,
+	openrouterSpendClient openrouter.SpendClient,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
+	stripeClient stripeclient.Client,
 	posthogClient *posthog.Posthog,
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
@@ -300,6 +307,8 @@ func NewActivities(
 		db:                              db,
 		temporalEnv:                     temporalEnv,
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
+		collectOpenRouterDailySpend:     activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
+		settleStripeInvoiceAllocations:  activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
@@ -322,9 +331,11 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
@@ -439,6 +450,10 @@ func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.
 	return a.refreshOpenRouterKey.Do(ctx, input)
 }
 
+func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {
+	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
+}
+
 func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) error {
 	return a.verifyCustomDomain.Do(ctx, input)
 }
@@ -497,6 +512,18 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 	return a.collectOpenRouterCreditsMetrics.Do(ctx, args)
 }
 
+func (a *Activities) CollectOpenRouterDailySpend(ctx context.Context, args activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
+	result, err := a.collectOpenRouterDailySpend.DoWithResult(ctx, args)
+	if err != nil {
+		return activities.CollectOpenRouterDailySpendResult{}, fmt.Errorf("collect OpenRouter daily spend: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SettleStripeInvoiceAllocations(ctx context.Context, args activities.SettleStripeInvoiceAllocationsArgs) error {
+	return a.settleStripeInvoiceAllocations.Do(ctx, args)
+}
+
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
 }
@@ -535,6 +562,10 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ReportTUMUsageToStripe(ctx context.Context, input activities.ReportTUMUsageToStripeInput) error {
+	return a.reportTUMUsageToStripe.Do(ctx, input)
 }
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {

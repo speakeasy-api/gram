@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -75,6 +76,9 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	qtx := repo.New(dbtx)
+	if err := qtx.LockBillingMetadataOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock billing metadata organization").LogError(ctx, s.logger)
+	}
 
 	var snapshotBefore *audit.BillingMetadataSnapshot
 	before, err := qtx.GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
@@ -85,10 +89,21 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").LogError(ctx, s.logger)
 	}
 
+	alertEmail := conv.PtrToPGText(payload.AlertEmail)
+	organization, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization billing type").LogError(ctx, s.logger)
+	}
+	if organization.GramAccountType == string(billing.TierPayg) {
+		// PAYG billing email is owned by SetBillingEmail. Preserve the value read
+		// under the shared lock so the legacy TUM writer cannot overwrite it.
+		alertEmail = before.AlertEmail
+	}
+
 	row, err := qtx.UpsertBillingMetadata(ctx, repo.UpsertBillingMetadataParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		TumMonthlyTokenLimit:   tokenLimit,
-		AlertEmail:             conv.PtrToPGText(payload.AlertEmail),
+		AlertEmail:             alertEmail,
 		BillingCycleAnchorDay:  conv.SafeInt32(payload.BillingCycleAnchorDay),
 		TunneledMcpServerLimit: tunneledMcpServerLimit,
 	})

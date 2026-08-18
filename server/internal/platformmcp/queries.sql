@@ -24,6 +24,19 @@ FROM platform_mcp_oauth_clients
 WHERE client_id = @client_id
   AND revoked_at IS NULL;
 
+-- name: GetPlatformMCPOAuthClientForUpdate :one
+SELECT *
+FROM platform_mcp_oauth_clients
+WHERE client_id = @client_id
+FOR UPDATE;
+
+-- name: ListPlatformMCPClientConnectionsForUpdate :many
+SELECT *
+FROM platform_mcp_connections
+WHERE oauth_client_id = @oauth_client_id
+  AND revoked_at IS NULL
+FOR UPDATE;
+
 -- name: RevokePlatformMCPOAuthClient :one
 UPDATE platform_mcp_oauth_clients
 SET revoked_at = @revoked_at,
@@ -46,13 +59,15 @@ INSERT INTO platform_mcp_connections (
     organization_id,
     subject_urn,
     oauth_client_id,
-    active_generation
+    active_generation,
+    authorization_expires_at
 ) VALUES (
     @id,
     @organization_id,
     @subject_urn,
     @oauth_client_id,
-    @active_generation
+    @active_generation,
+    @authorization_expires_at
 )
 RETURNING *;
 
@@ -97,9 +112,22 @@ FOR UPDATE OF connection;
 -- name: RevokePlatformMCPConnection :one
 UPDATE platform_mcp_connections
 SET revoked_at = @revoked_at,
+    reauthorization_required_at = @revoked_at,
+    reauthorization_reason = 'connection_revoked',
     updated_at = @revoked_at
 WHERE id = @id
   AND organization_id = @organization_id
+  AND revoked_at IS NULL
+RETURNING *;
+
+-- name: MarkPlatformMCPConnectionReauthorizationRequired :one
+UPDATE platform_mcp_connections
+SET reauthorization_required_at = @reauthorization_required_at,
+    reauthorization_reason = @reauthorization_reason,
+    updated_at = @reauthorization_required_at
+WHERE id = @connection_id
+  AND organization_id = @organization_id
+  AND active_generation = @connection_generation
   AND revoked_at IS NULL
 RETURNING *;
 
@@ -107,6 +135,9 @@ RETURNING *;
 UPDATE platform_mcp_connections
 SET active_generation = @active_generation,
     reauthorized_at = @reauthorized_at,
+    authorization_expires_at = @authorization_expires_at,
+    reauthorization_required_at = NULL,
+    reauthorization_reason = NULL,
     updated_at = @reauthorized_at
 WHERE id = @connection_id
   AND organization_id = @organization_id
@@ -135,8 +166,16 @@ INSERT INTO platform_mcp_authorization_grants (
 )
 RETURNING *;
 
--- name: GetPlatformMCPAuthorizationGrantForConsume :one
-SELECT auth_grant.*, connection.subject_urn, connection.active_generation, client.client_id
+-- name: GetPlatformMCPAuthorizationGrantForValidation :one
+SELECT
+    auth_grant.*,
+    connection.subject_urn,
+    connection.active_generation,
+    client.client_id,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
 FROM platform_mcp_authorization_grants AS auth_grant
 JOIN platform_mcp_connections AS connection
   ON connection.id = auth_grant.connection_id
@@ -147,8 +186,32 @@ JOIN platform_mcp_oauth_clients AS client
 WHERE auth_grant.organization_id = @organization_id
   AND auth_grant.authorization_code_hash = @authorization_code_hash
   AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
+  AND client.revoked_at IS NULL;
+
+-- name: GetPlatformMCPAuthorizationGrantForConsume :one
+SELECT
+    auth_grant.*,
+    connection.subject_urn,
+    connection.active_generation,
+    client.client_id,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
+FROM platform_mcp_authorization_grants AS auth_grant
+JOIN platform_mcp_connections AS connection
+  ON connection.id = auth_grant.connection_id
+  AND connection.organization_id = auth_grant.organization_id
+  AND connection.oauth_client_id = auth_grant.oauth_client_id
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = auth_grant.oauth_client_id
+WHERE auth_grant.organization_id = @organization_id
+  AND auth_grant.authorization_code_hash = @authorization_code_hash
+  AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
   AND client.revoked_at IS NULL
-FOR UPDATE OF auth_grant;
+FOR UPDATE OF auth_grant, connection;
 
 -- name: ConsumePlatformMCPAuthorizationGrant :one
 UPDATE platform_mcp_authorization_grants
@@ -202,18 +265,54 @@ WHERE session.organization_id = @organization_id
   AND client.revoked_at IS NULL;
 
 -- name: GetPlatformMCPSessionForRefreshForUpdate :one
-SELECT session.*, connection.subject_urn, connection.active_generation, client.client_id
-FROM platform_mcp_sessions AS session
-JOIN platform_mcp_connections AS connection
+-- Lock the connection before its session so refresh, connection revocation, and
+-- client revocation all use the same connection -> session lock order.
+WITH target_session AS MATERIALIZED (
+    SELECT session.connection_id, session.oauth_client_id
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = @organization_id
+      AND session.refresh_token_hash = @refresh_token_hash
+),
+locked_connection AS MATERIALIZED (
+    SELECT connection.*
+    FROM platform_mcp_connections AS connection
+    JOIN target_session
+      ON target_session.connection_id = connection.id
+      AND target_session.oauth_client_id = connection.oauth_client_id
+    WHERE connection.organization_id = @organization_id
+    FOR UPDATE OF connection
+),
+locked_session AS MATERIALIZED (
+    SELECT session.*
+    FROM platform_mcp_sessions AS session
+    JOIN locked_connection AS connection
+      ON connection.id = session.connection_id
+      AND connection.organization_id = session.organization_id
+      AND connection.oauth_client_id = session.oauth_client_id
+    WHERE session.organization_id = @organization_id
+      AND session.refresh_token_hash = @refresh_token_hash
+    FOR UPDATE OF session
+)
+SELECT
+    session.*,
+    connection.subject_urn,
+    connection.active_generation,
+    connection.revoked_at AS connection_revoked_at,
+    connection.reauthorization_required_at,
+    connection.reauthorization_reason,
+    client.client_id,
+    client.revoked_at AS client_revoked_at,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
+FROM locked_session AS session
+JOIN locked_connection AS connection
   ON connection.id = session.connection_id
   AND connection.organization_id = session.organization_id
   AND connection.oauth_client_id = session.oauth_client_id
 JOIN platform_mcp_oauth_clients AS client
-  ON client.id = session.oauth_client_id
-WHERE session.organization_id = @organization_id
-  AND session.refresh_token_hash = @refresh_token_hash
-  AND client.revoked_at IS NULL
-FOR UPDATE OF session;
+  ON client.id = session.oauth_client_id;
 
 -- name: RotatePlatformMCPSession :one
 UPDATE platform_mcp_sessions
@@ -1366,6 +1465,24 @@ WHERE workflow.organization_id = @organization_id
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
 
+-- name: HasPlatformMCPOrganizationSetupComplete :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'first_value_achieved'
+    UNION ALL
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    WHERE distribution.organization_id = @organization_id
+      AND distribution.state = 'attached'
+) AS setup_complete;
+
 -- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
 SELECT EXISTS (
     SELECT 1
@@ -1432,8 +1549,7 @@ RETURNING *;
 
 -- name: RecordPlatformMCPOnboardingInstallIntent :one
 UPDATE platform_mcp_onboarding_workflows
-SET source_surface = @source_surface,
-    client_family = @client_family,
+SET client_family = @client_family,
     expires_at = @expires_at,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -1442,6 +1558,54 @@ WHERE id = @id
   AND status = 'active'
   AND expires_at > clock_timestamp()
 RETURNING *;
+
+-- name: RecordPlatformMCPOnboardingInstallStarted :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+)
+SELECT
+    @organization_id,
+    'install_started',
+    @attempt_id
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_workflows AS workflow
+    WHERE workflow.id = @attempt_id
+      AND workflow.organization_id = @organization_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+)
+ON CONFLICT DO NOTHING;
+
+-- name: HasPlatformMCPOnboardingInstallStarted :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    JOIN platform_mcp_onboarding_workflows AS workflow
+      ON workflow.organization_id = milestone.organization_id
+     AND workflow.id = milestone.attempt_id
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'install_started'
+      AND milestone.attempt_id = @attempt_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+);
+
+-- name: RecordPlatformMCPDashboardCtaEvent :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+) VALUES (
+    @organization_id,
+    @milestone,
+    @attempt_id
+)
+ON CONFLICT DO NOTHING;
 
 -- name: RecordPlatformMCPOnboardingAgentConfigurationCopied :one
 UPDATE platform_mcp_onboarding_workflows
@@ -1564,11 +1728,68 @@ SELECT
 FROM platform_mcp_connections AS connection
 JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
+JOIN LATERAL (
+    SELECT session.refresh_expires_at, session.revoked_at
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = connection.organization_id
+      AND session.connection_id = connection.id
+      AND session.connection_generation = connection.active_generation
+    ORDER BY session.created_at DESC, session.id DESC
+    LIMIT 1
+) AS latest_session ON TRUE
 WHERE connection.organization_id = @organization_id
   AND connection.subject_urn = @subject_urn
   AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
   AND client.revoked_at IS NULL
+  AND COALESCE(
+      connection.authorization_expires_at,
+      COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+  ) > @now
+  AND latest_session.revoked_at IS NULL
+  AND latest_session.refresh_expires_at > @now
 ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC;
+
+-- name: GetPlatformMCPSubjectConnectionAuthState :one
+SELECT
+    connection.id,
+    connection.active_generation,
+    connection.authorized_at,
+    connection.reauthorized_at,
+    connection.reauthorization_required_at,
+    connection.reauthorization_reason,
+    connection.revoked_at,
+    client.revoked_at AS client_revoked_at,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at,
+    latest_session.refresh_expires_at AS latest_refresh_expires_at,
+    latest_session.revoked_at AS latest_session_revoked_at,
+    EXISTS (
+        SELECT 1
+        FROM platform_mcp_onboarding_milestones AS milestone
+        WHERE milestone.organization_id = connection.organization_id
+          AND milestone.milestone = 'connection_ready'
+          AND milestone.connection_id = connection.id
+          AND milestone.connection_generation = connection.active_generation
+    ) AS ready
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = connection.oauth_client_id
+LEFT JOIN LATERAL (
+    SELECT session.refresh_expires_at, session.revoked_at
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = connection.organization_id
+      AND session.connection_id = connection.id
+      AND session.connection_generation = connection.active_generation
+    ORDER BY session.created_at DESC, session.id DESC
+    LIMIT 1
+) AS latest_session ON TRUE
+WHERE connection.organization_id = @organization_id
+  AND connection.subject_urn = @subject_urn
+ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC
+LIMIT 1;
 
 -- name: RecordPlatformMCPSetupMilestone :exec
 INSERT INTO platform_mcp_onboarding_milestones (

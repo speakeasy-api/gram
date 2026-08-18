@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	ActionBillingMetadataUpdate Action = "billing_metadata:update"
+	ActionBillingMetadataCreateStripeCheckout Action = "billing_metadata:create_stripe_checkout"
+	ActionBillingMetadataUpdate               Action = "billing_metadata:update"
 )
 
 // BillingMetadataSnapshot captures an organization's billing contract terms
@@ -35,6 +36,48 @@ type LogBillingMetadataUpdateEvent struct {
 
 	BillingMetadataSnapshotBefore *BillingMetadataSnapshot
 	BillingMetadataSnapshotAfter  *BillingMetadataSnapshot
+}
+
+type LogBillingMetadataCreateStripeCheckoutEvent struct {
+	// OrganizationID is the organization starting PAYG billing.
+	OrganizationID string
+
+	// Actor is the user who requested the Checkout session.
+	Actor urn.Principal
+
+	// ActorDisplayName is the user's display label.
+	ActorDisplayName *string
+
+	// ActorSlug is the user's audit-log slug, when available.
+	ActorSlug *string
+
+	// BillingMetadataURN identifies the organization billing metadata subject.
+	BillingMetadataURN urn.BillingMetadata
+}
+
+func (l *Logger) LogBillingMetadataCreateStripeCheckout(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripeCheckoutEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionBillingMetadataCreateStripeCheckout),
+
+		SubjectID:          event.BillingMetadataURN.ID.String(),
+		SubjectType:        string(subjectTypeBillingMetadata),
+		SubjectDisplayName: conv.ToPGTextEmpty("Billing metadata"),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.BillingMetadataV1})
 }
 
 func (l *Logger) LogBillingMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataUpdateEvent) error {

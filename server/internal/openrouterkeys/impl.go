@@ -1,9 +1,9 @@
 // Package openrouterkeys implements the adminOpenRouterKeys service: the
 // platform-admin surface over openrouter_api_keys, the per-(organization, key
 // type) platform OpenRouter keys that pay for completions. It exposes each
-// key's encryption state plus the enable/disable and encrypt-at-rest
-// remediation actions. Key material never leaves the server: handlers resolve
-// it only to call OpenRouter and never place it in a response or audit entry.
+// key's credit usage plus the enable/disable actions. Key material never
+// leaves the server: handlers resolve it only to call OpenRouter and never
+// place it in a response or audit entry.
 package openrouterkeys
 
 import (
@@ -126,7 +126,6 @@ func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.Li
 			KeyType:          row.KeyType,
 			MonthlyCredits:   row.MonthlyCredits,
 			Disabled:         row.Disabled,
-			EncryptionStatus: encryptionStatus(row.HasPlaintext, row.HasEncrypted),
 			CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 		})
@@ -172,93 +171,6 @@ func (s *Service) GetKeyUsage(ctx context.Context, payload *gen.GetKeyUsagePaylo
 		MonthlyCredits: row.MonthlyCredits,
 		UpstreamLimit:  upstreamLimit,
 	}, nil
-}
-
-// EncryptKey is the remediation scrub for a key stored in plaintext: it
-// records the AES-256-GCM ciphertext and clears the plaintext column in a
-// single statement, after verifying the ciphertext decrypts back to the exact
-// plaintext. OpenRouter only returns key material at creation, so the
-// verification runs before anything destructive. The provisioning advisory
-// lock serializes the scrub against concurrent first-time provisioning and
-// the lazy read-repair path.
-func (s *Service) EncryptKey(ctx context.Context, payload *gen.EncryptKeyPayload) (*gen.AdminOpenRouterKey, error) {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin openrouter key encryption").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txq := orrepo.New(dbtx)
-	if err := txq.LockOpenRouterKeyProvisioning(ctx, orrepo.LockOpenRouterKeyProvisioningParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key").LogError(ctx, logger)
-	}
-
-	row, err := txq.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
-	}
-
-	if !row.Key.Valid || row.Key.String == "" {
-		if !row.KeyEncrypted.Valid {
-			return nil, oops.E(oops.CodeUnexpected, nil, "key row holds no key material").LogError(ctx, logger)
-		}
-		// Already scrubbed; nothing to do.
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// Prefer a ciphertext already written by creation dual-writes or lazy
-	// read-repair; otherwise mint one now. Either way, prove it decrypts back
-	// to the exact plaintext before the plaintext is destroyed.
-	ciphertext := row.KeyEncrypted.String
-	if !row.KeyEncrypted.Valid {
-		ciphertext, err = s.enc.Encrypt([]byte(row.Key.String))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "encrypt openrouter key").LogError(ctx, logger)
-		}
-	}
-	decrypted, err := s.enc.Decrypt(ciphertext)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "verify encrypted openrouter key").LogError(ctx, logger)
-	}
-	if decrypted != row.Key.String {
-		return nil, oops.E(oops.CodeUnexpected, nil, "encrypted openrouter key does not match the stored plaintext").LogError(ctx, logger)
-	}
-
-	if _, err := txq.SetOpenRouterKeyEncrypted(ctx, orrepo.SetOpenRouterKeyEncryptedParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-		KeyEncrypted:   conv.ToPGText(ciphertext),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "set openrouter key encrypted").LogError(ctx, logger)
-	}
-
-	// Deliberately not audit logged: audit entries are exposed to the owning
-	// organization through the auditlogs API, and this scrub is internal
-	// storage hygiene with no customer-observable effect. The structured log
-	// below keeps an operator trail.
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit openrouter key encryption").LogError(ctx, logger)
-	}
-	logger.InfoContext(ctx, "encrypted openrouter key at rest",
-		attr.SlogUserID(authCtx.UserID),
-	)
-
-	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
 }
 
 func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload) (*gen.AdminOpenRouterKey, error) {
@@ -338,21 +250,19 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
 }
 
-// keyMaterial resolves the usable API key from a row, preferring the
-// encrypted column. Unlike the openrouter package's provisioning path this
-// performs no read-repair: admin reads stay side-effect free.
+// keyMaterial resolves the usable API key from a row by decrypting the
+// encrypted column. A row without a ciphertext is a hard error.
 func (s *Service) keyMaterial(row orrepo.OpenrouterApiKey) (string, error) {
-	if row.KeyEncrypted.Valid {
-		plaintext, err := s.enc.Decrypt(row.KeyEncrypted.String)
-		if err != nil {
-			return "", fmt.Errorf("decrypt openrouter key: %w", err)
-		}
-		return plaintext, nil
+	if !row.KeyEncrypted.Valid {
+		return "", errors.New("key row holds no encrypted key material")
 	}
-	if row.Key.String == "" {
-		return "", errors.New("key row holds no key material")
+
+	plaintext, err := s.enc.Decrypt(row.KeyEncrypted.String)
+	if err != nil {
+		return "", fmt.Errorf("decrypt openrouter key: %w", err)
 	}
-	return row.Key.String, nil
+
+	return plaintext, nil
 }
 
 // logKeyAction writes the audit entry for the upstream enable/disable
@@ -417,23 +327,7 @@ func (s *Service) adminKeyView(ctx context.Context, logger *slog.Logger, organiz
 		KeyType:          row.KeyType,
 		MonthlyCredits:   row.MonthlyCredits,
 		Disabled:         row.Disabled,
-		EncryptionStatus: encryptionStatus(row.HasPlaintext, row.HasEncrypted),
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
-}
-
-// encryptionStatus projects the two column-presence flags into the API's
-// three-state enum. Distinguishing "encrypted with plaintext retained" from
-// fully scrubbed keeps a plaintext resurrection (e.g. a stale writer
-// re-filling the column) visible on the admin page.
-func encryptionStatus(hasPlaintext, hasEncrypted bool) string {
-	switch {
-	case hasEncrypted && !hasPlaintext:
-		return "encrypted"
-	case hasEncrypted && hasPlaintext:
-		return "encrypted_with_plaintext"
-	default:
-		return "plaintext"
-	}
 }

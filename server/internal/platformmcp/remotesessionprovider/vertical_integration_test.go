@@ -299,7 +299,7 @@ func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.P
 	require.NoError(t, err)
 	connectionID, generation := uuid.New(), uuid.New()
 	userID := "user_" + uuid.NewString()
-	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{ID: connectionID, OrganizationID: organizationID, SubjectUrn: urn.NewUserSubject(userID).String(), OauthClientID: client.ID, ActiveGeneration: generation})
+	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{ID: connectionID, OrganizationID: organizationID, SubjectUrn: urn.NewUserSubject(userID).String(), OauthClientID: client.ID, ActiveGeneration: generation, AuthorizationExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(90 * 24 * time.Hour), Valid: true}})
 	require.NoError(t, err)
 	return platformmcp.Principal{UserID: userID, OrganizationID: organizationID, ConnectionID: connectionID.String(), Generation: generation.String()}, platformmcp.ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}
 }
