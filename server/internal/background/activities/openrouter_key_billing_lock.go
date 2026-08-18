@@ -18,7 +18,20 @@ import (
 type openRouterKeyBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 	DisableAPIKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error
-	ReconcileMonthlyCreditsWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64, *int64) (int64, error)
+	ReconcileMonthlyCreditsWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64, int64, *int64) (int64, error)
+}
+
+func withOpenRouterKeyBillingLock(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	organizationID string,
+	keyType openrouter.KeyType,
+	operation func(*repo.Queries) error,
+) error {
+	return withOpenRouterKeyBillingConnectionLock(ctx, logger, db, organizationID, keyType, func(_ *pgxpool.Conn, queries *repo.Queries) error {
+		return operation(queries)
+	})
 }
 
 func withOpenRouterKeyBillingConnectionLock(

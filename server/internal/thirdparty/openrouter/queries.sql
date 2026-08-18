@@ -59,3 +59,15 @@ SET monthly_credits = @monthly_credits,
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
+
+-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
+-- Reconciles an upstream observation only while the local mirror still equals
+-- what the caller observed. A concurrent explicit cap change wins this CAS.
+UPDATE openrouter_api_keys
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND monthly_credits = @current_monthly_credits
+  AND (extract(epoch FROM updated_at) * 1000000)::bigint = @current_generation::bigint
+  AND deleted IS FALSE;

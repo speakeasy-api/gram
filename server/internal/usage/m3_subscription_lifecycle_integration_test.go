@@ -158,12 +158,12 @@ func (*m3OpenRouterProvisioner) GetKeyUsage(context.Context, string) (float64, *
 	return 0, nil, errors.New("not implemented")
 }
 
-func (*m3OpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, *int64) (int64, error) {
+func (*m3OpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, int64, *int64) (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-func (p *m3OpenRouterProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	return p.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, upstreamLimit)
+func (p *m3OpenRouterProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return p.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
 func (*m3OpenRouterProvisioner) GetModelUsage(context.Context, string, string, openrouter.KeyType) (*openrouter.ModelUsage, error) {

@@ -5,7 +5,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+func OpenRouterCreditsAlertGenerationKeyForTest(orgID string, keyType openrouter.KeyType) string {
+	return openRouterCreditsAlertGenerationKey(orgID, keyType)
+}
 
 func TestHighestCrossedOpenRouterCreditsThreshold_Ladder(t *testing.T) {
 	t.Parallel()
@@ -50,4 +56,19 @@ func TestOpenRouterCreditsAlertCycleStaysStableThroughRolloverGrace(t *testing.T
 	require.Equal(t, "2026-07", openRouterCreditsAlertCycle(time.Date(2026, time.July, 31, 23, 30, 0, 0, time.UTC)))
 	require.Equal(t, "2026-07", openRouterCreditsAlertCycle(time.Date(2026, time.August, 1, 0, 30, 0, 0, time.UTC)))
 	require.Equal(t, "2026-08", openRouterCreditsAlertCycle(time.Date(2026, time.August, 3, 0, 0, 0, 0, time.UTC)))
+}
+
+func TestOpenRouterCreditsAlertKeyPreservesLegacyReservationsUntilCapChange(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(
+		t,
+		"openrouter-credits-alert:org_placeholder:chat:90",
+		openRouterCreditsAlertKey("org_placeholder", "chat", 90, ""),
+	)
+	require.Equal(
+		t,
+		"openrouter-credits-alert:org_placeholder:chat:90:operation_placeholder",
+		openRouterCreditsAlertKey("org_placeholder", "chat", 90, "operation_placeholder"),
+	)
 }

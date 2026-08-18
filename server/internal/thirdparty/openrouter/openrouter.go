@@ -305,13 +305,15 @@ type Provisioner interface {
 	GetKeyUsage(ctx context.Context, apiKey string) (used float64, limit *int64, err error)
 
 	// ReconcileMonthlyCredits compares upstreamLimit against the caller-supplied
-	// currentLimit (the DB-cached value) and writes the upstream value to the
+	// currentLimit and currentGeneration from the DB snapshot and writes the upstream value to the
 	// openrouter_api_keys row when they diverge. It is a DB-only reconciliation
 	// — it does NOT call OpenRouter — and is intended to self-heal drift
 	// introduced by out-of-band edits on the OpenRouter dashboard. A nil
-	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
-	// effective limit the caller should use for the current tick.
-	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error)
+	// upstreamLimit means unlimited and is mirrored as zero. The conditional
+	// write never overwrites a cap operation committed after that snapshot,
+	// including one that deliberately writes the same numeric limit.
+	// Returns the effective limit the caller should use for the current tick.
+	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error)
 
 	// GetModelUsage fetches generation usage by ID. Normal completion paths use
 	// inline usage; this is only a fallback for streams closed before the final
@@ -713,19 +715,8 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		limit = int(key.MonthlyCredits)
 	}
 
-	// A key with no recorded ceiling reports the policy amount rather than a
-	// ceiling of nothing.
-	if limit <= 0 {
-		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-		if err != nil {
-			return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-		}
-
-		limit = o.defaultLimitForOrg(ctx, o.db, org)
-	}
-
 	if errors.Is(keyErr, pgx.ErrNoRows) {
-		return 0, limit, nil // the key doesn't exist yet
+		return 0, 0, nil // the key doesn't exist yet
 	}
 	if keyErr != nil {
 		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
@@ -798,34 +789,52 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *
 // ReconcileMonthlyCredits self-heals drift in the locally cached monthly limit
 // after an out-of-band change on the OpenRouter dashboard. See the
 // Provisioner interface doc for the full contract.
-func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	return o.reconcileMonthlyCredits(ctx, o.db, orgID, keyType, currentLimit, upstreamLimit)
+func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return o.reconcileMonthlyCredits(ctx, o.db, orgID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
 // ReconcileMonthlyCreditsWithDB is ReconcileMonthlyCredits using db for the
 // mirror write. Credits polling holds the same per-key advisory lock across
 // its upstream read and this write, so a stale observation cannot race a cap
 // operation and erase its applied generation.
-func (o *OpenRouter) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	return o.reconcileMonthlyCredits(ctx, db, orgID, keyType, currentLimit, upstreamLimit)
+func (o *OpenRouter) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return o.reconcileMonthlyCredits(ctx, db, orgID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
-func (o *OpenRouter) reconcileMonthlyCredits(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	if upstreamLimit == nil {
-		return currentLimit, nil
+func (o *OpenRouter) reconcileMonthlyCredits(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	// A nil upstream limit means the provider key is uncapped, not that the
+	// last local mirror is still authoritative. Mirror that as zero so cap
+	// meters and threshold alerts cannot claim an unenforced limit.
+	newLimit := int64(0)
+	if upstreamLimit != nil {
+		newLimit = *upstreamLimit
 	}
-
-	newLimit := *upstreamLimit
 	if newLimit == currentLimit {
 		return currentLimit, nil
 	}
 
-	if err := repo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType.OrDefault()),
-		MonthlyCredits: newLimit,
-	}); err != nil {
+	keyRepo := repo.New(db)
+	updated, err := keyRepo.CompareAndSetOpenRouterKeyMonthlyCredits(ctx, repo.CompareAndSetOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID:        orgID,
+		KeyType:               string(keyType.OrDefault()),
+		MonthlyCredits:        newLimit,
+		CurrentMonthlyCredits: currentLimit,
+		CurrentGeneration:     currentGeneration,
+	})
+	if err != nil {
 		return currentLimit, fmt.Errorf("reconcile openrouter monthly credits: %w", err)
+	}
+	if updated == 0 {
+		// A concurrent cap change won the compare-and-set. Read its value instead
+		// of overwriting it with the stale provider observation.
+		key, readErr := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+			OrganizationID: orgID,
+			KeyType:        string(keyType.OrDefault()),
+		})
+		if readErr != nil {
+			return currentLimit, fmt.Errorf("read concurrently updated openrouter monthly credits: %w", readErr)
+		}
+		return key.MonthlyCredits, nil
 	}
 
 	o.logger.InfoContext(ctx, "reconciled openrouter monthly credits from upstream",

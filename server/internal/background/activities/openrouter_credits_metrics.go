@@ -131,7 +131,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				if err != nil {
 					return fmt.Errorf("fetch openrouter key usage: %w", err)
 				}
-				effectiveLimit, err := dbProvisioner.ReconcileMonthlyCreditsWithDB(gctx, conn, row.OrganizationID, keyType, currentKey.MonthlyCredits, upstreamLimit)
+				effectiveLimit, err := dbProvisioner.ReconcileMonthlyCreditsWithDB(gctx, conn, row.OrganizationID, keyType, currentKey.MonthlyCredits, currentKey.UpdatedAt.Time.UnixMicro(), upstreamLimit)
 				if err != nil {
 					return fmt.Errorf("reconcile openrouter monthly credits: %w", err)
 				}
