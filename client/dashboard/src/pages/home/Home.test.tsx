@@ -1,15 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectGuideStatus } from "@/components/project-guide/projectGuideGate";
+const searchParams = vi.hoisted(() => new URLSearchParams());
 
-const gate = vi.hoisted(
-  () => ({ status: "dashboard" }) as { status: ProjectGuideStatus },
-);
-
-vi.mock("@/hooks/useProjectGuide", () => ({
-  useProjectGuide: () => gate,
-}));
 vi.mock("@/components/project-guide/ProjectGuide", () => ({
   ProjectGuide: () => <div data-testid="project-guide" />,
 }));
@@ -44,37 +37,31 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ mcp: { href: () => "/mcp" } }),
 }));
-vi.mock("react-router", () => ({ Navigate: () => null }));
+vi.mock("react-router", () => ({
+  Navigate: () => null,
+  useSearchParams: () => [searchParams],
+}));
 
 import Home from "./Home.tsx";
 
 afterEach(() => {
   cleanup();
-  gate.status = "dashboard";
+  searchParams.delete("showGuide");
 });
 
 describe("Home", () => {
-  it("keeps the assistant and dashboard when the gate says dashboard", () => {
-    render(<Home />);
-    expect(screen.getByTestId("chat-landing")).toBeTruthy();
-    expect(screen.getByTestId("project-dashboard")).toBeTruthy();
-    expect(screen.queryByTestId("project-guide")).toBeNull();
-  });
-
-  it("takes the space with the guide when the gate says guide", () => {
-    gate.status = "guide";
+  it("takes the space with the guide when showGuide is present", () => {
+    searchParams.set("showGuide", "");
     render(<Home />);
     expect(screen.getByTestId("project-guide")).toBeTruthy();
     expect(screen.queryByTestId("chat-landing")).toBeNull();
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
   });
 
-  it("shows neither surface while the gate is undecided", () => {
-    gate.status = "pending";
+  it("keeps the assistant and dashboard when showGuide is absent", () => {
     render(<Home />);
+    expect(screen.getByTestId("chat-landing")).toBeTruthy();
+    expect(screen.getByTestId("project-dashboard")).toBeTruthy();
     expect(screen.queryByTestId("project-guide")).toBeNull();
-    expect(screen.queryByTestId("chat-landing")).toBeNull();
-    expect(screen.queryByTestId("project-dashboard")).toBeNull();
-    expect(screen.getByTestId("project-guide-pending")).toBeTruthy();
   });
 });
