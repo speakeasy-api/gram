@@ -160,18 +160,14 @@ func (m *McpResearch) MarkInterrupted(ctx context.Context, input McpResearchInpu
 	return nil
 }
 
-// failReport lands the failure on the report row, best-effort: the returned
-// activity error is what surfaces operationally, and the row is what the
-// admin sees.
-// failReport lands the failure on the report row, returning the write error
-// so a caller with no other resolution path — the gated branch, whose
-// activity would otherwise succeed around a still-running row — can hand the
-// row to the workflow's compensation instead.
-// failReport marks the report failed, optionally persisting the partial
-// tool-call trace a run assembled before it failed. toolCalls is nil for
-// failures with no trace (a gate, a load error before the run); a run that
-// failed mid-way passes what it did so far, so a failed run keeps the same
-// per-action observability a completed one has.
+// failReport marks the report failed, returning the write error so a caller
+// with no other resolution path — the gated branch, whose activity would
+// otherwise succeed around a still-running row — can hand the row to the
+// workflow's compensation instead. toolCalls optionally persists the partial
+// trace a run assembled before it failed: nil for failures with no trace (a
+// gate, a load error before the run), and what the run did so far for a
+// mid-run failure, so a failed report keeps the same per-action
+// observability a completed one has.
 func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string, toolCalls []byte) error {
 	// The run's context may already be dead — that must not keep the failure
 	// off the row.
@@ -233,6 +229,12 @@ func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (
 // failure on our own record type is not expected and must not sink the write
 // it accompanies, so it degrades to the empty array and logs.
 func encodeToolCallTrace(logger *slog.Logger, ctx context.Context, toolCalls []researchagent.ToolCallRecord) []byte {
+	// A nil slice marshals to JSON null, which fails the report's array
+	// check — a run that failed before any tool call still stores an empty
+	// array, not null.
+	if len(toolCalls) == 0 {
+		return []byte("[]")
+	}
 	encoded, err := json.Marshal(toolCalls)
 	if err != nil {
 		logger.ErrorContext(ctx, "encode research tool-call trace", attr.SlogError(err))
