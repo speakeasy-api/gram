@@ -14,10 +14,9 @@ import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.j
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 
 /**
- * Per-journey card status. Keyed by project (`gramProject`) like the gate, so
- * this hook shares query keys with `useProjectGuide` and reuses its
- * already-fetched servers/policies data instead of refetching; the
- * secrets-findings query is this hook's own.
+ * Per-journey card status. Keyed by project (`gramProject`) so project switches
+ * cannot reuse another project's servers or policies; the secrets-findings
+ * query is this hook's own.
  */
 export function useProjectGuideProgress(): {
   statusByJourney: Record<JourneyId, JourneyStatus>;
