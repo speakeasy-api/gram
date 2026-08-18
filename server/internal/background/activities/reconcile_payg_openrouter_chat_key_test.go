@@ -211,7 +211,6 @@ func TestRefreshOpenRouterChatKeyDoesNotReinstateCommittedSubscriptionLoss(t *te
 	_, err := queries.CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(openrouter.KeyTypeChat),
-		Key:            pgtype.Text{String: "key_placeholder", Valid: true},
 		KeyEncrypted:   pgtype.Text{},
 		KeyHash:        "hash_placeholder",
 		MonthlyCredits: 100,

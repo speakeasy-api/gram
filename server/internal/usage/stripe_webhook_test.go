@@ -325,7 +325,6 @@ func createOpenRouterKeyFixture(t *testing.T, db *pgxpool.Pool, keyType openrout
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: stripeWebhookOrganizationID,
 		KeyType:        string(keyType),
-		Key:            pgtype.Text{String: "key_placeholder_" + string(keyType), Valid: true},
 		KeyEncrypted:   pgtype.Text{String: "", Valid: false},
 		KeyHash:        "hash_placeholder_" + string(keyType),
 		MonthlyCredits: credits,
