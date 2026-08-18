@@ -189,7 +189,6 @@ func createChatKeyAt(t *testing.T, db *pgxpool.Pool, organizationID string, crea
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        "chat",
-		Key:            pgtype.Text{},
 		KeyEncrypted:   pgtype.Text{},
 		KeyHash:        strings.Repeat("a", 64),
 		MonthlyCredits: 0,
