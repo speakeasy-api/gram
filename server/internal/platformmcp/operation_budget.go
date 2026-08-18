@@ -54,7 +54,14 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 	// it alone. Refusing the operation instead would deny every connection-less
 	// caller, and keying the connection bucket on the empty string would pool
 	// every such caller across every organization into one bucket.
-	if principal.ConnectionID != "" {
+	if principal.HasConnection() {
+		// HasConnection is an OR, so a principal claiming a connection through its
+		// generation alone lands here rather than being metered as connection-less.
+		// It has no key to charge, and charging the empty string would pool every
+		// such caller into one bucket, so the budget is unavailable to it.
+		if principal.ConnectionID == "" {
+			return ErrOperationBudgetUnavailable
+		}
 		connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
 		if err != nil {
 			return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)

@@ -72,6 +72,18 @@ func TestOperationBudgetThrottlesAConnectionlessPrincipalOnTheOrganization(t *te
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
+func TestOperationBudgetRejectsAConnectionClaimedByGenerationAlone(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{ConnectionID: "", Generation: "generation", OrganizationID: "organization"})
+
+	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
+	require.Empty(t, connection.keys)
+	require.Empty(t, organization.keys)
+}
+
 func TestOperationBudgetStillRequiresAnOrganization(t *testing.T) {
 	t.Parallel()
 
