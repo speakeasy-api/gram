@@ -11,11 +11,11 @@ members = [
 
 [[package]]
 name = "aiocop"
-version = "1.1.4"
+version = "1.1.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d8/3d/73386449323002edc3d88bc14cb72b59545fd6397f1610516685c042e82b/aiocop-1.1.4.tar.gz", hash = "sha256:2059a9837440dcd7122a16f5803f6c7a76e8bef99dea6f9af9d70d937debf6f0", size = 1391465, upload-time = "2026-02-26T10:50:41.277Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/f9/5aade23dc7310f5e7f1116f22652ef71fc7aad448a2151b3004fb8fcaf29/aiocop-1.1.5.tar.gz", hash = "sha256:9c64a58fb346689e7403e52edbcb4575fda4fbddafaf841983cf319b5385ca3f", size = 1393054, upload-time = "2026-07-20T14:53:57.96Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/b3/84769a0bcf73a548c095494b5cf1e1feba5ed685c91232029ffff7859062/aiocop-1.1.4-py3-none-any.whl", hash = "sha256:7263a4bc0c58023767729477590b20ce0dd9e5f51116cbba9a8ad1ec7e9ac51c", size = 21188, upload-time = "2026-02-26T10:50:42.609Z" },
+    { url = "https://files.pythonhosted.org/packages/58/73/0cd6611423de32295b912b40c32f1e208e120aed9cd4ddd9e64787fb7091/aiocop-1.1.5-py3-none-any.whl", hash = "sha256:64490af21725dda4d64ea0c30dcfd668d1052c15bf8afbff1818bdbf14b7fce0", size = 21536, upload-time = "2026-07-20T14:53:56.54Z" },
 ]
 
 [[package]]
@@ -429,7 +429,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aiocop", specifier = ">=1.1.4" },
+    { name = "aiocop", specifier = ">=1.1.5" },
     { name = "anyio", extras = ["trio"], specifier = ">=4.14.0" },
     { name = "pyrefly", specifier = ">=1.1.1" },
     { name = "pytest", specifier = ">=9.1.1" },
@@ -1084,7 +1084,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiocop", specifier = ">=1.1.4" },
+    { name = "aiocop", specifier = ">=1.1.5" },
     { name = "anyio", specifier = ">=4.14.1" },
     { name = "asyncer", specifier = ">=0.0.18" },
     { name = "click", specifier = ">=8.4.2" },
