@@ -468,4 +468,5 @@ func enableMCPApproval(ti *testInstance) {
 
 func disableMCPApproval(ti *testInstance) {
 	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, false)
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, false)
 }

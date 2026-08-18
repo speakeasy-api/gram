@@ -64,7 +64,12 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 	// de-rolled run resolves its report as failed — silently skipping would
 	// strand it in running.
 	if reason, gated := m.researchGate(ctx, input.OrgID); gated {
-		m.failReport(ctx, queries, input, reason)
+		if err := m.failReport(ctx, queries, input, reason); err != nil {
+			// Success here with the row still running would strand it until
+			// the staleness reaper; erroring hands it to the workflow's
+			// compensation instead.
+			return fmt.Errorf("resolve gated research report: %w", err)
+		}
 		return nil
 	}
 
@@ -73,7 +78,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		ProjectID: input.ProjectID,
 	})
 	if err != nil {
-		m.failReport(ctx, queries, input, "the approval request could not be loaded")
+		_ = m.failReport(ctx, queries, input, "the approval request could not be loaded")
 		return fmt.Errorf("load approval request for research: %w", err)
 	}
 
@@ -88,7 +93,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 	})
 	if err != nil {
 		m.logger.ErrorContext(ctx, "mcp research run failed", attr.SlogError(err))
-		m.failReport(ctx, queries, input, err.Error())
+		_ = m.failReport(ctx, queries, input, err.Error())
 		return fmt.Errorf("run research agent: %w", err)
 	}
 
@@ -114,7 +119,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		// rather than leaving it to the workflow's compensation, which can
 		// only report that something was interrupted.
 		m.logger.ErrorContext(ctx, "complete mcp research report failed", attr.SlogError(err))
-		m.failReport(ctx, queries, input, "the research run finished but its report could not be stored")
+		_ = m.failReport(ctx, queries, input, "the research run finished but its report could not be stored")
 		return fmt.Errorf("complete research report: %w", err)
 	}
 
@@ -150,7 +155,11 @@ func (m *McpResearch) MarkInterrupted(ctx context.Context, input McpResearchInpu
 // failReport lands the failure on the report row, best-effort: the returned
 // activity error is what surfaces operationally, and the row is what the
 // admin sees.
-func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string) {
+// failReport lands the failure on the report row, returning the write error
+// so a caller with no other resolution path — the gated branch, whose
+// activity would otherwise succeed around a still-running row — can hand the
+// row to the workflow's compensation instead.
+func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string) error {
 	// The run's context may already be dead — that must not keep the failure
 	// off the row.
 	ctx = context.WithoutCancel(ctx)
@@ -163,13 +172,15 @@ func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Quer
 		Error:     conv.ToPGText(reason),
 	}); err != nil {
 		m.logger.ErrorContext(ctx, "record research failure", attr.SlogError(err))
+		return fmt.Errorf("record research failure: %w", err)
 	}
+
+	return nil
 }
 
 // researchGate mirrors the service's start-time gate for the execution side:
-// the kill switch first (affirmatively on stops everything, failing open on
-// evaluation errors), then the rollout flag (failing closed). Returns the
-// reason to record when the run must not execute.
+// the kill switch first, then the rollout flag, both failing closed. Returns
+// the reason to record when the run must not execute.
 func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (string, bool) {
 	var groups map[string]string
 	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
@@ -179,10 +190,16 @@ func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (
 		groups = feature.OrgProjectGroups(org.Slug, "")
 	}
 
+	// The kill switch fails closed like everything else here: a run must not
+	// execute while the state of its stop control is unknown — the rollout
+	// flag failing closed alongside only covers the case where both
+	// evaluations fail together, not a partial failure.
 	killed, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
 	if err != nil {
-		m.logger.WarnContext(ctx, "mcp research kill-switch check failed; continuing to rollout check", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	} else if killed {
+		m.logger.WarnContext(ctx, "mcp research kill-switch check failed; refusing to run", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return "the research stop control could not be evaluated", true
+	}
+	if killed {
 		return "research was disabled before this run executed", true
 	}
 

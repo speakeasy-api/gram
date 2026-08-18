@@ -255,13 +255,16 @@ func (s *Service) requireResearchEnabled(ctx context.Context, organizationID str
 		groups = feature.OrgProjectGroups(org.Slug, "")
 	}
 
-	// The kill switch fails open on evaluation errors — only an affirmative
-	// on kills — which is safe because the rollout flag below independently
-	// fails closed.
+	// The kill switch fails closed like the rollout flag: a run must not be
+	// bought while the state of its stop control is unknown — the rollout
+	// flag failing closed alongside only covers both evaluations failing
+	// together, not a partial failure.
 	killed, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
 	if err != nil {
-		s.logger.WarnContext(ctx, "mcp research kill-switch check failed; continuing to rollout check", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	} else if killed {
+		s.logger.WarnContext(ctx, "mcp research kill-switch check failed; refusing to start", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily unavailable")
+	}
+	if killed {
 		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily disabled")
 	}
 
@@ -864,9 +867,8 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, err
 	}
 
-	if err := s.requireFeature(ctx, orgID); err != nil {
-		return nil, err
-	}
+	// project already enforced the approval rollout; this adds research's
+	// own gates on top.
 	if err := s.requireResearchEnabled(ctx, orgID); err != nil {
 		return nil, err
 	}

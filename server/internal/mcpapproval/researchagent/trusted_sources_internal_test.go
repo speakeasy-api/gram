@@ -18,6 +18,8 @@ func TestTrustedSourceCategory(t *testing.T) {
 		{name: "subdomain of a listed domain", url: "https://blog.owasp.org/top-ten", want: "security organization"},
 		{name: "path-scoped entry matches its section", url: "https://github.com/advisories/GHSA-xxxx", want: "vulnerability database"},
 		{name: "path-scoped entry vouches nothing outside it", url: "https://github.com/some-vendor/some-repo", want: ""},
+		{name: "a sibling path sharing the prefix is outside it", url: "https://github.com/advisories-malicious/x", want: ""},
+		{name: "the exact section page matches", url: "https://github.com/advisories", want: "vulnerability database"},
 		{name: "lookalike suffix is not a subdomain", url: "https://notowasp.org/", want: ""},
 		{name: "unlisted domain", url: "https://random-blog.example.com/post", want: ""},
 		{name: "junk", url: "::not a url::", want: ""},
