@@ -249,6 +249,7 @@ trackedFiles:
   src/funcs/mcpApprovalPromote.ts: {}
   src/funcs/mcpApprovalRecordDecision.ts: {}
   src/funcs/mcpApprovalRefreshEvidence.ts: {}
+  src/funcs/mcpApprovalStartResearch.ts: {}
   src/funcs/mcpEndpointsCheckSlugAvailability.ts: {}
   src/funcs/mcpEndpointsCreate.ts: {}
   src/funcs/mcpEndpointsDelete.ts: {}
@@ -1922,6 +1923,7 @@ trackedFiles:
   src/models/operations/settoolsetusersessionissuer.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
+  src/models/operations/startmcpresearch.ts: {}
   src/models/operations/startplatformmcponboarding.ts: {}
   src/models/operations/startplatformmcponboardingsetup.ts: {}
   src/models/operations/submitfeedback.ts: {}
@@ -2701,6 +2703,7 @@ trackedFiles:
   src/react-query/spendRulesOverview.ts: {}
   src/react-query/spendRulesPreviewRule.ts: {}
   src/react-query/spendRulesUpdateRule.ts: {}
+  src/react-query/startMcpResearch.ts: {}
   src/react-query/startPlatformMCPOnboarding.ts: {}
   src/react-query/startPlatformMCPOnboardingSetup.ts: {}
   src/react-query/summarizeChat.ts: {}
@@ -8424,6 +8427,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  startMcpResearch:
+    speakeasy-default-start-mcp-research:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-04-11T01:52:20.783Z", "id": "<id>", "report_version": 349092, "status": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   startPlatformMCPOnboarding:
     speakeasy-default-start-platform-MCP-onboarding:
       requestBody:

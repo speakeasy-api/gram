@@ -541,7 +541,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Body fullHeight className="pb-8">
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title>{serverNameTitle}</Page.Section.Title>
+            {/* No area eyebrow: "SECURE" over a server under review reads as
+                a verdict about the server, not as the app section. */}
+            <Page.Section.Title area="">{serverNameTitle}</Page.Section.Title>
             <Page.Section.Description>
               {server?.canonicalServerUrl || serverSlug}
             </Page.Section.Description>

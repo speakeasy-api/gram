@@ -140,6 +140,7 @@ ORDER BY decided_at DESC;
 SELECT id
 FROM mcp_research_reports
 WHERE id = @id
+  AND organization_id = @organization_id
   AND mcp_approval_request_id = @mcp_approval_request_id
   AND project_id = @project_id
   AND deleted IS FALSE;
@@ -366,3 +367,80 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: LockApprovalRequestForResearch :one
+-- Serializes research starts for one request. Starting a run is a
+-- check-then-insert — is one already running, if not create one — and the
+-- gap between those two is a paid agent run: two clicks that both read "none
+-- running" both spend. Taking this lock first makes the second caller wait
+-- and then see the first caller's row. The durable form of this is a partial
+-- unique index on (mcp_approval_request_id) WHERE status = 'running', which
+-- needs its own migration.
+SELECT id
+FROM mcp_approval_requests
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetRunningResearchReport :one
+SELECT *
+FROM mcp_research_reports
+WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: InterruptStaleResearchReports :execrows
+-- A running report older than the workflow's absolute deadline can only be a
+-- stranded row (crashed worker, exhausted or skipped compensation, terminated
+-- workflow) -- no live run outlives the Temporal run timeout. Resolving it
+-- durably reopens the one-run-per-request gate; the read path independently
+-- presents stale running rows as failed so polling recovers without a start.
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = 'the research run was interrupted and did not resolve'
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND started_at < @stale_before
+  AND deleted IS FALSE;
+
+-- name: CompleteResearchReport :one
+-- Only a run still in flight can complete, mirroring the failure update
+-- below: a late result whose activity was already given up on must not turn
+-- a failed or interrupted report back into a completed one, which would hide
+-- the failure behind a report nobody is sure describes this run.
+UPDATE mcp_research_reports
+SET status = 'completed'
+  , report = @report
+  , report_version = @report_version
+  , model = sqlc.narg(model)::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: FailResearchReport :one
+-- Only a run still in flight can fail: a completed report must never be
+-- retro-marked failed by a late compensation whose activity result got lost.
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = sqlc.narg(error)::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND deleted IS FALSE
+RETURNING *;

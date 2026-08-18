@@ -199,14 +199,15 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 		UsageSource:  billing.ModelUsageSourceSkillEfficacy,
 		// Platform-initiated inference: bill the org's internal key, never the
 		// customer-facing chat key's monthly cap.
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        billing.ModelUsageSourceSkillEfficacy,
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceSkillEfficacy,
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

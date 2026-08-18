@@ -9,11 +9,13 @@ import { mcpApprovalListRequests } from "../funcs/mcpApprovalListRequests.js";
 import { mcpApprovalPromote } from "../funcs/mcpApprovalPromote.js";
 import { mcpApprovalRecordDecision } from "../funcs/mcpApprovalRecordDecision.js";
 import { mcpApprovalRefreshEvidence } from "../funcs/mcpApprovalRefreshEvidence.js";
+import { mcpApprovalStartResearch } from "../funcs/mcpApprovalStartResearch.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ApprovalDecision } from "../models/components/approvaldecision.js";
 import { ApprovalRequestDetail } from "../models/components/approvalrequestdetail.js";
 import { ApprovalRequestSummary } from "../models/components/approvalrequestsummary.js";
 import { ListApprovalRequestsResult } from "../models/components/listapprovalrequestsresult.js";
+import { ResearchReport } from "../models/components/researchreport.js";
 import {
   CreateMcpApprovalRequestRequest,
   CreateMcpApprovalRequestSecurity,
@@ -42,6 +44,10 @@ import {
   RefreshMcpApprovalEvidenceRequest,
   RefreshMcpApprovalEvidenceSecurity,
 } from "../models/operations/refreshmcpapprovalevidence.js";
+import {
+  StartMcpResearchRequest,
+  StartMcpResearchSecurity,
+} from "../models/operations/startmcpresearch.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpApproval extends ClientSDK {
@@ -171,6 +177,25 @@ export class McpApproval extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ApprovalRequestDetail> {
     return unwrapAsync(mcpApprovalRefreshEvidence(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * startResearch mcpApproval
+   *
+   * @remarks
+   * Start a research-agent run for an approval request. The agent searches the web and reads pages about the server's vendor, then files a cited report; it never decides. Runs are additive — a re-run adds a report rather than replacing one — and at most one run per request is in flight at a time: starting while one runs returns the running report.
+   */
+  async startResearch(
+    request: StartMcpResearchRequest,
+    security?: StartMcpResearchSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResearchReport> {
+    return unwrapAsync(mcpApprovalStartResearch(
       this,
       request,
       security,

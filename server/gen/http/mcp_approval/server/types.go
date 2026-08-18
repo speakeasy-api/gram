@@ -206,6 +206,35 @@ type RefreshEvidenceResponseBody struct {
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
 }
 
+// StartResearchResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body.
+type StartResearchResponseBody struct {
+	// The report ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The run's lifecycle state, such as running, completed, or failed.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The structured findings. Every claim carries a provenance tier and its
+	// citations.
+	Report any `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	// Shape version of the report payload.
+	ReportVersion int `form:"report_version" json:"report_version" xml:"report_version"`
+	// The model that produced the report.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The prompt version the run used, so reports stay distinguishable across
+	// prompt changes.
+	PromptVersion *string `form:"prompt_version,omitempty" json:"prompt_version,omitempty" xml:"prompt_version,omitempty"`
+	// Who asked for the research run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run finished.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// Why the run failed, when it did.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was requested.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
 // "recordDecision" endpoint HTTP response body.
 type RecordDecisionResponseBody struct {
@@ -1340,6 +1369,190 @@ type RefreshEvidenceGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// StartResearchUnauthorizedResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the "unauthorized"
+// error.
+type StartResearchUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchForbiddenResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "forbidden" error.
+type StartResearchForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchBadRequestResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "bad_request" error.
+type StartResearchBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchNotFoundResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "not_found" error.
+type StartResearchNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchConflictResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "conflict" error.
+type StartResearchConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchUnsupportedMediaResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the
+// "unsupported_media" error.
+type StartResearchUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchInvalidResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "invalid" error.
+type StartResearchInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchInvariantViolationResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the
+// "invariant_violation" error.
+type StartResearchInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchUnexpectedResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "unexpected" error.
+type StartResearchUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartResearchGatewayErrorResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the "gateway_error"
+// error.
+type StartResearchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RecordDecisionUnauthorizedResponseBody is the type of the "mcpApproval"
 // service "recordDecision" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1793,6 +2006,25 @@ func NewRefreshEvidenceResponseBody(res *mcpapproval.ApprovalRequestDetail) *Ref
 		}
 	} else {
 		body.ResearchReports = []*ResearchReportResponseBody{}
+	}
+	return body
+}
+
+// NewStartResearchResponseBody builds the HTTP response body from the result
+// of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchResponseBody(res *mcpapproval.ResearchReport) *StartResearchResponseBody {
+	body := &StartResearchResponseBody{
+		ID:            res.ID,
+		Status:        res.Status,
+		Report:        res.Report,
+		ReportVersion: res.ReportVersion,
+		Model:         res.Model,
+		PromptVersion: res.PromptVersion,
+		RequestedBy:   res.RequestedBy,
+		StartedAt:     res.StartedAt,
+		CompletedAt:   res.CompletedAt,
+		Error:         res.Error,
+		CreatedAt:     res.CreatedAt,
 	}
 	return body
 }
@@ -2672,6 +2904,146 @@ func NewRefreshEvidenceGatewayErrorResponseBody(res *goa.ServiceError) *RefreshE
 	return body
 }
 
+// NewStartResearchUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchUnauthorizedResponseBody(res *goa.ServiceError) *StartResearchUnauthorizedResponseBody {
+	body := &StartResearchUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchForbiddenResponseBody builds the HTTP response body from the
+// result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchForbiddenResponseBody(res *goa.ServiceError) *StartResearchForbiddenResponseBody {
+	body := &StartResearchForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchBadRequestResponseBody builds the HTTP response body from
+// the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchBadRequestResponseBody(res *goa.ServiceError) *StartResearchBadRequestResponseBody {
+	body := &StartResearchBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchNotFoundResponseBody builds the HTTP response body from the
+// result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchNotFoundResponseBody(res *goa.ServiceError) *StartResearchNotFoundResponseBody {
+	body := &StartResearchNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchConflictResponseBody builds the HTTP response body from the
+// result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchConflictResponseBody(res *goa.ServiceError) *StartResearchConflictResponseBody {
+	body := &StartResearchConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchUnsupportedMediaResponseBody(res *goa.ServiceError) *StartResearchUnsupportedMediaResponseBody {
+	body := &StartResearchUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchInvalidResponseBody builds the HTTP response body from the
+// result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchInvalidResponseBody(res *goa.ServiceError) *StartResearchInvalidResponseBody {
+	body := &StartResearchInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchInvariantViolationResponseBody(res *goa.ServiceError) *StartResearchInvariantViolationResponseBody {
+	body := &StartResearchInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchUnexpectedResponseBody builds the HTTP response body from
+// the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchUnexpectedResponseBody(res *goa.ServiceError) *StartResearchUnexpectedResponseBody {
+	body := &StartResearchUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartResearchGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "startResearch" endpoint of the "mcpApproval" service.
+func NewStartResearchGatewayErrorResponseBody(res *goa.ServiceError) *StartResearchGatewayErrorResponseBody {
+	body := &StartResearchGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRecordDecisionUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "recordDecision" endpoint of the "mcpApproval" service.
 func NewRecordDecisionUnauthorizedResponseBody(res *goa.ServiceError) *RecordDecisionUnauthorizedResponseBody {
@@ -2883,6 +3255,18 @@ func NewPromotePayload(body *PromoteRequestBody, sessionToken *string, apikeyTok
 // endpoint payload.
 func NewRefreshEvidencePayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RefreshEvidencePayload {
 	v := &mcpapproval.RefreshEvidencePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewStartResearchPayload builds a mcpApproval service startResearch endpoint
+// payload.
+func NewStartResearchPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.StartResearchPayload {
+	v := &mcpapproval.StartResearchPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

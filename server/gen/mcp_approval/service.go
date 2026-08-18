@@ -33,6 +33,12 @@ type Service interface {
 	// Re-run every evidence source for a request and replace its current evidence
 	// with the fresh gather. Frozen decision snapshots are never touched.
 	RefreshEvidence(context.Context, *RefreshEvidencePayload) (res *ApprovalRequestDetail, err error)
+	// Start a research-agent run for an approval request. The agent searches the
+	// web and reads pages about the server's vendor, then files a cited report; it
+	// never decides. Runs are additive — a re-run adds a report rather than
+	// replacing one — and at most one run per request is in flight at a time:
+	// starting while one runs returns the running report.
+	StartResearch(context.Context, *StartResearchPayload) (res *ResearchReport, err error)
 	// Approve or deny an MCP approval request, recording the rationale and who it
 	// applies to.
 	RecordDecision(context.Context, *RecordDecisionPayload) (res *ApprovalDecision, err error)
@@ -58,7 +64,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "refreshEvidence", "recordDecision"}
+var MethodNames = [8]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "refreshEvidence", "startResearch", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -246,9 +252,8 @@ type RefreshEvidencePayload struct {
 	ID string
 }
 
-// One research-agent run over a request's server. Findings are gathered and
-// cited, never adjudicated — and web-sourced claims may be inaccurate,
-// incomplete, or deliberately seeded.
+// ResearchReport is the result type of the mcpApproval service startResearch
+// method.
 type ResearchReport struct {
 	// The report ID.
 	ID string
@@ -274,6 +279,16 @@ type ResearchReport struct {
 	Error *string
 	// When the run was requested.
 	CreatedAt string
+}
+
+// StartResearchPayload is the payload type of the mcpApproval service
+// startResearch method.
+type StartResearchPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The approval request ID.
+	ID string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

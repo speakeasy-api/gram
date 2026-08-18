@@ -481,6 +481,8 @@ func NewTemporalWorker(
 	// Trial expiry activities
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
+	temporalWorker.RegisterActivity(activities.RunMcpResearch)
+	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -595,6 +597,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
+	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows

@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	ActionMCPApprovalRequestCreate  Action = "mcp_approval_request:create"
-	ActionMCPApprovalRequestApprove Action = "mcp_approval_request:approve"
-	ActionMCPApprovalRequestDeny    Action = "mcp_approval_request:deny"
+	ActionMCPApprovalRequestCreate        Action = "mcp_approval_request:create"
+	ActionMCPApprovalRequestApprove       Action = "mcp_approval_request:approve"
+	ActionMCPApprovalRequestDeny          Action = "mcp_approval_request:deny"
+	ActionMCPApprovalRequestResearchStart Action = "mcp_approval_request:research_start"
 )
 
 type LogMCPApprovalRequestCreateEvent struct {
@@ -106,6 +107,53 @@ func (l *Logger) LogMCPApprovalRequestDecide(ctx context.Context, dbtx repo.DBTX
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
 		Action: string(action),
+
+		SubjectID:          event.RequestURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpApprovalRequest),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.TargetRaw),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpApprovalRequestV1})
+}
+
+type LogMCPApprovalRequestResearchStartEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RequestURN urn.MCPApprovalRequest
+
+	// TargetRaw is the stored (redacted) form of the server reference,
+	// recorded as the subject display name so a feed entry is readable
+	// without a second lookup.
+	TargetRaw string
+}
+
+// LogMCPApprovalRequestResearchStart records that an admin bought a research
+// run via mcpApproval.startResearch. Research spends against the
+// organization's chat key on the open web, so every run leaves a feed entry
+// naming who started it and against which server — logged in the same
+// transaction as the report row, so the entry and the run it describes
+// commit atomically.
+func (l *Logger) LogMCPApprovalRequestResearchStart(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestResearchStartEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionMCPApprovalRequestResearchStart),
 
 		SubjectID:          event.RequestURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpApprovalRequest),

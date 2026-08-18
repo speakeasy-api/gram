@@ -340,7 +340,7 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 			riskIntakeQuietProbes{},
 		)
 
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler)
+		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
