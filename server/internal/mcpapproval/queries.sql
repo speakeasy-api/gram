@@ -462,6 +462,7 @@ UPDATE mcp_research_reports
 SET status = 'completed'
   , report = @report
   , report_version = @report_version
+  , tool_calls = COALESCE(sqlc.narg(tool_calls)::jsonb, tool_calls)
   , model = sqlc.narg(model)::text
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()

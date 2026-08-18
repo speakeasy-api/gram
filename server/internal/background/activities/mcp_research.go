@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -82,7 +83,7 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		return fmt.Errorf("load approval request for research: %w", err)
 	}
 
-	document, meta, err := m.runner.Run(ctx, researchagent.RunInput{
+	document, meta, toolCalls, err := m.runner.Run(ctx, researchagent.RunInput{
 		OrgID:       input.OrgID,
 		ProjectID:   input.ProjectID,
 		ReportID:    input.ReportID,
@@ -97,11 +98,23 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		return fmt.Errorf("run research agent: %w", err)
 	}
 
+	// The trace of what the run actually did. A run that produced a report
+	// made at least one tool call, so an empty array is a genuine edge, not
+	// the common case; marshal errors on our own record type are not
+	// expected and must not sink a completed run, so a failure stores the
+	// empty array and logs.
+	encodedToolCalls, err := json.Marshal(toolCalls)
+	if err != nil {
+		m.logger.ErrorContext(ctx, "encode research tool-call trace", attr.SlogError(err))
+		encodedToolCalls = []byte("[]")
+	}
+
 	if _, err := queries.CompleteResearchReport(ctx, approvalrepo.CompleteResearchReportParams{
 		ID:            input.ReportID,
 		ProjectID:     input.ProjectID,
 		Report:        document,
 		ReportVersion: researchagent.ReportVersion,
+		ToolCalls:     encodedToolCalls,
 		Model:         conv.ToPGText(meta.Model),
 	}); err != nil {
 		// The row is no longer running: a compensation already resolved it

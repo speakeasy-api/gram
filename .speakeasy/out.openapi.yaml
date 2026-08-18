@@ -69419,6 +69419,38 @@ components:
           format: int64
       required:
         - sent_to_count
+    ResearchPageFetchCall:
+      type: object
+      properties:
+        content_bytes:
+          type: integer
+          description: The fetched page's extracted-text size.
+          format: int64
+        content_preview:
+          type: string
+          description: A bounded preview of the extracted page text. Untrusted web content.
+        content_type:
+          type: string
+          description: The fetched page's content type.
+        final_url:
+          type: string
+          description: Where the fetch landed after redirects, when it differed.
+        injection_flagged:
+          type: boolean
+          description: Whether the judge found the page tried to instruct its reader.
+        judge_rationale:
+          type: string
+          description: The judge's reasoning, when it flagged the page.
+        judged:
+          type: boolean
+          description: Whether the injection judge reached a verdict on this page.
+        truncated:
+          type: boolean
+          description: Whether the fetch hit its caps and the preview is of a prefix.
+        url:
+          type: string
+          description: The page the agent fetched.
+      description: A page the agent fetched, with what came back and the injection judge's verdict on it. A fetch spends nothing.
     ResearchReport:
       type: object
       properties:
@@ -69458,12 +69490,57 @@ components:
         status:
           type: string
           description: The run's lifecycle state, such as running, completed, or failed.
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResearchToolCall'
+          description: The run's per-action trace — every search and page fetch, in order. The report above is a synthesis that drops most of what was read; this is what the agent actually did.
       description: One research-agent run over a request's server. Findings are gathered and cited, never adjudicated — and web-sourced claims may be inaccurate, incomplete, or deliberately seeded.
       required:
         - id
         - status
         - report_version
         - created_at
+    ResearchToolCall:
+      type: object
+      properties:
+        error:
+          type: string
+          description: The tool's failure text, when the call did not succeed.
+        fetch:
+          $ref: '#/components/schemas/ResearchPageFetchCall'
+        search:
+          $ref: '#/components/schemas/ResearchWebSearchCall'
+        sequence:
+          type: integer
+          description: Position in the run, from zero.
+          format: int64
+        tool:
+          type: string
+          description: 'The tool that ran: web_search or fetch_page. The discriminator for which payload below is present.'
+      description: One action a research run took, named by tool and carrying the payload for that tool. The report is a synthesis that drops most of what was read; this is what the agent actually did. Observability, never a claim about the server.
+      required:
+        - sequence
+        - tool
+    ResearchWebSearchCall:
+      type: object
+      properties:
+        completion_tokens:
+          type: integer
+          description: Completion tokens this search spent.
+          format: int64
+        prompt_tokens:
+          type: integer
+          description: Prompt tokens this search spent.
+          format: int64
+        query:
+          type: string
+          description: What the agent searched for.
+        result_count:
+          type: integer
+          description: How many citations the search returned.
+          format: int64
+      description: A web search the agent ran. A search runs a billed completion, so its token spend lives here.
     ResolveChallengeForm:
       type: object
       properties:

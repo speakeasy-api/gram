@@ -1106,7 +1106,10 @@ trackedFiles:
   src/models/components/rendertemplateresult.ts: {}
   src/models/components/requestaccessform.ts: {}
   src/models/components/requestaccessresult.ts: {}
+  src/models/components/researchpagefetchcall.ts: {}
   src/models/components/researchreport.ts: {}
+  src/models/components/researchtoolcall.ts: {}
+  src/models/components/researchwebsearchcall.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
   src/models/components/resolveshadowmcpinventoryrequestform.ts: {}

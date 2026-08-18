@@ -577,7 +577,135 @@ function ResearchReportCard({
       )}
       <ReportBody report={report.report} />
       <ReportRunMeta report={report} />
+      <ResearchActivity toolCalls={report.toolCalls} />
     </div>
+  );
+}
+
+/**
+ * The run's per-action trace: what the agent actually did, collapsed by
+ * default because the report above is the synthesis. Each row is one search
+ * or page fetch with its outcome and the injection judge's verdict; the
+ * content preview is untrusted web text and is labeled as such.
+ */
+function ResearchActivity({
+  toolCalls,
+}: {
+  toolCalls: ResearchReport["toolCalls"];
+}): JSX.Element | null {
+  const [open, setOpen] = useState(false);
+  if (!toolCalls || toolCalls.length === 0) return null;
+
+  return (
+    <div className="border-border mt-2 border-t pt-2">
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? (
+          <ChevronUp className="size-3" />
+        ) : (
+          <ChevronDown className="size-3" />
+        )}
+        {open ? "Hide" : "Show"} what the agent did ({toolCalls.length}{" "}
+        {toolCalls.length === 1 ? "action" : "actions"})
+      </button>
+      {open && (
+        <ol className="mt-2 space-y-2">
+          {toolCalls.map((call) =>
+            call.fetch ? (
+              <ResearchFetchRow
+                key={call.sequence}
+                fetch={call.fetch}
+                error={call.error}
+              />
+            ) : (
+              <ResearchSearchRow
+                key={call.sequence}
+                search={call.search}
+                error={call.error}
+              />
+            ),
+          )}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** One page-fetch action: the URL, the injection verdict, and the preview. */
+function ResearchFetchRow({
+  fetch,
+  error,
+}: {
+  fetch: NonNullable<NonNullable<ResearchReport["toolCalls"]>[number]["fetch"]>;
+  error?: string;
+}): JSX.Element {
+  return (
+    <li className="border-border border-l-2 pl-2 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium">Fetched</span>
+        {fetch.injectionFlagged && (
+          <span className="border-warning text-warning border px-1 text-[10px]">
+            flagged
+          </span>
+        )}
+        {error && (
+          <span className="text-muted-foreground text-[10px]">failed</span>
+        )}
+      </div>
+      {fetch.url && (
+        <p className="mt-0.5 break-all">
+          <ExternalCitationLink url={fetch.url} truncate />
+        </p>
+      )}
+      {fetch.judged && (
+        <p className="text-muted-foreground mt-0.5 text-[10px]">
+          {fetch.injectionFlagged ? "judged: manipulative" : "judged: clean"}
+        </p>
+      )}
+      {fetch.judgeRationale && (
+        <p className="text-warning mt-0.5 text-[10px]">
+          {fetch.judgeRationale}
+        </p>
+      )}
+      {fetch.contentPreview && (
+        <p className="text-muted-foreground bg-muted/30 mt-1 line-clamp-3 px-1.5 py-1 text-[10px] italic">
+          {fetch.contentPreview}
+        </p>
+      )}
+    </li>
+  );
+}
+
+/** One web-search action: the query and its result count. */
+function ResearchSearchRow({
+  search,
+  error,
+}: {
+  search?: NonNullable<ResearchReport["toolCalls"]>[number]["search"];
+  error?: string;
+}): JSX.Element {
+  return (
+    <li className="border-border border-l-2 pl-2 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium">Searched</span>
+        {error && (
+          <span className="text-muted-foreground text-[10px]">failed</span>
+        )}
+      </div>
+      {search?.query && (
+        <p className="text-muted-foreground mt-0.5 break-words">
+          {search.query}
+        </p>
+      )}
+      {typeof search?.resultCount === "number" && (
+        <p className="text-muted-foreground mt-0.5 text-[10px]">
+          {search.resultCount} results
+        </p>
+      )}
+    </li>
   );
 }
 

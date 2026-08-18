@@ -2121,6 +2121,77 @@ func unmarshalResearchReportResponseBodyToMcpapprovalResearchReport(v *ResearchR
 		Error:         v.Error,
 		CreatedAt:     *v.CreatedAt,
 	}
+	if v.ToolCalls != nil {
+		res.ToolCalls = make([]*mcpapproval.ResearchToolCall, len(v.ToolCalls))
+		for i, val := range v.ToolCalls {
+			if val == nil {
+				res.ToolCalls[i] = nil
+				continue
+			}
+			res.ToolCalls[i] = unmarshalResearchToolCallResponseBodyToMcpapprovalResearchToolCall(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalResearchToolCallResponseBodyToMcpapprovalResearchToolCall builds a
+// value of type *mcpapproval.ResearchToolCall from a value of type
+// *ResearchToolCallResponseBody.
+func unmarshalResearchToolCallResponseBodyToMcpapprovalResearchToolCall(v *ResearchToolCallResponseBody) *mcpapproval.ResearchToolCall {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.ResearchToolCall{
+		Sequence: *v.Sequence,
+		Tool:     *v.Tool,
+		Error:    v.Error,
+	}
+	if v.Search != nil {
+		res.Search = unmarshalResearchWebSearchCallResponseBodyToMcpapprovalResearchWebSearchCall(v.Search)
+	}
+	if v.Fetch != nil {
+		res.Fetch = unmarshalResearchPageFetchCallResponseBodyToMcpapprovalResearchPageFetchCall(v.Fetch)
+	}
+
+	return res
+}
+
+// unmarshalResearchWebSearchCallResponseBodyToMcpapprovalResearchWebSearchCall
+// builds a value of type *mcpapproval.ResearchWebSearchCall from a value of
+// type *ResearchWebSearchCallResponseBody.
+func unmarshalResearchWebSearchCallResponseBodyToMcpapprovalResearchWebSearchCall(v *ResearchWebSearchCallResponseBody) *mcpapproval.ResearchWebSearchCall {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.ResearchWebSearchCall{
+		Query:            v.Query,
+		ResultCount:      v.ResultCount,
+		PromptTokens:     v.PromptTokens,
+		CompletionTokens: v.CompletionTokens,
+	}
+
+	return res
+}
+
+// unmarshalResearchPageFetchCallResponseBodyToMcpapprovalResearchPageFetchCall
+// builds a value of type *mcpapproval.ResearchPageFetchCall from a value of
+// type *ResearchPageFetchCallResponseBody.
+func unmarshalResearchPageFetchCallResponseBodyToMcpapprovalResearchPageFetchCall(v *ResearchPageFetchCallResponseBody) *mcpapproval.ResearchPageFetchCall {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.ResearchPageFetchCall{
+		URL:              v.URL,
+		FinalURL:         v.FinalURL,
+		ContentType:      v.ContentType,
+		ContentBytes:     v.ContentBytes,
+		Truncated:        v.Truncated,
+		Judged:           v.Judged,
+		InjectionFlagged: v.InjectionFlagged,
+		JudgeRationale:   v.JudgeRationale,
+		ContentPreview:   v.ContentPreview,
+	}
 
 	return res
 }

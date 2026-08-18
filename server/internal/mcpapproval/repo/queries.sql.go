@@ -40,11 +40,12 @@ UPDATE mcp_research_reports
 SET status = 'completed'
   , report = $1
   , report_version = $2
-  , model = $3::text
+  , tool_calls = COALESCE($3::jsonb, tool_calls)
+  , model = $4::text
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
-WHERE id = $4
-  AND project_id = $5
+WHERE id = $5
+  AND project_id = $6
   AND status = 'running'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, tool_calls, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
@@ -53,6 +54,7 @@ RETURNING id, organization_id, project_id, mcp_approval_request_id, status, repo
 type CompleteResearchReportParams struct {
 	Report        []byte
 	ReportVersion int32
+	ToolCalls     []byte
 	Model         pgtype.Text
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -66,6 +68,7 @@ func (q *Queries) CompleteResearchReport(ctx context.Context, arg CompleteResear
 	row := q.db.QueryRow(ctx, completeResearchReport,
 		arg.Report,
 		arg.ReportVersion,
+		arg.ToolCalls,
 		arg.Model,
 		arg.ID,
 		arg.ProjectID,

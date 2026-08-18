@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidencediff"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -143,7 +144,63 @@ func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
 		StartedAt:     optionalTime(report.StartedAt),
 		CompletedAt:   optionalTime(report.CompletedAt),
 		Error:         errText,
+		ToolCalls:     researchToolCallsView(report.ToolCalls),
 		CreatedAt:     conv.FromPGTimestamptz(report.CreatedAt),
+	}
+}
+
+// researchToolCallsView decodes the stored per-action trace for the API
+// boundary. A payload that will not decode yields an empty slice rather than
+// a partial trace: a half-read trace would misrepresent what the run did, and
+// the trace is observability, never load-bearing for a decision.
+func researchToolCallsView(raw []byte) []*gen.ResearchToolCall {
+	if len(raw) == 0 {
+		return nil
+	}
+	var records []researchagent.ToolCallRecord
+	if err := json.Unmarshal(raw, &records); err != nil {
+		return nil
+	}
+
+	out := make([]*gen.ResearchToolCall, 0, len(records))
+	for _, record := range records {
+		out = append(out, &gen.ResearchToolCall{
+			Sequence: record.Sequence,
+			Tool:     record.Tool,
+			Error:    conv.PtrEmpty(record.Error),
+			Search:   researchWebSearchCallView(record.Search),
+			Fetch:    researchPageFetchCallView(record.Fetch),
+		})
+	}
+	return out
+}
+
+func researchWebSearchCallView(call *researchagent.SearchCall) *gen.ResearchWebSearchCall {
+	if call == nil {
+		return nil
+	}
+	return &gen.ResearchWebSearchCall{
+		Query:            conv.PtrEmpty(call.Query),
+		ResultCount:      conv.PtrEmpty(call.ResultCount),
+		PromptTokens:     conv.PtrEmpty(int(call.PromptTokens)),
+		CompletionTokens: conv.PtrEmpty(int(call.CompletionTokens)),
+	}
+}
+
+func researchPageFetchCallView(call *researchagent.FetchCall) *gen.ResearchPageFetchCall {
+	if call == nil {
+		return nil
+	}
+	return &gen.ResearchPageFetchCall{
+		URL:              conv.PtrEmpty(call.URL),
+		FinalURL:         conv.PtrEmpty(call.FinalURL),
+		ContentType:      conv.PtrEmpty(call.ContentType),
+		ContentBytes:     conv.PtrEmpty(call.ContentBytes),
+		Truncated:        conv.PtrEmpty(call.Truncated),
+		Judged:           conv.PtrEmpty(call.Judged),
+		InjectionFlagged: conv.PtrEmpty(call.InjectionFlagged),
+		JudgeRationale:   conv.PtrEmpty(call.JudgeRationale),
+		ContentPreview:   conv.PtrEmpty(call.ContentPreview),
 	}
 }
 

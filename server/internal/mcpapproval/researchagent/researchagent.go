@@ -177,8 +177,9 @@ type RunInput struct {
 }
 
 // Run executes one research run: the agent loop, then the extraction pass.
-// It returns the encoded report document and its run metadata.
-func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunMeta, error) {
+// It returns the encoded report document, its run metadata, and the per-
+// action trace of the tool calls the run made.
+func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunMeta, []ToolCallRecord, error) {
 	meta := RunMeta{
 		Model:                Model,
 		PromptVersion:        PromptVersion,
@@ -250,6 +251,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// result of a sweep.
 	temperature := 0.2
 	var injections []InjectionFinding
+	var toolCalls []ToolCallRecord
 	toolSuccesses := 0
 	lastToolError := ""
 	wrappingUp := false
@@ -311,7 +313,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 			DisableResponseHealing:    false,
 		})
 		if err != nil {
-			return nil, meta, fmt.Errorf("research turn %d: %w", meta.Turns, err)
+			return nil, meta, toolCalls, fmt.Errorf("research turn %d: %w", meta.Turns, err)
 		}
 
 		meta.PromptTokens += int64(response.Usage.PromptTokens)
@@ -327,13 +329,39 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 		messages = append(messages, assistantToolCallMessage(response))
 		for _, call := range response.ToolCalls {
+			record := ToolCallRecord{
+				Sequence: len(toolCalls),
+				Tool:     r.toolHandlerName(call.Function.Name),
+				Error:    "",
+				Search:   nil,
+				Fetch:    nil,
+			}
+			switch record.Tool {
+			case "web_search":
+				record.Search = &SearchCall{Query: searchQueryArgument(call.Function.Arguments), ResultCount: 0, PromptTokens: 0, CompletionTokens: 0}
+			case "fetch_page":
+				record.Fetch = &FetchCall{URL: "", FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: ""}
+			}
+
+			// Snapshot before executeTool so the delta is this call's tool
+			// spend: a search drains its billed completion into meta here.
+			beforePrompt, beforeCompletion := meta.PromptTokens, meta.CompletionTokens
 			result, ok := r.executeTool(ctx, input.ReportID, call, &meta)
+			if record.Search != nil {
+				record.Search.PromptTokens = meta.PromptTokens - beforePrompt
+				record.Search.CompletionTokens = meta.CompletionTokens - beforeCompletion
+			}
+
 			if ok {
 				toolSuccesses++
-				result = r.judgeFetch(ctx, input, call, result, &meta, &injections)
+				describeToolOutcome(&record, result)
+				result = r.judgeFetch(ctx, input, call, result, &meta, &injections, &record)
 			} else {
+				record.Error = result
 				lastToolError = result
 			}
+			toolCalls = append(toolCalls, record)
+
 			fmt.Fprintf(transcript, "\nTOOL %s(%s):\n%s\n", call.Function.Name, call.Function.Arguments, result)
 			messages = append(messages, or.CreateChatMessagesTool(or.ChatToolMessage{
 				Role:       or.ChatToolMessageRoleTool,
@@ -352,14 +380,14 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// fetched, stored as evidence for a security decision.
 	if toolSuccesses == 0 {
 		if lastToolError != "" {
-			return nil, meta, fmt.Errorf("every research tool call failed; last failure: %s", lastToolError)
+			return nil, meta, toolCalls, fmt.Errorf("every research tool call failed; last failure: %s", lastToolError)
 		}
-		return nil, meta, fmt.Errorf("the model performed no research: it made no tool calls and its claims would be uncited recall")
+		return nil, meta, toolCalls, fmt.Errorf("the model performed no research: it made no tool calls and its claims would be uncited recall")
 	}
 
 	document, err := r.extract(ctx, input, transcript.String(), &meta)
 	if err != nil {
-		return nil, meta, err
+		return nil, meta, toolCalls, err
 	}
 
 	// Attached after extraction, on purpose: the model that writes the report
@@ -369,10 +397,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 	encoded, err := json.Marshal(document)
 	if err != nil {
-		return nil, meta, fmt.Errorf("encode research report: %w", err)
+		return nil, meta, toolCalls, fmt.Errorf("encode research report: %w", err)
 	}
 
-	return encoded, meta, nil
+	return encoded, meta, toolCalls, nil
 }
 
 // briefing renders the agent's starting context: the server under review and
@@ -540,6 +568,7 @@ func (r *Runner) judgeFetch(
 	result string,
 	meta *RunMeta,
 	injections *[]InjectionFinding,
+	record *ToolCallRecord,
 ) string {
 	if r.judge == nil {
 		return result
@@ -576,10 +605,17 @@ func (r *Runner) judgeFetch(
 	}
 
 	meta.PagesJudged++
+	if record.Fetch != nil {
+		record.Fetch.Judged = true
+	}
 	if !verdict.Injection {
 		return result
 	}
 
+	if record.Fetch != nil {
+		record.Fetch.InjectionFlagged = true
+		record.Fetch.JudgeRationale = verdict.Rationale
+	}
 	recordInjection(injections, InjectionFinding{URL: source, Rationale: verdict.Rationale})
 
 	return fmt.Sprintf(
@@ -743,4 +779,71 @@ func assistantToolCallMessage(response *openrouter.CompletionResponse) or.ChatMe
 	}
 
 	return or.CreateChatMessagesAssistant(message)
+}
+
+// toolHandlerName maps a completion tool name to its handler ("web_search",
+// "fetch_page") for the trace, empty when no registered tool matches.
+func (r *Runner) toolHandlerName(name string) string {
+	for _, tool := range r.tools {
+		descriptor := tool.executor.Descriptor()
+		if descriptor.Name == name {
+			return descriptor.HandlerName
+		}
+	}
+	return ""
+}
+
+// describeToolOutcome parses a successful tool result into the trace record.
+// Both shapes are our own tools' output, not model text: a fetch returns
+// {url, final_url, content_type, content, truncated}; a search returns
+// {results: [...]}.
+func describeToolOutcome(record *ToolCallRecord, result string) {
+	switch {
+	case record.Fetch != nil:
+		var page struct {
+			URL         string `json:"url"`
+			FinalURL    string `json:"final_url"`
+			ContentType string `json:"content_type"`
+			Content     string `json:"content"`
+			Truncated   bool   `json:"truncated"`
+		}
+		if json.Unmarshal([]byte(result), &page) != nil {
+			return
+		}
+		record.Fetch.URL = page.URL
+		record.Fetch.FinalURL = page.FinalURL
+		record.Fetch.ContentType = page.ContentType
+		record.Fetch.ContentBytes = len(page.Content)
+		record.Fetch.Truncated = page.Truncated
+		record.Fetch.ContentPreview = boundPreview(page.Content)
+	case record.Search != nil:
+		var search struct {
+			Results []json.RawMessage `json:"results"`
+		}
+		if json.Unmarshal([]byte(result), &search) == nil {
+			record.Search.ResultCount = len(search.Results)
+		}
+	}
+}
+
+// searchQueryArgument reads the query out of a web_search call's arguments,
+// falling back to the raw arguments when they do not parse.
+func searchQueryArgument(arguments string) string {
+	var input struct {
+		Query string `json:"query"`
+	}
+	if json.Unmarshal([]byte(arguments), &input) == nil && input.Query != "" {
+		return input.Query
+	}
+	return arguments
+}
+
+// boundPreview cuts extracted page text to a rune-bounded preview.
+func boundPreview(content string) string {
+	trimmed := strings.TrimSpace(content)
+	runes := []rune(trimmed)
+	if len(runes) <= maxToolCallPreviewRunes {
+		return trimmed
+	}
+	return string(runes[:maxToolCallPreviewRunes]) + "…"
 }
