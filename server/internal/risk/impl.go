@@ -3703,6 +3703,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
@@ -3852,6 +3853,7 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))

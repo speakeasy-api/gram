@@ -68,6 +68,13 @@ const (
 	// friends). Unregistered for the same reason as skill efficacy: platform
 	// internal key, excluded from Polar and TUM billing, never a BYOK slot.
 	ModelUsageSourceChatAnalysis ModelUsageSource = "chat-analysis"
+
+	// ModelUsageSourceMCPResearch tags the MCP research tools' web-search
+	// completions. Unregistered so it can never appear as a
+	// customer-configurable BYOK slot; the calls run on the org's chat key by
+	// decision, and this tag is what attributes their spend distinctly within
+	// that key's usage.
+	ModelUsageSourceMCPResearch ModelUsageSource = "mcp-research"
 )
 
 // The platform-initiated risk-analysis judges are likewise unregistered:
