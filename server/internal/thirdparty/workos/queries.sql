@@ -252,3 +252,37 @@ WHERE du.user_id = @user_id
   AND dg.organization_id = @organization_id
   AND du.deleted_at IS NULL
 ORDER BY dg.workos_directory_group_id;
+
+-- name: ListActiveDirectoryGroupIDsByEmails :many
+SELECT DISTINCT
+  LOWER(du.email) AS email,
+  dg.id AS directory_group_id
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND LOWER(du.email) = ANY(@emails::text[])
+ORDER BY email, directory_group_id;
+
+-- name: ListActiveDirectoryUserAttributesByEmails :many
+SELECT
+  LOWER(du.email) AS email,
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND LOWER(du.email) = ANY(@emails::text[])
+ORDER BY email, attribute.key, attribute.value;
