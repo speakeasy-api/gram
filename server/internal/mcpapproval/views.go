@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidencediff"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -30,16 +33,17 @@ func summaryView(request requestFields) *gen.ApprovalRequestSummary {
 	}
 
 	return &gen.ApprovalRequestSummary{
-		ID:             request.ID.String(),
-		TargetKind:     request.TargetKind,
-		TargetRaw:      request.TargetRaw,
-		ServerSlug:     serverSlug,
-		ArtifactRef:    fromPGText(request.ArtifactRef),
-		VersionPinned:  request.VersionPinned,
-		Status:         request.Status,
-		RequesterCount: int(request.RequesterCount),
-		CreatedAt:      conv.FromPGTimestamptz(request.CreatedAt),
-		UpdatedAt:      conv.FromPGTimestamptz(request.UpdatedAt),
+		ID:                request.ID.String(),
+		TargetKind:        request.TargetKind,
+		TargetRaw:         request.TargetRaw,
+		ServerSlug:        serverSlug,
+		ArtifactRef:       fromPGText(request.ArtifactRef),
+		VersionPinned:     request.VersionPinned,
+		Status:            request.Status,
+		RequesterCount:    int(request.RequesterCount),
+		EvidenceChangedAt: optionalTime(request.EvidenceChangedAt),
+		CreatedAt:         conv.FromPGTimestamptz(request.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(request.UpdatedAt),
 	}
 }
 
@@ -55,8 +59,13 @@ type requestFields struct {
 	VersionPinned  bool
 	Status         string
 	RequesterCount int64
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+
+	// EvidenceChangedAt is the drift flag the daily recheck sets and only a
+	// new decision clears.
+	EvidenceChangedAt pgtype.Timestamptz
+
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 func fromListRow(row repo.ListApprovalRequestsRow) requestFields {
@@ -64,7 +73,8 @@ func fromListRow(row repo.ListApprovalRequestsRow) requestFields {
 		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
 		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
 		Status: row.Status, RequesterCount: row.RequesterCount,
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		EvidenceChangedAt: row.EvidenceChangedAt,
+		CreatedAt:         row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
 
@@ -73,7 +83,8 @@ func fromGetRow(row repo.GetApprovalRequestRow) requestFields {
 		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
 		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
 		Status: row.Status, RequesterCount: row.RequesterCount,
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		EvidenceChangedAt: row.EvidenceChangedAt,
+		CreatedAt:         row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
 
@@ -82,7 +93,8 @@ func fromTargetRow(row repo.GetApprovalRequestByTargetRow) requestFields {
 		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
 		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
 		Status: row.Status, RequesterCount: row.RequesterCount,
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		EvidenceChangedAt: row.EvidenceChangedAt,
+		CreatedAt:         row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
 
@@ -109,9 +121,20 @@ func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 }
 
 func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
+	status := report.Status
+	errText := fromPGText(report.Error)
+	// A running row older than the workflow deadline is stranded, not live
+	// (see ResearchRunStaleAfter). Presenting it as failed here is what lets
+	// the page's polling resolve and the Run button re-enable — the durable
+	// resolution only happens on the next StartResearch, which this unblocks.
+	if status == researchStatusRunning && report.StartedAt.Valid && time.Since(report.StartedAt.Time) > ResearchRunStaleAfter {
+		status = "failed"
+		stale := "the research run was interrupted and did not resolve"
+		errText = &stale
+	}
 	return &gen.ResearchReport{
 		ID:            report.ID.String(),
-		Status:        report.Status,
+		Status:        status,
 		Report:        rawEvidence(report.Report),
 		ReportVersion: int(report.ReportVersion),
 		Model:         fromPGText(report.Model),
@@ -119,7 +142,7 @@ func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
 		RequestedBy:   fromPGText(report.RequestedBy),
 		StartedAt:     optionalTime(report.StartedAt),
 		CompletedAt:   optionalTime(report.CompletedAt),
-		Error:         fromPGText(report.Error),
+		Error:         errText,
 		CreatedAt:     conv.FromPGTimestamptz(report.CreatedAt),
 	}
 }
@@ -191,4 +214,44 @@ func optionalTime(value pgtype.Timestamptz) *string {
 	}
 
 	return conv.PtrEmpty(conv.FromPGTimestamptz(value))
+}
+
+// evidenceDiffView compares the latest decision's frozen snapshot against
+// the request's current evidence, on read. Nil when there is no decision to
+// compare against or either side cannot be decoded — the section is absent
+// rather than pretending nothing moved.
+func evidenceDiffView(latest repo.McpApprovalDecision, currentEvidence []byte, currentVersion int32) *gen.EvidenceDiff {
+	snapshot, err := evidence.DecodeDocument(latest.EvidenceSnapshot, int(latest.EvidenceVersion))
+	if err != nil {
+		return nil
+	}
+	current, err := evidence.DecodeDocument(currentEvidence, int(currentVersion))
+	if err != nil {
+		return nil
+	}
+
+	diff := evidencediff.Compare(snapshot, current)
+
+	fields := make([]*gen.EvidenceFieldChange, 0, len(diff.Fields))
+	for _, change := range diff.Fields {
+		fields = append(fields, &gen.EvidenceFieldChange{Field: change.Field, Before: change.Before, After: change.After})
+	}
+	advisories := make([]*gen.EvidenceAdvisoryChange, 0, len(diff.AdvisoriesAdded))
+	for _, advisory := range diff.AdvisoriesAdded {
+		advisories = append(advisories, &gen.EvidenceAdvisoryChange{
+			ID:       advisory.ID,
+			Summary:  conv.PtrEmpty(advisory.Summary),
+			Severity: conv.PtrEmpty(advisory.Severity),
+		})
+	}
+
+	return &gen.EvidenceDiff{
+		Changed:         diff.Changed,
+		ScopesAdded:     diff.ScopesAdded,
+		ScopesRemoved:   diff.ScopesRemoved,
+		SecretsAdded:    diff.SecretsAdded,
+		SecretsRemoved:  diff.SecretsRemoved,
+		Fields:          fields,
+		AdvisoriesAdded: advisories,
+	}
 }

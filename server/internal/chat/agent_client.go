@@ -201,6 +201,7 @@ func (c *Client) AgentChat(
 			ProjectID:                 projectID.String(),
 			Messages:                  messages,
 			Tools:                     toolDefs,
+			ToolChoice:                nil,
 			Temperature:               opts.Temperature,
 			Model:                     opts.Model,
 			Stream:                    false,
@@ -218,6 +219,7 @@ func (c *Client) AgentChat(
 			CacheControl:              nil,
 			NormalizeOutboundMessages: false,
 			WebSearch:                 nil,
+			DisableResponseHealing:    false,
 		}
 
 		if opts.UsageSource != "" {

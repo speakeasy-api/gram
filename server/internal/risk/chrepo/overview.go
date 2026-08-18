@@ -46,6 +46,9 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
 		Where("excluded_at IS NULL").
+		// Legacy suppression column, still filtered until the
+		// false_positive_at-only rows written before the suppression
+		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
 }
 

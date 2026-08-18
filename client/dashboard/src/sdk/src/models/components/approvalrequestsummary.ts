@@ -21,6 +21,10 @@ export type ApprovalRequestSummary = {
    */
   createdAt: Date;
   /**
+   * When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted. Cleared only by recording a new decision.
+   */
+  evidenceChangedAt?: Date | undefined;
+  /**
    * The approval request ID.
    */
   id: string;
@@ -65,6 +69,9 @@ export const ApprovalRequestSummary$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    evidence_changed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     id: z.string(),
     requester_count: z.int(),
     server_slug: z.optional(z.string()),
@@ -81,6 +88,7 @@ export const ApprovalRequestSummary$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "artifact_ref": "artifactRef",
       "created_at": "createdAt",
+      "evidence_changed_at": "evidenceChangedAt",
       "requester_count": "requesterCount",
       "server_slug": "serverSlug",
       "target_kind": "targetKind",

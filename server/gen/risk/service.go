@@ -306,6 +306,10 @@ type CreateRiskPolicyBypassRequestPayload struct {
 	ApikeyToken  *string
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service

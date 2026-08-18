@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -68,6 +69,10 @@ type HTTPMetadata struct {
 }
 
 // CompletionRequest encapsulates all parameters needed for a completion call.
+// ToolChoiceNone is the tool_choice that forbids tool calls while keeping
+// the tools key defined.
+var ToolChoiceNone = json.RawMessage(`"none"`)
+
 type CompletionRequest struct {
 	// Required fields
 	OrgID    string
@@ -79,6 +84,15 @@ type CompletionRequest struct {
 	Temperature *float64
 	Model       string
 	Stream      bool
+
+	// ToolChoice, when set, is forwarded verbatim as OpenAI tool_choice —
+	// raw because the spec admits strings and function-naming objects, and
+	// the chat proxy forwards whatever the client sent. Internal callers use
+	// ToolChoiceNone to forbid further tool calls while keeping Tools
+	// defined — the shape Anthropic-family models require once the history
+	// contains tool turns. Nil means provider default ("auto" when tools
+	// are present).
+	ToolChoice json.RawMessage
 
 	// Context for tracking and capture
 	UsageSource    billing.ModelUsageSource
@@ -122,6 +136,13 @@ type CompletionRequest struct {
 	// response. Search carries its own per-result charge on top of the
 	// completion tokens.
 	WebSearch *WebSearchOptions
+
+	// DisableResponseHealing turns off OpenRouter's response-healing plugin
+	// for the request. Healing "repairs" malformed structured output into a
+	// schema-valid object by stuffing unparseable content into string fields
+	// and inventing literal "placeholder" filler — a caller that validates
+	// its output wants the malformed original to fail loudly instead.
+	DisableResponseHealing bool
 }
 
 // WebSearchOptions configures the web-search plugin for one request.
@@ -157,6 +178,11 @@ type ObjectCompletionRequest struct {
 	// mandatory for this endpoint"), so a caller that needs such a model must
 	// set an effort here rather than silently taking a 400.
 	Reasoning *Reasoning
+
+	// DisableResponseHealing turns off OpenRouter's response-healing plugin,
+	// so malformed structured output fails the caller's validation instead
+	// of being "repaired" into schema-valid placeholder filler.
+	DisableResponseHealing bool
 }
 
 // CompletionResponse encapsulates the result of a completion call.

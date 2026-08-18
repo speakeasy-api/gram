@@ -21,11 +21,12 @@ type Client struct {
 	CreateRequestEndpoint      goa.Endpoint
 	PromoteEndpoint            goa.Endpoint
 	RefreshEvidenceEndpoint    goa.Endpoint
+	StartResearchEndpoint      goa.Endpoint
 	RecordDecisionEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "mcpApproval" service client given the endpoints.
-func NewClient(listRequests, getRequest, ensureServerReview, createRequest, promote, refreshEvidence, recordDecision goa.Endpoint) *Client {
+func NewClient(listRequests, getRequest, ensureServerReview, createRequest, promote, refreshEvidence, startResearch, recordDecision goa.Endpoint) *Client {
 	return &Client{
 		ListRequestsEndpoint:       listRequests,
 		GetRequestEndpoint:         getRequest,
@@ -33,6 +34,7 @@ func NewClient(listRequests, getRequest, ensureServerReview, createRequest, prom
 		CreateRequestEndpoint:      createRequest,
 		PromoteEndpoint:            promote,
 		RefreshEvidenceEndpoint:    refreshEvidence,
+		StartResearchEndpoint:      startResearch,
 		RecordDecisionEndpoint:     recordDecision,
 	}
 }
@@ -170,6 +172,29 @@ func (c *Client) RefreshEvidence(ctx context.Context, p *RefreshEvidencePayload)
 		return
 	}
 	return ires.(*ApprovalRequestDetail), nil
+}
+
+// StartResearch calls the "startResearch" endpoint of the "mcpApproval"
+// service.
+// StartResearch may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) StartResearch(ctx context.Context, p *StartResearchPayload) (res *ResearchReport, err error) {
+	var ires any
+	ires, err = c.StartResearchEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ResearchReport), nil
 }
 
 // RecordDecision calls the "recordDecision" endpoint of the "mcpApproval"

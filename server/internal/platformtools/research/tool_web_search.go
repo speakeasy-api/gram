@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -29,6 +30,11 @@ type WebSearch struct {
 	// out of the search provider's structured response, never the model's
 	// text.
 	menu *URLMenu
+
+	// usage accumulates what those searches cost, keyed by the caller's chat
+	// id — the research runner's report id. The budget caps the count; this
+	// reports the price, which is what the run stores.
+	usage sync.Map
 }
 
 type webSearchInput struct {
@@ -44,7 +50,53 @@ type webSearchResult struct {
 // The menu must be the same instance the fetch tool checks, or nothing a
 // search returns becomes fetchable.
 func NewWebSearchTool(search *SearchClient, menu *URLMenu) *WebSearch {
-	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), menu: menu}
+	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), menu: menu, usage: sync.Map{}}
+}
+
+// DrainUsage returns what this caller's searches have cost since the last
+// drain, and forgets it. Draining rather than reading keeps the map bounded:
+// the tool outlives every run that uses it.
+func (s *WebSearch) DrainUsage(chatID string) (promptTokens int64, completionTokens int64) {
+	recorded, ok := s.usage.LoadAndDelete(chatID)
+	if !ok {
+		return 0, 0
+	}
+
+	usage, ok := recorded.(SearchUsage)
+	if !ok {
+		return 0, 0
+	}
+
+	return usage.PromptTokens, usage.CompletionTokens
+}
+
+func (s *WebSearch) recordUsage(chatID string, usage SearchUsage) {
+	if chatID == "" {
+		return
+	}
+
+	for {
+		previous, loaded := s.usage.Load(chatID)
+		next := usage
+		if loaded {
+			if running, ok := previous.(SearchUsage); ok {
+				next = SearchUsage{
+					PromptTokens:     running.PromptTokens + usage.PromptTokens,
+					CompletionTokens: running.CompletionTokens + usage.CompletionTokens,
+				}
+			}
+		}
+
+		if !loaded {
+			if _, raced := s.usage.LoadOrStore(chatID, next); !raced {
+				return
+			}
+			continue
+		}
+		if s.usage.CompareAndSwap(chatID, previous, next) {
+			return
+		}
+	}
 }
 
 func (s *WebSearch) Descriptor() core.ToolDescriptor {
@@ -102,10 +154,11 @@ func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		return fmt.Errorf("this run's search budget of %d searches is exhausted: work with what the previous searches returned", maxSearchesPerChat)
 	}
 
-	results, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)
+	results, usage, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)
 	if err != nil {
 		return fmt.Errorf("web search failed: %w", err)
 	}
+	s.recordUsage(env.GramChatID, usage)
 
 	for _, result := range results {
 		s.menu.Allow(env.GramChatID, result.URL)

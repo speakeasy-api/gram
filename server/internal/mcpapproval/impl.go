@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -111,6 +113,19 @@ var statusFor = map[string]string{
 	decisionDenied:   "denied",
 }
 
+// ResearchRun identifies one research-agent run to enqueue.
+type ResearchRun struct {
+	ReportID  uuid.UUID
+	RequestID uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// ResearchStarter enqueues a research run for later execution. Production
+// wiring starts the Temporal research workflow; a nil starter reports
+// research as unavailable rather than stranding report rows in running.
+type ResearchStarter func(ctx context.Context, run ResearchRun) error
+
 type Service struct {
 	tracer   trace.Tracer
 	logger   *slog.Logger
@@ -120,6 +135,7 @@ type Service struct {
 	flags    feature.Provider
 	audit    *audit.Logger
 	evidence *evidence.Assembler
+	research ResearchStarter
 
 	// gapRetryMu guards gapRetryAt.
 	gapRetryMu sync.Mutex
@@ -134,7 +150,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, flags feature.Provider, auditLogger *audit.Logger, assembler *evidence.Assembler) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, flags feature.Provider, auditLogger *audit.Logger, assembler *evidence.Assembler, research ResearchStarter) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
@@ -146,6 +162,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		flags:      flags,
 		audit:      auditLogger,
 		evidence:   assembler,
+		research:   research,
 		gapRetryMu: sync.Mutex{},
 		gapRetryAt: make(map[uuid.UUID]time.Time),
 	}
@@ -218,6 +235,46 @@ func (s *Service) requireFeature(ctx context.Context, organizationID string) err
 	}
 	if !enabled {
 		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	return nil
+}
+
+// requireResearchEnabled enforces the research-specific gates on top of the
+// approval rollout: the kill switch first — affirmatively on stops research
+// everywhere without touching any rollout targeting — then the research
+// rollout flag, org-group targeted and failing closed like the approval
+// flag. Research spends against the org's chat key on the open web, so it
+// rolls out to a narrower set than the approval workflow it belongs to.
+func (s *Service) requireResearchEnabled(ctx context.Context, organizationID string) error {
+	var groups map[string]string
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization slug for mcp research flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	// The kill switch fails closed like the rollout flag: a run must not be
+	// bought while the state of its stop control is unknown — the rollout
+	// flag failing closed alongside only covers both evaluations failing
+	// together, not a partial failure.
+	killed, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "mcp research kill-switch check failed; refusing to start", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily unavailable")
+	}
+	if killed {
+		return oops.E(oops.CodeForbidden, nil, "MCP research is temporarily disabled")
+	}
+
+	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPResearch, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "mcp research flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "MCP research is not enabled for this organization")
 	}
 
 	return nil
@@ -790,6 +847,174 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // every remote source while the stored document did not: an all-gaps document
 // carries strictly less than what it would replace, so the write is skipped
 // and the failure surfaced.
+// researchStatusRunning mirrors the report table's app-validated lifecycle
+// states.
+const researchStatusRunning = "running"
+
+// ResearchRunStaleAfter is the age past which a running report can only be a
+// stranded row: the Temporal workflow's 40-minute run timeout bounds every
+// live run (see background.McpResearchWorkflow), and its compensation budget
+// adds under five minutes — so a running report older than this had its
+// compensation skipped or exhausted (worker crash, terminated workflow, DB
+// outage). Both recovery paths key off it: the read path presents such a row
+// as failed so the page's polling resolves and the Run button re-enables, and
+// StartResearch resolves it durably before admitting a new run.
+const ResearchRunStaleAfter = 45 * time.Minute
+
+func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchPayload) (*gen.ResearchReport, error) {
+	projectID, orgID, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// project already enforced the approval rollout; this adds research's
+	// own gates on top.
+	if err := s.requireResearchEnabled(ctx, orgID); err != nil {
+		return nil, err
+	}
+
+	requestID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+	}
+
+	queries := repo.New(s.db)
+
+	// Resolved with the project id in the predicate, so a caller who learns an
+	// id from a dashboard URL cannot research another tenant's request.
+	request, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	if s.research == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
+	}
+
+	requestedBy := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		requestedBy = authCtx.UserID
+	}
+
+	// At most one run per request in flight: a start while one runs returns
+	// the running report, so a double-click cannot spend twice. The check and
+	// the insert have to be one atomic step for that to be true — read
+	// separately, two callers both see no running run and both pay for one —
+	// so they share a transaction that opens by locking the request row.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin research start").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txQueries := queries.WithTx(dbtx)
+
+	if _, err := txQueries.LockApprovalRequestForResearch(ctx, repo.LockApprovalRequestForResearchParams{
+		ID:             requestID,
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock approval request for research").LogError(ctx, s.logger)
+	}
+
+	// Resolve any stranded run first: a running report older than the workflow
+	// deadline will never complete, and without this it would hold the
+	// one-run-per-request gate closed forever.
+	if _, err := txQueries.InterruptStaleResearchReports(ctx, repo.InterruptStaleResearchReportsParams{
+		McpApprovalRequestID: requestID,
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+		StaleBefore:          pgtype.Timestamptz{Time: time.Now().Add(-ResearchRunStaleAfter), Valid: true, InfinityModifier: pgtype.Finite},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve stale research reports").LogError(ctx, s.logger)
+	}
+
+	running, err := txQueries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
+		McpApprovalRequestID: requestID,
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+	})
+	switch {
+	case err == nil:
+		return researchReportView(running), nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading research reports").LogError(ctx, s.logger)
+	}
+
+	report, err := txQueries.CreateResearchReport(ctx, repo.CreateResearchReportParams{
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+		McpApprovalRequestID: requestID,
+		Status:               researchStatusRunning,
+		Report:               []byte("{}"),
+		ReportVersion:        researchagent.ReportVersion,
+		Model:                conv.ToPGText(researchagent.Model),
+		PromptVersion:        conv.ToPGText(researchagent.PromptVersion),
+		RequestedBy:          conv.ToPGTextEmpty(requestedBy),
+		StartedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
+		CompletedAt:          pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		Error:                pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating research report").LogError(ctx, s.logger)
+	}
+
+	var actorEmail *string
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		actorEmail = authCtx.Email
+	}
+	if err := s.audit.LogMCPApprovalRequestResearchStart(ctx, dbtx, audit.LogMCPApprovalRequestResearchStartEvent{
+		OrganizationID:   orgID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, requestedBy),
+		ActorDisplayName: actorEmail,
+		ActorSlug:        nil,
+		RequestURN:       urn.NewMCPApprovalRequest(requestID),
+		TargetRaw:        request.TargetRaw,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error auditing research start").LogError(ctx, s.logger)
+	}
+
+	// Committed before the enqueue, never inside it: the workflow reads this
+	// row, and the lock has to be released for the next caller either way.
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit research start").LogError(ctx, s.logger)
+	}
+
+	// The request's return must not cancel the enqueue.
+	if err := s.research(context.WithoutCancel(ctx), ResearchRun{
+		ReportID:  report.ID,
+		RequestID: requestID,
+		ProjectID: projectID,
+		OrgID:     orgID,
+	}); err != nil {
+		// The run never started; leaving the row running would strand it —
+		// the page polls a run that will never resolve and its Run button
+		// stays disabled. The client has usually disconnected by now (a
+		// failed enqueue is what it is reacting to), so this write cannot
+		// borrow the request's context: it would be canceled exactly when it
+		// is needed.
+		failCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if _, failErr := queries.FailResearchReport(failCtx, repo.FailResearchReportParams{
+			ID:        report.ID,
+			ProjectID: projectID,
+			Error:     conv.ToPGText("the research run could not be started"),
+		}); failErr != nil {
+			s.logger.ErrorContext(failCtx, "record research start failure", attr.SlogError(failErr))
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting research run").LogError(ctx, s.logger)
+	}
+
+	return researchReportView(report), nil
+}
+
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
 	projectID, _, err := s.project(ctx)
 	if err != nil {
@@ -924,6 +1149,15 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 		reports = append(reports, researchReportView(report))
 	}
 
+	// The diff is computed on read from the two stored sides — the latest
+	// decision's frozen snapshot and the current gather — so it is always
+	// consistent with what the page displays, even when the drift flag has
+	// not been swept yet.
+	var evidenceDiff *gen.EvidenceDiff
+	if len(decisionRows) > 0 {
+		evidenceDiff = evidenceDiffView(decisionRows[0], row.CurrentEvidence, row.EvidenceVersion)
+	}
+
 	return &gen.ApprovalRequestDetail{
 		Request:             summaryView(fromGetRow(row)),
 		Requesters:          requesters,
@@ -932,6 +1166,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 		EvidenceCollectedAt: optionalTime(row.EvidenceCollectedAt),
 		Decisions:           decisions,
 		ResearchReports:     reports,
+		EvidenceDiff:        evidenceDiff,
 	}, nil
 }
 
@@ -1050,6 +1285,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	if citedReportID.Valid {
 		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
 			ID:                   citedReportID.UUID,
+			OrganizationID:       organizationID,
 			McpApprovalRequestID: requestID,
 			ProjectID:            projectID,
 		}); err != nil {
@@ -1102,6 +1338,16 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// The snapshot this decision just froze answers any outstanding
+	// evidence-change flag; recording a decision is the only thing that
+	// clears it.
+	if err := queries.ClearApprovalRequestEvidenceChange(ctx, repo.ClearApprovalRequestEvidenceChangeParams{
+		ID:        requestID,
+		ProjectID: projectID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing evidence change flag").LogError(ctx, s.logger)
 	}
 
 	// The decision resolves the legacy bypass rows it answers too — in the

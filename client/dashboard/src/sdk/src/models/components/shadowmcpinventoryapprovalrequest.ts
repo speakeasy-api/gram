@@ -21,6 +21,10 @@ export type Status = ClosedEnum<typeof Status>;
  * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
  */
 export type ShadowMCPInventoryApprovalRequest = {
+  /**
+   * When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.
+   */
+  evidenceChangedAt?: Date | undefined;
   id: string;
   /**
    * How many distinct people have asked for this server.
@@ -40,12 +44,16 @@ export const ShadowMCPInventoryApprovalRequest$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    evidence_changed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     id: z.string(),
     requester_count: z.int(),
     status: Status$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "evidence_changed_at": "evidenceChangedAt",
       "requester_count": "requesterCount",
     });
   }),

@@ -554,6 +554,10 @@ type ShadowMCPInventoryApprovalRequest struct {
 	Status string
 	// How many distinct people have asked for this server.
 	RequesterCount int
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted; cleared only by a new decision.
+	EvidenceChangedAt *string
 }
 
 // Decision used when resolving a Shadow MCP inventory request.
