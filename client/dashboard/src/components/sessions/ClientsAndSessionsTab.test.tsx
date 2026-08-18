@@ -227,9 +227,14 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
+    // The row names the person and tallies what they reach; opening it names
+    // the client on the other side of the inbound leg. The server itself is
+    // not repeated — this tab is already scoped to one.
+    expect(screen.getByText(/1 provider/)).toBeDefined();
+
+    fireEvent.click(screen.getByText("Ada Lovelace"));
+
     expect(screen.getAllByText("Test Client").length).toBeGreaterThan(0);
-    expect(screen.getByText("the-server")).toBeDefined();
-    expect(screen.getByText("mcp.linear.app")).toBeDefined();
   });
 
   it("says so when a connection reaches no upstream at all", () => {
@@ -241,7 +246,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText("Gram tools only")).toBeDefined();
+    expect(screen.getByText(/Gram tools only/)).toBeDefined();
   });
 
   it("groups connections by person and can regroup by provider", () => {
@@ -319,6 +324,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
+    fireEvent.click(screen.getByText("Ada Lovelace"));
     fireEvent.click(screen.getByText("Revoke connection"));
     fireEvent.click(screen.getByText("Confirm session revoke"));
 
@@ -339,6 +345,9 @@ describe("ClientsAndSessionsTab", () => {
     fireEvent.click(screen.getByText("Client"));
 
     expect(screen.getByText("Never Used Client")).toBeDefined();
+
+    fireEvent.click(screen.getByText("Never Used Client"));
+
     expect(
       screen.getByText(/registered but holds no connections/i),
     ).toBeDefined();
@@ -357,6 +366,6 @@ describe("ClientsAndSessionsTab", () => {
     fireEvent.click(screen.getByText("Client"));
 
     expect(screen.getByText("Revoke registration")).toBeDefined();
-    expect(screen.getByText("Revoke all")).toBeDefined();
+    expect(screen.getByText("Revoke all connections")).toBeDefined();
   });
 });

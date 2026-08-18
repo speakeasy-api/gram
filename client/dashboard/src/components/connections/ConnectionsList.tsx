@@ -345,6 +345,14 @@ function ConnectionGroupRow({
                   {providers.length === 1 ? "" : "s"}
                 </span>
               </SimpleTooltip>
+            ) : grouping !== "provider" ? (
+              // Said rather than left blank: reaching only Gram-native tools is
+              // a real state, and an empty slot beside every other row's
+              // provider count reads as data we failed to load.
+              <span className="text-muted-foreground/70">
+                {" "}
+                · Gram tools only
+              </span>
             ) : null}
           </span>
 
@@ -373,7 +381,7 @@ function ConnectionGroupRow({
           {group.sessions.length === 0 ? (
             <div className="py-2 pr-3 pl-2">
               <span className="text-muted-foreground border-border ml-[2.5rem] border-l pl-3 text-xs">
-                Registered, but holds no connections.
+                Registered but holds no connections.
               </span>
             </div>
           ) : null}
