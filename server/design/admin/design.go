@@ -157,6 +157,41 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
 })
 
+var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
+	Attribute("status", String, func() {
+		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
+	})
+	Attribute("current_period_start", String, func() { Format(FormatDateTime) })
+	Attribute("current_period_end", String, func() { Format(FormatDateTime) })
+	Attribute("trial_start", String, func() { Format(FormatDateTime) })
+	Attribute("trial_end", String, func() { Format(FormatDateTime) })
+	Attribute("cancel_at_period_end", Boolean)
+	Attribute("cancel_at", String, func() { Format(FormatDateTime) })
+	Attribute("canceled_at", String, func() { Format(FormatDateTime) })
+	Attribute("payment_failed", Boolean)
+	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
+})
+
+var AdminInferenceKey = Type("AdminInferenceKey", func() {
+	Description("Configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Attribute("disabled", Boolean)
+	Required("key_type", "monthly_credits", "disabled")
+})
+
+var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
+	Attribute("period_start", String, func() { Format(FormatDateTime) })
+	Attribute("period_end", String, func() { Format(FormatDateTime) })
+	Attribute("tum_tokens", Int64)
+	Attribute("tum_unit_price_usd", String)
+	Attribute("tum_cost_usd", String)
+	Attribute("other_inference_spend_usd", String)
+	Attribute("recorded_through", String, func() { Format(FormatDate) })
+	Attribute("estimated_total_usd", String)
+	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
+})
+
 // Shared so the two write paths, and the service's own copy of the check,
 // cannot drift into accepting different sets.
 var accountTypes = conv.AnySlice(constants.AccountTypes)
@@ -604,5 +639,55 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
+	})
+
+	Method("getInferenceKeys", func() {
+		Description("Returns the configured state of every materialized platform-managed OpenRouter key for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(ArrayOf(AdminInferenceKey))
+		HTTP(func() { GET("/admin/organization.inferenceKeys"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetInferenceKeys")
+	})
+
+	Method("getPaygBillingSummary", func() {
+		Description("Returns current PAYG usage and estimated cost for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(AdminPaygBillingSummary)
+		HTTP(func() { GET("/admin/organization.paygBillingSummary"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetPaygBillingSummary")
+	})
+
+	Method("getStripeSubscription", func() {
+		Description("Returns the live Stripe subscription and payment state for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(AdminStripeSubscription)
+		HTTP(func() { GET("/admin/organization.stripeSubscription"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetStripeSubscription")
+	})
+
+	Method("cancelStripeSubscription", func() {
+		Description("Schedules an organization's PAYG subscription to cancel at period end.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Meta("openapi:typename", "CancelStripeSubscriptionRequestBody")
+		})
+		Result(AdminStripeSubscription)
+		HTTP(func() { POST("/admin/organization.cancelStripeSubscription"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminCancelStripeSubscription")
+	})
+
+	Method("resumeStripeSubscription", func() {
+		Description("Removes a scheduled period-end cancellation from an organization's PAYG subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Meta("openapi:typename", "ResumeStripeSubscriptionRequestBody")
+		})
+		Result(AdminStripeSubscription)
+		HTTP(func() { POST("/admin/organization.resumeStripeSubscription"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminResumeStripeSubscription")
 	})
 })

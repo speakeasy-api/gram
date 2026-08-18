@@ -277,6 +277,82 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organization.cancelStripeSubscription:
+        post:
+            tags:
+                - admin
+            summary: cancelStripeSubscription admin
+            description: Schedules an organization's PAYG subscription to cancel at period end.
+            operationId: adminCancelStripeSubscription
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CancelStripeSubscriptionRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminStripeSubscription'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.create:
         post:
             tags:
@@ -584,6 +660,85 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.inferenceKeys:
+        get:
+            tags:
+                - admin
+            summary: getInferenceKeys admin
+            description: Returns the configured state of every materialized platform-managed OpenRouter key for an organization.
+            operationId: adminGetInferenceKeys
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                type: array
+                                items:
+                                    $ref: '#/components/schemas/AdminInferenceKey'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.members:
         get:
             tags:
@@ -663,6 +818,83 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.paygBillingSummary:
+        get:
+            tags:
+                - admin
+            summary: getPaygBillingSummary admin
+            description: Returns current PAYG usage and estimated cost for an organization.
+            operationId: adminGetPaygBillingSummary
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminPaygBillingSummary'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.projects:
         get:
             tags:
@@ -686,6 +918,159 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminListOrganizationProjectsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.resumeStripeSubscription:
+        post:
+            tags:
+                - admin
+            summary: resumeStripeSubscription admin
+            description: Removes a scheduled period-end cancellation from an organization's PAYG subscription.
+            operationId: adminResumeStripeSubscription
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResumeStripeSubscriptionRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminStripeSubscription'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.stripeSubscription:
+        get:
+            tags:
+                - admin
+            summary: getStripeSubscription admin
+            description: Returns the live Stripe subscription and payment state for an organization.
+            operationId: adminGetStripeSubscription
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminStripeSubscription'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -58548,6 +58933,21 @@ components:
             required:
                 - updated_ids
                 - missing_ids
+        AdminInferenceKey:
+            type: object
+            properties:
+                disabled:
+                    type: boolean
+                key_type:
+                    type: string
+                monthly_credits:
+                    type: integer
+                    format: int64
+            description: Configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
+            required:
+                - key_type
+                - monthly_credits
+                - disabled
         AdminListOrganizationMembersResult:
             type: object
             properties:
@@ -58758,6 +59158,37 @@ components:
                 - trials_ending_soon
                 - disabled
                 - disabled_last_7_days
+        AdminPaygBillingSummary:
+            type: object
+            properties:
+                estimated_total_usd:
+                    type: string
+                other_inference_spend_usd:
+                    type: string
+                period_end:
+                    type: string
+                    format: date-time
+                period_start:
+                    type: string
+                    format: date-time
+                recorded_through:
+                    type: string
+                    format: date
+                tum_cost_usd:
+                    type: string
+                tum_tokens:
+                    type: integer
+                    format: int64
+                tum_unit_price_usd:
+                    type: string
+            required:
+                - period_start
+                - period_end
+                - tum_tokens
+                - tum_unit_price_usd
+                - tum_cost_usd
+                - other_inference_spend_usd
+                - estimated_total_usd
         AdminProject:
             type: object
             properties:
@@ -58855,6 +59286,48 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AdminStripeSubscription:
+            type: object
+            properties:
+                cancel_at:
+                    type: string
+                    format: date-time
+                cancel_at_period_end:
+                    type: boolean
+                canceled_at:
+                    type: string
+                    format: date-time
+                current_period_end:
+                    type: string
+                    format: date-time
+                current_period_start:
+                    type: string
+                    format: date-time
+                payment_failed:
+                    type: boolean
+                status:
+                    type: string
+                    enum:
+                        - incomplete
+                        - incomplete_expired
+                        - trialing
+                        - active
+                        - past_due
+                        - canceled
+                        - unpaid
+                        - paused
+                trial_end:
+                    type: string
+                    format: date-time
+                trial_start:
+                    type: string
+                    format: date-time
+            required:
+                - status
+                - current_period_start
+                - current_period_end
+                - cancel_at_period_end
+                - payment_failed
         AgentMarketplace:
             type: object
             properties:
@@ -59991,6 +60464,13 @@ components:
             required:
                 - scope
                 - memory_count
+        CancelStripeSubscriptionRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         CanonicalToolAttributes:
             type: object
             properties:
@@ -72756,6 +73236,13 @@ components:
             required:
                 - id
                 - version_id
+        ResumeStripeSubscriptionRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         RetryScheduleRequestBody:
             type: object
             properties:

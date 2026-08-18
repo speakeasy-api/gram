@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Service struct {
@@ -66,7 +67,14 @@ type Service struct {
 
 	audit *audit.Logger
 
-	trial trialemails.Notifier
+	trial   trialemails.Notifier
+	billing BillingOperations
+}
+
+type BillingOperations interface {
+	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
+	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
 // TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
@@ -111,6 +119,7 @@ func NewService(
 	openRouter TrialKeyReviver,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	billing BillingOperations,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -145,7 +154,8 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial: trialNotifier,
+		trial:   trialNotifier,
+		billing: billing,
 	}
 }
 

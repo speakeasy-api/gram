@@ -1,0 +1,361 @@
+import { useEffect, useRef, type JSX, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
+
+import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
+import {
+  inferenceKeysQuery,
+  invalidateOrganizationBilling,
+  organizationQuery,
+  paygBillingSummaryQuery,
+  stripeSubscriptionQuery,
+} from "@/lib/adminQueries";
+import {
+  cancelStripeSubscription,
+  errorMessage,
+  GramAdminError,
+  resumeStripeSubscription,
+  type AdminInferenceKey,
+  type AdminOrganization,
+  type AdminPaygBillingSummary,
+  type AdminStripeSubscription,
+} from "@/lib/gramAdminApi";
+import { useWriteReport } from "@/pages/organizations/writeReport";
+
+import {
+  billingState,
+  formatBillingDate,
+  formatExactUsd,
+  formatRecordedThrough,
+  formatTokenCount,
+} from "./billingState";
+
+function Group({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <section className="mt-5 first:mt-0">
+      <h5 className="text-muted-foreground mb-1 text-xs font-medium">
+        {title}
+      </h5>
+      {children}
+    </section>
+  );
+}
+
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-[12rem_1fr] items-baseline gap-3 py-1">
+      <span className="text-muted-foreground text-sm">{label}</span>
+      <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
+function cycleLabel(start: string, end: string): string {
+  const formattedStart = formatBillingDate(start);
+  const formattedEnd = formatBillingDate(end);
+  if (formattedStart === null || formattedEnd === null)
+    return "Dates unavailable";
+  return `${formattedStart} to ${formattedEnd}`;
+}
+
+function inferenceKeyPurpose(keyType: AdminInferenceKey["key_type"]): string {
+  switch (keyType) {
+    case "chat":
+      return "Other inference";
+    case "internal":
+      return "Security and internal inference";
+    default:
+      return "Platform-managed inference";
+  }
+}
+
+function formatConfiguredCredits(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(value);
+}
+
+function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
+  return (
+    <Group title="Platform-managed OpenRouter keys">
+      {keys.length === 0 && (
+        <p className="text-muted-foreground text-sm">
+          No platform-managed keys have been materialized.
+        </p>
+      )}
+      {keys.map((key) => (
+        <div
+          key={key.key_type}
+          className="border-border mt-3 border-t pt-2 first:mt-0 first:border-0 first:pt-0"
+        >
+          <Row label="Key type">{key.key_type}</Row>
+          <Row label="Purpose">{inferenceKeyPurpose(key.key_type)}</Row>
+          <Row label="Configured monthly credit limit">
+            {key.monthly_credits === 0
+              ? "Unlimited"
+              : formatConfiguredCredits(key.monthly_credits)}
+          </Row>
+          <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
+        </div>
+      ))}
+    </Group>
+  );
+}
+
+function BillingSummary({
+  summary,
+}: {
+  summary: AdminPaygBillingSummary;
+}): JSX.Element {
+  const recordedThrough = formatRecordedThrough(summary.recorded_through);
+  return (
+    <Group title="Current billing cycle">
+      <Row label="Period">
+        {cycleLabel(summary.period_start, summary.period_end)}
+      </Row>
+      <Row label="Tokens under management">
+        {formatTokenCount(summary.tum_tokens) ?? "—"}
+      </Row>
+      <Row label="TUM unit price">
+        {formatExactUsd(summary.tum_unit_price_usd) ?? "—"} per token
+      </Row>
+      <Row label="TUM cost">{formatExactUsd(summary.tum_cost_usd) ?? "—"}</Row>
+      <Row label="Other inference spend">
+        {formatExactUsd(summary.other_inference_spend_usd) ?? "—"}
+      </Row>
+      {recordedThrough && (
+        <Row label="Spend recorded through">{recordedThrough}</Row>
+      )}
+      <Row label="Estimated total">
+        <strong>{formatExactUsd(summary.estimated_total_usd) ?? "—"}</strong>
+      </Row>
+      <p className="text-muted-foreground mt-2 text-xs">
+        This is an estimate, not a bill. Inference spend includes completed UTC
+        days only, and the invoice can finalize up to 72 hours after the cycle
+        ends.
+      </p>
+    </Group>
+  );
+}
+
+function paymentLabel(subscription: AdminStripeSubscription): string {
+  if (subscription.payment_failed) return "Payment failed";
+  if (subscription.status === "past_due") return "Past due";
+  if (
+    [
+      "canceled",
+      "unpaid",
+      "incomplete",
+      "incomplete_expired",
+      "paused",
+    ].includes(subscription.status)
+  ) {
+    return "Not collecting";
+  }
+  return "No payment failure reported";
+}
+
+function SubscriptionDetails({
+  subscription,
+}: {
+  subscription: AdminStripeSubscription;
+}): JSX.Element {
+  const state = billingState(subscription);
+  return (
+    <Group title="Subscription and payment">
+      {state.paymentFailed && (
+        <p role="alert" className="text-destructive mb-2 text-sm font-medium">
+          The latest invoice has an unpaid balance.
+        </p>
+      )}
+      <Row label="Subscription status">
+        {subscription.status.replaceAll("_", " ")}
+      </Row>
+      <Row label="Payment state">{paymentLabel(subscription)}</Row>
+      <Row label="Current period">
+        {cycleLabel(
+          subscription.current_period_start,
+          subscription.current_period_end,
+        )}
+      </Row>
+      {subscription.trial_end && (
+        <Row label="Trial ends">
+          {formatBillingDate(subscription.trial_end) ?? "—"}
+        </Row>
+      )}
+      {state.kind === "ending" && (
+        <Row label="Scheduled cancellation">
+          {formatBillingDate(state.date) ?? "At the end of the current period"}
+        </Row>
+      )}
+      {subscription.canceled_at && (
+        <Row label="Cancellation requested">
+          {formatBillingDate(subscription.canceled_at) ?? "—"}
+        </Row>
+      )}
+    </Group>
+  );
+}
+
+export function BillingRoute(): JSX.Element | null {
+  const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
+  const { data } = useQuery(organizationQuery(idOrSlug));
+  if (!data) return null;
+  return <Billing key={data.id} org={data} />;
+}
+
+export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
+  const qc = useQueryClient();
+  const [confirm, confirmDialog] = useConfirmDialog();
+  const { announce, showFailure } = useWriteReport();
+  const control = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+
+  const inferenceKeysResult = useQuery(inferenceKeysQuery(org.id));
+  const subscriptionQuery = useQuery(stripeSubscriptionQuery(org.id));
+  const subscription = subscriptionQuery.data;
+  const state = subscription ? billingState(subscription) : null;
+  const showCurrentBillingCycle =
+    subscription?.status === "active" || subscription?.status === "past_due";
+  const summaryQuery = useQuery({
+    ...paygBillingSummaryQuery(org.id),
+    enabled: showCurrentBillingCycle,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (cancel: boolean) =>
+      cancel
+        ? cancelStripeSubscription(org.id)
+        : resumeStripeSubscription(org.id),
+    onSuccess: (updated) => {
+      qc.setQueryData(stripeSubscriptionQuery(org.id).queryKey, updated);
+      void invalidateOrganizationBilling(qc, org.id);
+    },
+  });
+
+  useEffect(() => {
+    if (mutation.isPending || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    control.current?.focus();
+  }, [mutation.isPending, mutation.status, mutation.variables]);
+
+  const changeCancellation = async (cancel: boolean): Promise<void> => {
+    const confirmed = await confirm({
+      title: `${cancel ? "Cancel" : "Resume"} pay as you go for ${org.name}?`,
+      description: cancel
+        ? "Billing and service continue until the current period ends."
+        : "The subscription will continue past the current period.",
+      confirmLabel: cancel ? "Cancel pay as you go" : "Resume pay as you go",
+      destructive: cancel,
+    });
+    if (!confirmed) {
+      control.current?.focus();
+      return;
+    }
+
+    showFailure(null);
+    restoreFocus.current = true;
+    mutation.mutate(cancel, {
+      onSuccess: () =>
+        announce(
+          `${org.name} pay as you go ${cancel ? "will end after this period" : "will continue"}.`,
+        ),
+      onError: (error) => {
+        const text = `Could not update billing for ${org.name}: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+      },
+    });
+  };
+
+  const missingSubscription =
+    subscriptionQuery.error instanceof GramAdminError &&
+    subscriptionQuery.error.status === 404;
+
+  return (
+    <div className="border-border bg-muted/10 rounded-md border p-4">
+      {subscriptionQuery.isPending && (
+        <p className="text-muted-foreground text-sm">Loading billing…</p>
+      )}
+      {missingSubscription && (
+        <p className="text-muted-foreground text-sm">
+          This organization has no Stripe subscription.
+        </p>
+      )}
+      {subscriptionQuery.isError && !missingSubscription && (
+        <p role="alert" className="text-destructive text-sm">
+          Could not load subscription: {errorMessage(subscriptionQuery.error)}
+        </p>
+      )}
+      {subscription && <SubscriptionDetails subscription={subscription} />}
+
+      {inferenceKeysResult.data && (
+        <InferenceKeys keys={inferenceKeysResult.data} />
+      )}
+      {inferenceKeysResult.isPending && (
+        <p className="text-muted-foreground mt-5 text-sm">
+          Loading OpenRouter keys…
+        </p>
+      )}
+      {inferenceKeysResult.isError && (
+        <p role="alert" className="text-destructive mt-5 text-sm">
+          Could not load OpenRouter keys:{" "}
+          {errorMessage(inferenceKeysResult.error)}
+        </p>
+      )}
+
+      {showCurrentBillingCycle && summaryQuery.data && (
+        <BillingSummary summary={summaryQuery.data} />
+      )}
+      {showCurrentBillingCycle &&
+        summaryQuery.isPending &&
+        summaryQuery.fetchStatus !== "idle" && (
+          <p className="text-muted-foreground mt-5 text-sm">
+            Loading current billing cycle…
+          </p>
+        )}
+      {showCurrentBillingCycle && summaryQuery.isError && (
+        <p role="alert" className="text-destructive mt-5 text-sm">
+          Could not load current billing cycle:{" "}
+          {errorMessage(summaryQuery.error)}
+        </p>
+      )}
+
+      {state &&
+        (state.kind === "active" ||
+          state.kind === "trialing" ||
+          state.kind === "ending") && (
+          <Group title="Controls">
+            <Button
+              ref={control}
+              size="sm"
+              variant={state.kind === "ending" ? "default" : "destructive"}
+              disabled={mutation.isPending}
+              onClick={() => void changeCancellation(state.kind !== "ending")}
+            >
+              {state.kind === "ending"
+                ? "Resume pay as you go"
+                : "Cancel pay as you go"}
+            </Button>
+          </Group>
+        )}
+      {confirmDialog}
+    </div>
+  );
+}

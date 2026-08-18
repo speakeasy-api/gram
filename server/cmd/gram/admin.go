@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
@@ -24,15 +25,36 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
+
+const adminBillingTelemetryEnabledFlag = "admin-billing-telemetry-enabled"
+
+func newAdminStripeClient(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) stripeclient.Client {
+	client, err := newStripeClient(ctx, logger, guardianPolicy, c)
+	if err != nil {
+		logger.WarnContext(ctx, "Stripe billing unavailable; continuing without Stripe", attr.SlogError(err))
+		return nil
+	}
+	return client
+}
 
 func newAdminCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
@@ -209,7 +231,31 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name: "stripe-api-key", Usage: "The Stripe API key", EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name: "stripe-webhook-secret", Usage: "The Stripe webhook signing secret", EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		&cli.BoolFlag{
+			Name:    adminBillingTelemetryEnabledFlag,
+			Usage:   "Enable PAYG billing telemetry from ClickHouse",
+			EnvVars: []string{"GRAM_ADMIN_BILLING_TELEMETRY_ENABLED"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name: "stripe-price-id-tum", Aliases: []string{"stripe.price_id_tum"}, EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name: "stripe-meter-id-tum", Aliases: []string{"stripe.meter_id_tum"}, EnvVars: []string{"STRIPE_METER_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name: "stripe-meter-event-name", Aliases: []string{"stripe.meter_event_name"}, EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name: "stripe-portal-configuration-id", Aliases: []string{"stripe.portal_configuration_id"}, EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
+		}),
 	}
+	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -273,6 +319,18 @@ func newAdminCommand() *cli.Command {
 				return err
 			}
 
+			stripeClient := newAdminStripeClient(ctx, logger, guardianPolicy, c)
+			var billingTelemetry *telemetryrepo.Queries
+			if c.Bool(adminBillingTelemetryEnabledFlag) {
+				chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+				if err != nil {
+					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
+				} else {
+					defer o11y.LogDefer(ctx, logger, func() error { return chShutdown(ctx) })
+					billingTelemetry = telemetryrepo.New(chDB)
+				}
+			}
+
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
 				return fmt.Errorf("failed to create admin encryption client: %w", err)
@@ -324,7 +382,8 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier, productFeatures))
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier, productFeatures, billingOperations))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
