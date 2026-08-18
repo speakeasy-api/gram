@@ -53,10 +53,10 @@ func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.U
 	upstreamRows, err := repo.New(s.db).ListRemoteSessionUpstreamsForSubjects(ctx, repo.ListRemoteSessionUpstreamsForSubjectsParams{
 		SubjectUrns: subjectURNs,
 		IssuerIds:   issuerIDs,
-		// NullUUID because remote_session_clients.project_id is nullable for
-		// organization-level clients; a concrete id here restricts the result to
-		// this project's clients, which is the scoping we want.
-		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		// Scopes on the user_session_issuer's project rather than the client's,
+		// so an upstream held through an organization-level or global client
+		// still surfaces here. See the query for why.
+		ProjectID: projectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session upstreams").LogError(ctx, s.logger)

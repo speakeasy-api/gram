@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -51,31 +50,23 @@ func BuildUserSessionUpstreamIndex(rows []repo.ListRemoteSessionUpstreamsForSubj
 	return index
 }
 
+// The expiry fields stay nil rather than carrying a zero time: an absent expiry
+// means the upstream issued a non-expiring token, which is not the same as one
+// that expired at the epoch.
 func buildUserSessionUpstreamView(row repo.ListRemoteSessionUpstreamsForSubjectsRow) *types.UserSessionUpstream {
 	return &types.UserSessionUpstream{
 		RemoteSessionID:        row.ID.String(),
 		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
 		RemoteSessionIssuerID:  row.RemoteSessionIssuerID.String(),
 		IssuerSlug:             row.IssuerSlug,
-		AccessExpiresAt:        formatOptionalTime(row.AccessExpiresAt),
-		RefreshExpiresAt:       formatOptionalTime(row.RefreshExpiresAt),
-		AuthorizationExpiresAt: formatOptionalTime(row.AuthorizationExpiresAt),
+		AccessExpiresAt:        conv.PtrEmpty(conv.FromPGTimestamptz(row.AccessExpiresAt)),
+		RefreshExpiresAt:       conv.PtrEmpty(conv.FromPGTimestamptz(row.RefreshExpiresAt)),
+		AuthorizationExpiresAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.AuthorizationExpiresAt)),
 		HasRefreshToken:        row.HasRefreshToken,
 		AutoRefresh:            row.AutoRefresh,
-		LastUsedAt:             formatOptionalTime(row.LastUsedAt),
+		LastUsedAt:             conv.PtrEmpty(conv.FromPGTimestamptz(row.LastUsedAt)),
 		Scopes:                 row.Scopes,
 	}
-}
-
-// formatOptionalTime distinguishes "no value" from the zero time: an absent
-// expiry means the upstream issued a non-expiring token, which is not the same
-// as one that expired at the epoch.
-func formatOptionalTime(ts pgtype.Timestamptz) *string {
-	if !ts.Valid {
-		return nil
-	}
-	s := ts.Time.Format(time.RFC3339)
-	return &s
 }
 
 func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*types.UserSessionUpstream) *types.UserSession {
@@ -114,7 +105,7 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*
 		// NULL for API key and anonymous subjects.
 		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),
 		RevokedAt:       revokedAt,
-		LastUsedAt:      formatOptionalTime(row.LastUsedAt),
+		LastUsedAt:      conv.PtrEmpty(conv.FromPGTimestamptz(row.LastUsedAt)),
 		// Never nil: the field is required, and a session with no upstream is a
 		// meaningful state (it reaches only Gram-native tools) that the client
 		// renders differently from an absent one.

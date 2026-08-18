@@ -838,9 +838,10 @@ JOIN (
      ) AS pair
   ON rs.subject_urn = pair.subject_urn
   AND rs.user_session_issuer_id = pair.issuer_id
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE rc.project_id = $3
+WHERE usi.project_id = $3
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
@@ -850,7 +851,7 @@ ORDER BY ri.slug ASC, rs.id ASC
 type ListRemoteSessionUpstreamsForSubjectsParams struct {
 	SubjectUrns []string
 	IssuerIds   []uuid.UUID
-	ProjectID   uuid.NullUUID
+	ProjectID   uuid.UUID
 }
 
 type ListRemoteSessionUpstreamsForSubjectsRow struct {
@@ -879,6 +880,12 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // happens to share an issuer.
 // Token material is never projected — only expiry metadata and a boolean for
 // whether a refresh grant exists.
+// Scoped by the session's user_session_issuer project, not the client's project
+// (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
+// through an organization-level or global client, whose project_id is NULL,
+// still belongs to the project whose user_session_issuer minted it. Filtering
+// on the client's project would silently drop those upstreams and report a
+// brokered session as having none.
 func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg ListRemoteSessionUpstreamsForSubjectsParams) ([]ListRemoteSessionUpstreamsForSubjectsRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects, arg.SubjectUrns, arg.IssuerIds, arg.ProjectID)
 	if err != nil {

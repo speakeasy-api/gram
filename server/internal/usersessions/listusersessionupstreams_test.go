@@ -10,9 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +46,7 @@ func TestListUserSessionsReturnsUpstreams(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	seedUpstream(t, ctx, ti.conn, *authCtx.ProjectID, issuerID, subject, "mcp.linear.app")
+	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.linear.app")
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -98,14 +100,17 @@ func TestListUserSessionsUpstreamsDoNotLeakAcrossSubjects(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	seedUpstream(t, ctx, ti.conn, *authCtx.ProjectID, issuerID, linked, "mcp.notion.com")
+	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, linked, "mcp.notion.com")
 
-	linkedURN := linked.String()
+	// Deliberately unfiltered: both subjects have to land on the same page for
+	// this to test anything. Filtered to one subject at a time, a page holds a
+	// single (subject, issuer) pair, and the cross-product join the parallel
+	// arrays exist to prevent returns exactly the same rows as the correct one.
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:          &linkedURN,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Status:              nil,
 		ClientID:            nil,
@@ -113,15 +118,51 @@ func TestListUserSessionsUpstreamsDoNotLeakAcrossSubjects(t *testing.T) {
 		Limit:               nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, res.Items, 1)
-	require.Len(t, res.Items[0].Upstreams, 1)
+	require.Len(t, res.Items, 2)
 
-	unlinkedURN := unlinked.String()
-	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+	bySubject := make(map[string][]*types.UserSessionUpstream, len(res.Items))
+	for _, item := range res.Items {
+		bySubject[item.SubjectUrn] = item.Upstreams
+	}
+
+	require.Len(t, bySubject[linked.String()], 1,
+		"the subject holding the remote_session reports their upstream")
+	require.Empty(t, bySubject[unlinked.String()],
+		"a subject on the same issuer with no remote_session must report no upstreams")
+}
+
+// An upstream held through a client with no project of its own — the
+// organization-level and global registrations, whose project_id is NULL — still
+// belongs to the project whose user_session_issuer minted the session. Scoping
+// the page query on the client's project instead would drop it and report the
+// brokered session as reaching nothing.
+func TestListUserSessionsReturnsUpstreamsForOrgLevelClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "org-level-upstream-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	issuerID := uuid.MustParse(issuer.ID)
+	subject := urn.NewUserSubject("org-level-subject")
+	_, err = seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.NoError(t, err)
+
+	seedUpstream(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, issuerID, subject, "mcp.sentry.dev")
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:          &unlinkedURN,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Status:              nil,
 		ClientID:            nil,
@@ -130,21 +171,24 @@ func TestListUserSessionsUpstreamsDoNotLeakAcrossSubjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
-	require.Empty(t, res.Items[0].Upstreams,
-		"a subject on the same issuer with no remote_session must report no upstreams")
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"an upstream on a client with no project of its own still belongs to the issuer's project")
+	require.Equal(t, "mcp.sentry.dev", res.Items[0].Upstreams[0].IssuerSlug)
 }
 
 // seedUpstream builds one outbound leg: the remote issuer, a client registered
 // against it, the attachment binding that client to the user-session issuer,
 // and the session Gram holds for the subject.
-func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) {
+// clientProject is a NullUUID because the client and issuer it registers can be
+// project-scoped, organization-level, or global; the invalid case is what the
+// org-level coverage below leans on.
+func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientProject uuid.NullUUID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) {
 	t.Helper()
 
 	q := remotesessions_repo.New(conn)
-	nullProject := uuid.NullUUID{UUID: projectID, Valid: true}
 
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                   nullProject,
+		ProjectID:                   clientProject,
 		OrganizationID:              pgtype.Text{String: "", Valid: false},
 		Slug:                        slug,
 		Issuer:                      "https://" + slug,
@@ -172,7 +216,7 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, project
 	require.NoError(t, err)
 
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:               nullProject,
+		ProjectID:               clientProject,
 		OrganizationID:          pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:   issuer.ID,
 		ClientID:                "client-" + slug,

@@ -688,6 +688,12 @@ WHERE project_id = @project_id
 -- happens to share an issuer.
 -- Token material is never projected — only expiry metadata and a boolean for
 -- whether a refresh grant exists.
+-- Scoped by the session's user_session_issuer project, not the client's project
+-- (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
+-- through an organization-level or global client, whose project_id is NULL,
+-- still belongs to the project whose user_session_issuer minted it. Filtering
+-- on the client's project would silently drop those upstreams and report a
+-- brokered session as having none.
 SELECT rs.id,
        rs.subject_urn,
        rs.user_session_issuer_id,
@@ -710,9 +716,10 @@ JOIN (
      ) AS pair
   ON rs.subject_urn = pair.subject_urn
   AND rs.user_session_issuer_id = pair.issuer_id
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE rc.project_id = @project_id
+WHERE usi.project_id = @project_id
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
