@@ -17,11 +17,18 @@ import (
 
 type Server struct {
 	provider *Provider
-	logger   *slog.Logger
+	// Origin the END USER'S BROWSER reaches this server on, which is not always
+	// the origin the relying party dials. They differ when the browser and the
+	// relying party sit on different machines — a dev stack on a remote box
+	// reached over a tunnel, say, where the server resolves this emulator on
+	// localhost and the browser cannot. Empty means "same as the issuer", which
+	// is the ordinary single-machine case.
+	browserBaseURL string
+	logger         *slog.Logger
 }
 
-func NewServer(provider *Provider, logger *slog.Logger) *Server {
-	return &Server{provider: provider, logger: logger}
+func NewServer(provider *Provider, browserBaseURL string, logger *slog.Logger) *Server {
+	return &Server{provider: provider, browserBaseURL: browserBaseURL, logger: logger}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -66,11 +73,69 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// authorizeEndpoint builds the browser-facing /authorize URL by moving the
+// ORIGIN of --browser-base-url over the issuer's, and nothing else. The value is
+// operator-supplied and an unusable authorization endpoint surfaces only as a
+// broken login, so anything that would not resolve to a route this server
+// actually serves is refused in favour of the issuer, loudly.
+//
+// A path prefix is refused rather than honoured: the mux registers /authorize at
+// the root, so advertising `https://proxy.example/idp/authorize` would 404 the
+// browser unless something in front happened to strip the prefix. Falling back
+// makes that a warning at startup instead of a dead login later.
+func (s *Server) authorizeEndpoint(issuer string) string {
+	fallback := strings.TrimRight(issuer, "/") + "/authorize"
+	if s.browserBaseURL == "" {
+		return fallback
+	}
+
+	base, err := url.Parse(s.browserBaseURL)
+	switch {
+	case err != nil || base.Host == "":
+		s.logger.Warn(
+			"browser base URL is not an absolute URL; falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+		)
+		return fallback
+	// A browser reaches this over HTTP(S) or not at all, and the endpoint is
+	// published for a browser to navigate to.
+	case !strings.EqualFold(base.Scheme, "http") && !strings.EqualFold(base.Scheme, "https"):
+		s.logger.Warn(
+			"browser base URL is not http(s); falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+			slog.String("scheme", base.Scheme),
+		)
+		return fallback
+	case strings.Trim(base.Path, "/") != "":
+		s.logger.Warn(
+			"browser base URL carries a path prefix, which this server does not serve; falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+			slog.String("path", base.Path),
+		)
+		return fallback
+	}
+
+	// Keep the origin only: the browser brings its own query string on the
+	// authorize request, and a fragment never reaches a server at all.
+	origin := url.URL{Scheme: base.Scheme, Host: base.Host}
+
+	return origin.JoinPath("/authorize").String()
+}
+
 func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {
 	iss := s.provider.Issuer()
+
+	// The authorization endpoint is the only URL in this document the browser
+	// ever visits; the relying party dials the rest itself. So it is the only
+	// one that takes the browser origin — keeping `issuer` on the dialed origin
+	// matters, because OIDC clients require the discovered issuer to match the
+	// URL they fetched the document from, and it is also the `iss` they verify
+	// on the id_token.
+	authorizeEndpoint := s.authorizeEndpoint(iss)
+
 	doc := map[string]any{
 		"issuer":                                iss,
-		"authorization_endpoint":                iss + "/authorize",
+		"authorization_endpoint":                authorizeEndpoint,
 		"token_endpoint":                        iss + "/token",
 		"userinfo_endpoint":                     iss + "/userinfo",
 		"jwks_uri":                              iss + "/jwks.json",

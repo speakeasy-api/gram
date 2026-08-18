@@ -72,6 +72,25 @@ turn_on_tls() {
 trust_local_ca() {
   echo "Trusting local certificate." >&2
 
+  # On a shared devbox the developer may not have admin rights, and installing
+  # the root CA needs them (macOS writes to /Library/Keychains/System.keychain
+  # under sudo). Registering it is only what stops a browser ON THIS MACHINE
+  # from warning: everything headless is pointed at the CA file explicitly
+  # (NODE_EXTRA_CA_CERTS, GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE, check:http's
+  # --cacert), and when the browser lives on another machine — see
+  # zero:remap-hostname — that machine needs the CA in its own trust store
+  # regardless of what happened here. So allow opting out of the hard failure.
+  if [ -n "${GRAM_TLS_SKIP_CA_TRUST:-}" ]; then
+    if output="$(mkcert -install 2>&1)"; then
+      echo "Local certificate is trusted." >&2
+    else
+      echo "WARN: could not install the root CA in this machine's trust store (GRAM_TLS_SKIP_CA_TRUST is set — continuing)." >&2
+      echo "      A browser running on this machine will warn about the certificate." >&2
+      echo "      Trust $(mkcert -CAROOT)/rootCA.pem on whichever machine you browse from." >&2
+    fi
+    return 0
+  fi
+
   # Run mkcert -install and capture output for diagnostics (do not swallow it)
   if output="$(mkcert -install 2>&1)"; then
     echo "Local certificate is trusted." >&2

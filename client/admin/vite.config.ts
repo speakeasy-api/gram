@@ -75,6 +75,23 @@ export default defineConfig(({ command }) => {
     }
   }
 
+  // Mirrors the Gram dashboard's config. Note this is NOT an access control:
+  // vite skips its host-validation middleware entirely when the dev server is
+  // HTTPS, which this one always is locally, and it exempts IP-literal Host
+  // headers in any case. What the list still does is keep the HMR websocket
+  // working when the app is loaded on a hostname other than localhost.
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
+  for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
+    const trimmed = hostname.trim();
+    if (trimmed) allowedHosts.add(trimmed);
+  }
+
+  // Loopback by default. Binding every interface publishes the admin app —
+  // whose local IdP accepts any identity without a password — to the whole
+  // network, so it happens only once someone has opted into remote access via
+  // zero:remap-hostname. docs/remote-dev-access.md spells out the exposure.
+  const devHost = process.env["GRAM_DEV_HOSTNAME"] ? true : "localhost";
+
   return {
     define: {
       __GRAM_APP_URL__: JSON.stringify(appUrl),
@@ -101,6 +118,8 @@ export default defineConfig(({ command }) => {
       // exactly.
       port: devPort,
       strictPort: true,
+      host: devHost,
+      allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : undefined,
       proxy: adminBackendUrl
         ? {

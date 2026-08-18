@@ -118,6 +118,13 @@ alias wts='wt status'           # which stacks are up
 
 `wt switch` also takes shortcuts in place of a branch name: `^` for the default branch, `-` for the previous worktree, and `pr:123` to check out a pull request. Prefer `^` over hardcoding `main` — it resolves correctly in any repo.
 
+### Browsing the stack from another device
+
+Not needed for ordinary local development, where the stack and the browser are
+on the same machine. If you run the stack somewhere else — a devbox, a cloud VM
+— and want to open it from your own laptop or local device, see
+[remote dev access](./docs/remote-dev-access.md).
+
 ### CLI development
 
 Quickstart:

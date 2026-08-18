@@ -9,8 +9,22 @@ set -euo pipefail
 
 url=${usage_url:?--url is required}
 
+# The dashboard probes are https (see check:daemon), served with the mkcert
+# certificate. Verifying it otherwise depends on the root CA being registered in
+# the machine's trust store, which needs admin rights the developer may not have
+# on a shared devbox — so point curl at the CA file zero:tls already recorded.
+# Falls back to the system trust store when unset, which is the normal case for
+# a plain-http probe.
+cacert=()
+if [[ -n "${NODE_EXTRA_CA_CERTS:-}" && -f "${NODE_EXTRA_CA_CERTS}" ]]; then
+  cacert=(--cacert "${NODE_EXTRA_CA_CERTS}")
+fi
+
+# ${a[@]+"${a[@]}"} rather than "${a[@]}": expanding an empty array under `set -u`
+# is an error on bash 3.2, which is what /usr/bin/env bash finds on a stock macOS,
+# and the array is empty for every plain-http probe.
 status="$(curl --silent --show-error --output /dev/null \
-  --connect-timeout 2 --max-time 5 \
+  --connect-timeout 2 --max-time 5 ${cacert[@]+"${cacert[@]}"} \
   --write-out "%{http_code}" "$url")"
 
 if [[ "$status" != "200" ]]; then
