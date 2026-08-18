@@ -1913,6 +1913,14 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Deliberately nullable with no default, unlike the capability arrays
+  -- above: MCP requires refusing authorization when the upstream advertises
+  -- no PKCE methods, so an empty array is a load-bearing "refuse" signal.
+  -- NULL means discovery has not captured the field for this row yet (the
+  -- row predates capture or has not refreshed since), which must stay
+  -- distinct from "the upstream advertised nothing". Do not "fix" this into
+  -- consistency with the siblings.
+  code_challenge_methods_supported TEXT[],
   -- Unlike the fields above, this comes from the OAuth CIMD draft
   -- (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414. It
   -- marks whether the issuer accepts a Client ID Metadata Document URL as
