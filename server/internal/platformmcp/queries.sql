@@ -1702,6 +1702,7 @@ VALUES (
 )
 ON CONFLICT (organization_id, milestone, user_id)
 WHERE connection_id IS NULL
+  AND connection_generation IS NULL
   AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
