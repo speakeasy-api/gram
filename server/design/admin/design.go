@@ -54,11 +54,12 @@ var AdminOrganization = Type("AdminOrganization", func() {
 
 var AdminProject = Type("AdminProject", func() {
 	Description("Project summary surfaced to admin operators.")
-	Required("id", "name", "slug", "created_at", "updated_at")
+	Required("id", "name", "slug", "mcp_server_count", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the project")
 	Attribute("name", String, "The name of the project")
 	Attribute("slug", String, "The slug of the project")
+	Attribute("mcp_server_count", Int, "Number of MCP servers in the project, counting both toolset-backed servers and mcp_servers rows.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the project.")
 		Format(FormatDateTime)

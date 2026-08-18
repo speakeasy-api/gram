@@ -591,22 +591,38 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 }
 
 const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
-SELECT id, slug, name, created_at, updated_at
-FROM projects
-WHERE organization_id = $1
-  AND deleted IS FALSE
-ORDER BY created_at DESC
+SELECT
+    p.id,
+    p.slug,
+    p.name,
+    p.created_at,
+    p.updated_at,
+    ((SELECT count(*) FROM toolsets t
+        WHERE t.project_id = p.id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+          AND NOT EXISTS (SELECT 1 FROM mcp_servers m2
+                           WHERE m2.toolset_id = t.id AND m2.deleted IS FALSE))
+     + (SELECT count(*) FROM mcp_servers m
+          WHERE m.project_id = p.id AND m.deleted IS FALSE))::bigint AS mcp_server_count
+FROM projects p
+WHERE p.organization_id = $1
+  AND p.deleted IS FALSE
+ORDER BY p.created_at DESC
 LIMIT 200
 `
 
 type AdminListProjectsForOrganizationRow struct {
-	ID        uuid.UUID
-	Slug      string
-	Name      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Slug           string
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	McpServerCount int64
 }
 
+// Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
+// toolset and its mcp_servers row would each be counted. The anti join on the
+// legacy half gives the same answer before and after that copy, and it is the
+// direction that plans as an index anti join rather than a seq scan of toolsets.
 func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organizationID string) ([]AdminListProjectsForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectsForOrganization, organizationID)
 	if err != nil {
@@ -622,6 +638,7 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 			&i.Name,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.McpServerCount,
 		); err != nil {
 			return nil, err
 		}

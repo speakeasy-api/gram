@@ -198,6 +198,9 @@ type AdminProject struct {
 	Name string
 	// The slug of the project
 	Slug string
+	// Number of MCP servers in the project, counting both toolset-backed servers
+	// and mcp_servers rows.
+	McpServerCount int
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.

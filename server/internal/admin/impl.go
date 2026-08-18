@@ -596,11 +596,12 @@ func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.Lis
 	projects := make([]*gen.AdminProject, len(rows))
 	for i, row := range rows {
 		projects[i] = &gen.AdminProject{
-			ID:        row.ID.String(),
-			Name:      row.Name,
-			Slug:      row.Slug,
-			CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339),
+			ID:             row.ID.String(),
+			Name:           row.Name,
+			Slug:           row.Slug,
+			McpServerCount: int(row.McpServerCount),
+			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
