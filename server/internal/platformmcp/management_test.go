@@ -24,6 +24,33 @@ func TestOnboardingRegistrationIdempotencyKeyIsBoundedAndTargetStable(t *testing
 	require.NotEqual(t, first, onboardingRegistrationIdempotencyKey(workflowID, "project", providerKey, "other/reference"))
 }
 
+func TestPlatformMCPDashboardCtaMilestone(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		action  string
+		surface string
+		want    string
+		valid   bool
+	}{
+		{name: "impression", action: "impression", surface: "sidebar_footer", want: "dashboard_cta_impression_sidebar_footer_v1", valid: true},
+		{name: "selected", action: "selected", surface: "sources_empty", want: "dashboard_cta_selected_sources_empty_v1", valid: true},
+		{name: "dismissed", action: "dismissed", surface: "organization_home", want: "dashboard_cta_dismissed_organization_home_v1", valid: true},
+		{name: "rejects unknown action", action: "opened", surface: "sidebar_footer"},
+		{name: "rejects unknown surface", action: "impression", surface: "settings"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, valid := platformMCPDashboardCtaMilestone(test.action, test.surface)
+			require.Equal(t, test.valid, valid)
+			require.Equal(t, test.want, got)
+		})
+	}
+}
+
 func TestAgentConfigurationReady(t *testing.T) {
 	t.Parallel()
 
@@ -50,10 +77,20 @@ func TestAgentConfigurationReady(t *testing.T) {
 		{
 			name: "credits an authenticated manual configuration",
 			projection: OnboardingProjection{
-				Workflow:    &OnboardingWorkflow{},
-				Connections: []OnboardingConnection{{ID: uuid.New()}},
+				Workflow:            &OnboardingWorkflow{},
+				Connections:         []OnboardingConnection{{ID: uuid.New()}},
+				ConnectionAuthState: ConnectionAuthStateActive,
 			},
 			want: true,
+		},
+		{
+			name: "does not credit terminal connection evidence",
+			projection: OnboardingProjection{
+				Workflow:            &OnboardingWorkflow{},
+				EvidenceConnection:  &OnboardingConnection{ID: uuid.New(), Ready: true},
+				ConnectionAuthState: ConnectionAuthStateReauthorizationRequired,
+			},
+			want: false,
 		},
 		{
 			name:       "credits later lifecycle evidence",

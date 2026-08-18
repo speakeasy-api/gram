@@ -29,7 +29,7 @@ var (
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")
 	ChatAnalysisSettingsV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_analysis_settings_event_v1", "Emitted when chat analysis settings are changed")
-	ChatSessionV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_session_event_v1", "Emitted when a chat session is accessed")
+	ChatSessionV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_session_event_v1", "Emitted when a chat session is accessed, moved to another harness, or exported as a handoff")
 	CustomDomainV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.custom_domain_event_v1", "Emitted when changes to custom domains are made")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
@@ -44,8 +44,9 @@ var (
 	ModelProviderKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
+	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
-	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, demoted, or re-armed")
+	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, extended, demoted, or re-armed")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")
@@ -91,6 +92,17 @@ type AuditLogCreatedPayloadV1 struct {
 	SubjectID   string `json:"subject_id"`
 	SubjectType string `json:"subject_type"`
 
+	// ActingSurface is how the change was made — a dashboard session, an API
+	// key, Platform MCP, a project assistant — drawn from a closed server-side
+	// set. Every record Gram writes carries one, and 'unknown' means no surface
+	// was identifiable rather than that the field was omitted.
+	//
+	// It is optional in the schema even so. This payload is published under 62
+	// event types that consumers already validate against, and a newly required
+	// property breaks every one of them; optional keeps the addition additive
+	// while the value is in fact always sent.
+	ActingSurface string `json:"acting_surface,omitzero"`
+
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`
 	ActorSlug          string          `json:"actor_slug,omitzero"`
@@ -99,4 +111,9 @@ type AuditLogCreatedPayloadV1 struct {
 	BeforeSnapshot     json.RawMessage `json:"before_snapshot,omitempty"`
 	AfterSnapshot      json.RawMessage `json:"after_snapshot,omitempty"`
 	Metadata           json.RawMessage `json:"metadata,omitempty"`
+
+	// ActingClientID is the registered OAuth client the call authenticated as,
+	// taken from its client record rather than any header the caller sent.
+	// Omitted when the call carried no OAuth client.
+	ActingClientID string `json:"acting_client_id,omitzero"`
 }

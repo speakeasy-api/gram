@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -69,6 +70,13 @@ type Service struct {
 	// attribute is tenant-driven at whatever rate the caller chooses.
 	cimdResolver *cimd.Resolver
 
+	// features gates RefreshUserSessionClientCIMD on FlagUserSessionCIMD,
+	// matching the gate the /authorize resolve path applies. Evaluated per
+	// organization (distinctID = org ID, no groups). Unlike the OAuth surface
+	// there is no last-known fallback: this endpoint is authenticated, so a
+	// flag-provider outage can fail the request instead of failing open.
+	features feature.Provider
+
 	// revoker cascades a user-session revoke into the subject's upstream
 	// grants. A revoked session whose provider tokens keep working is only
 	// half a revocation, so the two are driven together.
@@ -103,7 +111,7 @@ var (
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store, features feature.Provider) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -117,6 +125,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		signer:       signer,
 		serverURL:    serverURL,
 		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		features:     features,
 		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),

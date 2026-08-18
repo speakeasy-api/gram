@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -51,6 +52,10 @@ export function CreatePlatformIssuerSheet({
   // operator edits them, after which the *Dirty flags lock in their value.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+  const [logoAssetId, setLogoAssetId] = useState("");
+  // Create is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
@@ -124,6 +129,7 @@ export function CreatePlatformIssuerSheet({
     if (!open) return;
     setName("");
     setNameDirty(false);
+    setLogoAssetId("");
     setSlug("");
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
@@ -146,11 +152,12 @@ export function CreatePlatformIssuerSheet({
   );
 
   const handleSubmit = () => {
-    if (!submittable || submitting) return;
+    if (!submittable || submitting || logoUploading) return;
     createMutation.mutate({
       request: {
         createRemoteSessionIssuerForm: buildCreateIssuerForm({
           name,
+          logoAssetId,
           slug,
           clientSetupDocumentationUrl,
           issuerUrl,
@@ -263,6 +270,14 @@ export function CreatePlatformIssuerSheet({
               </Text>
             </Stack>
 
+            <AssetImageUploadField
+              tier="platform"
+              value={logoAssetId}
+              onChange={setLogoAssetId}
+              onUploadingChange={setLogoUploading}
+              description="Shown beside this provider in every organization's dashboard and on connect consent pages."
+            />
+
             <Stack gap={2}>
               <Label className="text-muted-foreground text-xs">
                 Client setup documentation URL (optional)
@@ -318,7 +333,7 @@ export function CreatePlatformIssuerSheet({
           </Button>
           <Button
             variant="primary"
-            disabled={!submittable || submitting}
+            disabled={!submittable || submitting || logoUploading}
             onClick={handleSubmit}
           >
             <Button.Text>{submitting ? "Creating…" : "Create"}</Button.Text>

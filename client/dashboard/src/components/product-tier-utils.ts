@@ -21,6 +21,11 @@ export const productTierColors = (
       text: "text-default-information",
       ring: "ring-border/50",
     },
+    payg: {
+      bg: "border-border bg-card border",
+      text: "text-default-information",
+      ring: "ring-border/50",
+    },
     enterprise: {
       bg: "border-border bg-card border",
       text: "text-default-success",

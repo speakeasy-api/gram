@@ -10,9 +10,15 @@ import (
 type Feature string
 
 const (
-	FeatureLogs                       Feature = "logs"
-	FeatureToolIOLogs                 Feature = "tool_io_logs"
-	FeatureSessionCapture             Feature = "session_capture"
+	FeatureLogs           Feature = "logs"
+	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureSessionCapture Feature = "session_capture"
+	// FeatureSessionPortability gates agent session portability: the device
+	// agent's "continue this session in another harness" flow and the agent
+	// service endpoints backing it (getSessionMeta, reportSessionMoved).
+	// Sibling of FeatureSessionCapture — capture records sessions, portability
+	// moves them.
+	FeatureSessionPortability         Feature = "session_portability"
 	FeatureAuthzChallengeLogging      Feature = "authz_challenge_logging"
 	FeatureSSO                        Feature = "sso"
 	FeatureSCIM                       Feature = "scim"

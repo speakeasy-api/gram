@@ -1043,6 +1043,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")),
+		Cwd:                 canonicalCwd(payload),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -1068,6 +1069,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		metadata.ExternalAccountID = cached.ExternalAccountID
 		metadata.DeviceID = cached.DeviceID
 		metadata.Hostname = conv.Default(metadata.Hostname, cached.Hostname)
+		metadata.Cwd = conv.Default(metadata.Cwd, cached.Cwd)
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
 		metadata.UserAccountID = cached.UserAccountID
@@ -1751,6 +1753,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
+		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
 		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
@@ -1942,6 +1945,13 @@ func canonicalEventTime(payload *gen.IngestPayload) time.Time {
 func canonicalSessionID(payload *gen.IngestPayload) string {
 	if payload != nil && payload.Session != nil {
 		return strings.TrimSpace(conv.PtrValOr(payload.Session.ID, ""))
+	}
+	return ""
+}
+
+func canonicalCwd(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Session != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Session.Cwd, ""))
 	}
 	return ""
 }

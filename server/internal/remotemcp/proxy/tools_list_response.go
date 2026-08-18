@@ -96,18 +96,24 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 // required. The outer jsonrpc.Message is re-encoded once after the chain
 // completes (see [RemoteMessage.materializedBytes]); this method does the
 // inner payload swap up front so the dirty signal alone is sufficient to
-// trigger that re-encode. Marshal happens before any typed-view or
-// underlying-message state is touched so a marshal failure leaves
-// everything at its pre-call values — the typed view and the wire
-// remain in sync regardless of the failure mode.
+// trigger that re-encode. Only the result's tools member is rewritten:
+// the replacement array is spliced into the original wire payload, so
+// _meta, nextCursor, and members not modeled by [mcp.ListToolsResult]
+// (under MCP 2026-07-28, the required resultType, ttlMs, and cacheScope)
+// retain their original values instead of being dropped by a typed
+// re-marshal. Marshal and splice both happen before any typed-view or
+// underlying-message state is touched so a failure leaves everything at
+// its pre-call values — the typed view and the wire remain in sync
+// regardless of the failure mode.
 //
 // Returns a [*MutationError] when the response carries a JSON-RPC Error
 // rather than a Result (mutually exclusive per the typed-view
-// contract), when marshaling the mutated ListToolsResult fails, or when
-// the underlying jsonrpc.Message is not a *jsonrpc.Response. The proxy
-// detects [*MutationError] at the interceptor return path and surfaces
-// it as an HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than
-// as a user-facing JSON-RPC rejection.
+// contract), when marshaling the replacement tools array or splicing it
+// into the original result fails, or when the underlying
+// jsonrpc.Message is not a *jsonrpc.Response. The proxy detects
+// [*MutationError] at the interceptor return path and surfaces it as an
+// HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a
+// user-facing JSON-RPC rejection.
 func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
@@ -121,19 +127,21 @@ func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 		tools = []*mcp.Tool{}
 	}
 
-	// Stage the mutation against a temporary copy of Result so a marshal
-	// failure can't leave the typed view's Tools desynced from the
-	// underlying wire bytes. Only commit (assign to Result.Tools,
-	// rpcResp.Result, dirty) once marshaling has succeeded.
-	staged := *r.Result
-	staged.Tools = tools
-	payload, err := json.Marshal(&staged)
+	// Marshal the replacement array and splice it into the original wire
+	// payload so a failure can't leave the typed view's Tools desynced from
+	// the underlying wire bytes. Only commit (assign to Result.Tools,
+	// rpcResp.Result, dirty) once both steps have succeeded.
+	payload, err := marshalJSONNoHTMLEscape(tools)
 	if err != nil {
-		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal mutated ListToolsResult: %w", err)}
+		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal replacement tools array: %w", err)}
+	}
+	result, err := spliceTopLevelKey(rpcResp.Result, "tools", payload)
+	if err != nil {
+		return &MutationError{Op: "set tools", Cause: fmt.Errorf("splice replacement tools array: %w", err)}
 	}
 
 	r.Result.Tools = tools
-	rpcResp.Result = payload
+	rpcResp.Result = result
 	r.RemoteMessage.dirty = true
 	return nil
 }

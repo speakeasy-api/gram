@@ -188,6 +188,20 @@ func isPreconditionFailed(err error) bool {
 	return false
 }
 
+// Delete removes the object; an already-absent object is success, matching
+// the BlobStore burn-after-read semantics.
+func (gbs *GCSBlobStore) Delete(ctx context.Context, u *url.URL) error {
+	subpath, err := gbs.getPath(u)
+	if err != nil {
+		return fmt.Errorf("generate asset path: %w", err)
+	}
+	err = gbs.bucket.Object(subpath).Delete(ctx)
+	if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}
+
 func (gbs *GCSBlobStore) PresignRead(ctx context.Context, subpath string, ttl time.Duration) (*url.URL, error) {
 	uri, err := gbs.getBucketURI(subpath)
 	if err != nil {

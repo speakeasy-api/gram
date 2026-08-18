@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -149,6 +152,18 @@ type sessionDurationOption struct {
 type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
+
+	// IssuerDisplay is the card's identity-provider label: the issuer's
+	// operator-set display name when present, otherwise the slug. Issuer
+	// branding is Gram-controlled and tenant-set, unlike the
+	// attacker-chosen CIMD client_name/logo_uri surfaced via
+	// ClientIDOrigin, so the two stay visually separate on the page.
+	IssuerDisplay string
+
+	// IssuerLogoURL points at the issuer's logo through the public
+	// assets.serveImage endpoint, empty when the issuer has no logo.
+	IssuerLogoURL string
+
 	Connected  bool
 	Expired    bool
 	CanRefresh bool
@@ -458,7 +473,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// recorded under a different origin (or vice versa).
 	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
 	}
 
@@ -479,10 +494,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			// Recorded as failed, not declined: the user's decline never
 			// reached the client, so this flow ended on a fault. Exactly one
 			// terminal outcome is counted per started flow either way.
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 		}
-		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
@@ -491,7 +506,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		// Reaching an approved consent POST with no resolved subject is a code
 		// invariant break, not a user action — a config/code-class failure.
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject
@@ -501,7 +516,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
 		}
@@ -517,13 +532,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		UserSessionClientID: clientRow.ID,
 		RemoteSetHash:       remoteSetHashEmpty,
 	}); err != nil && !isUniqueViolation(err) {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
 
@@ -541,7 +556,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
 	}
 
@@ -554,7 +569,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ErrorDescription: "",
 	})
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
@@ -768,6 +783,29 @@ func desiredSessionDurationHours(raw string) int {
 	return hours
 }
 
+// issuerCardBranding resolves the branding a consent card renders for its
+// identity provider. The display fallback matches
+// formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
+// name wins, otherwise the identifier the page always rendered (the slug).
+// The logo URL points at the public assets.serveImage endpoint on the
+// platform origin, the same construction mcpmetadata uses for MCP server
+// logos, and is empty when the issuer has no logo.
+func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+	display = c.IssuerSlug
+	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
+		display = name
+	}
+	if c.IssuerLogoAssetID.Valid {
+		u := *serverURL
+		u.Path = "/rpc/assets.serveImage"
+		q := u.Query()
+		q.Set("id", c.IssuerLogoAssetID.UUID.String())
+		u.RawQuery = q.Encode()
+		logoURL = u.String()
+	}
+	return display, logoURL
+}
+
 // buildRemoteSessionCards loads every remote_session_client linked to the
 // endpoint's user_session_issuer and materialises a card per client. Each
 // card carries a connected/disconnected state (read from remote_sessions
@@ -830,9 +868,12 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
 		cards = append(cards, remoteSessionCard{
 			ClientID:           c.ID.String(),
 			IssuerSlug:         c.IssuerSlug,
+			IssuerDisplay:      issuerDisplay,
+			IssuerLogoURL:      issuerLogoURL,
 			Connected:          state.Status == remotesessions.RemoteSessionActive,
 			Expired:            state.Status == remotesessions.RemoteSessionExpired,
 			CanRefresh:         state.CanRefresh,

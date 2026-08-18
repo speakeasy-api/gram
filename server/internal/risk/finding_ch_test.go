@@ -440,11 +440,22 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	kept.SetRiskPolicyId(policyID)
 	kept.SetMatch("different-secret")
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept}, nil))
+	// Republished manual suppression: matches the exclusion value, but the
+	// message-carried state must win over the ingest-time rule check.
+	manualAt := time.Now().UTC().Truncate(time.Second)
+	manual := chFinding()
+	manual.SetProjectId(authCtx.ProjectID.String())
+	manual.SetRiskPolicyId(policyID)
+	manual.SetMatch("hunter2")
+	manual.SetExcludedAt(manualAt.Format(time.RFC3339))
+	manual.SetExcludedReason(chrepo.ExcludedReasonManual)
+	manual.SetExcludedDetail("dismissed from the dashboard")
 
-	// Both rows are inserted: excluded findings are annotated, not dropped.
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept, manual}, nil))
+
+	// All rows are inserted: excluded findings are annotated, not dropped.
 	rows := chRows(t, ins)
-	require.Len(t, rows, 2, "excluded findings are annotated, not dropped")
+	require.Len(t, rows, 3, "excluded findings are annotated, not dropped")
 
 	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
 	for _, r := range rows {
@@ -455,10 +466,43 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	require.NotNil(t, excludedRow.ExclusionID, "excluded finding must carry the exclusion id")
 	require.Equal(t, exclusion.ID, *excludedRow.ExclusionID)
 	require.NotNil(t, excludedRow.ExcludedAt, "excluded finding must carry excluded_at")
+	require.Equal(t, chrepo.ExcludedReasonRule, excludedRow.ExcludedReason, "rule exclusion must stamp excluded_reason=rule")
+	require.Empty(t, excludedRow.ExcludedDetail, "rule exclusion carries no detail")
 
 	keptRow := byID[uuid.MustParse(kept.GetId())]
 	require.Nil(t, keptRow.ExclusionID, "non-excluded finding must not carry an exclusion id")
 	require.Nil(t, keptRow.ExcludedAt, "non-excluded finding must not carry excluded_at")
+	require.Empty(t, keptRow.ExcludedReason, "non-excluded finding must not carry a reason")
+
+	manualRow := byID[uuid.MustParse(manual.GetId())]
+	require.Nil(t, manualRow.ExclusionID, "message-carried suppression carries no exclusion id")
+	require.NotNil(t, manualRow.ExcludedAt, "message-carried excluded_at must be preserved")
+	require.True(t, manualAt.Equal(*manualRow.ExcludedAt), "message-carried excluded_at wins over the ingest-time rule check")
+	require.Equal(t, chrepo.ExcludedReasonManual, manualRow.ExcludedReason)
+	require.Equal(t, "dismissed from the dashboard", manualRow.ExcludedDetail)
+}
+
+// TestFindingCHWriter_HandleBatch_InvalidExcludedAtSkipsFinding mirrors the
+// false_positive_at guard: an excluded_at that fails to parse must skip the
+// message rather than append the row unsuppressed, which would silently
+// resurface a suppressed finding in ClickHouse's dedup.
+func TestFindingCHWriter_HandleBatch_InvalidExcludedAtSkipsFinding(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	bad := chFinding()
+	bad.SetExcludedAt("not-a-timestamp")
+
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid (or absent) excluded_at is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
 // Integration test against a real Postgres: the writer batch-resolves the

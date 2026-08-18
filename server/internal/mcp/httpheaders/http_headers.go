@@ -6,7 +6,38 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
+
+// IsStandardMCPRequestHeader reports whether name is one of the MCP
+// Streamable HTTP standard request headers that mirror protocol metadata
+// into HTTP headers (the 2026-07-28 Request Metadata section):
+// MCP-Protocol-Version (canonically mcpversions.HTTPHeader), Mcp-Method,
+// Mcp-Name, and the Mcp-Param-{Name} family. Comparison is
+// case-insensitive, per RFC 9110 field-name rules.
+//
+// These headers are sent by every conforming client as protocol metadata,
+// as distinct from the user-supplied Mcp-* variable headers Gram's hosted
+// runtime accepts; callers deciding whether an Mcp-* header carries a
+// user value should treat a standard header as protocol machinery. The
+// hosted env-var parser currently reserves only the protocol-version
+// header out of this set — reserving Mcp-Method, Mcp-Name, and Mcp-Param-*
+// there is deferred until Gram's 2026-07-28 support can reject the
+// collision visibly rather than dropping a value silently.
+func IsStandardMCPRequestHeader(name string) bool {
+	if strings.EqualFold(name, mcpversions.HTTPHeader) {
+		return true
+	}
+
+	switch lower := strings.ToLower(name); lower {
+	case "mcp-method", "mcp-name":
+		return true
+	default:
+		// The Mcp-Param-{Name} family requires a non-empty name; a bare
+		// "Mcp-Param-" is not a standard header.
+		return strings.HasPrefix(lower, "mcp-param-") && len(lower) > len("mcp-param-")
+	}
+}
 
 // AuthorizationBearerToken returns the Bearer token from the request's
 // Authorization header with the "Bearer " prefix stripped. Prefix matching

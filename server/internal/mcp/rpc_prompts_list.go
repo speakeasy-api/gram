@@ -99,6 +99,7 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 		Result: promptsListResult{
 			Prompts: prompts,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	}
 
 	bs, err := json.Marshal(result)

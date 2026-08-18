@@ -57,6 +57,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -94,7 +97,7 @@ type IdentityResolver interface {
 type Service struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
-	metrics         *metrics
+	metrics         *mcpmetrics.Metrics
 	guardianPolicy  *guardian.Policy
 	db              *pgxpool.Pool
 	authRepo        *auth_repo.Queries
@@ -256,6 +259,11 @@ type mcpInputs struct {
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
 	tags []string
+	// protocolVersionHeader is the sanitized MCP-Protocol-Version header value
+	// the request arrived with, or empty when absent (every `initialize`, and
+	// every request from a pre-2025-06-18 client). Threaded here because the
+	// dispatch and handlers run without access to the *http.Request.
+	protocolVersionHeader string
 }
 
 func NewService(
@@ -316,7 +324,7 @@ func NewService(
 	return &Service{
 		logger:               logger,
 		tracer:               tracer,
-		metrics:              newMetrics(meter, logger),
+		metrics:              mcpmetrics.NewMetrics(meter, logger),
 		guardianPolicy:       guardianPolicy,
 		db:                   db,
 		authRepo:             auth_repo.New(db),
@@ -967,6 +975,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
 		tags:                  tags,
+		protocolVersionHeader: mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)),
 	}
 
 	// Record the resolved variation group and requested tag filter for
@@ -1227,8 +1236,29 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 			normalizedKey := strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")
 
 			// Check if this is a display name and map to actual header name
-			if actualKey, ok := displayNameToActual[normalizedKey]; ok {
+			actualKey, aliased := displayNameToActual[normalizedKey]
+			if aliased {
 				normalizedKey = actualKey
+			}
+
+			// The MCP-Protocol-Version header is protocol metadata every
+			// conforming client stamps on every request since 2025-06-18, and
+			// without this skip it silently becomes a `protocol_version`
+			// variable. The skip is alias-aware: a toolset whose configured
+			// display name maps to it keeps receiving it as before.
+			//
+			// The remaining 2026-07-28 standard headers (Mcp-Method, Mcp-Name,
+			// Mcp-Param-*; httpheaders.IsStandardMCPRequestHeader is the
+			// canonical set) are deliberately NOT skipped yet. Clients on that
+			// revision are not measurably present, while skipping now would
+			// silently break any variable whose actual name collides — default
+			// variable headers are minted as MCP-<VAR> and never appear in the
+			// display-name alias map, so the alias exception cannot save them.
+			// Reserving those headers belongs to the 2026-07-28 support work,
+			// where header-body validation gives clients a visible rejection
+			// instead of a silently dropped value.
+			if !aliased && strings.EqualFold(keySanitized, mcpversions.HTTPHeader) {
+				continue
 			}
 
 			envVars[normalizedKey] = r.Header.Get(k)
@@ -1240,6 +1270,13 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 }
 
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+	// The census version resolves lazily: the header answers for every
+	// conforming client since 2025-06-18, and only a header-less request pays
+	// the `_meta` scan. Handlers that consume the rest of the per-request
+	// metadata decode it themselves (tools/call in the same pass as its
+	// params, tools/list scoped to its analytics event).
+	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(payload.protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfaceHosting)
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
@@ -1249,13 +1286,13 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
 	case "initialize":
 		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
@@ -1419,7 +1456,8 @@ func (s *Service) HandleToolsList(
 		Params:  json.RawMessage("{}"),
 	}
 
-	// Call existing handleToolsList with all dependencies
+	// Call existing handleToolsList with all dependencies. Internal callers
+	// carry no HTTP request and therefore no per-request `_meta`.
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
@@ -1435,6 +1473,7 @@ func (s *Service) HandleToolsList(
 		s.temporal,
 		s.shadowMCPClient,
 		s.platformExtras,
+		s.sessionClientInfo,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)

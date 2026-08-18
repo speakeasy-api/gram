@@ -14,6 +14,21 @@ import (
 // placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
+// Values of risk_findings.excluded_reason: why a suppressed finding's
+// excluded_at is set. The empty string means "not suppressed" (or a legacy
+// row written before the column existed).
+const (
+	// ExcludedReasonRule marks a finding suppressed by an exclusion rule;
+	// exclusion_id records which one.
+	ExcludedReasonRule = "rule"
+	// ExcludedReasonManual marks a finding a user dismissed via the UI or an
+	// agent tool.
+	ExcludedReasonManual = "manual"
+	// ExcludedReasonAutomated marks a finding flagged by the offline
+	// false-positive sweep.
+	ExcludedReasonAutomated = "automated"
+)
+
 // RiskFindingRow is a single row destined for the risk_findings table. The raw
 // matched value is never carried here: only its length, a redacted display
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
@@ -82,6 +97,15 @@ type RiskFindingRow struct {
 	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
 	FalsePositiveAt *time.Time `ch:"false_positive_at"`
 
+	// ExcludedReason says why ExcludedAt is set — ExcludedReasonRule (exclusion
+	// rule, ExclusionID set), ExcludedReasonManual (user dismissal) or
+	// ExcludedReasonAutomated (offline false-positive sweep). ExcludedDetail is
+	// free-form context: the user-supplied dismissal reason for manual rows,
+	// the catalog reason for automated ones. Both empty when the finding is not
+	// suppressed and on legacy rows written before the columns existed.
+	ExcludedReason string `ch:"excluded_reason"`
+	ExcludedDetail string `ch:"excluded_detail"`
+
 	// Reveal metadata: which text StartPos/EndPos index (Surface), the scanner
 	// field and gjson path the span matched, and the recorded tool call id
 	// anchoring the finding. All empty when unknown; see the risk_findings
@@ -143,6 +167,8 @@ var riskFindingColumns = []string{
 	"excluded_at",
 	"exclusion_id",
 	"false_positive_at",
+	"excluded_reason",
+	"excluded_detail",
 	"message_created_at",
 	"assistant_id",
 	"chat_source",
@@ -228,6 +254,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
 			chNullable(row.FalsePositiveAt),
+			row.ExcludedReason,
+			row.ExcludedDetail,
 			row.MessageCreatedAt,
 			row.AssistantID,
 			row.ChatSource,

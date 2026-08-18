@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  UserSessionUpstream,
+  UserSessionUpstream$inboundSchema,
+} from "./usersessionupstream.js";
 
 /**
  * An issued user_session record. refresh_token_hash is never returned.
@@ -38,6 +42,10 @@ export type UserSession = {
    */
   jti: string;
   /**
+   * When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.
+   */
+  lastUsedAt?: Date | undefined;
+  /**
    * Next refresh deadline.
    */
   refreshExpiresAt: Date;
@@ -62,6 +70,10 @@ export type UserSession = {
    */
   subjectUrn: string;
   updatedAt: Date;
+  /**
+   * The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
+   */
+  upstreams: Array<UserSessionUpstream>;
   /**
    * The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
    */
@@ -89,6 +101,9 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       id: z.string(),
       issuer_slug: z.string(),
       jti: z.string(),
+      last_used_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       refresh_expires_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -104,6 +119,7 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      upstreams: z.array(UserSessionUpstream$inboundSchema),
       user_session_client_id: z.optional(z.string()),
       user_session_issuer_id: z.string(),
     }),
@@ -114,6 +130,7 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         "created_at": "createdAt",
         "expires_at": "expiresAt",
         "issuer_slug": "issuerSlug",
+        "last_used_at": "lastUsedAt",
         "refresh_expires_at": "refreshExpiresAt",
         "revoked_at": "revokedAt",
         "subject_display_name": "subjectDisplayName",

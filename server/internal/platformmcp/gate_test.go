@@ -23,6 +23,10 @@ func (c testCapabilityChecker) IsFeatureEnabled(_ context.Context, _ string, cap
 	return c.enabled, c.err
 }
 
+func (c testCapabilityChecker) IsFeatureEnabledUncached(ctx context.Context, organizationID string, capability productfeatures.Feature) (bool, error) {
+	return c.IsFeatureEnabled(ctx, organizationID, capability)
+}
+
 type testOrganizationSlugResolver struct {
 	slug string
 	err  error

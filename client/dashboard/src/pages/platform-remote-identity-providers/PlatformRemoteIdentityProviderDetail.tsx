@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/Heading";
@@ -15,7 +16,7 @@ import { useGlobalRemoteSessionIssuer } from "@gram/client/react-query/globalRem
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "../remote-identity-providers/ScopeBadge";
 import { issuerDisplayName } from "../remote-identity-providers/issuerDisplay";
-import { activeDetailTab } from "../remote-identity-providers/tabs";
+import { activeDetailTab } from "@/lib/detail-tabs";
 import { OverviewTab } from "../remote-identity-providers/tabs/issuer/OverviewTab";
 import { PlatformAdminOnly } from "./PlatformAdminOnly";
 import { PlatformConvergenceTab } from "./PlatformConvergenceTab";
@@ -109,11 +110,20 @@ function PlatformIssuerDetail({
             />
           )}
         </div>
-        <Heading variant="h1" className="break-all normal-case">
-          {issuer
-            ? issuerDisplayName(issuer)
-            : "Platform Remote Identity Provider"}
-        </Heading>
+        <div className="flex items-center gap-3">
+          {issuer?.logoAssetId && (
+            <AssetImage
+              assetId={issuer.logoAssetId}
+              alt=""
+              className="size-10 shrink-0 object-contain"
+            />
+          )}
+          <Heading variant="h1" className="break-all normal-case">
+            {issuer
+              ? issuerDisplayName(issuer)
+              : "Platform Remote Identity Provider"}
+          </Heading>
+        </div>
       </DetailHero>
 
       <Tabs value={activeTab} className="flex w-full flex-1 flex-col">

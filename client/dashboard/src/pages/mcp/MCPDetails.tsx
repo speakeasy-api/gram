@@ -244,7 +244,10 @@ function renderMcpDetailTabContent(
     case "sessions":
       return (
         <RequireScope scope="project:read" level="page">
-          <ClientsAndSessionsTab issuerId={toolset.userSessionIssuerId} />
+          <ClientsAndSessionsTab
+            issuerId={toolset.userSessionIssuerId}
+            authTabPath="authentication"
+          />
         </RequireScope>
       );
     case "team-access":
