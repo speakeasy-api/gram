@@ -2332,7 +2332,7 @@ const toolsListResponseThreeTools = `{
     "futureUnknownField": {"nested": ["ok"]},
     "tools": [
       {"name": "tool_a", "description": "first", "inputSchema": {"type": "object"}},
-      {"name": "tool_b", "description": "second", "inputSchema": {"type": "object"}},
+      {"name": "tool_b", "description": "second <b&c>", "inputSchema": {"type": "object"}},
       {"name": "tool_c", "description": "third", "inputSchema": {"type": "object"}}
     ]
   }
@@ -2578,6 +2578,8 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	require.Contains(t, rr.Body.String(), `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetTools")
 	require.Contains(t, rr.Body.String(), `"_meta":{"upstream/trace":9007199254740993}`,
 		"_meta must relay with its original bytes — no float64 precision loss")
+	require.Contains(t, rr.Body.String(), `"description":"second <b&c>"`,
+		"kept tool bytes must not be HTML-escaped, matching the non-escaping relay of preserved members")
 }
 
 func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedToolsListInterceptor(t *testing.T) {

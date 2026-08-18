@@ -63,3 +63,19 @@ func spliceTopLevelKey(object json.RawMessage, key string, value json.RawMessage
 	}
 	return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
 }
+
+// marshalJSONNoHTMLEscape marshals v like json.Marshal but without HTML
+// escaping. Replacement values handed to spliceTopLevelKey must be encoded
+// this way: the splice and the SDK envelope encoder both leave literal <,
+// >, and & untouched in preserved members, so an HTML-escaped replacement
+// would relay <-escaped alongside neighbors that keep their literal
+// characters.
+func marshalJSONNoHTMLEscape(v any) (json.RawMessage, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode replacement value: %w", err)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
+}

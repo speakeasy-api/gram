@@ -98,9 +98,9 @@ func resourcesListResponseFromRemoteMessage(request *ResourcesListRequest, msg *
 // inner payload swap up front so the dirty signal alone is sufficient to
 // trigger that re-encode. Only the result's resources member is rewritten:
 // the replacement array is spliced into the original wire payload, so
-// _meta, nextCursor, and members [mcp.ListResourcesResult] does not model
+// _meta, nextCursor, and members not modeled by [mcp.ListResourcesResult]
 // (under MCP 2026-07-28, the required resultType, ttlMs, and cacheScope)
-// relay with their original values instead of being dropped by a typed
+// retain their original values instead of being dropped by a typed
 // re-marshal. Marshal and splice both happen before any typed-view or
 // underlying-message state is touched so a failure leaves everything at
 // its pre-call values — the typed view and the wire remain in sync
@@ -131,7 +131,7 @@ func (r *ResourcesListResponse) SetResources(resources []*mcp.Resource) error {
 	// from the underlying wire bytes. Only commit (assign to
 	// Result.Resources, rpcResp.Result, dirty) once both steps have
 	// succeeded.
-	payload, err := json.Marshal(resources)
+	payload, err := marshalJSONNoHTMLEscape(resources)
 	if err != nil {
 		return &MutationError{Op: "set resources", Cause: fmt.Errorf("marshal replacement resources array: %w", err)}
 	}

@@ -98,9 +98,9 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 // inner payload swap up front so the dirty signal alone is sufficient to
 // trigger that re-encode. Only the result's tools member is rewritten:
 // the replacement array is spliced into the original wire payload, so
-// _meta, nextCursor, and members [mcp.ListToolsResult] does not model
+// _meta, nextCursor, and members not modeled by [mcp.ListToolsResult]
 // (under MCP 2026-07-28, the required resultType, ttlMs, and cacheScope)
-// relay with their original values instead of being dropped by a typed
+// retain their original values instead of being dropped by a typed
 // re-marshal. Marshal and splice both happen before any typed-view or
 // underlying-message state is touched so a failure leaves everything at
 // its pre-call values — the typed view and the wire remain in sync
@@ -131,7 +131,7 @@ func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 	// payload so a failure can't leave the typed view's Tools desynced from
 	// the underlying wire bytes. Only commit (assign to Result.Tools,
 	// rpcResp.Result, dirty) once both steps have succeeded.
-	payload, err := json.Marshal(tools)
+	payload, err := marshalJSONNoHTMLEscape(tools)
 	if err != nil {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal replacement tools array: %w", err)}
 	}

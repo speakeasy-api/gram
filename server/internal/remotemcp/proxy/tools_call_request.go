@@ -78,7 +78,7 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool)
 // front so the dirty signal alone is sufficient to trigger that
 // re-encode. Only the params' arguments member is rewritten: the
 // replacement is spliced into the original wire payload, so _meta, name,
-// and members [mcp.CallToolParamsRaw] does not model relay with their
+// and members not modeled by [mcp.CallToolParamsRaw] retain their
 // original values instead of being dropped by a typed re-marshal. The
 // splice happens before any typed-view or underlying-message state is
 // touched so a failure leaves everything at its pre-call values — the
