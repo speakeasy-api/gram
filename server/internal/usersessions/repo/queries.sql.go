@@ -842,6 +842,7 @@ JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
 WHERE usi.project_id = $3
+  AND (rc.project_id IS NULL OR rc.project_id = $3)
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
@@ -885,7 +886,9 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // through an organization-level or global client, whose project_id is NULL,
 // still belongs to the project whose user_session_issuer minted it. Filtering
 // on the client's project would silently drop those upstreams and report a
-// brokered session as having none.
+// brokered session as having none. A client that does carry a project must
+// still match, so a row that somehow paired one project's client with another
+// project's issuer stays invisible rather than being read as a shared one.
 func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg ListRemoteSessionUpstreamsForSubjectsParams) ([]ListRemoteSessionUpstreamsForSubjectsRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects, arg.SubjectUrns, arg.IssuerIds, arg.ProjectID)
 	if err != nil {
