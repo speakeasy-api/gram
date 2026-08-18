@@ -46,15 +46,22 @@ func (b OperationBudget) valid() bool {
 }
 
 func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
-	if !b.valid() || principal.ConnectionID == "" || principal.OrganizationID == "" {
+	if !b.valid() || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
-	if err != nil {
-		return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
-	}
-	if !connection.Allowed {
-		return ErrOperationRateLimited
+	// A surface acting under assistant identity holds no OAuth connection, so
+	// there is no connection bucket to charge and the organization bucket meters
+	// it alone. Refusing the operation instead would deny every connection-less
+	// caller, and keying the connection bucket on the empty string would pool
+	// every such caller across every organization into one bucket.
+	if principal.ConnectionID != "" {
+		connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
+		if err != nil {
+			return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
+		}
+		if !connection.Allowed {
+			return ErrOperationRateLimited
+		}
 	}
 	organization, err := b.Organization.Allow(ctx, principal.OrganizationID)
 	if err != nil {

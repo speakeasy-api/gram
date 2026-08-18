@@ -47,6 +47,42 @@ func TestOperationBudgetDistinguishesLimiterFailureFromThrottle(t *testing.T) {
 	require.NotErrorIs(t, err, ErrOperationRateLimited)
 }
 
+func TestOperationBudgetMetersAConnectionlessPrincipalOnTheOrganizationAlone(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: "organization"})
+
+	require.NoError(t, err)
+	require.Empty(t, connection.keys)
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
+func TestOperationBudgetThrottlesAConnectionlessPrincipalOnTheOrganization(t *testing.T) {
+	t.Parallel()
+
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}
+	err := (OperationBudget{
+		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+		Organization: organization,
+	}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: "organization"})
+
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
+func TestOperationBudgetStillRequiresAnOrganization(t *testing.T) {
+	t.Parallel()
+
+	err := (OperationBudget{
+		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+		Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+	}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: ""})
+
+	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
+}
+
 type recordingOperationLimiter struct {
 	result ratelimit.Result
 	err    error
