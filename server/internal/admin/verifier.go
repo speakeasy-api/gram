@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -69,7 +69,6 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 		session, accessToken, err = v.refreshSession(ctx, session)
 		switch {
 		case errors.Is(err, errAdminSessionRefreshRequired):
-			_ = v.sessions.Delete(ctx, session.SessionID)
 			return ctx, oops.C(oops.CodeUnauthorized).LogError(ctx, v.logger, attr.SlogError(err))
 		case err != nil:
 			return ctx, oops.E(oops.CodeUnexpected, err, "refresh admin session").LogError(ctx, v.logger)
@@ -114,9 +113,8 @@ var errAdminSessionRefreshRequired = errors.New("admin session requires reauthen
 const (
 	adminRefreshUpstreamTimeout = 10 * time.Second
 	adminRefreshLockTTL         = 12 * time.Second
-	adminRefreshWaitBudget      = 12 * time.Second
+	adminRefreshWaitBudget      = adminRefreshLockTTL + adminRefreshUpstreamTimeout + time.Second
 	adminRefreshWaitPoll        = 200 * time.Millisecond
-	adminRefreshReleaseTimeout  = 5 * time.Second
 )
 
 func adminSessionRefreshLockKey(sessionID string) string {
@@ -128,7 +126,6 @@ func adminSessionRefreshLockKey(sessionID string) string {
 // instead of presenting the same refresh token again.
 func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session, string, error) {
 	lockKey := adminSessionRefreshLockKey(session.SessionID)
-	acquiredAt := time.Now()
 	held, err := v.locks.Add(ctx, lockKey, adminRefreshLockTTL)
 	if err != nil {
 		return session, "", fmt.Errorf("acquire admin refresh lock: %w", err)
@@ -136,20 +133,17 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 	if !held {
 		return v.awaitRefreshedSession(ctx, session.SessionID)
 	}
+	return v.refreshSessionLocked(ctx, session)
+}
 
-	defer o11y.LogDefer(ctx, v.logger, func() error {
-		// Past the lease TTL this key may belong to a new holder.
-		if time.Since(acquiredAt) >= adminRefreshLockTTL {
-			return nil
-		}
-		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRefreshReleaseTimeout)
-		defer cancel()
-		return v.locks.Delete(releaseCtx, lockKey)
-	})
+func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session) (Session, string, error) {
 
 	// The caller's snapshot predates lock acquisition. Re-read so a refresh that
 	// completed while this request was acquiring is adopted rather than replayed.
 	current, err := v.sessions.Get(ctx, session.SessionID)
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return session, "", errAdminSessionRefreshRequired
+	}
 	if err != nil {
 		return session, "", fmt.Errorf("re-read admin session before refresh: %w", err)
 	}
@@ -163,6 +157,9 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 		return current, "", fmt.Errorf("decrypt admin refresh token: %w", err)
 	}
 	if refreshToken == "" {
+		if err := v.sessions.Delete(ctx, current.SessionID); err != nil {
+			return current, "", fmt.Errorf("delete unrefreshable admin session: %w", err)
+		}
 		return current, "", errAdminSessionRefreshRequired
 	}
 
@@ -170,7 +167,13 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 	defer cancel()
 	tok, err := v.oidc.Refresh(refreshCtx, refreshToken)
 	if err != nil {
-		return current, "", fmt.Errorf("%w: %w", errAdminSessionRefreshRequired, err)
+		if !isInvalidGrant(err) {
+			return current, "", fmt.Errorf("refresh oidc access token: %w", err)
+		}
+		if err := v.sessions.Delete(ctx, current.SessionID); err != nil {
+			return current, "", fmt.Errorf("delete rejected admin session: %w", err)
+		}
+		return current, "", errAdminSessionRefreshRequired
 	}
 	current, err = v.sessions.UpdateTokens(ctx, current, tok.AccessToken, tok.RefreshToken, tok.Expiry)
 	if err != nil {
@@ -187,9 +190,23 @@ func (v *Verifier) awaitRefreshedSession(ctx context.Context, sessionID string) 
 
 	for {
 		current, err := v.sessions.Get(waitCtx, sessionID)
-		if err == nil && !NeedsRefresh(current.AccessTokenExpiresAt) {
+		switch {
+		case errors.Is(err, redisCache.ErrCacheMiss):
+			return current, "", errAdminSessionRefreshRequired
+		case err != nil:
+			return current, "", fmt.Errorf("poll admin session during refresh: %w", err)
+		case !NeedsRefresh(current.AccessTokenExpiresAt):
 			accessToken, err := v.sessions.DecryptAccessToken(current)
 			return current, accessToken, err
+		}
+
+		lockKey := adminSessionRefreshLockKey(sessionID)
+		held, err := v.locks.Add(waitCtx, lockKey, adminRefreshLockTTL)
+		if err != nil {
+			return current, "", fmt.Errorf("reacquire admin refresh lock: %w", err)
+		}
+		if held {
+			return v.refreshSessionLocked(waitCtx, current)
 		}
 
 		select {

@@ -135,6 +135,36 @@ func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.Resp
 	return rec
 }
 
+func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, requests int, beforeWait func()) []int {
+	t.Helper()
+
+	start := make(chan struct{})
+	codes := make(chan int, requests)
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+			codes <- rec.Code
+		}()
+	}
+	close(start)
+	beforeWait()
+	wg.Wait()
+	close(codes)
+
+	results := make([]int, 0, requests)
+	for code := range codes {
+		results = append(results, code)
+	}
+	return results
+}
+
 // TestAttach_MountsSessionRoute proves the hand-written route reaches the
 // handler on the same muxer that carries the generated admin routes. A missing
 // or conflicting pattern would give 404 instead of 401.
@@ -225,6 +255,55 @@ func TestHandleGetSession_RefreshesExpiredTokens(t *testing.T) {
 	require.True(t, session.AccessTokenExpiresAt.After(time.Now()))
 }
 
+func TestHandleGetSession_ClassifiesRefreshFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		status      int
+		oauthError  string
+		wantStatus  int
+		wantSession bool
+	}{
+		{name: "invalid grant", status: http.StatusBadRequest, oauthError: "invalid_grant", wantStatus: http.StatusUnauthorized, wantSession: false},
+		{name: "provider unavailable", status: http.StatusServiceUnavailable, oauthError: "server_error", wantStatus: http.StatusInternalServerError, wantSession: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			oidcClient := newTestOIDCClientWithToken(
+				t,
+				userinfoOK("sub-refresh-failure", "operator@example.com"),
+				func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tt.status)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": tt.oauthError})
+				},
+			)
+			svc := newTestSessionService(t, oidcClient)
+			sessionID, err := svc.sessions.Store(ctx, StoreParams{
+				Email:        "operator@example.com",
+				Name:         "Test Operator",
+				OIDCSubject:  "sub-refresh-failure",
+				HD:           testAdminHD,
+				AccessToken:  "old-access-token",
+				RefreshToken: "old-refresh-token",
+				ExpiresAt:    time.Now().Add(-time.Minute),
+			})
+			require.NoError(t, err)
+
+			require.Equal(t, tt.wantStatus, callSessionGet(t, svc, sessionID).Code)
+			_, err = svc.sessions.Get(ctx, sessionID)
+			if tt.wantSession {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
 func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
 	t.Parallel()
 
@@ -260,34 +339,56 @@ func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	const requests = 5
-	start := make(chan struct{})
-	codes := make(chan int, requests)
-	var wg sync.WaitGroup
-	for range requests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
-			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-			rec := httptest.NewRecorder()
-			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
-			codes <- rec.Code
-		}()
-	}
-	close(start)
-	require.Eventually(t, func() bool {
-		return refreshes.Load() == 1
-	}, time.Second, 10*time.Millisecond)
-	close(releaseRefresh)
-	wg.Wait()
-	close(codes)
-
-	for code := range codes {
+	codes := callSessionGetConcurrently(t, svc, sessionID, 5, func() {
+		assert.Eventually(t, func() bool {
+			return refreshes.Load() == 1
+		}, time.Second, 10*time.Millisecond)
+		close(releaseRefresh)
+	})
+	for _, code := range codes {
 		require.Equal(t, http.StatusOK, code)
 	}
 	require.EqualValues(t, 1, refreshes.Load())
+}
+
+func TestHandleGetSession_SharesConcurrentReauthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	var refreshes atomic.Int32
+	releaseRefresh := make(chan struct{})
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		userinfoOK("sub-concurrent-reauth", "operator@example.com"),
+		func(w http.ResponseWriter, _ *http.Request) {
+			refreshes.Add(1)
+			<-releaseRefresh
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
+		},
+	)
+	svc := newTestSessionService(t, oidcClient)
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-concurrent-reauth",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	codes := callSessionGetConcurrently(t, svc, sessionID, 3, func() {
+		assert.Eventually(t, func() bool {
+			return refreshes.Load() > 0
+		}, time.Second, 10*time.Millisecond)
+		close(releaseRefresh)
+	})
+	for _, code := range codes {
+		require.Equal(t, http.StatusUnauthorized, code)
+	}
 }
 
 func TestAuthCodeURLRequestsConsentForInteractiveLogin(t *testing.T) {
