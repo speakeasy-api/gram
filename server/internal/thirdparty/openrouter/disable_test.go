@@ -350,6 +350,102 @@ func TestRefreshAPIKeyLimit_NilPreservesEachPaygInferenceCap(t *testing.T) {
 	}
 }
 
+func TestReconcileMonthlyCredits_UncappedUpstreamClearsMirror(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Zero(t, effective, "an uncapped provider key has no enforceable alert denominator")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Zero(t, row.MonthlyCredits, "the local display mirror must follow provider authority")
+}
+
+func TestReconcileMonthlyCredits_DoesNotOverwriteConcurrentCapChange(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	const newerCap = int64(250)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: newerCap,
+	}))
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Equal(t, newerCap, effective)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, newerCap, row.MonthlyCredits)
+}
+
+func TestReconcileMonthlyCredits_DetectsSameValueCapOperation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	// A user can deliberately save the same numeric cap. The write generation,
+	// not just the number, makes that operation newer than this poll.
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: before.MonthlyCredits,
+	}))
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Equal(t, before.MonthlyCredits, effective)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
+}
+
 func TestRefreshAPIKeyLimit_NilPreservesDisabledKeyAfterTierTransition(t *testing.T) {
 	t.Parallel()
 

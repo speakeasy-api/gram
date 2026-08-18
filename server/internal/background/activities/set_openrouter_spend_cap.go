@@ -14,12 +14,14 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
@@ -39,14 +41,22 @@ type SetOpenRouterSpendCap struct {
 	db         *pgxpool.Pool
 	openRouter openrouter.Provisioner
 	audit      openRouterSpendCapAuditLogger
+	cache      cache.Cache
 }
 
-func NewSetOpenRouterSpendCap(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, auditLogger openRouterSpendCapAuditLogger) *SetOpenRouterSpendCap {
+func NewSetOpenRouterSpendCap(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	openRouter openrouter.Provisioner,
+	auditLogger openRouterSpendCapAuditLogger,
+	cacheAdapter cache.Cache,
+) *SetOpenRouterSpendCap {
 	return &SetOpenRouterSpendCap{
 		logger:     logger,
 		db:         db,
 		openRouter: openRouter,
 		audit:      auditLogger,
+		cache:      cacheAdapter,
 	}
 }
 
@@ -90,7 +100,8 @@ func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendC
 
 func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Conn, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType) error {
 	subject := urn.NewOpenRouterAPIKey(args.OrganizationID, string(keyType))
-	recorded, err := auditrepo.New(conn).HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
+	auditQueries := auditrepo.New(conn)
+	recorded, err := auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,
 		OperationID:    args.OperationID,
@@ -99,7 +110,16 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		return fmt.Errorf("check spend-cap audit operation: %w", err)
 	}
 	if recorded {
-		return nil
+		latest, err := auditQueries.GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
+			OrganizationID: args.OrganizationID,
+			SubjectID:      subject.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("check latest spend-cap audit operation: %w", err)
+		}
+		if latest.OperationID != args.OperationID || latest.MonthlyCredits != int64(args.Limit) {
+			return nil
+		}
 	}
 
 	key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
@@ -107,10 +127,19 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		KeyType:        string(keyType),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if recorded {
+			return nil
+		}
 		return fmt.Errorf("%s key must be provisioned before setting its inference cap", keyType)
 	}
 	if err != nil {
 		return fmt.Errorf("read %s key before setting inference cap: %w", keyType, err)
+	}
+	if recorded {
+		// A cache failure after the durable cap mutation must be repairable on
+		// activity retry. The latest-audit check above prevents an older operation
+		// from replacing a newer generation.
+		return s.rearmCreditsAlertsIfCurrent(ctx, conn, queries, args, keyType)
 	}
 	before := key.MonthlyCredits
 	applied := false
@@ -215,7 +244,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	auditQueries := auditrepo.New(dbtx)
+	auditQueries = auditrepo.New(dbtx)
 	recorded, err = auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,
@@ -246,6 +275,55 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit spend-cap audit transaction: %w", err)
+	}
+
+	return s.rearmCreditsAlertsIfCurrent(ctx, conn, queries, args, keyType)
+}
+
+func (s *SetOpenRouterSpendCap) rearmCreditsAlertsIfCurrent(
+	ctx context.Context,
+	conn *pgxpool.Conn,
+	queries *activitiesrepo.Queries,
+	args SetOpenRouterSpendCapArgs,
+	keyType openrouter.KeyType,
+) error {
+	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("read billing state before re-arming inference alerts: %w", err)
+	}
+	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+	if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription {
+		return nil
+	}
+	key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: args.OrganizationID,
+		KeyType:        string(keyType),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s key before re-arming inference alerts: %w", keyType, err)
+	}
+	if key.Disabled {
+		return nil
+	}
+	return s.rearmCreditsAlerts(ctx, args, keyType)
+}
+
+func (s *SetOpenRouterSpendCap) rearmCreditsAlerts(ctx context.Context, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType) error {
+	now := time.Now().UTC()
+	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+	if err := s.cache.Set(
+		ctx,
+		openRouterCreditsAlertGenerationKey(args.OrganizationID, keyType),
+		openRouterCreditsAlertGeneration{
+			OperationID:    args.OperationID,
+			MonthlyCredits: int64(args.Limit),
+		},
+		cycleEnd.Sub(now)+openRouterCreditsAlertGrace,
+	); err != nil {
+		return fmt.Errorf("re-arm OpenRouter %s credits alerts: %w", keyType, err)
 	}
 	return nil
 }

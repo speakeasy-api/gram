@@ -54,12 +54,12 @@ func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, 
 	return 12.5, nil, nil // arbitrary local number; unlimited dev key
 }
 
-func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
 
-func (o *Development) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	return o.ReconcileMonthlyCredits(ctx, orgID, keyType, currentLimit, upstreamLimit)
+func (o *Development) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return o.ReconcileMonthlyCredits(ctx, orgID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
 func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {

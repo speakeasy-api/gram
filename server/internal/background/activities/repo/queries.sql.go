@@ -983,6 +983,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -999,6 +1000,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
+	LimitGeneration  int64
 	ApiKeyEncrypted  pgtype.Text
 }
 
@@ -1025,6 +1027,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
+			&i.LimitGeneration,
 			&i.ApiKeyEncrypted,
 		); err != nil {
 			return nil, err
@@ -1087,6 +1090,26 @@ func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, a
 	var recovery_start_day pgtype.Date
 	err := row.Scan(&recovery_start_day)
 	return recovery_start_day, err
+}
+
+const getOpenRouterInferenceKeyLimit = `-- name: GetOpenRouterInferenceKeyLimit :one
+SELECT monthly_credits
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type GetOpenRouterInferenceKeyLimitParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) GetOpenRouterInferenceKeyLimit(ctx context.Context, arg GetOpenRouterInferenceKeyLimitParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterInferenceKeyLimit, arg.OrganizationID, arg.KeyType)
+	var monthly_credits int64
+	err := row.Scan(&monthly_credits)
+	return monthly_credits, err
 }
 
 const getPaygOpenRouterChatKeyProjection = `-- name: GetPaygOpenRouterChatKeyProjection :one

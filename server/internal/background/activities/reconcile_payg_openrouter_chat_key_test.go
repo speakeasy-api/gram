@@ -72,8 +72,8 @@ func (m *mockPaygChatKeyProvisioner) GetKeyUsage(ctx context.Context, apiKey str
 	return used, limit, args.Error(2)
 }
 
-func (m *mockPaygChatKeyProvisioner) ReconcileMonthlyCredits(ctx context.Context, organizationID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	args := m.Called(ctx, organizationID, keyType, currentLimit, upstreamLimit)
+func (m *mockPaygChatKeyProvisioner) ReconcileMonthlyCredits(ctx context.Context, organizationID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	args := m.Called(ctx, organizationID, keyType, currentLimit, currentGeneration, upstreamLimit)
 	credits, ok := args.Get(0).(int64)
 	if !ok {
 		panic("mock monthly credits value is not an int64")
@@ -81,8 +81,8 @@ func (m *mockPaygChatKeyProvisioner) ReconcileMonthlyCredits(ctx context.Context
 	return credits, args.Error(1)
 }
 
-func (m *mockPaygChatKeyProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	return m.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, upstreamLimit)
+func (m *mockPaygChatKeyProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return m.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, currentGeneration, upstreamLimit)
 }
 
 func (m *mockPaygChatKeyProvisioner) GetModelUsage(ctx context.Context, generationID string, organizationID string, keyType openrouter.KeyType) (*openrouter.ModelUsage, error) {

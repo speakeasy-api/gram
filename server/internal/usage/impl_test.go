@@ -176,7 +176,7 @@ func (*recordingOpenRouterProvisioner) GetKeyUsage(context.Context, string) (flo
 	return 0, nil, fmt.Errorf("not implemented")
 }
 
-func (*recordingOpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, *int64) (int64, error) {
+func (*recordingOpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, int64, *int64) (int64, error) {
 	return 0, fmt.Errorf("not implemented")
 }
 

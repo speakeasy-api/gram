@@ -73,6 +73,13 @@ LEFT JOIN openrouter_api_keys chat_key
  AND chat_key.deleted IS FALSE
 WHERE organization_metadata.id = @organization_id;
 
+-- name: GetOpenRouterInferenceKeyLimit :one
+SELECT monthly_credits
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: SetPaygOpenRouterChatKeyProjectionFixture :exec
 WITH updated_organization AS (
   UPDATE organization_metadata
@@ -110,6 +117,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
