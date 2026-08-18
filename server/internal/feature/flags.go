@@ -110,8 +110,8 @@ const (
 	// no research runs anywhere, checked before the rollout flag. It exists
 	// apart from FlagMCPResearch so an emergency stop never touches the
 	// rollout flag's org targeting — un-killing restores exactly the release
-	// state from before. Fails open on evaluation errors, which is safe
-	// because FlagMCPResearch independently fails closed.
+	// state from before. Fails closed: research must not run while the state
+	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)

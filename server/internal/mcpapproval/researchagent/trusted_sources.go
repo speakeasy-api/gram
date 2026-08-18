@@ -53,8 +53,13 @@ func trustedSourceCategory(raw string) string {
 		if host != domain && !strings.HasSuffix(host, "."+domain) {
 			continue
 		}
-		if hasPath && !strings.HasPrefix(strings.TrimPrefix(path, "/"), pathPrefix) {
-			continue
+		if hasPath {
+			trimmed := strings.TrimPrefix(path, "/")
+			// Exact section or a /-delimited descendant only: a listing for
+			// /advisories must not vouch for /advisories-malicious.
+			if trimmed != pathPrefix && !strings.HasPrefix(trimmed, pathPrefix+"/") {
+				continue
+			}
 		}
 		return source.Category
 	}
