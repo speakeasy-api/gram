@@ -458,9 +458,12 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 }
 
 // enableMCPApproval opens the rollout gate for the test organization; tests
-// for the gated-off state close it again explicitly.
+// for the gated-off state close it again explicitly. The research flag opens
+// with it so research tests exercise their own gates deliberately rather
+// than tripping the default-off rollout.
 func enableMCPApproval(ti *testInstance) {
 	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, true)
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, true)
 }
 
 func disableMCPApproval(ti *testInstance) {

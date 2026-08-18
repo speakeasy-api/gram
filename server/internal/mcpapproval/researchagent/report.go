@@ -132,6 +132,16 @@ type Claim struct {
 type Citation struct {
 	URL   string `json:"url"`
 	Title string `json:"title,omitempty"`
+
+	// TrustedSource names the category the citation's domain holds in the
+	// embedded trusted-source registry ("vulnerability database", "security
+	// research", …), empty when unlisted. Stamped deterministically by
+	// validation, never by the model: it exists so an admin can see at a
+	// glance which citations rest on independently recognized ground and
+	// judge the model-asserted source_reputation against it. It gates
+	// nothing — an unlisted source is not a bad source, only an unvouched
+	// one.
+	TrustedSource string `json:"trusted_source,omitempty"`
 }
 
 // RunMeta records what produced the report, for the audit trail and for
@@ -268,6 +278,7 @@ func followableCitations(citations []Citation) []Citation {
 		if !followableURL(citation.URL) {
 			continue
 		}
+		citation.TrustedSource = trustedSourceCategory(citation.URL)
 
 		kept = append(kept, citation)
 	}

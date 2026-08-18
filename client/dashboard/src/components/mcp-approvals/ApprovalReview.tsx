@@ -649,7 +649,7 @@ function ReportRunMeta({
 type ReportClaim = {
   text: string;
   tier?: string;
-  citations: string[];
+  citations: ClaimCitation[];
   sourceReputation?: string;
 };
 
@@ -690,25 +690,42 @@ function reportClaims(report: unknown): ReportClaim[] {
  * objects; bare string URLs are accepted too so older payloads keep
  * rendering.
  */
-function citationURLs(value: unknown): string[] {
+function citationURLs(value: unknown): ClaimCitation[] {
   if (!Array.isArray(value)) return [];
 
-  const out: string[] = [];
+  const out: ClaimCitation[] = [];
   for (const entry of value) {
     if (typeof entry === "string" && safeExternalHttpUrl(entry) !== null) {
-      out.push(entry);
+      out.push({ url: entry });
       continue;
     }
     if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
-      const url = (entry as Record<string, unknown>)["url"];
+      const record = entry as Record<string, unknown>;
+      const url = record["url"];
       if (typeof url === "string" && safeExternalHttpUrl(url) !== null) {
-        out.push(url);
+        out.push({
+          url,
+          trustedSource:
+            typeof record["trusted_source"] === "string"
+              ? record["trusted_source"]
+              : undefined,
+        });
       }
     }
   }
 
   return out;
 }
+
+type ClaimCitation = {
+  url: string;
+  /**
+   * The category the citation's domain holds in the server's trusted-source
+   * registry, stamped deterministically at validation — never by the model.
+   * Absent means unlisted, not untrustworthy.
+   */
+  trustedSource?: string;
+};
 
 function tierLabel(tier: string): string {
   switch (tier) {
@@ -768,7 +785,17 @@ function ReportClaims({ report }: { report: unknown }): JSX.Element | null {
               </span>
             )}
             {claim.citations.map((citation) => (
-              <ExternalCitationLink key={citation} url={citation} truncate />
+              <span
+                key={citation.url}
+                className="inline-flex items-center gap-1"
+              >
+                <ExternalCitationLink url={citation.url} truncate />
+                {citation.trustedSource && (
+                  <span className="text-muted-foreground text-xs">
+                    ✓ {citation.trustedSource}
+                  </span>
+                )}
+              </span>
             ))}
             <SourceReputationLabel reputation={claim.sourceReputation} />
           </div>
