@@ -22,33 +22,33 @@ function footnote(): string | null {
 }
 
 describe("InferenceCapMeter", () => {
-  // A key with no cap set has nothing for a bar to be a proportion of, but the
-  // spend against it still has to be somewhere.
-  it("reports the spend and draws no bar without a monthly cap", () => {
-    render(
-      <InferenceCapMeter cap={cap({ creditsUsed: 10, monthlyCredits: 0 })} />,
-    );
+  describe("without a monthly cap", () => {
+    it("reports the spend and draws no bar", () => {
+      render(
+        <InferenceCapMeter cap={cap({ creditsUsed: 10, monthlyCredits: 0 })} />,
+      );
 
-    expect(screen.getByText(/\$10\.00 spent this month/)).toBeTruthy();
-    expect(screen.queryByText(/No cap is set\./)).toBeTruthy();
-    expect(screen.queryByRole("progressbar")).toBeNull();
-  });
+      expect(screen.getByText(/\$10\.00 spent this month/)).toBeTruthy();
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
 
-  it("names the cap on the bar itself", () => {
-    render(<InferenceCapMeter cap={cap({ keyType: "internal" })} />);
+    // Every note this meter draws is about a cap's own month, which says there
+    // is a cap directly under the line saying there isn't one.
+    it.each<["chat" | "internal"]>([["chat"], ["internal"]])(
+      "adds no note under the %s key's figure",
+      (keyType) => {
+        const { container } = render(
+          <InferenceCapMeter cap={cap({ keyType, monthlyCredits: 0 })} />,
+        );
 
-    expect(screen.getByRole("progressbar").getAttribute("aria-label")).toBe(
-      "Security inference cap: $10.00 of the $100.00 monthly cap",
-    );
-  });
-
-  // Spend can pass the cap while the last requests settle, and a bar wider than
-  // its track would spill out of the meter.
-  it("holds the bar at full once the spend passes the cap", () => {
-    render(<InferenceCapMeter cap={cap({ creditsUsed: 250 })} />);
-
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "100",
+        expect(screen.getByText(/No cap is set\./)).toBeTruthy();
+        expect(
+          screen.queryByText(/resets on the first of the month/),
+        ).toBeNull();
+        // The heading and the figure, and no empty paragraph opening a gap
+        // under them.
+        expect(container.querySelectorAll("p")).toHaveLength(2);
+      },
     );
   });
 
@@ -79,6 +79,14 @@ describe("InferenceCapMeter", () => {
       render(<InferenceCapMeter cap={cap({ creditsUsed: 100 })} />);
 
       expect(footnote()).toMatch(/This month's cap is reached/);
+    });
+
+    // The band's note is the whole line: nothing else is appended to it, so the
+    // copy a customer reads is exactly the copy the band was approved with.
+    it("draws the band's note and nothing else", () => {
+      render(<InferenceCapMeter cap={cap({ creditsUsed: 50 })} />);
+
+      expect(footnote()).toBe("You've used at least half of this month's cap.");
     });
   });
 

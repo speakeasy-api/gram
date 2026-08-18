@@ -35,14 +35,22 @@ import (
 type checkoutStripeClient struct {
 	mu sync.Mutex
 
-	customers       map[string]*stripeclient.Customer
-	checkoutResults map[string]checkoutStripeResult
-	customerInputs  []stripeclient.CreateCustomerInput
-	checkoutInputs  []stripeclient.CreateCheckoutSessionInput
-	customerError   error
-	checkoutError   error
-	checkoutState   *stripeclient.CheckoutSessionState
-	checkoutGetErr  error
+	customers                map[string]*stripeclient.Customer
+	checkoutResults          map[string]checkoutStripeResult
+	customerInputs           []stripeclient.CreateCustomerInput
+	checkoutInputs           []stripeclient.CreateCheckoutSessionInput
+	customerError            error
+	checkoutError            error
+	checkoutState            *stripeclient.CheckoutSessionState
+	checkoutGetErr           error
+	subscriptionState        *stripeclient.SubscriptionState
+	subscriptionReadError    error
+	subscriptionUpdateError  error
+	subscriptionUpdates      []stripeclient.SetSubscriptionCancelAtPeriodEndInput
+	afterSubscriptionUpdate  func()
+	portalInputs             []stripeclient.CreatePortalSessionInput
+	portalError              error
+	portalCustomerIDOverride string
 }
 
 type checkoutStripeResult struct {
@@ -53,10 +61,12 @@ type checkoutStripeResult struct {
 
 func newCheckoutStripeClient() *checkoutStripeClient {
 	return &checkoutStripeClient{
-		customers:       make(map[string]*stripeclient.Customer),
-		checkoutResults: make(map[string]checkoutStripeResult),
-		customerInputs:  make([]stripeclient.CreateCustomerInput, 0),
-		checkoutInputs:  make([]stripeclient.CreateCheckoutSessionInput, 0),
+		customers:           make(map[string]*stripeclient.Customer),
+		checkoutResults:     make(map[string]checkoutStripeResult),
+		customerInputs:      make([]stripeclient.CreateCustomerInput, 0),
+		checkoutInputs:      make([]stripeclient.CreateCheckoutSessionInput, 0),
+		subscriptionUpdates: make([]stripeclient.SetSubscriptionCancelAtPeriodEndInput, 0),
+		portalInputs:        make([]stripeclient.CreatePortalSessionInput, 0),
 	}
 }
 
@@ -110,6 +120,54 @@ func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) 
 	return &state, nil
 }
 
+func (c *checkoutStripeClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.subscriptionReadError != nil {
+		return nil, c.subscriptionReadError
+	}
+	if c.subscriptionState == nil {
+		return nil, errors.New("subscription not found")
+	}
+	state := *c.subscriptionState
+	return &state, nil
+}
+
+func (c *checkoutStripeClient) SetSubscriptionCancelAtPeriodEnd(_ context.Context, input stripeclient.SetSubscriptionCancelAtPeriodEndInput) (*stripeclient.SubscriptionState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.subscriptionUpdates = append(c.subscriptionUpdates, input)
+	// Separate from the read error so a test can fail the write alone: one
+	// field for both would short-circuit at the read every lifecycle call makes
+	// first, leaving the write's own failure path never exercised.
+	if c.subscriptionUpdateError != nil {
+		return nil, c.subscriptionUpdateError
+	}
+	if c.subscriptionState == nil {
+		return nil, errors.New("subscription not found")
+	}
+	c.subscriptionState.CancelAtPeriodEnd = input.CancelAtPeriodEnd
+	state := *c.subscriptionState
+	if c.afterSubscriptionUpdate != nil {
+		c.afterSubscriptionUpdate()
+	}
+	return &state, nil
+}
+
+func (c *checkoutStripeClient) CreatePortalSession(_ context.Context, input stripeclient.CreatePortalSessionInput) (*stripeclient.PortalSession, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.portalInputs = append(c.portalInputs, input)
+	if c.portalError != nil {
+		return nil, c.portalError
+	}
+	customerID := input.CustomerID
+	if c.portalCustomerIDOverride != "" {
+		customerID = c.portalCustomerIDOverride
+	}
+	return &stripeclient.PortalSession{ID: "bps_test", CustomerID: customerID, URL: "https://billing.stripe.test/session"}, nil
+}
+
 func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
 	return errors.New("not implemented")
 }
@@ -143,7 +201,7 @@ func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.Webh
 }
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum"}
+	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}
 }
 
 func (c *checkoutStripeClient) snapshot() (int, []stripeclient.CreateCustomerInput, []stripeclient.CreateCheckoutSessionInput) {

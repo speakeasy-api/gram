@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   hasScope: vi.fn(),
   session: vi.fn(),
+  subscription: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
 }));
@@ -41,6 +43,38 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+}));
+
+// The plan section and the spend cap both read the live subscription; the
+// shared wrapper is stubbed so this file stays about which sections the page
+// composes for a given tier.
+vi.mock("@/components/billing/use-stripe-subscription", () => ({
+  useStripeSubscription: () => mocks.subscription(),
+}));
+
+vi.mock("@gram/client/react-query/createStripePortalSession.js", () => ({
+  useCreateStripePortalSessionMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/cancelStripeSubscription.js", () => ({
+  useCancelStripeSubscriptionMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/resumeStripeSubscription.js", () => ({
+  useResumeStripeSubscriptionMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/getStripeSubscription.js", () => ({
+  invalidateAllGetStripeSubscription: vi.fn(),
 }));
 
 // The usage meters and the TUM view own their own data; this test is only
@@ -130,14 +164,24 @@ const billingEmailField = () =>
 const inferenceCapsSection = () =>
   screen.queryByRole("heading", { name: /inference caps/i });
 
-/** The billing email section invalidates its query through the client. */
+const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
+
+const portalButton = () =>
+  screen.queryByRole("button", { name: "Manage billing" });
+
+/**
+ * The billing email section invalidates its query through the client, and the
+ * inference caps section reads the location to answer an anchor link into it.
+ */
 function renderBilling() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <Billing />
+      <MemoryRouter>
+        <Billing />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -154,6 +198,16 @@ describe("Billing", () => {
         startedAt: new Date(Date.now() - 2 * DAY),
         endsAt: new Date(Date.now() + 12 * DAY),
       },
+    });
+    mocks.subscription.mockReturnValue({
+      data: {
+        status: "active",
+        cancelAtPeriodEnd: false,
+        paymentFailed: false,
+      },
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
     });
     const legacyTierLimits = {
       basePrice: 0,
@@ -188,7 +242,7 @@ describe("Billing", () => {
   afterEach(cleanup);
 
   it("offers pay as you go to a trialing admin on the self-serve view", () => {
-    render(<Billing />);
+    renderBilling();
 
     expect(cta()).not.toBeNull();
   });
@@ -198,7 +252,7 @@ describe("Billing", () => {
   it("offers pay as you go on the enterprise TUM view", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
-    render(<Billing />);
+    renderBilling();
 
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).not.toBeNull();
@@ -211,7 +265,7 @@ describe("Billing", () => {
     mocks.productTier.mockReturnValue("enterprise");
     mocks.hasScope.mockReturnValue(false);
 
-    render(<Billing />);
+    renderBilling();
 
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).toBeNull();
@@ -252,6 +306,56 @@ describe("Billing", () => {
     },
   );
 
+  // The plan section is where a converted organization manages its card,
+  // invoices, and cancellation, so it belongs to the pay-as-you-go view only.
+  it("places the pay as you go plan on the payg view", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+
+    renderBilling();
+
+    expect(planSection()).not.toBeNull();
+    expect(portalButton()).not.toBeNull();
+  });
+
+  // The account type can read as PAYG while a product trial is still running.
+  // Checkout is what creates the subscription, so the CTA owns that view — a
+  // plan section beside it would be reporting on something that doesn't exist.
+  it("keeps a trialing payg org on the checkout CTA alone", () => {
+    mocks.productTier.mockReturnValue("payg");
+
+    renderBilling();
+
+    expect(cta()).not.toBeNull();
+    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
+  });
+
+  it.each<ProductTier>([
+    "base",
+    "base_PAID",
+    "__deprecated__pro",
+    "enterprise",
+  ])("shows no pay as you go plan on the %s view", (tier) => {
+    mocks.productTier.mockReturnValue(tier);
+
+    renderBilling();
+
+    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
+  });
+
+  // A pre-card trial converts through the checkout CTA, not the plan section:
+  // there is no subscription to manage until checkout creates one.
+  it("keeps the trialing view on the checkout CTA", () => {
+    mocks.productTier.mockReturnValue("enterprise");
+
+    renderBilling();
+
+    expect(cta()).not.toBeNull();
+    expect(planSection()).toBeNull();
+  });
+
   it("shows no inference caps on the pre-checkout view", () => {
     mocks.productTier.mockReturnValue("base");
 
@@ -281,7 +385,7 @@ describe("Billing", () => {
       },
     });
 
-    render(<Billing />);
+    renderBilling();
 
     expect(cta()).toBeNull();
     expect(screen.queryByText("Pay as you go pricing")).toBeNull();

@@ -2,11 +2,14 @@ import type { InferenceSpendCap } from "@gram/client/models/components/inference
 import { describe, expect, it } from "vitest";
 
 import {
-  crossedSpendCapThreshold,
-  inferenceCapFieldId,
+  INFERENCE_CAPS_ANCHOR,
+  inferenceCapAnchor,
   inferenceCapLabel,
+  inferenceCapPausedNote,
+  inferenceCapRaiseLabel,
+  isInferenceCapAnchor,
+  isInferenceCapReached,
   sortInferenceCaps,
-  spendCapFillPercent,
 } from "./inference-caps";
 
 function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
@@ -28,70 +31,114 @@ describe("inferenceCapLabel", () => {
   ])("labels the %s key as %s", (keyType, label) => {
     expect(inferenceCapLabel(keyType)).toBe(label);
   });
+});
 
-  const FORBIDDEN = ["chat", "internal", "fallback key"] as const;
+describe("inferenceCapAnchor", () => {
+  it("gives each cap its own anchor", () => {
+    expect(inferenceCapAnchor("internal")).not.toBe(inferenceCapAnchor("chat"));
+  });
+
+  // The anchor lands in the address bar, so the API's key types must not be in
+  // it any more than they are in the copy.
+  it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
+    "keeps the %s identifier out of the URL",
+    (keyType) => {
+      expect(inferenceCapAnchor(keyType)).not.toContain(keyType);
+    },
+  );
+
+  it("recognizes the section anchor and every cap anchor", () => {
+    expect(isInferenceCapAnchor(INFERENCE_CAPS_ANCHOR)).toBe(true);
+    expect(isInferenceCapAnchor(inferenceCapAnchor("internal"))).toBe(true);
+    expect(isInferenceCapAnchor(inferenceCapAnchor("chat"))).toBe(true);
+  });
+
+  it("recognizes nothing else", () => {
+    expect(isInferenceCapAnchor("billing-email")).toBe(false);
+    expect(isInferenceCapAnchor("")).toBe(false);
+  });
+});
+
+describe("cap copy", () => {
+  // The banners stack when both caps are reached, so their calls to action have
+  // to be told apart by name alone.
+  it("names each cap's call to action distinctly", () => {
+    expect(inferenceCapRaiseLabel("internal")).not.toBe(
+      inferenceCapRaiseLabel("chat"),
+    );
+  });
+
+  // The two caps stop unrelated work; a banner that described the wrong one
+  // would send an admin to raise a cap that isn't the reason for the silence.
+  it("describes what each cap stops in its own words", () => {
+    expect(inferenceCapPausedNote("internal")).not.toBe(
+      inferenceCapPausedNote("chat"),
+    );
+  });
+
+  const FORBIDDEN = ["chat", "internal", "spend cap", "fallback key"] as const;
 
   // The correction this section exists for: the misleading identifiers are gone
   // from everything a customer reads.
   it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
-    "keeps internal identifiers out of the %s cap's label",
+    "keeps internal identifiers out of the %s cap's copy",
     (keyType) => {
-      const label = inferenceCapLabel(keyType).toLowerCase();
+      const copy = [
+        inferenceCapLabel(keyType),
+        inferenceCapPausedNote(keyType),
+        inferenceCapRaiseLabel(keyType),
+      ]
+        .join(" ")
+        .toLowerCase();
 
       for (const term of FORBIDDEN) {
-        expect(label).not.toContain(term);
+        expect(copy).not.toContain(term);
       }
     },
   );
 });
 
-describe("inferenceCapFieldId", () => {
-  // Both controls can be on screen together, and a label points at its field by
-  // id — a shared one would send every label to the same input.
-  it("gives each cap its own field id", () => {
-    expect(inferenceCapFieldId("internal")).not.toBe(
-      inferenceCapFieldId("chat"),
-    );
-  });
-
-  it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
-    "keeps the %s identifier out of the markup",
-    (keyType) => {
-      expect(inferenceCapFieldId(keyType)).not.toContain(keyType);
-    },
-  );
-});
-
-describe("crossedSpendCapThreshold", () => {
+describe("isInferenceCapReached", () => {
   // A cap of zero is "none configured", not "spend nothing" — the endpoint
-  // reports it for keys that never had one set, and a band above 0 there would
-  // read as a limit that was reached.
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    "reports no band against a cap of %s",
-    (limit) => {
-      expect(crossedSpendCapThreshold(42, limit)).toBe(0);
+  // reports it for keys that never had one set.
+  const cases: Array<{
+    name: string;
+    usage: { monthlyCredits: number; creditsUsed: number } | undefined;
+    reached: boolean;
+  }> = [
+    { name: "nothing loaded", usage: undefined, reached: false },
+    {
+      name: "no cap configured and nothing spent",
+      usage: { monthlyCredits: 0, creditsUsed: 0 },
+      reached: false,
     },
-  );
+    {
+      name: "no cap configured but spending",
+      usage: { monthlyCredits: 0, creditsUsed: 42 },
+      reached: false,
+    },
+    {
+      name: "under the cap",
+      usage: { monthlyCredits: 100, creditsUsed: 99 },
+      reached: false,
+    },
+    {
+      name: "exactly at the cap",
+      usage: { monthlyCredits: 100, creditsUsed: 100 },
+      reached: true,
+    },
+    {
+      name: "over the cap",
+      usage: { monthlyCredits: 100, creditsUsed: 150 },
+      reached: true,
+    },
+  ];
 
-  it("reports the highest band the spend has crossed", () => {
-    expect(crossedSpendCapThreshold(49.99, 100)).toBe(0);
-    expect(crossedSpendCapThreshold(50, 100)).toBe(50);
-    expect(crossedSpendCapThreshold(90, 100)).toBe(90);
-    expect(crossedSpendCapThreshold(100, 100)).toBe(100);
-    expect(crossedSpendCapThreshold(250, 100)).toBe(100);
-  });
-});
-
-describe("spendCapFillPercent", () => {
-  // Spend can pass the cap while the last requests settle, and a bar wider than
-  // its track would spill out of the meter.
-  it("clamps overage to a full bar", () => {
-    expect(spendCapFillPercent(250, 100)).toBe(100);
-  });
-
-  it("draws nothing without a cap to be a proportion of", () => {
-    expect(spendCapFillPercent(42, 0)).toBe(0);
-  });
+  for (const { name, usage, reached } of cases) {
+    it(`${reached ? "pauses" : "runs"} with ${name}`, () => {
+      expect(isInferenceCapReached(usage)).toBe(reached);
+    });
+  }
 });
 
 describe("sortInferenceCaps", () => {

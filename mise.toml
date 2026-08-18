@@ -303,6 +303,7 @@ STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
+STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
 
 #########################
 ## Polar configuration ##

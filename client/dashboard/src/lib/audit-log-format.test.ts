@@ -59,6 +59,23 @@ describe("renderVerb", () => {
       ),
     ).toBe("sent org admin invite to");
   });
+
+  // Every billing action is recorded against the same fixed subject display
+  // name, so the phrase has to read as a sentence with it behind them.
+  it("reads as a sentence in front of the billing metadata subject", () => {
+    const sentence = (action: string) =>
+      `${renderVerb(log({ action }))} Billing metadata`;
+
+    expect(sentence("billing_metadata:create_stripe_portal")).toBe(
+      "opened Stripe billing portal for Billing metadata",
+    );
+    expect(sentence("billing_metadata:cancel_stripe_subscription")).toBe(
+      "canceled Stripe subscription for Billing metadata",
+    );
+    expect(sentence("billing_metadata:resume_stripe_subscription")).toBe(
+      "resumed Stripe subscription for Billing metadata",
+    );
+  });
 });
 
 describe("formatAuditActionLabel", () => {
@@ -73,6 +90,12 @@ describe("formatAuditActionLabel", () => {
       "Updated a global variation",
     );
     expect(formatAuditActionLabel("widget:delete")).toBe("Deleted widget");
+    expect(
+      formatAuditActionLabel("billing_metadata:cancel_stripe_subscription"),
+    ).toBe("Canceled Stripe subscription");
+    expect(
+      formatAuditActionLabel("billing_metadata:create_stripe_portal"),
+    ).toBe("Opened Stripe billing portal");
   });
 });
 
