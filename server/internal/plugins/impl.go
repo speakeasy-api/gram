@@ -34,6 +34,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -1090,6 +1091,67 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 
 // --- Assignments ---
 
+func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesPayload) (*gen.ListAudiencesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	directoryRepo := workosrepo.New(s.db)
+	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles for plugin assignments").LogError(ctx, s.logger)
+	}
+	groups, err := directoryRepo.ListActiveDirectoryGroups(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list directory groups for plugin assignments").LogError(ctx, s.logger)
+	}
+	attributes, err := directoryRepo.ListActiveDirectoryAttributeValues(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values for plugin assignments").LogError(ctx, s.logger)
+	}
+
+	result := &gen.ListAudiencesResult{
+		Audiences: make([]*gen.PluginAudience, 0, 1+len(roles)+len(groups)+len(attributes)),
+	}
+	result.Audiences = append(result.Audiences, &gen.PluginAudience{
+		Kind:         "everyone",
+		DisplayName:  "Everyone",
+		MemberCount:  nil,
+		PrincipalUrn: urn.PrincipalWildcard,
+	})
+	for _, role := range roles {
+		result.Audiences = append(result.Audiences, &gen.PluginAudience{
+			Kind:         "role",
+			DisplayName:  role.WorkosName,
+			MemberCount:  &role.MemberCount,
+			PrincipalUrn: role.RoleUrn,
+		})
+	}
+	for _, group := range groups {
+		result.Audiences = append(result.Audiences, &gen.PluginAudience{
+			Kind:         "directory_group",
+			DisplayName:  group.Name,
+			MemberCount:  &group.MemberCount,
+			PrincipalUrn: DirectoryGroupPrincipal(group.ID),
+		})
+	}
+	for _, attribute := range attributes {
+		result.Audiences = append(result.Audiences, &gen.PluginAudience{
+			Kind:         "directory_attribute",
+			DisplayName:  fmt.Sprintf("%s: %s", attribute.AttributeKey, attribute.AttributeValue),
+			MemberCount:  &attribute.MemberCount,
+			PrincipalUrn: DirectoryAttributePrincipal(attribute.AttributeKey, attribute.AttributeValue),
+		})
+	}
+
+	return result, nil
+}
+
 func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPluginAssignmentsPayload) (*gen.SetPluginAssignmentsResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1139,6 +1201,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	directoryRepo := workosrepo.New(tx)
 	for _, principal := range principals {
 		switch principal.Type {
+		case pluginAssignmentPrincipalStandard:
+			continue
 		case pluginAssignmentPrincipalDirectoryGroup:
 			groupID, err := uuid.Parse(principal.Identifier)
 			if err != nil {

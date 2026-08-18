@@ -141,7 +141,7 @@ func UsageCommands() []string {
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -1768,6 +1768,10 @@ func ParseEndpoint(
 		pluginsSetPluginAssignmentsBodyFlag             = pluginsSetPluginAssignmentsFlags.String("body", "REQUIRED", "")
 		pluginsSetPluginAssignmentsSessionTokenFlag     = pluginsSetPluginAssignmentsFlags.String("session-token", "", "")
 		pluginsSetPluginAssignmentsProjectSlugInputFlag = pluginsSetPluginAssignmentsFlags.String("project-slug-input", "", "")
+
+		pluginsListAudiencesFlags                = flag.NewFlagSet("list-audiences", flag.ExitOnError)
+		pluginsListAudiencesSessionTokenFlag     = pluginsListAudiencesFlags.String("session-token", "", "")
+		pluginsListAudiencesProjectSlugInputFlag = pluginsListAudiencesFlags.String("project-slug-input", "", "")
 
 		pluginsDownloadPluginPackageFlags                = flag.NewFlagSet("download-plugin-package", flag.ExitOnError)
 		pluginsDownloadPluginPackagePluginIDFlag         = pluginsDownloadPluginPackageFlags.String("plugin-id", "REQUIRED", "")
@@ -3885,6 +3889,7 @@ func ParseEndpoint(
 	pluginsUpdatePluginServerFlags.Usage = pluginsUpdatePluginServerUsage
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
+	pluginsListAudiencesFlags.Usage = pluginsListAudiencesUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
 	pluginsDownloadPlatformMCPPluginFlags.Usage = pluginsDownloadPlatformMCPPluginUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
@@ -5472,6 +5477,9 @@ func ParseEndpoint(
 
 			case "set-plugin-assignments":
 				epf = pluginsSetPluginAssignmentsFlags
+
+			case "list-audiences":
+				epf = pluginsListAudiencesFlags
 
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
@@ -7569,6 +7577,9 @@ func ParseEndpoint(
 			case "set-plugin-assignments":
 				endpoint = c.SetPluginAssignments()
 				data, err = pluginsc.BuildSetPluginAssignmentsPayload(*pluginsSetPluginAssignmentsBodyFlag, *pluginsSetPluginAssignmentsSessionTokenFlag, *pluginsSetPluginAssignmentsProjectSlugInputFlag)
+			case "list-audiences":
+				endpoint = c.ListAudiences()
+				data, err = pluginsc.BuildListAudiencesPayload(*pluginsListAudiencesSessionTokenFlag, *pluginsListAudiencesProjectSlugInputFlag)
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
@@ -15574,6 +15585,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-plugin-server: Update a server's configuration within a plugin.`)
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
+	fmt.Fprintln(os.Stderr, `    list-audiences: List the audiences that can be assigned to plugins.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
 	fmt.Fprintln(os.Stderr, `    download-platform-mcp-plugin: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
@@ -15784,6 +15796,26 @@ func pluginsSetPluginAssignmentsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsListAudiencesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-audiences", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the audiences that can be assigned to plugins.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-audiences --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDownloadPluginPackageUsage() {

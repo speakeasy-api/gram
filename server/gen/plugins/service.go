@@ -35,6 +35,8 @@ type Service interface {
 	RemovePluginServer(context.Context, *RemovePluginServerPayload) (err error)
 	// Replace all assignments for a plugin with the given list of principal URNs.
 	SetPluginAssignments(context.Context, *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error)
+	// List the audiences that can be assigned to plugins.
+	ListAudiences(context.Context, *ListAudiencesPayload) (res *ListAudiencesResult, err error)
 	// Download a ZIP of a single plugin package for direct installation.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -104,7 +106,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadPlatformMCPPlugin", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPlatformMCPPackageStatus", "repairPlatformMCPPackage", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [20]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadPlatformMCPPlugin", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPlatformMCPPackageStatus", "repairPlatformMCPPackage", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -237,6 +239,20 @@ type GetPublishStatusPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListAudiencesPayload is the payload type of the plugins service
+// listAudiences method.
+type ListAudiencesPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListAudiencesResult is the result type of the plugins service listAudiences
+// method.
+type ListAudiencesResult struct {
+	// Audiences that can be assigned to plugins.
+	Audiences []*PluginAudience
+}
+
 // ListPluginsPayload is the payload type of the plugins service listPlugins
 // method.
 type ListPluginsPayload struct {
@@ -337,6 +353,17 @@ type PluginAssignment struct {
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string
 	CreatedAt    string
+}
+
+type PluginAudience struct {
+	// Audience kind.
+	Kind string
+	// Display name for the audience.
+	DisplayName string
+	// Number of current members, when the audience has an enumerable membership.
+	MemberCount *int64
+	// Principal URN used to assign the audience to a plugin.
+	PrincipalUrn string
 }
 
 // PluginServer is the result type of the plugins service addPluginServer

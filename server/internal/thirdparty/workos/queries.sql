@@ -306,3 +306,36 @@ SELECT EXISTS(
     AND deleted IS FALSE
     AND workos_deleted IS FALSE
 );
+
+-- name: ListActiveDirectoryGroups :many
+SELECT
+  dg.id,
+  dg.name,
+  COUNT(DISTINCT du.id)::bigint AS member_count
+FROM directory_groups AS dg
+LEFT JOIN directory_user_group_memberships AS m
+  ON m.directory_group_id = dg.id
+  AND m.deleted IS FALSE
+LEFT JOIN directory_users AS du
+  ON du.id = m.directory_user_id
+  AND du.organization_id = dg.organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+WHERE dg.organization_id = @organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+GROUP BY dg.id, dg.name
+ORDER BY dg.name, dg.id;
+
+-- name: ListActiveDirectoryAttributeValues :many
+SELECT
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value,
+  COUNT(DISTINCT du.id)::bigint AS member_count
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+GROUP BY attribute.key, attribute.value
+ORDER BY attribute.key, attribute.value;
