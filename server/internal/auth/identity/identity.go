@@ -62,6 +62,7 @@ type AuthenticateResult struct {
 	AccessToken    string
 	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
 	User           AuthenticatedUser
+	impersonated   bool
 }
 
 type MagicAuthChallenge struct {
@@ -103,6 +104,13 @@ type IDPUserInfo struct {
 	ExternalID      string  `json:"-"`
 	WorkOSSessionID string  `json:"-"`
 	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	impersonated    bool
+}
+
+// IsImpersonated reports whether WorkOS authenticated the user through a
+// Dashboard-initiated impersonation session.
+func (u *IDPUserInfo) IsImpersonated() bool {
+	return u != nil && u.impersonated
 }
 
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
@@ -221,6 +229,7 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 		ExternalID:      resp.User.ExternalID,
 		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
 		OrganizationID:  resp.OrganizationID,
+		impersonated:    resp.impersonated,
 	}
 }
 

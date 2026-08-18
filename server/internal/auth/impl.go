@@ -283,8 +283,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	if err := s.validateAuthNonce(ctx, payload); err != nil {
-		return redirectWithError(authErrCodeLookup, err)
+	stateProvided := conv.PtrValOr(payload.State, "") != ""
+	if stateProvided {
+		if err := s.validateAuthNonce(ctx, payload); err != nil {
+			return redirectWithError(authErrCodeLookup, err)
+		}
 	}
 
 	// Consume the signup intent on every path, not only the zero-org one, so a
@@ -310,6 +313,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
+	}
+	if !stateProvided && !idpUser.IsImpersonated() {
+		return redirectWithError(authErrCodeLookup, errors.New("missing or invalid state parameter"))
 	}
 
 	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
