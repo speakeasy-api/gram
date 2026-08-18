@@ -47,6 +47,29 @@ type ListRiskFindingsParams struct {
 	Limit          uint64
 }
 
+// riskFindingListColumns is the projection every findings listing serves, in
+// RiskFindingListRow's scan order. The Dismissed listing (dismissed.go) selects
+// the same set so both tabs render from one row shape.
+var riskFindingListColumns = []string{
+	"id",
+	"message_created_at",
+	"chat_message_id",
+	"content_part_id",
+	"chat_id",
+	"external_user_id",
+	"assistant_id",
+	"risk_policy_id",
+	"risk_policy_version",
+	"rule_id",
+	"description",
+	"source",
+	"confidence",
+	"tags",
+	"start_pos",
+	"end_pos",
+	"match_redacted",
+}
+
 // RiskFindingListRow is one listing row served from ClickHouse. The match is
 // only ever the precomputed redacted display string — the raw value never
 // reaches this store.
@@ -68,6 +91,31 @@ type RiskFindingListRow struct {
 	StartPos          int32
 	EndPos            int32
 	MatchRedacted     string
+}
+
+// scanTargets returns the row's fields in riskFindingListColumns order. It is
+// what keeps the projection and the scan in lockstep across the two listings
+// that share this row shape.
+func (r *RiskFindingListRow) scanTargets() []any {
+	return []any{
+		&r.ID,
+		&r.MessageCreatedAt,
+		&r.ChatMessageID,
+		&r.ContentPartID,
+		&r.ChatID,
+		&r.ExternalUserID,
+		&r.AssistantID,
+		&r.RiskPolicyID,
+		&r.RiskPolicyVersion,
+		&r.RuleID,
+		&r.Description,
+		&r.Source,
+		&r.Confidence,
+		&r.Tags,
+		&r.StartPos,
+		&r.EndPos,
+		&r.MatchRedacted,
+	}
 }
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
@@ -92,7 +140,17 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 }
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
-// excluded, not marked false positive. Applied after the per-id dedup.
+// suppressed, not marked a false positive. Applied after the per-id dedup.
+//
+// Two columns for one meaning, for the length of the suppression convergence.
+// excluded_at is where every suppression path records itself (exclusion rules,
+// manual dismissals, the offline sweep, with excluded_reason saying which);
+// false_positive_at is the legacy column that predates it. There is no backfill
+// giving the older rows an excluded_at: once the writer convergence is deployed
+// nothing writes a false_positive_at-only row again, and the rows that already
+// carry one expire under the table's 90-day created_at TTL. The contract phase
+// drops this half of the condition, and then the column, once that window
+// closes.
 const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 
 // ListRiskFindings returns one page of findings ordered by
@@ -107,26 +165,7 @@ const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 // (risk_policy_id, rule_id, tenant-fingerprint) keeping the newest occurrence,
 // which subsumes the id dedup (duplicates share the whole key).
 func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams) ([]RiskFindingListRow, error) {
-	columns := []string{
-		"id",
-		"message_created_at",
-		"chat_message_id",
-		"content_part_id",
-		"chat_id",
-		"external_user_id",
-		"assistant_id",
-		"risk_policy_id",
-		"risk_policy_version",
-		"rule_id",
-		"description",
-		"source",
-		"confidence",
-		"tags",
-		"start_pos",
-		"end_pos",
-		"match_redacted",
-	}
-	sb, err := listRiskFindingsBase(p, columns...)
+	sb, err := listRiskFindingsBase(p, riskFindingListColumns...)
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +213,12 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Column("fingerprint_tenant_hs256").
 			Suffix("LIMIT 1 BY id")
-		grouped := sq.Select(columns...).
+		grouped := sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
 			Where(liveStateCond).
 			OrderBy("message_created_at DESC", "id DESC").
 			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
-		outer := sq.Select(columns...).FromSelect(grouped, "deduped")
+		outer := sq.Select(riskFindingListColumns...).FromSelect(grouped, "deduped")
 		if hasCursor {
 			outer = outer.Where(cursorCond, *p.CursorTime, p.CursorID.UUID)
 		}
@@ -199,7 +238,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		// support, so it renders through the suffix.
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Suffix("LIMIT 1 BY id")
-		sb = sq.Select(columns...).
+		sb = sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
 			Where(liveStateCond).
 			OrderBy("message_created_at DESC", "id DESC").
@@ -220,25 +259,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	var out []RiskFindingListRow
 	for rows.Next() {
 		var row RiskFindingListRow
-		if err := rows.Scan(
-			&row.ID,
-			&row.MessageCreatedAt,
-			&row.ChatMessageID,
-			&row.ContentPartID,
-			&row.ChatID,
-			&row.ExternalUserID,
-			&row.AssistantID,
-			&row.RiskPolicyID,
-			&row.RiskPolicyVersion,
-			&row.RuleID,
-			&row.Description,
-			&row.Source,
-			&row.Confidence,
-			&row.Tags,
-			&row.StartPos,
-			&row.EndPos,
-			&row.MatchRedacted,
-		); err != nil {
+		if err := rows.Scan(row.scanTargets()...); err != nil {
 			return nil, fmt.Errorf("scan risk findings list row: %w", err)
 		}
 		out = append(out, row)
