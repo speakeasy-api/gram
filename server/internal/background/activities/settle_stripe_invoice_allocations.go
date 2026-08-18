@@ -8,7 +8,9 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -26,6 +28,8 @@ const (
 
 	stripeAllocationSourceOpenRouter = "openrouter_daily_spend"
 	stripeAllocationSourceTUM        = "tum_cycle"
+
+	stripeAllocationIdempotencyKeyIndex = "stripe_invoice_allocations_idempotency_key_key"
 )
 
 // SettleStripeInvoiceAllocationsArgs fixes the observation time for one daily
@@ -198,7 +202,7 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 				invoice.StripeInvoiceID,
 				destination,
 				now,
-			)); err != nil {
+			)); err != nil && !allocationAlreadyClaimed(err) {
 				return fmt.Errorf("freeze baseline for %s: %w", day.SourceDay.Time.Format(time.DateOnly), err)
 			}
 		}
@@ -286,12 +290,33 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 			invoice.StripeInvoiceID,
 			destination,
 			now,
-		)); err != nil {
+		)); err != nil && !allocationAlreadyClaimed(err) {
 			return fmt.Errorf("freeze carry for %s: %w", baseline.SourceKey, err)
 		}
 	}
 
 	return nil
+}
+
+// allocationAlreadyClaimed reports whether a failed allocation insert lost a
+// race to a concurrent settle rather than hitting a real fault.
+//
+// The insert arbitrates ON CONFLICT on (organization_id, source_kind,
+// source_key, seq), and Postgres resolves a concurrent conflict on the arbiter
+// through the speculative-insert wait without raising. It does not extend that
+// to the table's other unique index, idempotency_key, so a racing insert that
+// reaches that one still raises. Both keys derive from the same (organization,
+// source day, seq) tuple, so the violation means the row this run wanted is
+// already stored, and no UPDATE in this package rewrites a stored allocation's
+// amount_usd or source_snapshot_usd. The loser has nothing left to do.
+//
+// Any other violation, the arbiter's included, is a fault this activity has
+// never reasoned about and still has to surface.
+func allocationAlreadyClaimed(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
+		pgErr.ConstraintName == stripeAllocationIdempotencyKeyIndex
 }
 
 func openRouterAllocationParams(
