@@ -672,16 +672,40 @@ describe("ThirdPartyMcpJourney", () => {
         .getAttribute("href"),
     ).toMatch(/\/mcp\/linear$/);
     expect(screen.queryByText("mcp-server")).toBeNull();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "I've connected it",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByText("mcp_servers").closest("pre")!);
 
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
 
     await waitFor(() =>
       expect(
         screen.getByText(
-          "Connect to the Linear MCP server and list its available tools.",
+          "Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads.",
         ),
       ).toBeTruthy(),
     );
+    expect(
+      (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(
+      screen
+        .getByText(
+          "Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads.",
+        )
+        .closest("pre")!,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
     expect(queries.activity).toHaveBeenCalledWith(
       { gramProject: "project-guide-test", getMcpServerActivityPayload: {} },
       undefined,
@@ -689,7 +713,55 @@ describe("ThirdPartyMcpJourney", () => {
     );
   });
 
-  it("credits a previously recorded governed call", async () => {
+  it("restores an in-progress journey from matching activity", async () => {
+    setVerifiedServer();
+    workflow.current = {
+      phase: "complete",
+      reset: vi.fn(),
+      statuses: [
+        {
+          key: "completed",
+          mcpServerId: "mcp-server",
+          name: "Linear",
+          status: "completed",
+        },
+      ],
+    };
+    queries.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            lastToolCallAt: new Date("2026-08-18T00:00:00.000Z"),
+            recentToolCalls: 1,
+            targetId: "linear",
+            targetLabel: "List issues",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(screen.getByText("Journey A complete")).toBeTruthy();
+    expect(screen.getByText("The path is governed.")).toBeTruthy();
+    expect(screen.getByText("Governed call")).toBeTruthy();
+    expect(screen.getByText("List issues")).toBeTruthy();
+  });
+
+  it("honors backend done when a matching activity is present", async () => {
     setVerifiedServer();
     queries.activity.mockReturnValue({
       data: {
@@ -719,10 +791,10 @@ describe("ThirdPartyMcpJourney", () => {
     );
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(screen.getByText("First call: List issues")).toBeTruthy();
+    expect(screen.getByText("Journey A complete")).toBeTruthy();
   });
 
-  it("does not credit a call recorded before a new prompt starts", async () => {
+  it("does not restore from unrelated activity", async () => {
     setVerifiedServer();
     workflow.current = {
       phase: "complete",
@@ -740,9 +812,9 @@ describe("ThirdPartyMcpJourney", () => {
       data: {
         activity: [
           {
-            lastToolCallAt: new Date("2020-01-01T00:00:00.000Z"),
+            lastToolCallAt: new Date("2026-08-18T00:00:00.000Z"),
             recentToolCalls: 1,
-            targetId: "linear",
+            targetId: "other-server",
             targetLabel: "List issues",
             targetType: "hosted_mcp_server",
             totalToolCalls: 1,
@@ -768,8 +840,64 @@ describe("ThirdPartyMcpJourney", () => {
         screen.getByRole("button", { name: "I've connected it" }),
       ).toBeTruthy();
     });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("does not credit a call recorded before a new prompt starts", async () => {
+    setVerifiedServer();
+    workflow.current = {
+      phase: "complete",
+      reset: vi.fn(),
+      statuses: [
+        {
+          key: "completed",
+          mcpServerId: "mcp-server",
+          name: "Linear",
+          status: "completed",
+        },
+      ],
+    };
+    const activity = { current: [] as Array<Record<string, unknown>> };
+    queries.activity.mockImplementation(() => ({
+      data: { activity: activity.current },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    }));
+    const onComplete = vi.fn();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "I've connected it" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('"url"').closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Using the Linear MCP server/)).toBeTruthy(),
+    );
+    fireEvent.click(
+      screen.getByText(/Using the Linear MCP server/).closest("pre")!,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    activity.current = [
+      {
+        lastToolCallAt: new Date("2020-01-01T00:00:00.000Z"),
+        recentToolCalls: 1,
+        targetId: "linear",
+        targetLabel: "List issues",
+        targetType: "hosted_mcp_server",
+        totalToolCalls: 1,
+      },
+    ];
 
     expect(onComplete).not.toHaveBeenCalled();
     expect(
@@ -791,18 +919,7 @@ describe("ThirdPartyMcpJourney", () => {
         },
       ],
     };
-    const activity = {
-      current: [
-        {
-          lastToolCallAt: new Date("2020-01-01T00:00:00.000Z"),
-          recentToolCalls: 1,
-          targetId: "linear",
-          targetLabel: "List issues",
-          targetType: "hosted_mcp_server",
-          totalToolCalls: 1,
-        },
-      ],
-    };
+    const activity = { current: [] as Array<Record<string, unknown>> };
     queries.activity.mockImplementation(() => ({
       data: { activity: activity.current },
       isError: false,
@@ -823,7 +940,14 @@ describe("ThirdPartyMcpJourney", () => {
         screen.getByRole("button", { name: "I've connected it" }),
       ).toBeTruthy();
     });
+    fireEvent.click(screen.getByText('"url"').closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Using the Linear MCP server/)).toBeTruthy(),
+    );
+    fireEvent.click(
+      screen.getByText(/Using the Linear MCP server/).closest("pre")!,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
     activity.current = [
       {

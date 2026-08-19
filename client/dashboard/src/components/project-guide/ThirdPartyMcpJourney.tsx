@@ -16,6 +16,7 @@ import {
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -103,9 +104,12 @@ export function ThirdPartyMcpJourney({
   const [client, setClient] = useState<Client>("claude");
   const [isPromptPhase, setIsPromptPhase] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [hasCopiedConfig, setHasCopiedConfig] = useState(false);
+  const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false);
   const [promptStartedAt, setPromptStartedAt] = useState<Date>();
   const [activityBaseline, setActivityBaseline] = useState<Date>();
   const completionNotified = useRef(false);
+  const shouldReduceMotion = useReducedMotion();
   const catalog = useListMCPCatalog(
     undefined,
     undefined,
@@ -211,7 +215,7 @@ export function ThirdPartyMcpJourney({
                 entry.targetId === mcpServer?.slug &&
                 entry.totalToolCalls > 0,
             );
-            if (status === "done" && activity) return false;
+            if (activity && !isPromptPhase) return false;
             if (
               isPromptPhase &&
               promptStartedAt &&
@@ -243,7 +247,7 @@ export function ThirdPartyMcpJourney({
     (!activityBaseline || serverActivity.lastToolCallAt > activityBaseline),
   );
   const activityCompletesJourney = Boolean(
-    serverActivity && (status === "done" || activityAfterPrompt),
+    serverActivity && (!isPromptPhase || activityAfterPrompt),
   );
 
   useEffect(() => {
@@ -390,7 +394,7 @@ export function ThirdPartyMcpJourney({
       endpointUrl && serverSlug
         ? clientConfig(client, serverSlug, endpointUrl)
         : undefined;
-    const prompt = `Connect to the ${serverName} MCP server and list its available tools.`;
+    const prompt = `Using the ${serverName} MCP server, list the read-only tools you can call and summarise what each one reads.`;
     const startPrompt = () => {
       setActivityBaseline(serverActivity?.lastToolCallAt);
       setPromptStartedAt(new Date());
@@ -424,17 +428,13 @@ export function ThirdPartyMcpJourney({
             View {serverName} MCP server
           </Link>
         )}
-        {activityCompletesJourney && !isPromptPhase && (
-          <motion.p
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22 }}
-            className="border-l-2 border-l-success-default pl-3 text-[13px]"
-          >
-            First call: {serverActivity?.targetLabel}
-          </motion.p>
-        )}
-        {config && !isPromptPhase && (
+        {activityCompletesJourney && serverActivity ? (
+          <JourneyCompletion
+            activity={serverActivity}
+            serverName={serverName}
+            shouldReduceMotion={shouldReduceMotion}
+          />
+        ) : config && !isPromptPhase ? (
           <>
             <div className="border-border flex gap-3 border-b">
               {(["claude", "cursor", "codex"] as const).map((name) => (
@@ -456,24 +456,31 @@ export function ThirdPartyMcpJourney({
               code={config.code}
               language={config.language}
               copyable
+              onSelectOrCopy={() => setHasCopiedConfig(true)}
             />
             <button
               type="button"
               onClick={startPrompt}
-              className="border-foreground bg-foreground text-background px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+              disabled={!hasCopiedConfig}
+              className="border-foreground bg-foreground text-background disabled:border-border disabled:bg-muted disabled:text-muted-foreground px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
             >
               I've connected it
             </button>
           </>
-        )}
-        {isPromptPhase && (
+        ) : isPromptPhase ? (
           <>
-            <CodeSnippet code={prompt} language="text" copyable />
+            <CodeSnippet
+              code={prompt}
+              language="text"
+              copyable
+              onSelectOrCopy={() => setHasCopiedPrompt(true)}
+            />
             {!isListening && (
               <button
                 type="button"
                 onClick={() => setIsListening(true)}
-                className="border-foreground bg-foreground text-background px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+                disabled={!hasCopiedPrompt}
+                className="border-foreground bg-foreground text-background disabled:border-border disabled:bg-muted disabled:text-muted-foreground px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
               >
                 Sent it
               </button>
@@ -491,33 +498,34 @@ export function ThirdPartyMcpJourney({
                   Retry activity check
                 </button>
               </>
-            ) : isListening && activityCompletesJourney ? (
-              <motion.p
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
-                className="border-l-2 border-l-success-default pl-3 text-[13px]"
-              >
-                First call: {serverActivity?.targetLabel}
-              </motion.p>
             ) : isListening ? (
               <motion.p
-                initial={{ opacity: 0, y: 4 }}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : { duration: 0.22 }
+                }
                 className="text-muted-foreground flex items-center gap-2 font-mono text-[11px]"
               >
                 <motion.span
                   aria-hidden="true"
-                  animate={{ opacity: [0.2, 1, 0.2] }}
-                  transition={{ duration: 1.1, repeat: Infinity }}
+                  animate={
+                    shouldReduceMotion
+                      ? { opacity: 1 }
+                      : { opacity: [0.2, 1, 0.2] }
+                  }
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : { duration: 1.1, repeat: Infinity }
+                  }
                   className="bg-foreground size-1.5"
                 />
                 Listening for the first call on your endpoint
               </motion.p>
             ) : null}
           </>
-        )}
+        ) : null}
         {activityError && !isPromptPhase && (
           <>
             <p className="text-destructive text-[13px]">
@@ -620,6 +628,79 @@ function installStatusLabel(
     case "failed":
       return "Install failed";
   }
+}
+
+function JourneyCompletion({
+  activity,
+  serverName,
+  shouldReduceMotion,
+}: {
+  activity: McpServerActivity;
+  serverName: string;
+  shouldReduceMotion: boolean | null;
+}): JSX.Element {
+  return (
+    <motion.div
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.22 }}
+      className="border-l-2 border-l-success-default grid gap-3 pl-3"
+    >
+      <div className="grid gap-1">
+        <span className="text-success-default font-mono text-[10px] tracking-[0.05em] uppercase">
+          Journey A complete
+        </span>
+        <h5 className="text-[24px] leading-[1.1]">The path is governed.</h5>
+        <p className="text-muted-foreground text-[13px] leading-[1.6]">
+          {serverName} is connected through your governed endpoint, and its
+          calls are recorded in Tool Logs.
+        </p>
+      </div>
+      <GovernedCallEvent
+        activity={activity}
+        serverName={serverName}
+        shouldReduceMotion={shouldReduceMotion}
+      />
+    </motion.div>
+  );
+}
+
+function GovernedCallEvent({
+  activity,
+  serverName,
+  shouldReduceMotion,
+}: {
+  activity: McpServerActivity;
+  serverName: string;
+  shouldReduceMotion: boolean | null;
+}): JSX.Element {
+  return (
+    <motion.div
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.22 }}
+      className="border-border grid gap-3 border px-3 py-3"
+    >
+      <span className="font-mono text-[10px] tracking-[0.05em] uppercase">
+        Governed call
+      </span>
+      <p className="text-[13px]">{activity.targetLabel}</p>
+      <dl className="text-muted-foreground grid gap-1 font-mono text-[10px]">
+        <div className="flex justify-between gap-3">
+          <dt>Server</dt>
+          <dd>{serverName}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt>Recent calls</dt>
+          <dd>{activity.recentToolCalls}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt>Recorded calls</dt>
+          <dd>{activity.totalToolCalls}</dd>
+        </div>
+      </dl>
+    </motion.div>
+  );
 }
 
 function DeploymentStatuses({
