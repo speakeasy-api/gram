@@ -26,7 +26,26 @@ vi.mock("@/components/page-layout", () => {
         ({ children }: { children?: ReactNode }) => <>{children}</>,
         { Breadcrumbs: () => null },
       ),
-      Body: ({ children }: { children: ReactNode }) => <>{children}</>,
+      Body: ({
+        children,
+        fullWidth,
+        fullHeight,
+        noPadding,
+      }: {
+        children: ReactNode;
+        fullWidth?: boolean;
+        fullHeight?: boolean;
+        noPadding?: boolean;
+      }) => (
+        <div
+          data-testid="page-body"
+          data-full-width={fullWidth}
+          data-full-height={fullHeight}
+          data-no-padding={noPadding}
+        >
+          {children}
+        </div>
+      ),
     },
   );
   return { Page };
@@ -56,6 +75,11 @@ describe("Home", () => {
     expect(screen.getByTestId("project-guide")).toBeTruthy();
     expect(screen.queryByTestId("chat-landing")).toBeNull();
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
+    expect(screen.getByTestId("page-body").dataset).toMatchObject({
+      fullWidth: "true",
+      fullHeight: "true",
+      noPadding: "true",
+    });
   });
 
   it("keeps the assistant and dashboard when showGuide is absent", () => {
@@ -63,5 +87,8 @@ describe("Home", () => {
     expect(screen.getByTestId("chat-landing")).toBeTruthy();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
     expect(screen.queryByTestId("project-guide")).toBeNull();
+    expect(screen.getByTestId("page-body").dataset.fullWidth).toBeUndefined();
+    expect(screen.getByTestId("page-body").dataset.fullHeight).toBeUndefined();
+    expect(screen.getByTestId("page-body").dataset.noPadding).toBeUndefined();
   });
 });

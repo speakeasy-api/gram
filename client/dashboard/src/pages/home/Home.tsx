@@ -35,7 +35,11 @@ export default function Home(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
+      <Page.Body
+        fullWidth={showGuide || undefined}
+        fullHeight={showGuide || undefined}
+        noPadding={showGuide || undefined}
+      >
         <RequireScope scope="project:read" level="page">
           {showGuide ? (
             <ProjectGuide />

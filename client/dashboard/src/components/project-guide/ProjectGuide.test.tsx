@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { JourneyId, JourneyStatus } from "./journeys";
+import { ProjectGuideRun } from "./ProjectGuideRun";
+import {
+  PROJECT_GUIDE_JOURNEYS,
+  type JourneyId,
+  type JourneyStatus,
+} from "./journeys";
 
 const statusByJourney = vi.hoisted(
   () =>
@@ -65,8 +70,35 @@ describe("ProjectGuide", () => {
   it("keeps the other journey switchable when a selected path opens", () => {
     render(<ProjectGuide />);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    const openingControl = screen.getByRole("button", {
+      name: /Govern a third-party MCP/,
+    });
+    const controlledRegionId = openingControl.getAttribute("aria-controls");
+    expect(openingControl.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(openingControl);
+
+    const activeRegion = screen.getByRole("region", {
+      name: "Govern a third-party MCP",
+    });
+    expect(activeRegion.id).toBe(controlledRegionId);
+    expect(
+      screen
+        .getByRole("button", { name: "← Back to start" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "← Back to start" })
+        .getAttribute("aria-controls"),
+    ).toBe(controlledRegionId);
+
+    const switchControl = screen.getByRole("button", {
+      name: "Switch to Block a leaked credential mid-prompt",
+    });
+    expect(switchControl.getAttribute("aria-expanded")).toBe("false");
+    expect(switchControl.getAttribute("aria-controls")).toBe(
+      "project-guide-secret-block-content",
     );
 
     expect(
@@ -86,17 +118,54 @@ describe("ProjectGuide", () => {
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("nothing has run for this step yet");
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Switch to Block a leaked credential mid-prompt",
-      }),
-    );
+    fireEvent.click(switchControl);
 
     expect(
       screen.getByRole("heading", {
         name: "Block a leaked credential mid-prompt",
       }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("region", {
+        name: "Block a leaked credential mid-prompt",
+      }).id,
+    ).toBe("project-guide-secret-block-content");
+  });
+
+  it("renders supplied current content, output, event, and action callbacks", () => {
+    const onPrimaryAction = vi.fn();
+    const onSecondaryAction = vi.fn();
+
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="not-started"
+        regionId="fixture-run"
+        currentStep={2}
+        currentContent={<p>Coordinator-provided checkpoint</p>}
+        output={<span>Coordinator output line</span>}
+        eventCard={<section>Coordinator event card</section>}
+        primaryAction={{ label: "Continue run", onClick: onPrimaryAction }}
+        secondaryAction={{
+          label: "Cancel run",
+          onClick: onSecondaryAction,
+        }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Coordinator-provided checkpoint")).toBeTruthy();
+    expect(screen.getByText("Coordinator output line")).toBeTruthy();
+    expect(screen.getByText("Coordinator event card")).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Govern a third-party MCP" }).id,
+    ).toBe("fixture-run");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue run" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+
+    expect(onPrimaryAction).toHaveBeenCalledOnce();
+    expect(onSecondaryAction).toHaveBeenCalledOnce();
   });
 
   it("renders deterministic active output and event areas for an in-progress path", () => {

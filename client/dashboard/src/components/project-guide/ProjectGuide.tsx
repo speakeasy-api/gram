@@ -34,6 +34,9 @@ export function ProjectGuide(): JSX.Element {
   const selectedJourney = PROJECT_GUIDE_JOURNEYS.find(
     (journey) => journey.id === selected,
   );
+  const selectedContentId = selected
+    ? projectGuideContentId(selected)
+    : undefined;
   const isComplete =
     statusByJourney["third-party-mcp"] === "done" &&
     statusByJourney["secret-block"] === "done";
@@ -67,6 +70,8 @@ export function ProjectGuide(): JSX.Element {
             <button
               type="button"
               onClick={() => setSelected(null)}
+              aria-controls={selectedContentId}
+              aria-expanded="true"
               className="ml-auto font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
             >
               ← Back to start
@@ -102,12 +107,14 @@ export function ProjectGuide(): JSX.Element {
                   <JourneySpine
                     journey={journey}
                     status={status}
+                    controlsId={projectGuideContentId(journey.id)}
                     onSelect={() => setSelected(journey.id)}
                   />
                 ) : isSelected ? (
                   <ProjectGuideRun
                     journey={journey}
                     status={status}
+                    regionId={projectGuideContentId(journey.id)}
                     onSwitchJourney={() =>
                       setSelected(otherProjectGuideJourney(journey.id))
                     }
@@ -117,6 +124,7 @@ export function ProjectGuide(): JSX.Element {
                     journey={journey}
                     status={status}
                     statusPending={progressPending}
+                    controlsId={projectGuideContentId(journey.id)}
                     onSelect={() => setSelected(journey.id)}
                   />
                 )}
@@ -127,6 +135,10 @@ export function ProjectGuide(): JSX.Element {
       </section>
     </GuideCanvas>
   );
+}
+
+function projectGuideContentId(journeyId: JourneyId): string {
+  return `project-guide-${journeyId}-content`;
 }
 
 function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
@@ -149,11 +161,13 @@ function JourneyChoice({
   journey,
   status,
   statusPending,
+  controlsId,
   onSelect,
 }: {
   journey: JourneyMeta;
   status: JourneyStatus;
   statusPending: boolean;
+  controlsId: string;
   onSelect: () => void;
 }): JSX.Element {
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
@@ -174,6 +188,8 @@ function JourneyChoice({
       type="button"
       onClick={onSelect}
       aria-label={journey.title}
+      aria-controls={controlsId}
+      aria-expanded="false"
       className="flex h-full w-full flex-col text-left"
     >
       <JourneyGraphic journey={journey} status={status} />
@@ -355,10 +371,12 @@ function JourneyGraphic({
 function JourneySpine({
   journey,
   status,
+  controlsId,
   onSelect,
 }: {
   journey: JourneyMeta;
   status: JourneyStatus;
+  controlsId: string;
   onSelect: () => void;
 }): JSX.Element {
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
@@ -373,6 +391,8 @@ function JourneySpine({
       type="button"
       onClick={onSelect}
       aria-label={`Switch to ${journey.title}`}
+      aria-controls={controlsId}
+      aria-expanded="false"
       className="flex h-full w-full flex-col items-center gap-3.5 py-5 hover:bg-card/60"
     >
       <span
