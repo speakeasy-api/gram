@@ -67,7 +67,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
-import { formatChatSource } from "@/lib/formatPlatform";
+import { formatChatSource, formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -793,22 +793,6 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-// harnessLabel renders a wire-format harness value ("claude-code") as its
-// display name. Unknown values pass through raw rather than guessing.
-function harnessLabel(harness: string): string {
-  switch (harness) {
-    case "claude-code":
-      return "Claude Code";
-    case "cursor":
-    case "cursor-app":
-      return "Cursor";
-    case "codex":
-      return "Codex";
-    default:
-      return harness;
-  }
-}
-
 // SessionLinksSection lists session-lineage edges touching this chat: moves
 // out of it ("Moved to …") and moves that produced it ("Derived from …").
 // Presence-gated — chats with no edges render nothing, so there is no feature
@@ -888,7 +872,7 @@ function SessionLinksSection({
         {outbound.map((link, i) =>
           row(
             `out-${i}-${link.createdAt.toISOString()}`,
-            <>Moved to {harnessLabel(link.targetHarness)}</>,
+            <>Moved to {formatPlatform(link.targetHarness)}</>,
             link.createdAt,
             hop(link.childChatId, link.childCaptured),
             link.childCaptured
