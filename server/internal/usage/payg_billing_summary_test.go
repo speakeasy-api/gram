@@ -110,14 +110,19 @@ func materializePaygSummaryKey(t *testing.T, db *pgxpool.Pool, orgID string, key
 		MonthlyCredits: 0,
 	})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `UPDATE openrouter_api_keys SET created_at = $1 WHERE organization_id = $2 AND key_type = $3`, createdAt, orgID, keyType)
-	require.NoError(t, err)
+	require.NoError(t, repo.New(db).SetOpenRouterAPIKeyCreatedAtFixture(t.Context(), repo.SetOpenRouterAPIKeyCreatedAtFixtureParams{
+		CreatedAt:      pgtype.Timestamptz{Time: createdAt, InfinityModifier: pgtype.Finite, Valid: true},
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}))
 }
 
 func setPaygSummaryKeysCreatedAt(t *testing.T, db *pgxpool.Pool, orgID string, createdAt time.Time) {
 	t.Helper()
-	_, err := db.Exec(t.Context(), `UPDATE openrouter_api_keys SET created_at = $1 WHERE organization_id = $2`, createdAt, orgID)
-	require.NoError(t, err)
+	require.NoError(t, repo.New(db).SetOpenRouterAPIKeysCreatedAtFixture(t.Context(), repo.SetOpenRouterAPIKeysCreatedAtFixtureParams{
+		CreatedAt:      pgtype.Timestamptz{Time: createdAt, InfinityModifier: pgtype.Finite, Valid: true},
+		OrganizationID: orgID,
+	}))
 }
 
 func upsertPaygSummarySpend(t *testing.T, db *pgxpool.Pool, orgID string, day time.Time, amount string) {

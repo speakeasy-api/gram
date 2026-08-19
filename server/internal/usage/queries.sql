@@ -772,3 +772,16 @@ SELECT *
 FROM stripe_invoices
 WHERE organization_id = @organization_id
 ORDER BY service_period_start, stripe_invoice_id;
+
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeysCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;

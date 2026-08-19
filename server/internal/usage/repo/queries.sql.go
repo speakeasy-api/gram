@@ -1738,6 +1738,42 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 	return i, err
 }
 
+const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture for PAYG estimate completeness windows.
+func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeysCreatedAtFixture = `-- name: SetOpenRouterAPIKeysCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+`
+
+type SetOpenRouterAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+}
+
+// Test-only fixture for PAYG estimate completeness windows.
+func (q *Queries) SetOpenRouterAPIKeysCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID)
+	return err
+}
+
 const setStripeCheckoutSessionFixture = `-- name: SetStripeCheckoutSessionFixture :exec
 UPDATE billing_metadata
 SET stripe_checkout_session_id = $1
