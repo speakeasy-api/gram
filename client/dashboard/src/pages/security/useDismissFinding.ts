@@ -47,14 +47,22 @@ async function runBatched(
   return { succeededIds, failedIds };
 }
 
-/** Bulk/single mark-false-positive with optimistic hide + undo toast, shared
- * by the risk overview category table, the risk events log, and the chat
- * session risk popover. Real mutations, not the AIS-321 UX-demo store: a
- * dismiss removes the result from every listRiskResults-backed surface
- * server-side, so this hook only needs to bridge the gap between "mutation
- * fired" and "the list query has refetched without it". */
+/** Bulk/single suppression with optimistic hide + undo toast, shared by the
+ * risk overview category table, the risk events log, and the chat session
+ * risk popover. Real mutations, not the AIS-321 UX-demo store: suppressing a
+ * finding removes it from every listRiskResults-backed surface server-side,
+ * so this hook only needs to bridge the gap between "mutation fired" and "the
+ * list query has refetched without it".
+ *
+ * `restore` is the same unmark call reached from the other direction — the
+ * Watchdog's Suppressed section, where the finding is already hidden and the
+ * user is putting it back — so it reports as a first-class action rather than
+ * as an undo of something that just happened. It resolves to whether anything
+ * actually came back, so a caller showing the finding (the suppressed-finding
+ * drawer) can close only once the restore landed. */
 export function useDismissFinding(): {
   dismiss: (results: RiskResult[], reason?: string) => void;
+  restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
 } {
   const queryClient = useQueryClient();
@@ -64,15 +72,14 @@ export function useDismissFinding(): {
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation();
 
   const invalidateLists = useCallback(() => {
-    // RiskEvents.tsx, RiskOverviewCategoryDetail.tsx, and DismissedFindingsTab.tsx
-    // each query results directly via useInfiniteQuery (not a generated hook),
-    // under their own queryKey under this shared ["risk", "results", ...]
-    // prefix (e.g. ["risk","results","list"], ["risk","results","list-dismissed"]).
-    // Invalidate the whole prefix rather than each exact key — a dismiss from
-    // one surface (e.g. Risk Events) must be reflected on every other surface
-    // (e.g. the Dismissed tab), and matching each new custom key one-by-one
-    // here is exactly the kind of thing that's easy to add a surface and
-    // forget to wire up.
+    // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
+    // directly via useInfiniteQuery (not a generated hook), under their own
+    // queryKey under this shared ["risk", "results", ...] prefix (e.g.
+    // ["risk","results","list"]). Invalidate the whole prefix rather than each
+    // exact key — suppressing from one surface (e.g. Risk Events) must be
+    // reflected on every other surface, and matching each new custom key
+    // one-by-one here is exactly the kind of thing that's easy to add a
+    // surface and forget to wire up.
     void queryClient.invalidateQueries({
       queryKey: ["risk", "results"],
     });
@@ -110,29 +117,55 @@ export function useDismissFinding(): {
     });
   }, []);
 
-  const undo = useCallback(
-    (ids: string[]) => {
-      removeOptimistic(ids);
-      void runBatched(ids, (batchIds) =>
+  const unsuppress = useCallback(
+    (ids: string[]) =>
+      runBatched(ids, (batchIds) =>
         unmarkMutation.mutateAsync({
           request: {
             unmarkRiskResultsFalsePositiveRequestBody: { resultIds: batchIds },
           },
         }),
-      ).then(({ succeededIds, failedIds }) => {
+      ),
+    [unmarkMutation],
+  );
+
+  const undo = useCallback(
+    (ids: string[]) => {
+      removeOptimistic(ids);
+      void unsuppress(ids).then(({ succeededIds, failedIds }) => {
         if (succeededIds.length > 0) {
           invalidateLists();
         }
         if (failedIds.length > 0) {
-          // Put the failed ids back: the mark stayed in effect server-side,
-          // so the optimistic hide must too, or the row would look restored
-          // while still dismissed.
+          // Put the failed ids back: the suppression stayed in effect
+          // server-side, so the optimistic hide must too, or the row would
+          // look restored while still suppressed.
           addOptimistic(failedIds);
-          toast.error("Failed to undo — the finding is still dismissed.");
+          toast.error("Failed to undo — the finding is still suppressed.");
         }
       });
     },
-    [unmarkMutation, invalidateLists, removeOptimistic, addOptimistic],
+    [unsuppress, invalidateLists, removeOptimistic, addOptimistic],
+  );
+
+  const restore = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      if (ids.length === 0) return false;
+      const { succeededIds, failedIds } = await unsuppress(ids);
+      if (succeededIds.length > 0) {
+        invalidateLists();
+        toast.success(
+          `Restored ${succeededIds.length} ${succeededIds.length === 1 ? "finding" : "findings"}`,
+        );
+      }
+      if (failedIds.length > 0) {
+        toast.error(
+          `Failed to restore ${failedIds.length} ${failedIds.length === 1 ? "finding" : "findings"}.`,
+        );
+      }
+      return succeededIds.length > 0;
+    },
+    [unsuppress, invalidateLists],
   );
 
   const dismiss = useCallback(
@@ -154,16 +187,17 @@ export function useDismissFinding(): {
         if (failedIds.length > 0) {
           removeOptimistic(failedIds);
           toast.error(
-            `Failed to mark ${failedIds.length} finding${failedIds.length === 1 ? "" : "s"} as false positive.`,
+            `Failed to suppress ${failedIds.length} finding${failedIds.length === 1 ? "" : "s"}.`,
           );
         }
         if (succeededIds.length > 0) {
           invalidateLists();
-          // Undo only becomes available once the mark has actually
+          // Undo only becomes available once the suppression has actually
           // succeeded — offering it earlier would let an immediate click
-          // race the outstanding mark request.
-          showUndoToast(`Marked ${succeededIds.length} as false positive`, () =>
-            undo(succeededIds),
+          // race the outstanding request.
+          showUndoToast(
+            `Suppressed ${succeededIds.length} ${succeededIds.length === 1 ? "finding" : "findings"}`,
+            () => undo(succeededIds),
           );
         }
       });
@@ -178,6 +212,7 @@ export function useDismissFinding(): {
 
   return {
     dismiss,
+    restore,
     isOptimisticallyDismissed,
   };
 }
