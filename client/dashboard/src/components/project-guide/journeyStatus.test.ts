@@ -331,7 +331,7 @@ describe("latestSecretsFinding", () => {
     const older = { id: "older", createdAt: new Date("2026-08-01") };
     const newer = { id: "newer", createdAt: new Date("2026-08-02") };
 
-    expect(latestSecretsFinding([older, newer] as RiskResult[])).toBe(newer);
+    expect(latestSecretsFinding([newer, older] as RiskResult[])).toBe(newer);
   });
 });
 

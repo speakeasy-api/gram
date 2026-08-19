@@ -65,13 +65,14 @@ export function useProjectGuideProgress(): {
   } = useRiskListPolicies({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // One row is enough: the card only asks whether a secrets finding exists.
+  // The API caps pages at 200 and orders them newest-first by event time; read
+  // one full page so latestSecretsFinding does not depend on a one-row limit.
   const {
     data: secretsFindings,
     isError: findingsError,
     isPending: findingsPending,
   } = useRiskListResults(
-    { gramProject, category: "secrets", limit: 1 },
+    { gramProject, category: "secrets", limit: 200 },
     undefined,
     { throwOnError: false },
   );

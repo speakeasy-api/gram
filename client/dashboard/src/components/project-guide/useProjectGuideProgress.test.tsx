@@ -195,6 +195,20 @@ describe("useProjectGuideProgress", () => {
     });
   });
 
+  it("requests enough findings for latest selection", () => {
+    renderHook(() => useProjectGuideProgress());
+
+    expect(queryHooks.results).toHaveBeenCalledWith(
+      {
+        gramProject: "request-project",
+        category: "secrets",
+        limit: 200,
+      },
+      undefined,
+      { throwOnError: false },
+    );
+  });
+
   it("credits activity for any governed catalog server", () => {
     queryHooks.servers.mockReturnValue({
       data: {
@@ -359,7 +373,7 @@ describe("useProjectGuideProgress", () => {
       {
         gramProject: "request-project",
         category: "secrets",
-        limit: 1,
+        limit: 200,
       },
       undefined,
       { throwOnError: false },
