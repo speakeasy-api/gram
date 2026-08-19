@@ -857,6 +857,33 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 	require.Equal(t, plugins.DirectoryAttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
 }
 
+func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Attribute Assignment"})
+	require.NoError(t, err)
+
+	legacyPrincipal := "directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"
+	_, err = pluginsrepo.New(ti.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		PluginID:       uuid.MustParse(plugin.ID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   legacyPrincipal,
+	})
+	require.NoError(t, err)
+
+	principal := plugins.DirectoryAttributePrincipal("department", "engineering")
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
+}
+
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
