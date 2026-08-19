@@ -77,16 +77,44 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return fmt.Errorf("require org admin: %w", err)
+	if !ok || authCtx == nil {
+		return nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
-	orgID := authCtx.ActiveOrganizationID
+	if organizationID == "" {
+		return nil, "", oops.C(oops.CodeUnauthorized)
+	}
+
+	if organizationID == authCtx.ActiveOrganizationID {
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
+		if err := s.authz.Require(ctx, check); err != nil {
+			return nil, "", fmt.Errorf("require %s: %w", scope, err)
+		}
+		return authCtx, organizationID, nil
+	}
+
+	if err := s.authz.RequireUserOrganizationScope(ctx, organizationID, authCtx.UserID, scope); err != nil {
+		return nil, "", fmt.Errorf("require %s for requested organization: %w", scope, err)
+	}
+
+	if _, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, "", oops.E(oops.CodeNotFound, err, "organization not found")
+		}
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger, attr.SlogOrganizationID(organizationID))
+	}
+
+	return authCtx, organizationID, nil
+}
+
+func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
+	authCtx, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	if err != nil {
+		return err
+	}
+
 	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
 		return nil
 	}
@@ -160,7 +188,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	}
 
 	cacheEntry := FeatureCache{
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: orgID,
 		Feature:        Feature(payload.FeatureName),
 		Enabled:        payload.Enabled,
 	}
@@ -168,7 +196,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
 		s.logger.WarnContext(ctx, "failed to cache feature flag state",
 			attr.SlogError(cacheErr),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogOrganizationID(orgID),
 			attr.SlogProductFeatureName(payload.FeatureName),
 		)
 	}
@@ -177,14 +205,10 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeUnauthorized)
+	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	if err != nil {
+		return err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return fmt.Errorf("require org admin: %w", err)
-	}
-
 	var visible, enforced bool
 	switch payload.Policy {
 	case "disabled":
@@ -198,7 +222,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -206,7 +230,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 	setFeatureState := func(feature Feature, enabled bool) error {
 		if enabled {
 			_, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
-				OrganizationID: authCtx.ActiveOrganizationID,
+				OrganizationID: orgID,
 				FeatureName:    string(feature),
 			})
 			if err != nil {
@@ -216,7 +240,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		}
 
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: orgID,
 			FeatureName:    string(feature),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -229,13 +253,13 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 	}
 
 	if err := setFeatureState(FeatureRemoteSessionAutoRefresh, visible); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "set remote session refresh visibility").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh visibility").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	if err := setFeatureState(FeatureRemoteSessionAutoRefreshEnforced, enforced); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "set remote session refresh enforcement").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh enforcement").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
 	for _, state := range []struct {
@@ -246,14 +270,14 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
 		cacheEntry := FeatureCache{
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: orgID,
 			Feature:        state.feature,
 			Enabled:        state.enabled,
 		}
 		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
 			s.logger.WarnContext(ctx, "failed to cache remote session refresh policy",
 				attr.SlogError(cacheErr),
-				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+				attr.SlogOrganizationID(orgID),
 				attr.SlogProductFeatureName(string(state.feature)),
 			)
 		}
@@ -263,15 +287,10 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 }
 
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
+	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, fmt.Errorf("require org read: %w", err)
-	}
-
-	orgID := authCtx.ActiveOrganizationID
 
 	// Helper function to check if a feature is enabled (cache first, then DB)
 	isEnabled := func(feature Feature) bool {
@@ -343,6 +362,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CustomerManagedEncryptionKeysEnabled:    isEnabled(FeatureCustomerManagedEncryptionKeys),
 		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
+		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		DeviceAgent:                             deviceAgent,
 	}, nil
 }

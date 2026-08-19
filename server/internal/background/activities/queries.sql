@@ -183,7 +183,7 @@ WHERE invoice.organization_id = @target_organization_id
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || @target_key_type::text
           AND allocation.seq = 1
       )
     )
@@ -194,7 +194,7 @@ WHERE invoice.organization_id = @target_organization_id
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || @target_key_type::text
           AND allocation.seq = 2
       )
     )
@@ -224,7 +224,7 @@ WHERE invoice.organization_id = @target_organization_id
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || @target_key_type::text
           AND allocation.seq = 1
       )
     )
@@ -235,7 +235,7 @@ WHERE invoice.organization_id = @target_organization_id
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || @target_key_type::text
           AND allocation.seq = 2
       )
     )
@@ -269,13 +269,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
+      CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
       WHERE invoice.service_period_end + interval '48 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 1
         )
     )
@@ -286,13 +287,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
+      CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
       WHERE invoice.service_period_end + interval '72 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 2
         )
     )
@@ -336,13 +338,14 @@ WHERE invoice.organization_id = @organization_id
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
+      CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
       WHERE invoice.service_period_end + interval '48 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 1
         )
     )
@@ -353,13 +356,14 @@ WHERE invoice.organization_id = @organization_id
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
+      CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
       WHERE invoice.service_period_end + interval '72 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 2
         )
     )
@@ -402,6 +406,7 @@ WHERE organization_id = @organization_id
 -- name: ListOpenRouterInvoiceSourceDays :many
 SELECT
     generated.source_timestamp::date AS source_day
+  , billable.key_type::text AS key_type
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
   , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
@@ -410,34 +415,36 @@ CROSS JOIN LATERAL generate_series(
   invoice.service_period_end - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
+CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
 LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
- AND spend.key_type = 'chat'
+ AND spend.key_type = billable.key_type
  AND spend.day = generated.source_timestamp::date
 -- Surface a snapshot an earlier pass already froze; the caller must not reseed
--- that day from spend backfilled since.
+-- that key-day from spend backfilled since.
 LEFT JOIN stripe_invoice_allocations frozen
   ON frozen.organization_id = invoice.organization_id
  AND frozen.source_kind = 'openrouter_daily_spend'
- AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
  AND frozen.seq = 1
 WHERE invoice.organization_id = @organization_id
   AND invoice.stripe_invoice_id = @stripe_invoice_id
   AND invoice.service_period_end + interval '48 hours' <= @now
-ORDER BY source_day;
+ORDER BY generated.source_timestamp::date, billable.key_type;
 
 -- name: ListOpenRouterInvoiceBaselines :many
 SELECT
     allocation.source_key
   , allocation.source_day
+  , split_part(allocation.source_key, ':', 2)::text AS key_type
   , allocation.source_snapshot_usd
   , (CASE
-      WHEN chat_key.created_at IS NULL
-        OR allocation.source_day < (chat_key.created_at AT TIME ZONE 'UTC')::date
+      WHEN inference_key.created_at IS NULL
+        OR allocation.source_day < (inference_key.created_at AT TIME ZONE 'UTC')::date
         THEN 0::numeric
-	  WHEN chat_key.deleted_at IS NOT NULL
-	    AND allocation.source_day >= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
-	    THEN COALESCE(spend.spend_usd, 0::numeric)
+      WHEN inference_key.deleted_at IS NOT NULL
+        AND allocation.source_day >= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
+        THEN COALESCE(spend.spend_usd, 0::numeric)
       ELSE spend.spend_usd
     END)::numeric(14, 6) AS final_spend_usd
   , carry.amount_usd AS existing_carry_amount_usd
@@ -446,16 +453,16 @@ FROM stripe_invoice_allocations allocation
 JOIN stripe_invoices invoice
   ON invoice.organization_id = allocation.organization_id
  AND invoice.stripe_invoice_id = allocation.original_invoice_id
-LEFT JOIN openrouter_api_keys chat_key
-  ON chat_key.organization_id = allocation.organization_id
- AND chat_key.key_type = 'chat'
+LEFT JOIN openrouter_api_keys inference_key
+  ON inference_key.organization_id = allocation.organization_id
+ AND inference_key.key_type = split_part(allocation.source_key, ':', 2)
 LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
- AND spend.key_type = 'chat'
+ AND spend.key_type = split_part(allocation.source_key, ':', 2)
  AND spend.day = allocation.source_day
  AND (
-   chat_key.deleted_at IS NULL
-   OR spend.day <= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+   inference_key.deleted_at IS NULL
+   OR spend.day <= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
  )
 LEFT JOIN stripe_invoice_allocations carry
   ON carry.organization_id = allocation.organization_id
@@ -466,8 +473,9 @@ WHERE allocation.organization_id = @organization_id
   AND invoice.stripe_invoice_id = @stripe_invoice_id
   AND invoice.service_period_end + interval '72 hours' <= @now
   AND allocation.source_kind = 'openrouter_daily_spend'
+  AND split_part(allocation.source_key, ':', 2) = ANY(@billable_key_types::text[])
   AND allocation.seq = 1
-ORDER BY allocation.source_day;
+ORDER BY allocation.source_day, split_part(allocation.source_key, ':', 2);
 
 -- name: CreateOpenRouterInvoiceAllocation :execrows
 INSERT INTO stripe_invoice_allocations (
@@ -825,29 +833,6 @@ WHERE d.organization_id = ANY($1::text[])
     WHERE organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
-
--- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
--- Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
--- row to detect whether another drain pass is needed.
-SELECT id, seq, content, created_at
-FROM chat_messages
-WHERE chat_id = @chat_id
-  AND project_id = @project_id
-  AND role = 'user'
-  AND content != ''
-  AND (message_id IS NULL OR message_id = '')
-  AND seq > @after_message_seq
-ORDER BY seq ASC, created_at ASC
-LIMIT @limit_count;
-
--- name: BackfillClaudeUserMessagePromptID :exec
-UPDATE chat_messages
-SET message_id = @prompt_id
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id
-  AND role = 'user'
-  AND (message_id IS NULL OR message_id = '');
 
 -- name: FetchPendingOutboxIDs :many
 -- Fetch the next batch of outbox row IDs (across all organizations) that the

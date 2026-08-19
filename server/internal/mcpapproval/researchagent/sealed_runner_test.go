@@ -43,7 +43,7 @@ func TestRun_SeedsMenuFromBriefing(t *testing.T) {
 		// arrive inside JSON strings and sentences, not on clean lines.
 		Evidence: json.RawMessage(`{"identity": {"homepage": "https://somevendor.io/docs.", "note": "see https://somevendor.io/security, then decide"}}`),
 	}
-	_, _, err := runner.Run(t.Context(), input)
+	_, _, _, err := runner.Run(t.Context(), input)
 	require.NoError(t, err)
 
 	runID := input.ReportID.String()
@@ -84,7 +84,7 @@ func TestRun_BriefingRedactsEmails(t *testing.T) {
 	input := runInput()
 	input.Evidence = json.RawMessage(`{"usage": {"requesters": ["alex@corp.example.com", "sam@corp.example.com", "alex@corp.example.com"]}}`)
 
-	_, _, err := runner.Run(t.Context(), input)
+	_, _, _, err := runner.Run(t.Context(), input)
 	require.NoError(t, err)
 
 	rendered, err := json.Marshal(completions.firstTurn.Messages)

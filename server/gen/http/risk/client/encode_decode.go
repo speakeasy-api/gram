@@ -1501,6 +1501,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.UserID != nil {
 			values.Add("user_id", *p.UserID)
 		}
+		for _, value := range p.ExternalUserIds {
+			values.Add("external_user_ids", value)
+		}
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
 		}
@@ -2994,6 +2997,9 @@ func EncodeListDismissedRiskResultsRequest(encoder func(*http.Request) goahttp.E
 		}
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		for _, value := range p.Reasons {
+			values.Add("reasons", value)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -11602,6 +11608,10 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		MatchRedacted:     v.MatchRedacted,
 		CreatedAt:         *v.CreatedAt,
 		FalsePositiveAt:   v.FalsePositiveAt,
+		SuppressedAt:      v.SuppressedAt,
+		SuppressedReason:  v.SuppressedReason,
+		SuppressedDetail:  v.SuppressedDetail,
+		ExclusionID:       v.ExclusionID,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

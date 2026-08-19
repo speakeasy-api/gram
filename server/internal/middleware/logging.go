@@ -88,7 +88,8 @@ var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
 	"token": true,
 
-	// Email address on auth.login and agent.getPlugins.
+	// Email address on auth.login, and on agent.getPlugins polls from legacy
+	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
 	// Chat search terms, which are user-typed free text.

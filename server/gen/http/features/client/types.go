@@ -15,6 +15,8 @@ import (
 // SetProductFeatureRequestBody is the type of the "features" service
 // "setProductFeature" endpoint HTTP request body.
 type SetProductFeatureRequestBody struct {
+	// Organization whose product feature to update.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Name of the feature to update
 	FeatureName string `form:"feature_name" json:"feature_name" xml:"feature_name"`
 	// Whether the feature should be enabled
@@ -24,6 +26,8 @@ type SetProductFeatureRequestBody struct {
 // SetRemoteSessionAutoRefreshPolicyRequestBody is the type of the "features"
 // service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP request body.
 type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Organization policy for automatic remote-session refresh
 	Policy string `form:"policy" json:"policy" xml:"policy"`
 }
@@ -70,6 +74,9 @@ type GetProductFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -643,8 +650,9 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 // payload of the "setProductFeature" endpoint of the "features" service.
 func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetProductFeatureRequestBody {
 	body := &SetProductFeatureRequestBody{
-		FeatureName: p.FeatureName,
-		Enabled:     p.Enabled,
+		OrganizationID: p.OrganizationID,
+		FeatureName:    p.FeatureName,
+		Enabled:        p.Enabled,
 	}
 	return body
 }
@@ -654,7 +662,8 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 // "features" service.
 func NewSetRemoteSessionAutoRefreshPolicyRequestBody(p *features.SetRemoteSessionAutoRefreshPolicyPayload) *SetRemoteSessionAutoRefreshPolicyRequestBody {
 	body := &SetRemoteSessionAutoRefreshPolicyRequestBody{
-		Policy: p.Policy,
+		OrganizationID: p.OrganizationID,
+		Policy:         p.Policy,
 	}
 	return body
 }
@@ -679,6 +688,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		CustomerManagedEncryptionKeysEnabled:    *body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             *body.ConsentToolFilteringEnabled,
 		DeviceAgent:                             *body.DeviceAgent,
 	}
 
@@ -1185,6 +1195,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.RemoteSessionAutoRefreshEnforcedEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "body"))
+	}
+	if body.ConsentToolFilteringEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

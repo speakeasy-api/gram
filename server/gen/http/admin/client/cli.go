@@ -572,3 +572,113 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 
 	return v, nil
 }
+
+// BuildGetInferenceKeysPayload builds the payload for the admin
+// getInferenceKeys endpoint from CLI flags.
+func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, adminGetInferenceKeysAdminSessionToken string) (*admin.GetInferenceKeysPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetInferenceKeysOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetInferenceKeysAdminSessionToken != "" {
+			adminSessionToken = &adminGetInferenceKeysAdminSessionToken
+		}
+	}
+	v := &admin.GetInferenceKeysPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetPaygBillingSummaryPayload builds the payload for the admin
+// getPaygBillingSummary endpoint from CLI flags.
+func BuildGetPaygBillingSummaryPayload(adminGetPaygBillingSummaryOrganizationID string, adminGetPaygBillingSummaryAdminSessionToken string) (*admin.GetPaygBillingSummaryPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetPaygBillingSummaryOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetPaygBillingSummaryAdminSessionToken != "" {
+			adminSessionToken = &adminGetPaygBillingSummaryAdminSessionToken
+		}
+	}
+	v := &admin.GetPaygBillingSummaryPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetStripeSubscriptionPayload builds the payload for the admin
+// getStripeSubscription endpoint from CLI flags.
+func BuildGetStripeSubscriptionPayload(adminGetStripeSubscriptionOrganizationID string, adminGetStripeSubscriptionAdminSessionToken string) (*admin.GetStripeSubscriptionPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetStripeSubscriptionOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminGetStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.GetStripeSubscriptionPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCancelStripeSubscriptionPayload builds the payload for the admin
+// cancelStripeSubscription endpoint from CLI flags.
+func BuildCancelStripeSubscriptionPayload(adminCancelStripeSubscriptionBody string, adminCancelStripeSubscriptionAdminSessionToken string) (*admin.CancelStripeSubscriptionPayload, error) {
+	var err error
+	var body CancelStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCancelStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCancelStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminCancelStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.CancelStripeSubscriptionPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildResumeStripeSubscriptionPayload builds the payload for the admin
+// resumeStripeSubscription endpoint from CLI flags.
+func BuildResumeStripeSubscriptionPayload(adminResumeStripeSubscriptionBody string, adminResumeStripeSubscriptionAdminSessionToken string) (*admin.ResumeStripeSubscriptionPayload, error) {
+	var err error
+	var body ResumeStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminResumeStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminResumeStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminResumeStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.ResumeStripeSubscriptionPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

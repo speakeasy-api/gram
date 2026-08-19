@@ -96,33 +96,6 @@ func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizat
 	return result.RowsAffected(), nil
 }
 
-const backfillClaudeUserMessagePromptID = `-- name: BackfillClaudeUserMessagePromptID :exec
-UPDATE chat_messages
-SET message_id = $1
-WHERE id = $2
-  AND chat_id = $3
-  AND project_id = $4
-  AND role = 'user'
-  AND (message_id IS NULL OR message_id = '')
-`
-
-type BackfillClaudeUserMessagePromptIDParams struct {
-	PromptID  pgtype.Text
-	MessageID uuid.UUID
-	ChatID    uuid.UUID
-	ProjectID uuid.NullUUID
-}
-
-func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg BackfillClaudeUserMessagePromptIDParams) error {
-	_, err := q.db.Exec(ctx, backfillClaudeUserMessagePromptID,
-		arg.PromptID,
-		arg.MessageID,
-		arg.ChatID,
-		arg.ProjectID,
-	)
-	return err
-}
-
 const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
 WITH candidate AS (
   SELECT
@@ -420,7 +393,7 @@ WHERE invoice.organization_id = $2
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $1::text
           AND allocation.seq = 1
       )
     )
@@ -431,7 +404,7 @@ WHERE invoice.organization_id = $2
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $1::text
           AND allocation.seq = 2
       )
     )
@@ -1087,7 +1060,7 @@ WHERE invoice.organization_id = $1
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $4::text
           AND allocation.seq = 1
       )
     )
@@ -1098,7 +1071,7 @@ WHERE invoice.organization_id = $1
         FROM stripe_invoice_allocations allocation
         WHERE allocation.organization_id = invoice.organization_id
           AND allocation.source_kind = 'openrouter_daily_spend'
-          AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $4::text
           AND allocation.seq = 2
       )
     )
@@ -1109,12 +1082,18 @@ type GetOpenRouterDailySpendRecoveryStartDayParams struct {
 	TargetOrganizationID pgtype.Text
 	TargetEarliestDay    pgtype.Date
 	TargetEndDay         pgtype.Date
+	TargetKeyType        string
 }
 
 // Expand collection to the oldest unresolved invoice day. This heals outages
 // beyond the normal overlap instead of permanently detecting the same gap.
 func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, arg GetOpenRouterDailySpendRecoveryStartDayParams) (pgtype.Date, error) {
-	row := q.db.QueryRow(ctx, getOpenRouterDailySpendRecoveryStartDay, arg.TargetOrganizationID, arg.TargetEarliestDay, arg.TargetEndDay)
+	row := q.db.QueryRow(ctx, getOpenRouterDailySpendRecoveryStartDay,
+		arg.TargetOrganizationID,
+		arg.TargetEarliestDay,
+		arg.TargetEndDay,
+		arg.TargetKeyType,
+	)
 	var recovery_start_day pgtype.Date
 	err := row.Scan(&recovery_start_day)
 	return recovery_start_day, err
@@ -1495,14 +1474,15 @@ const listOpenRouterInvoiceBaselines = `-- name: ListOpenRouterInvoiceBaselines 
 SELECT
     allocation.source_key
   , allocation.source_day
+  , split_part(allocation.source_key, ':', 2)::text AS key_type
   , allocation.source_snapshot_usd
   , (CASE
-      WHEN chat_key.created_at IS NULL
-        OR allocation.source_day < (chat_key.created_at AT TIME ZONE 'UTC')::date
+      WHEN inference_key.created_at IS NULL
+        OR allocation.source_day < (inference_key.created_at AT TIME ZONE 'UTC')::date
         THEN 0::numeric
-	  WHEN chat_key.deleted_at IS NOT NULL
-	    AND allocation.source_day >= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
-	    THEN COALESCE(spend.spend_usd, 0::numeric)
+      WHEN inference_key.deleted_at IS NOT NULL
+        AND allocation.source_day >= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
+        THEN COALESCE(spend.spend_usd, 0::numeric)
       ELSE spend.spend_usd
     END)::numeric(14, 6) AS final_spend_usd
   , carry.amount_usd AS existing_carry_amount_usd
@@ -1511,16 +1491,16 @@ FROM stripe_invoice_allocations allocation
 JOIN stripe_invoices invoice
   ON invoice.organization_id = allocation.organization_id
  AND invoice.stripe_invoice_id = allocation.original_invoice_id
-LEFT JOIN openrouter_api_keys chat_key
-  ON chat_key.organization_id = allocation.organization_id
- AND chat_key.key_type = 'chat'
+LEFT JOIN openrouter_api_keys inference_key
+  ON inference_key.organization_id = allocation.organization_id
+ AND inference_key.key_type = split_part(allocation.source_key, ':', 2)
 LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
- AND spend.key_type = 'chat'
+ AND spend.key_type = split_part(allocation.source_key, ':', 2)
  AND spend.day = allocation.source_day
  AND (
-   chat_key.deleted_at IS NULL
-   OR spend.day <= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+   inference_key.deleted_at IS NULL
+   OR spend.day <= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
  )
 LEFT JOIN stripe_invoice_allocations carry
   ON carry.organization_id = allocation.organization_id
@@ -1531,19 +1511,22 @@ WHERE allocation.organization_id = $1
   AND invoice.stripe_invoice_id = $2
   AND invoice.service_period_end + interval '72 hours' <= $3
   AND allocation.source_kind = 'openrouter_daily_spend'
+  AND split_part(allocation.source_key, ':', 2) = ANY($4::text[])
   AND allocation.seq = 1
-ORDER BY allocation.source_day
+ORDER BY allocation.source_day, split_part(allocation.source_key, ':', 2)
 `
 
 type ListOpenRouterInvoiceBaselinesParams struct {
-	OrganizationID  pgtype.Text
-	StripeInvoiceID string
-	Now             pgtype.Timestamptz
+	OrganizationID   pgtype.Text
+	StripeInvoiceID  string
+	Now              pgtype.Timestamptz
+	BillableKeyTypes []string
 }
 
 type ListOpenRouterInvoiceBaselinesRow struct {
 	SourceKey              string
 	SourceDay              pgtype.Date
+	KeyType                string
 	SourceSnapshotUsd      pgtype.Numeric
 	FinalSpendUsd          pgtype.Numeric
 	ExistingCarryAmountUsd pgtype.Numeric
@@ -1551,7 +1534,12 @@ type ListOpenRouterInvoiceBaselinesRow struct {
 }
 
 func (q *Queries) ListOpenRouterInvoiceBaselines(ctx context.Context, arg ListOpenRouterInvoiceBaselinesParams) ([]ListOpenRouterInvoiceBaselinesRow, error) {
-	rows, err := q.db.Query(ctx, listOpenRouterInvoiceBaselines, arg.OrganizationID, arg.StripeInvoiceID, arg.Now)
+	rows, err := q.db.Query(ctx, listOpenRouterInvoiceBaselines,
+		arg.OrganizationID,
+		arg.StripeInvoiceID,
+		arg.Now,
+		arg.BillableKeyTypes,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1562,6 +1550,7 @@ func (q *Queries) ListOpenRouterInvoiceBaselines(ctx context.Context, arg ListOp
 		if err := rows.Scan(
 			&i.SourceKey,
 			&i.SourceDay,
+			&i.KeyType,
 			&i.SourceSnapshotUsd,
 			&i.FinalSpendUsd,
 			&i.ExistingCarryAmountUsd,
@@ -1580,6 +1569,7 @@ func (q *Queries) ListOpenRouterInvoiceBaselines(ctx context.Context, arg ListOp
 const listOpenRouterInvoiceSourceDays = `-- name: ListOpenRouterInvoiceSourceDays :many
 SELECT
     generated.source_timestamp::date AS source_day
+  , billable.key_type::text AS key_type
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
   , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
@@ -1588,37 +1578,45 @@ CROSS JOIN LATERAL generate_series(
   invoice.service_period_end - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
+CROSS JOIN unnest($1::text[]) AS billable(key_type)
 LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
- AND spend.key_type = 'chat'
+ AND spend.key_type = billable.key_type
  AND spend.day = generated.source_timestamp::date
 LEFT JOIN stripe_invoice_allocations frozen
   ON frozen.organization_id = invoice.organization_id
  AND frozen.source_kind = 'openrouter_daily_spend'
- AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
  AND frozen.seq = 1
-WHERE invoice.organization_id = $1
-  AND invoice.stripe_invoice_id = $2
-  AND invoice.service_period_end + interval '48 hours' <= $3
-ORDER BY source_day
+WHERE invoice.organization_id = $2
+  AND invoice.stripe_invoice_id = $3
+  AND invoice.service_period_end + interval '48 hours' <= $4
+ORDER BY generated.source_timestamp::date, billable.key_type
 `
 
 type ListOpenRouterInvoiceSourceDaysParams struct {
-	OrganizationID  pgtype.Text
-	StripeInvoiceID string
-	Now             pgtype.Timestamptz
+	BillableKeyTypes []string
+	OrganizationID   pgtype.Text
+	StripeInvoiceID  string
+	Now              pgtype.Timestamptz
 }
 
 type ListOpenRouterInvoiceSourceDaysRow struct {
 	SourceDay         pgtype.Date
+	KeyType           string
 	SpendUsd          pgtype.Numeric
 	FrozenSnapshotUsd pgtype.Numeric
 }
 
 // Surface a snapshot an earlier pass already froze; the caller must not reseed
-// that day from spend backfilled since.
+// that key-day from spend backfilled since.
 func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListOpenRouterInvoiceSourceDaysParams) ([]ListOpenRouterInvoiceSourceDaysRow, error) {
-	rows, err := q.db.Query(ctx, listOpenRouterInvoiceSourceDays, arg.OrganizationID, arg.StripeInvoiceID, arg.Now)
+	rows, err := q.db.Query(ctx, listOpenRouterInvoiceSourceDays,
+		arg.BillableKeyTypes,
+		arg.OrganizationID,
+		arg.StripeInvoiceID,
+		arg.Now,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1626,7 +1624,12 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 	var items []ListOpenRouterInvoiceSourceDaysRow
 	for rows.Next() {
 		var i ListOpenRouterInvoiceSourceDaysRow
-		if err := rows.Scan(&i.SourceDay, &i.SpendUsd, &i.FrozenSnapshotUsd); err != nil {
+		if err := rows.Scan(
+			&i.SourceDay,
+			&i.KeyType,
+			&i.SpendUsd,
+			&i.FrozenSnapshotUsd,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1722,13 +1725,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
-      WHERE invoice.service_period_end + interval '48 hours' <= $1
+      CROSS JOIN unnest($1::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '48 hours' <= $2
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 1
         )
     )
@@ -1739,13 +1743,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
-      WHERE invoice.service_period_end + interval '72 hours' <= $1
+      CROSS JOIN unnest($1::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '72 hours' <= $2
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 2
         )
     )
@@ -1770,11 +1775,16 @@ WHERE invoice.organization_id IS NOT NULL
 ORDER BY organization_id
 `
 
+type ListStripeInvoiceBillingOrganizationsParams struct {
+	BillableKeyTypes []string
+	Now              pgtype.Timestamptz
+}
+
 // Organizations remain candidates for as long as a required immutable
 // snapshot, a delivery, or a destination assignment is missing. There is no
 // age cutoff: an outage must delay billing rather than erase it.
-func (q *Queries) ListStripeInvoiceBillingOrganizations(ctx context.Context, now pgtype.Timestamptz) ([]string, error) {
-	rows, err := q.db.Query(ctx, listStripeInvoiceBillingOrganizations, now)
+func (q *Queries) ListStripeInvoiceBillingOrganizations(ctx context.Context, arg ListStripeInvoiceBillingOrganizationsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStripeInvoiceBillingOrganizations, arg.BillableKeyTypes, arg.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -1813,13 +1823,14 @@ WHERE invoice.organization_id = $1
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
-      WHERE invoice.service_period_end + interval '48 hours' <= $2
+      CROSS JOIN unnest($2::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '48 hours' <= $3
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 1
         )
     )
@@ -1830,13 +1841,14 @@ WHERE invoice.organization_id = $1
         invoice.service_period_end - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
-      WHERE invoice.service_period_end + interval '72 hours' <= $2
+      CROSS JOIN unnest($2::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '72 hours' <= $3
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
             AND allocation.seq = 2
         )
     )
@@ -1866,8 +1878,9 @@ ORDER BY service_period_start
 `
 
 type ListStripeInvoicesForOpenRouterBillingParams struct {
-	OrganizationID pgtype.Text
-	Now            pgtype.Timestamptz
+	OrganizationID   pgtype.Text
+	BillableKeyTypes []string
+	Now              pgtype.Timestamptz
 }
 
 type ListStripeInvoicesForOpenRouterBillingRow struct {
@@ -1882,7 +1895,7 @@ type ListStripeInvoicesForOpenRouterBillingRow struct {
 }
 
 func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, arg ListStripeInvoicesForOpenRouterBillingParams) ([]ListStripeInvoicesForOpenRouterBillingRow, error) {
-	rows, err := q.db.Query(ctx, listStripeInvoicesForOpenRouterBilling, arg.OrganizationID, arg.Now)
+	rows, err := q.db.Query(ctx, listStripeInvoicesForOpenRouterBilling, arg.OrganizationID, arg.BillableKeyTypes, arg.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -1899,65 +1912,6 @@ func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, ar
 			&i.ServicePeriodEnd,
 			&i.InvoiceState,
 			&i.FinalizedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
-SELECT id, seq, content, created_at
-FROM chat_messages
-WHERE chat_id = $1
-  AND project_id = $2
-  AND role = 'user'
-  AND content != ''
-  AND (message_id IS NULL OR message_id = '')
-  AND seq > $3
-ORDER BY seq ASC, created_at ASC
-LIMIT $4
-`
-
-type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
-	ChatID          uuid.UUID
-	ProjectID       uuid.NullUUID
-	AfterMessageSeq int64
-	LimitCount      int32
-}
-
-type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
-	ID        uuid.UUID
-	Seq       int64
-	Content   string
-	CreatedAt pgtype.Timestamptz
-}
-
-// Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
-// row to detect whether another drain pass is needed.
-func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.AfterMessageSeq,
-		arg.LimitCount,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUnlinkedClaudeUserMessagesForCorrelationRow
-	for rows.Next() {
-		var i ListUnlinkedClaudeUserMessagesForCorrelationRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Seq,
-			&i.Content,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

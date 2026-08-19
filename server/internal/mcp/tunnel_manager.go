@@ -3,12 +3,13 @@ package mcp
 import (
 	"context"
 	"log/slog"
-	"net/http"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -38,14 +39,20 @@ func newTunnelManager(routes route.Store, forwardToken string, proxyManager *rem
 	}
 }
 
+// buildProxy constructs the tunnel-backed proxy for one request.
+// clientAffinityKey pins route selection, forwarding headers, and retry to a
+// stable client identity: runtime callers derive it from the request, while
+// consent-time enumeration derives it from the challenge state so every
+// request of one enumeration session lands on the same gateway.
 func (m *tunnelManager) buildProxy(
 	ctx context.Context,
-	r *http.Request,
+	clientAffinityKey string,
 	logger *slog.Logger,
-	endpoint *mcpendpointsrepo.McpEndpoint,
+	projectID uuid.UUID,
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) (*proxy.Proxy, error) {
 	if m == nil || m.proxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
@@ -56,7 +63,6 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeGatewayError, nil, "tunnel route store unavailable").LogError(ctx, logger)
 	}
 
-	clientAffinityKey := tunnelrouting.ClientAffinityKeyFromRequest(r)
 	candidates, err := m.routes.Candidates(ctx, tunnelID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list tunnel routes").LogError(ctx, logger)
@@ -88,9 +94,10 @@ func (m *tunnelManager) buildProxy(
 		gatewayURL,
 		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),
 		mcpServer.Visibility,
-		endpoint.ProjectID.String(),
+		projectID.String(),
 		upstreamAuth,
 		wwwAuthenticate,
+		selection,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	// Redirects won't work across a tunnel boundary; disable.

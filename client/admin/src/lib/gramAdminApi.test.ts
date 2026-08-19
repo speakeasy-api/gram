@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GramAdminError,
   bulkUpdateAccountType,
+  cancelStripeSubscription,
   disableOrganization,
   enableOrganization,
   errorMessage,
   extendTrial,
+  getInferenceKeys,
+  getPaygBillingSummary,
+  getStripeSubscription,
   getProject,
   listOrganizations,
   logout,
@@ -14,6 +18,7 @@ import {
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
   rearmTrial,
+  resumeStripeSubscription,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -126,6 +131,72 @@ describe("getProject", () => {
     expect(fetch.mock.calls.at(-1)?.[0]).toBe(
       "/admin/project.get?id_or_slug=default",
     );
+  });
+});
+
+describe("organization billing endpoints", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("reads billing state from explicit admin organization endpoints", async () => {
+    const fetch = stubFetch();
+
+    await getInferenceKeys("org one");
+    await getPaygBillingSummary("org one");
+    await getStripeSubscription("org one");
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "/admin/organization.inferenceKeys?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.stripeSubscription?organization_id=org+one",
+    );
+  });
+
+  it("posts only the canonical organization id to lifecycle controls", async () => {
+    const fetch = stubFetch();
+
+    await cancelStripeSubscription("org_1");
+    await resumeStripeSubscription("org_1");
+
+    for (const [path, init] of fetch.mock.calls) {
+      expect(path).toMatch(
+        /^\/admin\/organization\.(cancel|resume)StripeSubscription$/,
+      );
+      expect(init).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ organization_id: "org_1" }),
+      });
+    }
+  });
+
+  it("reports a lifecycle 401 without redirecting to login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+    const before = window.location.href;
+
+    await expect(cancelStripeSubscription("org_1")).rejects.toThrow(
+      GramAdminError,
+    );
+
+    expect(window.location.href).toBe(before);
   });
 });
 
@@ -364,9 +435,8 @@ describe("logout", () => {
     expect(window.location.href).toContain("prompt=select_account");
   });
 
-  // The 401 handler retries with prompt=none, which the provider honours
-  // silently. Taking it here would sign the operator back in behind the Logout
-  // they just pressed.
+  // Taking the read-side 401 handler here would start a new login behind the
+  // Logout the operator just pressed.
   it("reports a 401 instead of signing the operator back in", async () => {
     vi.stubGlobal(
       "fetch",

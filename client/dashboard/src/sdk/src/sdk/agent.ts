@@ -91,7 +91,7 @@ export class Agent extends ClientSDK {
    * Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
    */
   async getPlugins(
-    request: GetAgentPluginsRequest,
+    request?: GetAgentPluginsRequest | undefined,
     security?: GetAgentPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetPluginsResult> {

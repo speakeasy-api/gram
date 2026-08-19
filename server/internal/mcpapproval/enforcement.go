@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -44,13 +46,21 @@ import (
 // when nothing can express the radius.
 func reconcileDecisionGrants(
 	ctx context.Context,
-	db riskrepo.DBTX,
+	db pgx.Tx,
 	organizationID string,
 	projectID uuid.UUID,
 	canonicalURL string,
 	approved bool,
 	principals []urn.Principal,
 ) error {
+	// Serialized against the policy-creation backfill: two check-then-write
+	// transactions that each read what the other writes would otherwise miss
+	// each other's uncommitted rows and both commit, leaving this decision
+	// unenforced on a policy created in the same instant.
+	if err := repo.New(db).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
+		return fmt.Errorf("lock project enforcement state: %w", err)
+	}
+
 	rows, err := riskrepo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("list shadow mcp policies for decision: %w", err)
@@ -75,46 +85,67 @@ func reconcileDecisionGrants(
 		return oops.E(oops.CodeBadRequest, nil, "This project's policy allows servers by default, so an approval can only clear the block for everyone. Approve without naming principals, or switch the policy to block-by-default for per-person approvals.")
 	}
 
-	// Every path revokes by grant variant, not by the exact URL-only selector:
-	// legacy access-request approvals persisted {server_url, server_identity}
-	// selectors that evaluate URL-only at runtime, and an exact-selector
-	// revoke would leave those grants standing — a legacy-approved user would
-	// survive a recorded deny.
 	for _, policy := range blocking {
-		policyID := policy.ID.String()
+		if err := applyDecisionToPolicy(ctx, db, organizationID, policy, canonicalURL, approved, principals); err != nil {
+			return err
+		}
+	}
 
-		switch policyDisposition(policy) {
-		case shadowmcp.DispositionAllowAll:
-			if approved {
-				// The server is allowed by default; approval clears any block
-				// rule standing in the way. Blast radius does not apply — an
-				// allow_all policy has no per-principal allow concept.
-				if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL); err != nil {
-					return fmt.Errorf("revoke block rule on approval: %w", err)
-				}
-				continue
-			}
+	return nil
+}
+
+// applyDecisionToPolicy writes one decision's grant state onto one blocking
+// policy. Shared by decision-time enforcement (every blocking policy, one
+// decision) and the policy-creation backfill (one new policy, every standing
+// decision), so the two can never disagree on what a decision means.
+//
+// Every path revokes by grant variant, not by the exact URL-only selector:
+// legacy access-request approvals persisted {server_url, server_identity}
+// selectors that evaluate URL-only at runtime, and an exact-selector
+// revoke would leave those grants standing — a legacy-approved user would
+// survive a recorded deny.
+func applyDecisionToPolicy(
+	ctx context.Context,
+	db riskrepo.DBTX,
+	organizationID string,
+	policy riskrepo.RiskPolicy,
+	canonicalURL string,
+	approved bool,
+	principals []urn.Principal,
+) error {
+	policyID := policy.ID.String()
+
+	switch policyDisposition(policy) {
+	case shadowmcp.DispositionAllowAll:
+		if approved {
+			// The server is allowed by default; approval clears any block
+			// rule standing in the way. Blast radius does not apply — an
+			// allow_all policy has no per-principal allow concept.
 			if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL); err != nil {
-				return fmt.Errorf("revoke block rule variants on denial: %w", err)
+				return fmt.Errorf("revoke block rule on approval: %w", err)
 			}
-			if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL, []urn.Principal{authz.AllUsersPrincipal()}); err != nil {
-				return fmt.Errorf("write block rule on denial: %w", err)
-			}
-		default:
-			if approved {
-				if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL); err != nil {
-					return fmt.Errorf("revoke bypass variants on approval: %w", err)
-				}
-				if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL, principals); err != nil {
-					return fmt.Errorf("replace bypass audience on approval: %w", err)
-				}
-				continue
-			}
-			// A denial leaves the policy's default standing: blocked, with no
-			// exceptions for this server.
+			return nil
+		}
+		if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL); err != nil {
+			return fmt.Errorf("revoke block rule variants on denial: %w", err)
+		}
+		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBlock, policyID, canonicalURL, []urn.Principal{authz.AllUsersPrincipal()}); err != nil {
+			return fmt.Errorf("write block rule on denial: %w", err)
+		}
+	default:
+		if approved {
 			if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL); err != nil {
-				return fmt.Errorf("revoke bypass audience on denial: %w", err)
+				return fmt.Errorf("revoke bypass variants on approval: %w", err)
 			}
+			if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL, principals); err != nil {
+				return fmt.Errorf("replace bypass audience on approval: %w", err)
+			}
+			return nil
+		}
+		// A denial leaves the policy's default standing: blocked, with no
+		// exceptions for this server.
+		if err := policybypass.RevokePolicyURLGrantVariants(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL); err != nil {
+			return fmt.Errorf("revoke bypass audience on denial: %w", err)
 		}
 	}
 

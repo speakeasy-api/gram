@@ -52,6 +52,7 @@ export function buildRiskListResultsQuery(
       category: request?.category,
       ruleId: request?.ruleId,
       userId: request?.userId,
+      externalUserIds: request?.externalUserIds,
       uniqueMatch: request?.uniqueMatch,
       nonAssistant: request?.nonAssistant,
       assistantId: request?.assistantId,
@@ -94,6 +95,7 @@ export function queryKeyRiskListResults(
     category?: string | undefined;
     ruleId?: string | undefined;
     userId?: string | undefined;
+    externalUserIds?: Array<string> | undefined;
     uniqueMatch?: boolean | undefined;
     nonAssistant?: boolean | undefined;
     assistantId?: string | undefined;

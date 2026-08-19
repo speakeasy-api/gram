@@ -64,6 +64,7 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 		Now:                                    workflow.Now(ctx).UTC(),
 		RestrictOpenRouterToReadyOrganizations: true,
 		OpenRouterReadyOrganizationIDs:         collected.ReadyOrganizationIDs,
+		OpenRouterBillableKeyPolicyFingerprint: collected.BillableKeyPolicyFingerprint,
 	}).Get(ctx, nil)
 	if settlementErr != nil {
 		settlementErr = fmt.Errorf("settle Stripe invoice allocations: %w", settlementErr)

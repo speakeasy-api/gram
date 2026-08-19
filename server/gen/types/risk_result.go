@@ -58,7 +58,20 @@ type RiskResult struct {
 	MatchRedacted *string
 	// When this result was created.
 	CreatedAt string
-	// When this result was manually marked as a false positive. Null when not
-	// dismissed.
+	// Deprecated: mirror of suppressed_at, kept while clients migrate to the
+	// suppressed_* fields. Null when not suppressed.
 	FalsePositiveAt *string
+	// When this result was suppressed (hidden from open-finding listings). Null
+	// when not suppressed.
+	SuppressedAt *string
+	// Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id),
+	// 'manual' (dismissed by a user), or 'automated' (the automated false-positive
+	// sweep). Null when not suppressed.
+	SuppressedReason *string
+	// Free-form suppression context: the user-supplied dismissal reason for manual
+	// suppressions, the catalog reason for automated ones. Null when absent.
+	SuppressedDetail *string
+	// The exclusion rule that suppressed this result. Only set when
+	// suppressed_reason is 'rule'.
+	ExclusionID *string
 }

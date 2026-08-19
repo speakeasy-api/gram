@@ -11,6 +11,7 @@ import (
 	"maps"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,6 +35,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -771,6 +773,115 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Len(t, fetched.Assignments, 3)
+}
+
+func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unavailable Assignment"})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	groupWorkOSID := uuid.NewString()
+	directoryRepo := workosrepo.New(ti.conn)
+	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		WorkosDirectoryGroupID: groupWorkOSID,
+		Name:                   "Unavailable",
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	principal := plugins.DirectoryGroupPrincipal(groupID)
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+
+	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, workosrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGTextEmpty(""),
+		WorkosDirectoryGroupID: groupWorkOSID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
+
+	result, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID})
+	require.NoError(t, err)
+	require.Empty(t, result.Assignments)
+}
+
+func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Attribute Assignment"})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = workosrepo.New(ti.conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: uuid.NewString(),
+		Email:                 conv.ToPGText("member@example.com"),
+		Attributes:            []byte(`{"department":"engineering"}`),
+		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
+		WorkosLastEventID:     conv.ToPGTextEmpty(""),
+		RestoreDeleted:        true,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, plugins.DirectoryAttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
+}
+
+func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Attribute Assignment"})
+	require.NoError(t, err)
+
+	legacyPrincipal := "directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"
+	_, err = pluginsrepo.New(ti.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		PluginID:       uuid.MustParse(plugin.ID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   legacyPrincipal,
+	})
+	require.NoError(t, err)
+
+	principal := plugins.DirectoryAttributePrincipal("department", "engineering")
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {

@@ -39,17 +39,35 @@ import (
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
+// CanonicalFoldGate reports the organization id an identity-folded query
+// should run under: the org id when the canonical identity fold is rolled out
+// to it, "" when it is not. Injected rather than reimplemented so the rollout
+// flag stays one switch across every service that folds.
+type CanonicalFoldGate interface {
+	CanonicalOrgFor(ctx context.Context, orgID string) string
+}
+
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	chConn  driver.Conn
-	auth    *auth.Auth
-	authz   *authz.Engine
-	roleMgr *RoleManager
-	audit   *audit.Logger
-	email   *email.Service
-	siteURL *url.URL
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	chConn   driver.Conn
+	auth     *auth.Auth
+	authz    *authz.Engine
+	roleMgr  *RoleManager
+	audit    *audit.Logger
+	email    *email.Service
+	siteURL  *url.URL
+	foldGate CanonicalFoldGate
+}
+
+// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
+// caller wired the rollout flag in, which fails closed: no fold.
+func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
+	if s.foldGate == nil {
+		return ""
+	}
+	return s.foldGate.CanonicalOrgFor(ctx, orgID)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -66,20 +84,22 @@ func NewService(
 	auditLogger *audit.Logger,
 	emailService *email.Service,
 	siteURL *url.URL,
+	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:  logger,
-		db:      db,
-		chConn:  chConn,
-		auth:    auth.New(logger, db, sessions, authz),
-		authz:   authz,
-		roleMgr: roleMgr,
-		audit:   auditLogger,
-		email:   emailService,
-		siteURL: siteURL,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:   logger,
+		db:       db,
+		chConn:   chConn,
+		auth:     auth.New(logger, db, sessions, authz),
+		authz:    authz,
+		roleMgr:  roleMgr,
+		audit:    auditLogger,
+		email:    emailService,
+		siteURL:  siteURL,
+		foldGate: foldGate,
 	}
 }
 
@@ -266,8 +286,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {

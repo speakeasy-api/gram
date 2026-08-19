@@ -831,17 +831,41 @@ WITH inputs AS (
   SELECT
       $1::bigint AS tum_tokens
     , $2::text::numeric(20, 8) AS tum_unit_price_usd
+), applicable_keys AS (
+  SELECT key_type
+  FROM openrouter_api_keys
+  WHERE organization_id = $3::text
+    AND key_type = ANY($4::text[])
+    AND created_at < LEAST($5::timestamptz, $6::timestamptz)
+    AND (deleted_at IS NULL OR deleted_at >= $7::timestamptz)
+), billable_spend AS (
+  SELECT key_type, day, spend_usd
+  FROM openrouter_spend_daily
+  WHERE organization_id = $3::text
+    AND key_type = ANY($4::text[])
+    AND day >= ($7::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($5::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($6::timestamptz AT TIME ZONE 'UTC')::date
+), recorded_spend AS (
+  SELECT CASE
+    WHEN COUNT(*) FILTER (WHERE recorded_through IS NULL) > 0 THEN NULL
+    ELSE MIN(recorded_through)::date
+  END AS recorded_through
+  FROM (
+    SELECT applicable_keys.key_type, MAX(billable_spend.day)::date AS recorded_through
+    FROM applicable_keys
+    LEFT JOIN billable_spend USING (key_type)
+    GROUP BY applicable_keys.key_type
+  ) key_watermarks
 ), completed_spend AS (
   SELECT
       COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
-    , MAX(day)::date AS recorded_through
-  FROM openrouter_spend_daily
-  WHERE organization_id = $3::text
-    AND key_type = 'chat'
-    AND day >= ($4::timestamptz AT TIME ZONE 'UTC')::date
-    AND day < ($5::timestamptz AT TIME ZONE 'UTC')::date
-    AND day < ($6::timestamptz AT TIME ZONE 'UTC')::date
+    , recorded_spend.recorded_through
+  FROM recorded_spend
+  LEFT JOIN billable_spend ON billable_spend.day <= recorded_spend.recorded_through
+  GROUP BY recorded_spend.recorded_through
 )
+
 SELECT
     inputs.tum_unit_price_usd::text AS tum_unit_price_usd
   , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
@@ -853,12 +877,13 @@ CROSS JOIN completed_spend
 `
 
 type GetPaygBillingSummaryCostsParams struct {
-	TumTokens       int64
-	TumUnitPriceUsd string
-	OrganizationID  string
-	PeriodStart     pgtype.Timestamptz
-	PeriodEnd       pgtype.Timestamptz
-	CompletedBefore pgtype.Timestamptz
+	TumTokens        int64
+	TumUnitPriceUsd  string
+	OrganizationID   string
+	BillableKeyTypes []string
+	PeriodEnd        pgtype.Timestamptz
+	CompletedBefore  pgtype.Timestamptz
+	PeriodStart      pgtype.Timestamptz
 }
 
 type GetPaygBillingSummaryCostsRow struct {
@@ -874,9 +899,10 @@ func (q *Queries) GetPaygBillingSummaryCosts(ctx context.Context, arg GetPaygBil
 		arg.TumTokens,
 		arg.TumUnitPriceUsd,
 		arg.OrganizationID,
-		arg.PeriodStart,
+		arg.BillableKeyTypes,
 		arg.PeriodEnd,
 		arg.CompletedBefore,
+		arg.PeriodStart,
 	)
 	var i GetPaygBillingSummaryCostsRow
 	err := row.Scan(
@@ -1081,7 +1107,7 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 }
 
 const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, disabled
+SELECT key_type, monthly_credits, disabled
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = ANY($2::text[])
@@ -1095,8 +1121,9 @@ type ListMaterializedOpenRouterInferenceKeysParams struct {
 }
 
 type ListMaterializedOpenRouterInferenceKeysRow struct {
-	KeyType  string
-	Disabled bool
+	KeyType        string
+	MonthlyCredits int64
+	Disabled       bool
 }
 
 func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, arg ListMaterializedOpenRouterInferenceKeysParams) ([]ListMaterializedOpenRouterInferenceKeysRow, error) {
@@ -1108,7 +1135,7 @@ func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, a
 	var items []ListMaterializedOpenRouterInferenceKeysRow
 	for rows.Next() {
 		var i ListMaterializedOpenRouterInferenceKeysRow
-		if err := rows.Scan(&i.KeyType, &i.Disabled); err != nil {
+		if err := rows.Scan(&i.KeyType, &i.MonthlyCredits, &i.Disabled); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1711,6 +1738,42 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 	return i, err
 }
 
+const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture for PAYG estimate completeness windows.
+func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeysCreatedAtFixture = `-- name: SetOpenRouterAPIKeysCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+`
+
+type SetOpenRouterAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+}
+
+// Test-only fixture for PAYG estimate completeness windows.
+func (q *Queries) SetOpenRouterAPIKeysCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID)
+	return err
+}
+
 const setStripeCheckoutSessionFixture = `-- name: SetStripeCheckoutSessionFixture :exec
 UPDATE billing_metadata
 SET stripe_checkout_session_id = $1
@@ -1977,7 +2040,7 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 
 const upsertOpenRouterDailySpendFixture = `-- name: UpsertOpenRouterDailySpendFixture :exec
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
-VALUES ($1, 'chat', $2, $3)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, key_type, day) DO UPDATE
 SET spend_usd = EXCLUDED.spend_usd,
     updated_at = clock_timestamp()
@@ -1985,13 +2048,19 @@ SET spend_usd = EXCLUDED.spend_usd,
 
 type UpsertOpenRouterDailySpendFixtureParams struct {
 	OrganizationID string
+	KeyType        string
 	Day            pgtype.Date
 	SpendUsd       pgtype.Numeric
 }
 
 // Test-only fixture for billing-summary reads.
 func (q *Queries) UpsertOpenRouterDailySpendFixture(ctx context.Context, arg UpsertOpenRouterDailySpendFixtureParams) error {
-	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpendFixture, arg.OrganizationID, arg.Day, arg.SpendUsd)
+	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpendFixture,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.Day,
+		arg.SpendUsd,
+	)
 	return err
 }
 

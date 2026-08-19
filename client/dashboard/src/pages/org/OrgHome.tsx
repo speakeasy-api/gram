@@ -131,7 +131,9 @@ function OrgHomeInner() {
   // ProjectDashboard; staleTime dedupes re-runs and the fetch on navigation.
   const gramClient = useGramContext();
   const queryClient = useQueryClient();
-  const { data: featuresData } = useProductFeatures();
+  const { data: featuresData } = useProductFeatures({
+    organizationId: organization.id,
+  });
   const logsEnabled = featuresData?.logsEnabled === true;
   const prefetchProject =
     getPreferredProject(organization.projects) ??

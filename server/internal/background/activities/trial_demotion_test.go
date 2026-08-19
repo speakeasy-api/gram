@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -63,12 +66,13 @@ func (p *trialProvisioner) DisableAPIKeyWithDB(ctx context.Context, _ openrouter
 }
 
 type trialTestInstance struct {
-	conn        *pgxpool.Pool
-	trials      *trialsrepo.Queries
-	orgs        *orgrepo.Queries
-	provisioner *trialProvisioner
-	notifier    *recordingTrialNotifier
-	activity    *activities.DemoteExpiredTrials
+	conn            *pgxpool.Pool
+	trials          *trialsrepo.Queries
+	orgs            *orgrepo.Queries
+	productFeatures *productfeatures.Client
+	provisioner     *trialProvisioner
+	notifier        *recordingTrialNotifier
+	activity        *activities.DemoteExpiredTrials
 }
 
 func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
@@ -81,19 +85,24 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 
 	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
 	notifier := &recordingTrialNotifier{inactive: nil}
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	productFeatures := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
 
 	return ctx, &trialTestInstance{
-		conn:        conn,
-		trials:      trialsrepo.New(conn),
-		orgs:        orgrepo.New(conn),
-		provisioner: provisioner,
-		notifier:    notifier,
+		conn:            conn,
+		trials:          trialsrepo.New(conn),
+		orgs:            orgrepo.New(conn),
+		productFeatures: productFeatures,
+		provisioner:     provisioner,
+		notifier:        notifier,
 		activity: activities.NewDemoteExpiredTrials(
 			testenv.NewLogger(t),
 			conn,
 			provisioner,
 			audit.NewLogger(),
 			notifier,
+			productFeatures,
 		),
 	}
 }
@@ -135,6 +144,25 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	ctx, ti := newTrialTestInstance(t)
 	endsAt := time.Now().Add(-time.Hour).UTC()
 	orgID := newTrialOrg(t, ctx, ti, endsAt)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, orgID))
+	q := featurerepo.New(tx)
+	features := slices.Concat(productfeatures.TrialRuntimeFeatures, []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureAuthzChallengeLogging,
+	})
+	for _, feature := range features {
+		_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, tx.Commit(ctx))
+	for _, feature := range features {
+		_, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+	}
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
@@ -156,6 +184,19 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 
 	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
 	require.Equal(t, []string{orgID}, ti.notifier.inactive)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.Falsef(t, enabled, "demotion should disable %s", feature)
+	}
+	for _, feature := range []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureAuthzChallengeLogging,
+	} {
+		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.Truef(t, enabled, "demotion should preserve %s", feature)
+	}
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
