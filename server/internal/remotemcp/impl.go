@@ -38,14 +38,15 @@ import (
 )
 
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
-	headers *Headers
-	policy  *guardian.Policy
-	audit   *audit.Logger
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	headers      *Headers
+	policy       *guardian.Policy
+	audit        *audit.Logger
+	provisioning *RemoteMCPProvisioningService
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,14 +65,15 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
-		logger:  logger,
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		headers: NewHeaders(logger, db, enc),
-		policy:  policy,
-		audit:   auditLogger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		headers:      NewHeaders(logger, db, enc),
+		policy:       policy,
+		audit:        auditLogger,
+		provisioning: NewRemoteMCPProvisioningService(db, policy, auditLogger),
 	}
 }
 
@@ -161,6 +163,34 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	return mv.BuildRemoteMcpServerView(server), nil
+}
+
+func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.CreateServerAndMcpServerPayload) (*gen.CreateServerAndMcpServerResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	result, err := s.provisioning.ProvisionDashboardRemoteMCP(ctx, authCtx, DashboardRemoteMCPProvisioningInput{
+		Name:          payload.Name,
+		URL:           payload.URL,
+		TransportType: payload.TransportType,
+	})
+	if err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, shareableErr.LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)
+	}
+	return &gen.CreateServerAndMcpServerResult{
+		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),
+		McpServer:       mv.BuildMcpServerView(result.MCPServer),
+	}, nil
 }
 
 func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPayload) (*gen.ListServersResult, error) {

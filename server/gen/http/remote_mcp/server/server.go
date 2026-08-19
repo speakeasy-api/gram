@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts                            []*MountPoint
 	CreateServer                      http.Handler
+	CreateServerAndMcpServer          http.Handler
 	ListServers                       http.Handler
 	GetServer                         http.Handler
 	UpdateServer                      http.Handler
@@ -61,6 +62,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateServer", "POST", "/rpc/remoteMcp.createServer"},
+			{"CreateServerAndMcpServer", "POST", "/rpc/remoteMcp.createServerAndMcpServer"},
 			{"ListServers", "GET", "/rpc/remoteMcp.listServers"},
 			{"GetServer", "GET", "/rpc/remoteMcp.getServer"},
 			{"UpdateServer", "POST", "/rpc/remoteMcp.updateServer"},
@@ -74,6 +76,7 @@ func New(
 			{"DeleteServerHeader", "DELETE", "/rpc/remoteMcp.deleteServerHeader"},
 		},
 		CreateServer:                      NewCreateServerHandler(e.CreateServer, mux, decoder, encoder, errhandler, formatter),
+		CreateServerAndMcpServer:          NewCreateServerAndMcpServerHandler(e.CreateServerAndMcpServer, mux, decoder, encoder, errhandler, formatter),
 		ListServers:                       NewListServersHandler(e.ListServers, mux, decoder, encoder, errhandler, formatter),
 		GetServer:                         NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateServer:                      NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
@@ -94,6 +97,7 @@ func (s *Server) Service() string { return "remoteMcp" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateServer = m(s.CreateServer)
+	s.CreateServerAndMcpServer = m(s.CreateServerAndMcpServer)
 	s.ListServers = m(s.ListServers)
 	s.GetServer = m(s.GetServer)
 	s.UpdateServer = m(s.UpdateServer)
@@ -113,6 +117,7 @@ func (s *Server) MethodNames() []string { return remotemcp.MethodNames[:] }
 // Mount configures the mux to serve the remoteMcp endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateServerHandler(mux, h.CreateServer)
+	MountCreateServerAndMcpServerHandler(mux, h.CreateServerAndMcpServer)
 	MountListServersHandler(mux, h.ListServers)
 	MountGetServerHandler(mux, h.GetServer)
 	MountUpdateServerHandler(mux, h.UpdateServer)
@@ -161,6 +166,60 @@ func NewCreateServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateServerAndMcpServerHandler configures the mux to serve the
+// "remoteMcp" service "createServerAndMcpServer" endpoint.
+func MountCreateServerAndMcpServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.createServerAndMcpServer", f)
+}
+
+// NewCreateServerAndMcpServerHandler creates a HTTP handler which loads the
+// HTTP request and calls the "remoteMcp" service "createServerAndMcpServer"
+// endpoint.
+func NewCreateServerAndMcpServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateServerAndMcpServerRequest(mux, decoder)
+		encodeResponse = EncodeCreateServerAndMcpServerResponse(encoder)
+		encodeError    = EncodeCreateServerAndMcpServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createServerAndMcpServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

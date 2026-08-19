@@ -144,7 +144,7 @@ func UsageCommands() []string {
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
-		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
+		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
@@ -1909,6 +1909,12 @@ func ParseEndpoint(
 		remoteMcpCreateServerSessionTokenFlag     = remoteMcpCreateServerFlags.String("session-token", "", "")
 		remoteMcpCreateServerApikeyTokenFlag      = remoteMcpCreateServerFlags.String("apikey-token", "", "")
 		remoteMcpCreateServerProjectSlugInputFlag = remoteMcpCreateServerFlags.String("project-slug-input", "", "")
+
+		remoteMcpCreateServerAndMcpServerFlags                = flag.NewFlagSet("create-server-and-mcp-server", flag.ExitOnError)
+		remoteMcpCreateServerAndMcpServerBodyFlag             = remoteMcpCreateServerAndMcpServerFlags.String("body", "REQUIRED", "")
+		remoteMcpCreateServerAndMcpServerSessionTokenFlag     = remoteMcpCreateServerAndMcpServerFlags.String("session-token", "", "")
+		remoteMcpCreateServerAndMcpServerApikeyTokenFlag      = remoteMcpCreateServerAndMcpServerFlags.String("apikey-token", "", "")
+		remoteMcpCreateServerAndMcpServerProjectSlugInputFlag = remoteMcpCreateServerAndMcpServerFlags.String("project-slug-input", "", "")
 
 		remoteMcpListServersFlags                = flag.NewFlagSet("list-servers", flag.ExitOnError)
 		remoteMcpListServersSessionTokenFlag     = remoteMcpListServersFlags.String("session-token", "", "")
@@ -3953,6 +3959,7 @@ func ParseEndpoint(
 
 	remoteMcpFlags.Usage = remoteMcpUsage
 	remoteMcpCreateServerFlags.Usage = remoteMcpCreateServerUsage
+	remoteMcpCreateServerAndMcpServerFlags.Usage = remoteMcpCreateServerAndMcpServerUsage
 	remoteMcpListServersFlags.Usage = remoteMcpListServersUsage
 	remoteMcpGetServerFlags.Usage = remoteMcpGetServerUsage
 	remoteMcpUpdateServerFlags.Usage = remoteMcpUpdateServerUsage
@@ -5611,6 +5618,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-server":
 				epf = remoteMcpCreateServerFlags
+
+			case "create-server-and-mcp-server":
+				epf = remoteMcpCreateServerAndMcpServerFlags
 
 			case "list-servers":
 				epf = remoteMcpListServersFlags
@@ -7729,6 +7739,9 @@ func ParseEndpoint(
 			case "create-server":
 				endpoint = c.CreateServer()
 				data, err = remotemcpc.BuildCreateServerPayload(*remoteMcpCreateServerBodyFlag, *remoteMcpCreateServerSessionTokenFlag, *remoteMcpCreateServerApikeyTokenFlag, *remoteMcpCreateServerProjectSlugInputFlag)
+			case "create-server-and-mcp-server":
+				endpoint = c.CreateServerAndMcpServer()
+				data, err = remotemcpc.BuildCreateServerAndMcpServerPayload(*remoteMcpCreateServerAndMcpServerBodyFlag, *remoteMcpCreateServerAndMcpServerSessionTokenFlag, *remoteMcpCreateServerAndMcpServerApikeyTokenFlag, *remoteMcpCreateServerAndMcpServerProjectSlugInputFlag)
 			case "list-servers":
 				endpoint = c.ListServers()
 				data, err = remotemcpc.BuildListServersPayload(*remoteMcpListServersSessionTokenFlag, *remoteMcpListServersApikeyTokenFlag, *remoteMcpListServersProjectSlugInputFlag)
@@ -16505,6 +16518,7 @@ func remoteMcpUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-mcp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-server: Create a new remote MCP server`)
+	fmt.Fprintln(os.Stderr, `    create-server-and-mcp-server: Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.`)
 	fmt.Fprintln(os.Stderr, `    list-servers: List all remote MCP servers for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
@@ -16542,6 +16556,30 @@ func remoteMcpCreateServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server --body '{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpCreateServerAndMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp create-server-and-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp create-server-and-mcp-server --body '{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteMcpListServersUsage() {

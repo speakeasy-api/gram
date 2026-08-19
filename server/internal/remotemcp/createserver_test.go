@@ -4,16 +4,101 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+func TestCreateServerAndMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	beforeRemoteAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerCreate)
+	require.NoError(t, err)
+	beforeMcpAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("  Remote source  "),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.RemoteMcpServer)
+	require.NotNil(t, result.McpServer)
+
+	remote := result.RemoteMcpServer
+	mcpServer := result.McpServer
+	require.NotNil(t, remote.Name)
+	require.Equal(t, "Remote source", *remote.Name)
+	require.Equal(t, remote.ID, *mcpServer.RemoteMcpServerID)
+	require.Equal(t, "Remote source", *mcpServer.Name)
+	require.Equal(t, types.McpServerVisibility("disabled"), mcpServer.Visibility)
+	require.NotNil(t, mcpServer.UserSessionIssuerID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	storedMcpServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        uuid.MustParse(mcpServer.ID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(remote.ID), storedMcpServer.RemoteMcpServerID.UUID)
+	require.True(t, storedMcpServer.RemoteMcpServerID.Valid)
+	require.Equal(t, "disabled", storedMcpServer.Visibility)
+	require.True(t, storedMcpServer.UserSessionIssuerID.Valid)
+
+	issuer, err := usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:        storedMcpServer.UserSessionIssuerID.UUID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, issuer.Slug)
+
+	afterRemoteAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeRemoteAuditCount+1, afterRemoteAuditCount)
+	afterMcpAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeMcpAuditCount+1, afterMcpAuditCount)
+}
+
+func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://mcp.example.com/remote",
+		TransportType:    "streamable-http",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.RemoteMcpServer)
+	require.NotNil(t, result.McpServer)
+	require.Nil(t, result.RemoteMcpServer.Name)
+	require.NotNil(t, result.McpServer.Name)
+	require.Equal(t, "mcp.example.com/remote", *result.McpServer.Name)
+}
 
 func TestCreateServer(t *testing.T) {
 	t.Parallel()
