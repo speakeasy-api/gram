@@ -19,6 +19,7 @@ import {
   CLOUD_ORG_TOKEN_SENTINEL,
   CLOUD_SESSIONS_ANCHOR,
   MANIFEST_URL,
+  PINNED_AGENT_VERSION,
 } from "./cloud-setup";
 
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
@@ -26,8 +27,6 @@ const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 type ReleasesManifest = {
   latest: Record<string, { version: string }>;
 };
-
-const INLINABLE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
 
 function usePinnedAgentVersion() {
   const query = useQuery<ReleasesManifest>({
@@ -43,7 +42,7 @@ function usePinnedAgentVersion() {
     retry: 1,
   });
   const raw = query.data?.latest?.speakeasyd?.version;
-  const version = raw && INLINABLE_VERSION.test(raw) ? raw : null;
+  const version = raw && PINNED_AGENT_VERSION.test(raw) ? raw : null;
   return { version, isError: query.isError, isLoading: query.isPending };
 }
 
@@ -188,9 +187,10 @@ function CloudSetupScript({ version }: { version: string }) {
           {hasExistingAgentKey ? "Rotate token" : "Generate token"}
         </strong>{" "}
         to mint the <code>org_token</code>. Pin this version; auto-update is
-        disabled because the VM lives minutes. Add an <code>email</code> field
-        (a shared org mailbox is fine) if you want policy to sync — without it
-        the daemon starts but fetches nothing.
+        disabled because the VM lives minutes. After pasting, add an{" "}
+        <code>email</code> field to <code>managed.json</code> (a shared org
+        mailbox is fine) if you want policy to sync — without it the daemon
+        starts but fetches nothing.
       </Text>
 
       {generatedToken && (

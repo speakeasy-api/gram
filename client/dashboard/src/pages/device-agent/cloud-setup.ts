@@ -17,7 +17,8 @@ export const CLOUD_SESSIONS_ANCHOR = "cloud-sessions";
 // Same charset the OS-tile snippets require: a manifest version is inlined
 // into a root shell script, so reject anything that isn't strict semver
 // (optionally with a prerelease suffix).
-const PINNED_AGENT_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
+export const PINNED_AGENT_VERSION =
+  /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
 
 export type CloudSetupScriptInput = {
   version: string;
@@ -78,24 +79,31 @@ set -euo pipefail
 VERSION="${version}"
 BASE="${base}"
 
-install -d -m 0755 /usr/local/bin
-curl -fSL -o /usr/local/bin/speakeasyd "$BASE/${daemon}"
-curl -fSL -o /usr/local/bin/speakeasy "$BASE/${cli}"
-chmod 0755 /usr/local/bin/speakeasyd /usr/local/bin/speakeasy
-
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
-PKG="${helperPkg}"
-curl -fSL -o "$PKG" "$BASE/$PKG"
-curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c -
-DEBIAN_FRONTEND=noninteractive apt-get install -y "./$PKG"
+curl -fsSL -o checksums.txt "$BASE/checksums.txt"
+fetch_and_verify() {
+  curl -fSL -o "$1" "$BASE/$1"
+  grep " $1$" checksums.txt | sha256sum -c -
+}
+
+install -d -m 0755 /usr/local/bin
+fetch_and_verify "${daemon}"
+install -m 0755 "${daemon}" /usr/local/bin/speakeasyd
+fetch_and_verify "${cli}"
+install -m 0755 "${cli}" /usr/local/bin/speakeasy
+fetch_and_verify "${helperPkg}"
+DEBIAN_FRONTEND=noninteractive apt-get install -y "./${helperPkg}"
 
 install -d -m 0755 /etc/speakeasy
 cat >/etc/speakeasy/managed.json <<'SPEAKEASY_MANAGED_JSON'
 ${managedJson}
 SPEAKEASY_MANAGED_JSON
-chmod 0644 /etc/speakeasy/managed.json
+# 0640 matches the fleet managed.json contract. Setup is root; SessionStart
+# starts speakeasyd as the session user (typically uid 1000 on this Ubuntu VM).
+chmod 0640 /etc/speakeasy/managed.json
+chgrp "$(id -gn 1000 2>/dev/null || echo root)" /etc/speakeasy/managed.json
 `;
 }
 

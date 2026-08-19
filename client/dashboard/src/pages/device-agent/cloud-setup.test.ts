@@ -52,11 +52,25 @@ describe("buildCloudSetupScript", () => {
 
   it("pins linux_amd64 binaries and the helper .deb from the release bucket", () => {
     expect(script).toContain(`${RELEASES_BASE}/v0.1.20`);
-    expect(script).toContain("$BASE/speakeasyd_0.1.20_linux_amd64");
-    expect(script).toContain("$BASE/speakeasy_0.1.20_linux_amd64");
     expect(script).toContain("speakeasy-helper_0.1.20_linux_amd64.deb");
     expect(script).toContain("apt-get install -y");
     expect(script).not.toContain("linux_arm64");
+    expect(script).toContain("checksums.txt");
+    expect(script).toContain("fetch_and_verify");
+    expect(script).toContain("sha256sum -c -");
+    expect(script).toContain(
+      'fetch_and_verify "speakeasyd_0.1.20_linux_amd64"',
+    );
+    expect(script).toContain('fetch_and_verify "speakeasy_0.1.20_linux_amd64"');
+    expect(script).toContain(
+      'fetch_and_verify "speakeasy-helper_0.1.20_linux_amd64.deb"',
+    );
+  });
+
+  it("writes managed.json 0640 and group-readable by the session user", () => {
+    expect(script).toContain("chmod 0640 /etc/speakeasy/managed.json");
+    expect(script).toContain('chgrp "$(id -gn 1000 2>/dev/null || echo root)"');
+    expect(script).not.toContain("chmod 0644");
   });
 
   it("writes managed.json only — no Claude settings and no process start", () => {
