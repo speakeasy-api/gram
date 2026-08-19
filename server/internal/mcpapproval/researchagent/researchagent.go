@@ -212,6 +212,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	})
 
 	transcript := &strings.Builder{}

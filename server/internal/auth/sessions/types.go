@@ -14,11 +14,13 @@ const (
 var _ cache.CacheableObject[Session] = (*Session)(nil)
 
 type Session struct {
-	SessionID            string
-	ActiveOrganizationID string
-	UserID               string
-	WorkOSSessionID      string
-	ImpersonatorEmail    string
+	SessionID             string
+	ActiveOrganizationID  string
+	UserID                string
+	WorkOSSessionID       string
+	ImpersonatorEmail     string
+	SupportOrganizationID string
+	SupportExpiresAt      time.Time
 }
 
 func SessionCacheKey(sessionID string) string {
@@ -30,6 +32,9 @@ func (s Session) CacheKey() string {
 }
 
 func (s Session) TTL() time.Duration {
+	if !s.SupportExpiresAt.IsZero() {
+		return time.Until(s.SupportExpiresAt)
+	}
 	return sessionCacheExpiry
 }
 

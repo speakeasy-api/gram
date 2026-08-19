@@ -48,7 +48,7 @@ func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
 	require.Error(t, engine.Require(ctx, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_demo"}))
 }
 
-func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
+func TestPrepareContext_demoOrgReadOnlyEvenForPlatformAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx := demoTestCtx(t)
@@ -56,8 +56,7 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	require.True(t, ok)
 	authCtx.IsAdmin = true
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "acme-demo")
-	// An admin scope override must not widen the demo org back to writes.
+	// An explicit scope override must not widen the demo org back to writes.
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
@@ -66,7 +65,7 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	// The demo branch wins over the admin-override allScopeGrants branch.
+	// The demo branch wins over broad platform-admin grants.
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
 	require.Error(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
 }

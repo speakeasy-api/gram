@@ -690,7 +690,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 }
 
 // TestPrepareContext_adminImpersonationGrantsAllScopes verifies that when a
-// Speakeasy admin impersonates a customer org (IsAdmin + AdminOverride), the
+// platform admin has a validated support session, the
 // engine injects wildcard grants for every scope so that Require() calls
 // succeed. Without this, the admin has no WorkOS membership in the target org
 // and every endpoint returns 403.
@@ -698,17 +698,16 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
-	// Build a context that looks like admin impersonation: enterprise account,
-	// IsAdmin flag, and AdminOverride pointing at the target org.
+	// Build the trusted context produced by support-session authentication.
 	sessionID := "session_admin"
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_customer",
-		UserID:               "user_admin",
-		SessionID:            &sessionID,
-		AccountType:          "enterprise",
-		IsAdmin:              true,
+	ctx := contextvalues.WithValidatedSupportSession(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_customer",
+		UserID:                "user_admin",
+		SessionID:             &sessionID,
+		AccountType:           "enterprise",
+		IsAdmin:               true,
+		SupportOrganizationID: "org_customer",
 	})
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "org_customer")
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)

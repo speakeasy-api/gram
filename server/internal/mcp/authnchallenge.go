@@ -301,6 +301,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

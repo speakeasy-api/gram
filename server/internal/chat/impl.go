@@ -892,8 +892,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
 	// the gate drift in the first place. The shared demo org is exempt: its
 	// transcripts are fabricated by seed/demo/ and exist to be read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
-		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
+	if contextvalues.IsSupportSession(ctx) && authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
 		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
 	}
 

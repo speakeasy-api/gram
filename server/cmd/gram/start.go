@@ -1256,7 +1256,6 @@ func newStartCommand() *cli.Command {
 				}
 				return sess.ActiveOrganizationID, true
 			}))
-			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			// LiteLLM dispatch must run before OTLP forwarding: LiteLLM ingest
 			// is excluded from outbound forwarding, and the canonical metrics
