@@ -52,6 +52,11 @@ func SetPluginAssignmentsPluginsPath() string {
 	return "/rpc/plugins.setPluginAssignments"
 }
 
+// ListAudiencesPluginsPath returns the URL path to the plugins service listAudiences HTTP endpoint.
+func ListAudiencesPluginsPath() string {
+	return "/rpc/plugins.listAudiences"
+}
+
 // DownloadPluginPackagePluginsPath returns the URL path to the plugins service downloadPluginPackage HTTP endpoint.
 func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"

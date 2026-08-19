@@ -291,7 +291,9 @@ export default function OrgIdentity(): JSX.Element {
 
 function OrgIdentityInner() {
   const organization = useOrganization();
-  const { data: features } = useProductFeatures();
+  const { data: features } = useProductFeatures({
+    organizationId: organization.id,
+  });
 
   const ssoFeatureEnabled = features?.ssoEnabled ?? false;
   const scimFeatureEnabled = features?.scimEnabled ?? false;

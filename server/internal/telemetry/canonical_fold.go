@@ -221,6 +221,13 @@ func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string
 	}()
 }
 
+// CanonicalOrgFor exposes the fold gate to services outside this package that
+// run their own identity-folded queries, so the rollout flag stays a single
+// switch rather than one per caller.
+func (s *Service) CanonicalOrgFor(ctx context.Context, orgID string) string {
+	return s.canonicalOrgFor(ctx, orgID)
+}
+
 // canonicalOrgFor resolves the fold flag to the org id the repo params carry:
 // the org id when folding is enabled, "" when the org serves literal
 // identities. The single choke point for fold gating on org-scoped reads.

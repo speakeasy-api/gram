@@ -1403,6 +1403,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			category         *string
 			ruleID           *string
 			userID           *string
+			externalUserIds  []string
 			uniqueMatch      *bool
 			nonAssistant     *bool
 			assistantID      *string
@@ -1442,6 +1443,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if userIDRaw != "" {
 			userID = &userIDRaw
 		}
+		externalUserIds = qp["external_user_ids"]
 		{
 			uniqueMatchRaw := qp.Get("unique_match")
 			if uniqueMatchRaw != "" {
@@ -1523,7 +1525,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, externalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

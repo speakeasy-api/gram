@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Service struct {
@@ -61,11 +62,20 @@ type Service struct {
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
 
-	openRouter TrialKeyReviver
+	openRouter      TrialKeyReviver
+	openRouterUsage OpenRouterUsageReader
+	productFeatures *productfeatures.Client
 
 	audit *audit.Logger
 
-	trial trialemails.Notifier
+	trial   trialemails.Notifier
+	billing BillingOperations
+}
+
+type BillingOperations interface {
+	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
+	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
 // TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
@@ -75,8 +85,19 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
-// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
-var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+// OpenRouterUsageReader reads the current monthly usage for a materialized key.
+type OpenRouterUsageReader interface {
+	GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error)
+}
+
+// AdminOpenRouter is the complete OpenRouter surface used by the admin service.
+type AdminOpenRouter interface {
+	TrialKeyReviver
+	OpenRouterUsageReader
+}
+
+// ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
+var ErrOpenRouterUnavailable = errors.New("no usable OpenRouter configuration")
 
 const keyBillingLockWaitTimeout = 5 * time.Second
 
@@ -84,15 +105,19 @@ const keyBillingLockWaitTimeout = 5 * time.Second
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
+	return 0, 0, ErrOpenRouterUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -107,8 +132,10 @@ func NewService(
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
-	openRouter TrialKeyReviver,
+	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
+	productFeatures *productfeatures.Client,
+	billing BillingOperations,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -116,32 +143,36 @@ func NewService(
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
 	sessionStore := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
 			logger.With(attr.SlogCacheNamespace("admin_session")),
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
 		encryptionClient,
 	)
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient),
-		allowedOrigins: allowedOrigins,
-		workos:         workosClient,
-		openRouter:     openRouter,
-		audit:          audit.NewLogger(),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:          logger,
+		db:              db,
+		oidc:            oidcClient,
+		sessions:        sessionStore,
+		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:  allowedOrigins,
+		workos:          workosClient,
+		openRouter:      openRouter,
+		openRouterUsage: openRouter,
+		productFeatures: productFeatures,
+		audit:           audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
-		trial: trialNotifier,
+		trial:   trialNotifier,
+		billing: billing,
 	}
 }
 
@@ -1060,6 +1091,10 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
 	}
 
+	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
+	}
+
 	actor, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
 		OrganizationID: payload.ID,
@@ -1081,6 +1116,9 @@ func (s *Service) rearmTrialLocked(
 	}
 
 	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	}
 
 	// Speakeasy-only, and the only place the email meets the entry's subject.
 	logger.InfoContext(ctx, "re-armed enterprise trial",
@@ -1130,7 +1168,7 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lock
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
 		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
 		switch {
-		case errors.Is(err, ErrKeyRevivalUnavailable):
+		case errors.Is(err, ErrOpenRouterUnavailable):
 			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
 		case err != nil:
 			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)

@@ -79,6 +79,26 @@ type Client struct {
 	// getOrganizationStats endpoint.
 	GetOrganizationStatsDoer goahttp.Doer
 
+	// GetInferenceKeys Doer is the HTTP client used to make requests to the
+	// getInferenceKeys endpoint.
+	GetInferenceKeysDoer goahttp.Doer
+
+	// GetPaygBillingSummary Doer is the HTTP client used to make requests to the
+	// getPaygBillingSummary endpoint.
+	GetPaygBillingSummaryDoer goahttp.Doer
+
+	// GetStripeSubscription Doer is the HTTP client used to make requests to the
+	// getStripeSubscription endpoint.
+	GetStripeSubscriptionDoer goahttp.Doer
+
+	// CancelStripeSubscription Doer is the HTTP client used to make requests to
+	// the cancelStripeSubscription endpoint.
+	CancelStripeSubscriptionDoer goahttp.Doer
+
+	// ResumeStripeSubscription Doer is the HTTP client used to make requests to
+	// the resumeStripeSubscription endpoint.
+	ResumeStripeSubscriptionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -115,6 +135,11 @@ func NewClient(
 		CreateOrganizationDoer:       doer,
 		RearmTrialDoer:               doer,
 		GetOrganizationStatsDoer:     doer,
+		GetInferenceKeysDoer:         doer,
+		GetPaygBillingSummaryDoer:    doer,
+		GetStripeSubscriptionDoer:    doer,
+		CancelStripeSubscriptionDoer: doer,
+		ResumeStripeSubscriptionDoer: doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -502,6 +527,126 @@ func (c *Client) GetOrganizationStats() goa.Endpoint {
 		resp, err := c.GetOrganizationStatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationStats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetInferenceKeys returns an endpoint that makes HTTP requests to the admin
+// service getInferenceKeys server.
+func (c *Client) GetInferenceKeys() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetInferenceKeysRequest(c.encoder)
+		decodeResponse = DecodeGetInferenceKeysResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetInferenceKeysRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetInferenceKeysDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getInferenceKeys", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPaygBillingSummary returns an endpoint that makes HTTP requests to the
+// admin service getPaygBillingSummary server.
+func (c *Client) GetPaygBillingSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPaygBillingSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetPaygBillingSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPaygBillingSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPaygBillingSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getPaygBillingSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service getStripeSubscription server.
+func (c *Client) GetStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeGetStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CancelStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service cancelStripeSubscription server.
+func (c *Client) CancelStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCancelStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeCancelStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCancelStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CancelStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "cancelStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResumeStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service resumeStripeSubscription server.
+func (c *Client) ResumeStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResumeStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeResumeStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResumeStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResumeStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "resumeStripeSubscription", err)
 		}
 		return decodeResponse(resp)
 	}

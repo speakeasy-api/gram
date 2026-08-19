@@ -526,6 +526,69 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
+// BuildListShadowMCPInventoryServersForUserPayload builds the payload for the
+// access listShadowMCPInventoryServersForUser endpoint from CLI flags.
+func BuildListShadowMCPInventoryServersForUserPayload(accessListShadowMCPInventoryServersForUserProjectID string, accessListShadowMCPInventoryServersForUserUserKeys string, accessListShadowMCPInventoryServersForUserLimit string, accessListShadowMCPInventoryServersForUserSessionToken string) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessListShadowMCPInventoryServersForUserProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var userKeys []string
+	{
+		err = json.Unmarshal([]byte(accessListShadowMCPInventoryServersForUserUserKeys), &userKeys)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if accessListShadowMCPInventoryServersForUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryServersForUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventoryServersForUserSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryServersForUserSessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryServersForUserPayload{}
+	v.ProjectID = projectID
+	v.UserKeys = userKeys
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildResolveShadowMCPInventoryRequestPayload builds the payload for the
 // access resolveShadowMCPInventoryRequest endpoint from CLI flags.
 func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventoryRequestBody string, accessResolveShadowMCPInventoryRequestSessionToken string) (*access.ResolveShadowMCPInventoryRequestPayload, error) {

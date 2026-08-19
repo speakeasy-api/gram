@@ -13,6 +13,7 @@ import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
+import { accessListShadowMCPInventoryServersForUser } from "../funcs/accessListShadowMCPInventoryServersForUser.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
@@ -79,6 +80,10 @@ import {
   ListShadowMCPInventoryRequest,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
+import {
+  ListShadowMCPInventoryServersForUserRequest,
+  ListShadowMCPInventoryServersForUserSecurity,
+} from "../models/operations/listshadowmcpinventoryserversforuser.js";
 import {
   ListShadowMCPInventoryUsersRequest,
   ListShadowMCPInventoryUsersSecurity,
@@ -312,6 +317,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryResult> {
     return unwrapAsync(accessListShadowMCPInventory(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listShadowMCPInventoryServersForUser access
+   *
+   * @remarks
+   * List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.
+   */
+  async listShadowMCPInventoryServersForUser(
+    request: ListShadowMCPInventoryServersForUserRequest,
+    security?: ListShadowMCPInventoryServersForUserSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryResult> {
+    return unwrapAsync(accessListShadowMCPInventoryServersForUser(
       this,
       request,
       security,

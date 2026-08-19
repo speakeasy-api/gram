@@ -86,3 +86,28 @@ func RearmTrialAdminPath() string {
 func GetOrganizationStatsAdminPath() string {
 	return "/admin/organizations.stats"
 }
+
+// GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
+func GetInferenceKeysAdminPath() string {
+	return "/admin/organization.inferenceKeys"
+}
+
+// GetPaygBillingSummaryAdminPath returns the URL path to the admin service getPaygBillingSummary HTTP endpoint.
+func GetPaygBillingSummaryAdminPath() string {
+	return "/admin/organization.paygBillingSummary"
+}
+
+// GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
+func GetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.stripeSubscription"
+}
+
+// CancelStripeSubscriptionAdminPath returns the URL path to the admin service cancelStripeSubscription HTTP endpoint.
+func CancelStripeSubscriptionAdminPath() string {
+	return "/admin/organization.cancelStripeSubscription"
+}
+
+// ResumeStripeSubscriptionAdminPath returns the URL path to the admin service resumeStripeSubscription HTTP endpoint.
+func ResumeStripeSubscriptionAdminPath() string {
+	return "/admin/organization.resumeStripeSubscription"
+}

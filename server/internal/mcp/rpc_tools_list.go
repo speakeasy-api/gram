@@ -79,6 +79,15 @@ func handleToolsList(
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
+	// The consent-screen tool selection narrows the same slice the ?tags=
+	// filter does, so static mode, dynamic-mode search/describe, and the
+	// call-side lookup all agree on the session's visible tools.
+	if payload.toolSelection != nil {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsBySelection(toolset.Tools, payload.toolSelection)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
+	}
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		// Identity and protocol-version parity with `mcp_initialized`: under
 		// 2026-07-28 there is no initialize to capture them at, so this event
@@ -116,8 +125,16 @@ func handleToolsList(
 		}
 	}
 
+	// A restrictive session whose effective selection is empty gets no
+	// dynamic facade either: search_tools would still reach the embedding
+	// search service, a surface a zero-tool grant does not cover.
+	mode := payload.mode
+	if payload.toolSelection != nil && len(toolset.Tools) == 0 {
+		mode = ToolModeStatic
+	}
+
 	var tools []*toolListEntry
-	switch payload.mode {
+	switch mode {
 	case ToolModeDynamic:
 		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {

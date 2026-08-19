@@ -15,6 +15,8 @@ import (
 // UpsertWorkUnitsSettingsRequestBody is the type of the "adminChatAnalysis"
 // service "upsertWorkUnitsSettings" endpoint HTTP request body.
 type UpsertWorkUnitsSettingsRequestBody struct {
+	// Organization whose settings to replace.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Whether work-units chat analysis is enabled.
 	WorkUnitsEnabled *bool `form:"work_units_enabled,omitempty" json:"work_units_enabled,omitempty" xml:"work_units_enabled,omitempty"`
 	// Maximum work-units evaluations reserved across the organization each UTC
@@ -26,11 +28,20 @@ type UpsertWorkUnitsSettingsRequestBody struct {
 // "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
 // request body.
 type UpsertBusinessMemorySettingsRequestBody struct {
+	// Organization whose settings to replace.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Whether completed sessions are mined for business memories.
 	BusinessMemoryEnabled *bool `form:"business_memory_enabled,omitempty" json:"business_memory_enabled,omitempty" xml:"business_memory_enabled,omitempty"`
 	// Maximum business-memory extraction evaluations reserved across the
 	// organization each UTC day. 0 disables extraction.
 	BusinessMemoryDailyCap *int `form:"business_memory_daily_cap,omitempty" json:"business_memory_daily_cap,omitempty" xml:"business_memory_daily_cap,omitempty"`
+}
+
+// TriggerAnalysisRequestBody is the type of the "adminChatAnalysis" service
+// "triggerAnalysis" endpoint HTTP request body.
+type TriggerAnalysisRequestBody struct {
+	// Organization whose projects to signal.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
 // GetSettingsResponseBody is the type of the "adminChatAnalysis" service
@@ -1502,8 +1513,9 @@ func NewTriggerAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *TriggerA
 
 // NewGetSettingsPayload builds a adminChatAnalysis service getSettings
 // endpoint payload.
-func NewGetSettingsPayload(sessionToken *string) *adminchatanalysis.GetSettingsPayload {
+func NewGetSettingsPayload(organizationID string, sessionToken *string) *adminchatanalysis.GetSettingsPayload {
 	v := &adminchatanalysis.GetSettingsPayload{}
+	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
 
 	return v
@@ -1513,6 +1525,7 @@ func NewGetSettingsPayload(sessionToken *string) *adminchatanalysis.GetSettingsP
 // upsertWorkUnitsSettings endpoint payload.
 func NewUpsertWorkUnitsSettingsPayload(body *UpsertWorkUnitsSettingsRequestBody, sessionToken *string) *adminchatanalysis.UpsertWorkUnitsSettingsPayload {
 	v := &adminchatanalysis.UpsertWorkUnitsSettingsPayload{
+		OrganizationID:    *body.OrganizationID,
 		WorkUnitsEnabled:  *body.WorkUnitsEnabled,
 		WorkUnitsDailyCap: *body.WorkUnitsDailyCap,
 	}
@@ -1525,6 +1538,7 @@ func NewUpsertWorkUnitsSettingsPayload(body *UpsertWorkUnitsSettingsRequestBody,
 // upsertBusinessMemorySettings endpoint payload.
 func NewUpsertBusinessMemorySettingsPayload(body *UpsertBusinessMemorySettingsRequestBody, sessionToken *string) *adminchatanalysis.UpsertBusinessMemorySettingsPayload {
 	v := &adminchatanalysis.UpsertBusinessMemorySettingsPayload{
+		OrganizationID:         *body.OrganizationID,
 		BusinessMemoryEnabled:  *body.BusinessMemoryEnabled,
 		BusinessMemoryDailyCap: *body.BusinessMemoryDailyCap,
 	}
@@ -1535,8 +1549,10 @@ func NewUpsertBusinessMemorySettingsPayload(body *UpsertBusinessMemorySettingsRe
 
 // NewTriggerAnalysisPayload builds a adminChatAnalysis service triggerAnalysis
 // endpoint payload.
-func NewTriggerAnalysisPayload(sessionToken *string) *adminchatanalysis.TriggerAnalysisPayload {
-	v := &adminchatanalysis.TriggerAnalysisPayload{}
+func NewTriggerAnalysisPayload(body *TriggerAnalysisRequestBody, sessionToken *string) *adminchatanalysis.TriggerAnalysisPayload {
+	v := &adminchatanalysis.TriggerAnalysisPayload{
+		OrganizationID: *body.OrganizationID,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -1545,6 +1561,9 @@ func NewTriggerAnalysisPayload(sessionToken *string) *adminchatanalysis.TriggerA
 // ValidateUpsertWorkUnitsSettingsRequestBody runs the validations defined on
 // UpsertWorkUnitsSettingsRequestBody
 func ValidateUpsertWorkUnitsSettingsRequestBody(body *UpsertWorkUnitsSettingsRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.WorkUnitsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("work_units_enabled", "body"))
 	}
@@ -1567,6 +1586,9 @@ func ValidateUpsertWorkUnitsSettingsRequestBody(body *UpsertWorkUnitsSettingsReq
 // ValidateUpsertBusinessMemorySettingsRequestBody runs the validations defined
 // on UpsertBusinessMemorySettingsRequestBody
 func ValidateUpsertBusinessMemorySettingsRequestBody(body *UpsertBusinessMemorySettingsRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.BusinessMemoryEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("business_memory_enabled", "body"))
 	}
@@ -1582,6 +1604,15 @@ func ValidateUpsertBusinessMemorySettingsRequestBody(body *UpsertBusinessMemoryS
 		if *body.BusinessMemoryDailyCap > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.business_memory_daily_cap", *body.BusinessMemoryDailyCap, 10000, false))
 		}
+	}
+	return
+}
+
+// ValidateTriggerAnalysisRequestBody runs the validations defined on
+// TriggerAnalysisRequestBody
+func ValidateTriggerAnalysisRequestBody(body *TriggerAnalysisRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	return
 }

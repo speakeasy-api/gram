@@ -114,7 +114,6 @@ type Activities struct {
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
-	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	syncIdentityMap                 *activities.SyncIdentityMap
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
@@ -375,7 +374,6 @@ func NewActivities(
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
@@ -435,6 +433,7 @@ func NewActivities(
 			openrouterProvisioner,
 			auditLogger,
 			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
+			productFeatures,
 		),
 		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
@@ -725,10 +724,6 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
-}
-
-func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
-	return a.correlateClaudePrompts.Do(ctx, input)
 }
 
 func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {

@@ -5490,6 +5490,15 @@ CREATE TABLE IF NOT EXISTS mcp_research_reports (
   report JSONB NOT NULL DEFAULT '{}'::jsonb,
   report_version INTEGER NOT NULL DEFAULT 1,
 
+  -- The per-action trace: an ordered array of the tool calls the run made,
+  -- one object per search or page fetch, with the outcome, the injection
+  -- judge's verdict, and a bounded preview of the untrusted text it saw. The
+  -- report above is a run-level synthesis that drops most of what was read;
+  -- this is what the agent actually did. The runner produces all of it during
+  -- the run and would otherwise discard it. No page bodies are stored — only
+  -- previews — and a preview is untrusted web content, never executed.
+  tool_calls JSONB NOT NULL DEFAULT '[]'::jsonb,
+
   -- Reproducibility. A report is part of an audit trail and re-runs are
   -- additive, so a reader must be able to tell which run a decision rested on
   -- and what produced it.
@@ -5508,6 +5517,7 @@ CREATE TABLE IF NOT EXISTS mcp_research_reports (
 
   CONSTRAINT mcp_research_reports_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_research_reports_report_check CHECK (jsonb_typeof(report) = 'object'),
+  CONSTRAINT mcp_research_reports_tool_calls_check CHECK (jsonb_typeof(tool_calls) = 'array'),
   CONSTRAINT mcp_research_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT mcp_research_reports_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   -- Composite so the report cannot claim one project while its request

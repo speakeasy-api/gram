@@ -34,8 +34,6 @@ import (
 // Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
-const MaxClaudePromptCorrelationEditDistanceBytes = 65536
-
 // ErrInvalidShadowMCPInventoryURLCursor marks malformed shadow MCP inventory URL list cursors.
 var ErrInvalidShadowMCPInventoryURLCursor = errors.New("invalid shadow mcp inventory url cursor")
 
@@ -516,9 +514,18 @@ type ShadowMCPInventoryURLRow struct {
 }
 
 type ListShadowMCPInventoryUsageParams struct {
+	// OrganizationID scopes the canonical identity fold applied to UserKeys.
+	// Only needed when UserKeys is set.
+	OrganizationID      string
 	GramProjectID       string
 	CanonicalServerURLs []string
-	Limit               int
+	// UserKeys restricts the usage to calls made by these identifiers, matched
+	// against either the reported email or the user id. Leave empty for the
+	// whole project. With CanonicalServerURLs empty as well, this answers the
+	// inverse question the inventory table cannot: which shadow MCP servers
+	// one person reached.
+	UserKeys []string
+	Limit    int
 }
 
 type ShadowMCPInventoryUsageRow struct {
@@ -924,6 +931,60 @@ func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
 	return true, nil
 }
 
+type ListShadowMCPInventoryURLsByCanonicalURLsParams struct {
+	GramProjectID       string
+	CanonicalServerURLs []string
+}
+
+// ListShadowMCPInventoryURLsByCanonicalURLs loads the stored inventory
+// metadata for a known set of URLs. Callers that derive their URL set from
+// telemetry need this to pick up what only the inventory table holds — an
+// admin's server_name_override, and the true first/last seen — rather than
+// reporting what one person's traces happened to show.
+func (q *Queries) ListShadowMCPInventoryURLsByCanonicalURLs(ctx context.Context, arg ListShadowMCPInventoryURLsByCanonicalURLsParams) ([]ShadowMCPInventoryURLRow, error) {
+	if len(arg.CanonicalServerURLs) == 0 {
+		return []ShadowMCPInventoryURLRow{}, nil
+	}
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"canonical_server_url": arg.CanonicalServerURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory canonical url lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory canonical url lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]ShadowMCPInventoryURLRow, 0, len(arg.CanonicalServerURLs))
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory canonical url lookup row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory canonical url lookup rows: %w", err)
+	}
+
+	return result, nil
+}
+
 func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg ListShadowMCPInventoryURLsBySlugHashParams) ([]ShadowMCPInventoryURLRow, error) {
 	const slugHashExpression = "substring(lower(hex(SHA256(canonical_server_url))), 1, 8)"
 
@@ -1180,7 +1241,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.CanonicalServerURLs, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1280,7 +1341,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		}
 	}
 
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,7 +1402,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -1356,6 +1417,31 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		GroupBy("trace_id").
 		Having("server_url != ''").
 		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	if len(userKeys) > 0 {
+		lowered := make([]string, 0, len(userKeys))
+		for _, key := range userKeys {
+			if trimmed := strings.ToLower(strings.TrimSpace(key)); trimmed != "" {
+				lowered = append(lowered, trimmed)
+			}
+		}
+		if len(lowered) > 0 {
+			// Either identifier, because user_key itself is the email when
+			// there is one and the user id otherwise, and a caller holds both.
+			orgLit := canonicalIdentityOrgLiteral(orgID)
+			match := squirrel.Or{squirrel.Expr("lowerUTF8(trace_summaries.user_id) IN (?)", lowered)}
+			// The email leg only exists when the fold can be applied. Matching
+			// user_email raw would split one person across their work and
+			// personal addresses, which is the whole reason identity_map
+			// exists, so an org id that cannot be inlined drops the email leg
+			// rather than matching without the fold.
+			if orgLit != "" {
+				match = append(match, canonicalEmailPredicate(orgLit, "trace_summaries.user_email", lowered))
+			}
+			sb = sb.Where(match)
+			sb = withCanonicalFoldSettings(sb, orgLit)
+		}
+	}
 
 	if len(canonicalServerURLs) > 0 {
 		predicates := make(squirrel.Or, 0, len(canonicalServerURLs))
@@ -6783,138 +6869,6 @@ func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg Lis
 		events = append(events, ev)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return events, nil
-}
-
-type ListClaudeUserPromptCandidatesForCorrelationParams struct {
-	GramProjectID          string
-	GramChatID             string
-	SessionID              string
-	MessagePrompt          string
-	MessageTimeUnixNano    int64
-	AfterEventSequence     int64
-	AfterEventTimeUnixNano int64
-	MinFuzzyLength         int
-	MaxTimeDeltaNanos      int64
-}
-
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Context, arg ListClaudeUserPromptCandidatesForCorrelationParams) ([]ClaudeUserPromptCandidate, error) {
-	if arg.MessagePrompt == "" {
-		return nil, nil
-	}
-	if len(arg.MessagePrompt) > MaxClaudePromptCorrelationEditDistanceBytes {
-		return nil, nil
-	}
-
-	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
-		"gram_project_id":               arg.GramProjectID,
-		"gram_chat_id":                  arg.GramChatID,
-		"session_id":                    arg.SessionID,
-		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
-		"max_edit_distance_bytes":       strconv.Itoa(MaxClaudePromptCorrelationEditDistanceBytes),
-		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
-		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
-		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
-		"min_fuzzy_length":              strconv.Itoa(arg.MinFuzzyLength),
-		"max_time_delta_nanos":          strconv.FormatInt(arg.MaxTimeDeltaNanos, 10),
-		"negative_max_time_delta_nanos": strconv.FormatInt(-arg.MaxTimeDeltaNanos, 10),
-	}))
-
-	normalizedPromptExpr := "replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ')"
-	rawEvents := sq.Select(
-		"toString(attributes.prompt.id) AS prompt_id",
-		normalizedPromptExpr+" AS prompt",
-		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
-		"time_unix_nano",
-	).
-		From("telemetry_logs").
-		Where("gram_project_id = {gram_project_id:String}").
-		Where("gram_chat_id = {gram_chat_id:String}").
-		Where("toString(attributes.session.id) = {session_id:String}").
-		Where("toString(attributes.event.name) = 'user_prompt'").
-		Where("toString(attributes.prompt.id) != ''").
-		Where("toString(attributes.prompt) != ''").
-		Where("length(" + normalizedPromptExpr + ") <= {max_edit_distance_bytes:UInt64}").
-		Where(squirrel.Or{
-			squirrel.Expr("event_sequence > {after_event_sequence:Int64}"),
-			squirrel.Expr(`(
-				event_sequence = {after_event_sequence:Int64}
-				AND time_unix_nano > {after_event_time_unix_nano:Int64}
-			)`),
-		}).
-		Where(`time_unix_nano BETWEEN message_time_unix_nano + {negative_max_time_delta_nanos:Int64}
-			AND message_time_unix_nano + max_time_delta_nanos`)
-
-	scoredCandidates := sq.Select(
-		"prompt_id",
-		"prompt",
-		"event_sequence",
-		"time_unix_nano",
-		"prompt = message_prompt AS is_exact",
-		`if(
-			prompt = message_prompt,
-			1.0,
-			1.0 - (
-				toFloat64(editDistanceUTF8(prompt, message_prompt))
-				/ toFloat64(greatest(lengthUTF8(prompt), message_len, 1))
-			)
-		) AS similarity,
-		abs(time_unix_nano - message_time_unix_nano) AS time_delta`,
-	).
-		FromSelect(rawEvents, "raw_events")
-
-	sb := sq.Select(
-		"prompt_id",
-		"prompt",
-		"event_sequence",
-		"time_unix_nano",
-		"similarity",
-		"is_exact",
-	).
-		Prefix(`WITH
-			replaceRegexpAll(trimBoth(base64Decode({message_prompt_b64:String})), '\\s+', ' ') AS message_prompt,
-			lengthUTF8(message_prompt) AS message_len,
-			{message_time_unix_nano:Int64} AS message_time_unix_nano,
-			{max_time_delta_nanos:Int64} AS max_time_delta_nanos`).
-		FromSelect(scoredCandidates, "scored_candidates").
-		Where(squirrel.Or{
-			squirrel.Expr("is_exact"),
-			squirrel.And{
-				squirrel.Expr("message_len >= {min_fuzzy_length:UInt64}"),
-				squirrel.Expr("lengthUTF8(prompt) >= {min_fuzzy_length:UInt64}"),
-				squirrel.Expr("time_delta <= max_time_delta_nanos"),
-			},
-		}).
-		OrderBy("is_exact DESC", "similarity DESC", "time_delta ASC", "event_sequence ASC", "time_unix_nano ASC").
-		Limit(2)
-
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building list Claude user prompt candidates query: %w", err)
-	}
-	if len(args) > 0 {
-		return nil, fmt.Errorf("building list Claude user prompt candidates query: unexpected positional arguments")
-	}
-
-	rows, err := q.conn.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []ClaudeUserPromptCandidate
-	for rows.Next() {
-		var event ClaudeUserPromptCandidate
-		if err = rows.ScanStruct(&event); err != nil {
-			return nil, fmt.Errorf("error scanning row: %w", err)
-		}
-		events = append(events, event)
-	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
