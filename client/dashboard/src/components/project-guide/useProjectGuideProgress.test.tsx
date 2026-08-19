@@ -2,20 +2,30 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const queryHooks = vi.hoisted(() => ({
+  activity: vi.fn(),
   overview: vi.fn(),
   policies: vi.fn(),
+  plugins: vi.fn(),
   results: vi.fn(),
   servers: vi.fn(),
 }));
+
+const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
 
 vi.mock("@/components/project-guide/allTimeOverviewQuery", () => ({
   useAllTimeProjectOverview: queryHooks.overview,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useProjectSlugForRequests: () => "request-project",
+  useProjectSlugForRequests: () => requestProject.slug,
+}));
+vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
+  useGetMcpServerActivity: queryHooks.activity,
 }));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: queryHooks.servers,
+}));
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  usePlugins: queryHooks.plugins,
 }));
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: queryHooks.policies,
@@ -28,6 +38,11 @@ import { useProjectGuideProgress } from "./useProjectGuideProgress";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  requestProject.slug = "request-project";
+  queryHooks.activity.mockReturnValue({
+    data: { activity: [] },
+    isPending: false,
+  });
   queryHooks.servers.mockReturnValue({
     data: { mcpServers: [] },
     isPending: false,
@@ -37,6 +52,10 @@ beforeEach(() => {
     isPending: false,
   });
   queryHooks.overview.mockReturnValue({ data: undefined, isPending: false });
+  queryHooks.plugins.mockReturnValue({
+    data: { plugins: [] },
+    isPending: false,
+  });
   queryHooks.results.mockReturnValue({
     data: { results: [] },
     isPending: false,
@@ -44,8 +63,138 @@ beforeEach(() => {
 });
 
 describe("useProjectGuideProgress", () => {
+  it("keeps both journeys not started with known empty data", () => {
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney).toEqual({
+      "third-party-mcp": "not-started",
+      "secret-block": "not-started",
+    });
+  });
+
+  it("marks each journey in progress when its artifact exists", () => {
+    queryHooks.servers.mockReturnValue({
+      data: { mcpServers: [{ id: "server-1", remoteMcpServerId: "remote-1" }] },
+      isPending: false,
+    });
+    queryHooks.policies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            enabled: true,
+            action: "block",
+            sources: ["gitleaks"],
+            messageTypes: ["tool_request", "tool_response"],
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney).toEqual({
+      "third-party-mcp": "in-progress",
+      "secret-block": "in-progress",
+    });
+  });
+
+  it("marks governed MCP activity and a secrets finding done", () => {
+    queryHooks.servers.mockReturnValue({
+      data: {
+        mcpServers: [
+          {
+            id: "server-1",
+            slug: "server-slug",
+            remoteMcpServerId: "remote-1",
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.plugins.mockReturnValue({
+      data: {
+        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
+      },
+      isPending: false,
+    });
+    queryHooks.activity.mockReturnValue({
+      data: { activity: [{ targetId: "server-slug", totalToolCalls: 1 }] },
+      isPending: false,
+    });
+    queryHooks.results.mockReturnValue({
+      data: { results: [{ id: "result-1" }] },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney).toEqual({
+      "third-party-mcp": "done",
+      "secret-block": "done",
+    });
+  });
+
+  it("credits activity for any governed catalog server", () => {
+    queryHooks.servers.mockReturnValue({
+      data: {
+        mcpServers: [
+          { id: "server-1", slug: "server-one", remoteMcpServerId: "remote-1" },
+          { id: "server-2", slug: "server-two", remoteMcpServerId: "remote-2" },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.plugins.mockReturnValue({
+      data: {
+        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-2" }] }],
+      },
+      isPending: false,
+    });
+    queryHooks.activity.mockReturnValue({
+      data: { activity: [{ targetId: "server-two", totalToolCalls: 1 }] },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney["third-party-mcp"]).toBe("done");
+  });
+
+  it("does not infer an empty or done status from unavailable query data", () => {
+    queryHooks.servers.mockReturnValue({ data: undefined, isPending: false });
+    queryHooks.results.mockReturnValue({ data: undefined, isPending: false });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney).toEqual({
+      "third-party-mcp": "in-progress",
+      "secret-block": "in-progress",
+    });
+  });
+
+  it("does not trust retained data from an errored query", () => {
+    queryHooks.activity.mockReturnValue({
+      data: { activity: [{ targetId: "server-slug", totalToolCalls: 1 }] },
+      isError: true,
+      isPending: false,
+    });
+    queryHooks.results.mockReturnValue({
+      data: { results: [{ id: "result-1" }] },
+      isError: true,
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney).toEqual({
+      "third-party-mcp": "in-progress",
+      "secret-block": "in-progress",
+    });
+  });
+
   it("scopes every generated progress query to the request project", () => {
-    renderHook(() => useProjectGuideProgress());
+    const { rerender } = renderHook(() => useProjectGuideProgress());
 
     expect(queryHooks.servers).toHaveBeenCalledWith(
       { gramProject: "request-project" },
@@ -54,6 +203,16 @@ describe("useProjectGuideProgress", () => {
     );
     expect(queryHooks.policies).toHaveBeenCalledWith(
       { gramProject: "request-project" },
+      undefined,
+      { throwOnError: false },
+    );
+    expect(queryHooks.plugins).toHaveBeenCalledWith(
+      { gramProject: "request-project" },
+      undefined,
+      { throwOnError: false },
+    );
+    expect(queryHooks.activity).toHaveBeenCalledWith(
+      { gramProject: "request-project", getMcpServerActivityPayload: {} },
       undefined,
       { throwOnError: false },
     );
@@ -66,5 +225,22 @@ describe("useProjectGuideProgress", () => {
       undefined,
       { throwOnError: false },
     );
+
+    requestProject.slug = "other-project";
+    rerender();
+
+    for (const hook of [
+      queryHooks.servers,
+      queryHooks.policies,
+      queryHooks.plugins,
+      queryHooks.activity,
+      queryHooks.results,
+    ]) {
+      expect(hook).toHaveBeenLastCalledWith(
+        expect.objectContaining({ gramProject: "other-project" }),
+        undefined,
+        { throwOnError: false },
+      );
+    }
   });
 });

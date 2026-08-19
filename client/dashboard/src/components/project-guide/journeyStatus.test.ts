@@ -1,4 +1,6 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -6,6 +8,7 @@ import {
   firstIncompleteStepIndex,
   hasBlockingSecretsPolicy,
   hasCatalogBackedServer,
+  hasDefaultPluginServer,
 } from "./journeyStatus";
 
 function server(overrides: Partial<McpServer>): McpServer {
@@ -37,6 +40,29 @@ function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
   } as RiskPolicy;
 }
 
+function plugin(overrides: Partial<Plugin>): Plugin {
+  return {
+    agentPluginsV1Compatible: true,
+    createdAt: new Date("2026-08-01T00:00:00Z"),
+    id: "plugin-id",
+    name: "Default",
+    slug: "default",
+    updatedAt: new Date("2026-08-01T00:00:00Z"),
+    ...overrides,
+  } as Plugin;
+}
+
+function pluginServer(mcpServerId: string): PluginServer {
+  return {
+    createdAt: new Date("2026-08-01T00:00:00Z"),
+    displayName: "Server",
+    id: "plugin-server-id",
+    mcpServerId,
+    policy: "optional",
+    sortOrder: 0,
+  };
+}
+
 describe("hasCatalogBackedServer", () => {
   it("counts a server backed by a remote MCP server", () => {
     expect(
@@ -63,9 +89,45 @@ describe("hasBlockingSecretsPolicy", () => {
   it("matches an enabled gitleaks policy set to block", () => {
     expect(
       hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response"],
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("matches an omitted message type list as all message types", () => {
+    expect(
+      hasBlockingSecretsPolicy([
         policy({ action: "block", sources: ["gitleaks"] }),
       ]),
     ).toBe(true);
+  });
+
+  it("matches an empty message type list as all message types", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: [],
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("rejects a secrets policy that does not scan tool requests and responses", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["user_message"],
+        }),
+      ]),
+    ).toBe(false);
   });
 
   it("rejects a flag-only secrets policy", () => {
@@ -94,6 +156,40 @@ describe("hasBlockingSecretsPolicy", () => {
 
   it("handles an unread list", () => {
     expect(hasBlockingSecretsPolicy(undefined)).toBe(false);
+  });
+});
+
+describe("hasDefaultPluginServer", () => {
+  it("matches a server in the Default plugin", () => {
+    expect(
+      hasDefaultPluginServer(
+        [
+          plugin({
+            isDefault: true,
+            servers: [pluginServer("server-1")],
+          }),
+        ],
+        "server-1",
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores a server in a non-default plugin", () => {
+    expect(
+      hasDefaultPluginServer(
+        [
+          plugin({
+            isDefault: false,
+            servers: [pluginServer("server-1")],
+          }),
+        ],
+        "server-1",
+      ),
+    ).toBe(false);
+  });
+
+  it("handles an unread plugin list", () => {
+    expect(hasDefaultPluginServer(undefined, "server-1")).toBe(false);
   });
 });
 

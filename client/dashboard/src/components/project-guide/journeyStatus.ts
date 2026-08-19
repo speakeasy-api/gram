@@ -1,6 +1,9 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 
 /**
  * Journey A's own artifact: a server whose backend is a catalog remote MCP
@@ -9,7 +12,45 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 export function hasCatalogBackedServer(
   servers: McpServer[] | undefined,
 ): boolean {
-  return (servers ?? []).some((server) => Boolean(server.remoteMcpServerId));
+  return Boolean(catalogBackedMcpServer(servers));
+}
+
+export function catalogBackedMcpServer(
+  servers: McpServer[] | undefined,
+): McpServer | undefined {
+  return servers?.find((server) => Boolean(server.remoteMcpServerId));
+}
+
+export function hasDefaultPluginServer(
+  plugins: Plugin[] | undefined,
+  mcpServerId: string | undefined,
+): boolean {
+  return Boolean(
+    mcpServerId &&
+    plugins?.some(
+      (plugin) =>
+        plugin.isDefault === true &&
+        plugin.servers?.some((server) => server.mcpServerId === mcpServerId),
+    ),
+  );
+}
+
+export function hasMcpServerActivity(
+  activity: McpServerActivity[] | undefined,
+  server: McpServer | undefined,
+): boolean {
+  return Boolean(
+    server?.slug &&
+    activity?.some(
+      (entry) => entry.targetId === server.slug && entry.totalToolCalls > 0,
+    ),
+  );
+}
+
+export function latestSecretsFinding(
+  results: RiskResult[] | undefined,
+): RiskResult | undefined {
+  return results?.[0];
 }
 
 /**
@@ -23,7 +64,10 @@ export function hasBlockingSecretsPolicy(
     (policy) =>
       policy.enabled &&
       policy.action === "block" &&
-      policy.sources.includes("gitleaks"),
+      policy.sources.includes("gitleaks") &&
+      (!policy.messageTypes?.length ||
+        (policy.messageTypes.includes("tool_request") &&
+          policy.messageTypes.includes("tool_response"))),
   );
 }
 
