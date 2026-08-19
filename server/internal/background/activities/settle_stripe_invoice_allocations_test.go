@@ -334,6 +334,10 @@ func TestSettleStripeInvoiceAllocations_BillsEveryCanonicalKeyTypeExactlyOnce(t 
 	require.Equal(t, start.Format(time.DateOnly)+":internal", rows[1].SourceKey)
 	require.NotEqual(t, rows[0].IdempotencyKey, rows[1].IdempotencyKey)
 	require.ElementsMatch(t, []int64{100, 200}, []int64{stripe.itemInputs[0].AmountCents, stripe.itemInputs[1].AmountCents})
+	require.ElementsMatch(t, []string{
+		"Other inference usage for 2026-01-10",
+		"Security inference usage for 2026-01-10",
+	}, []string{stripe.itemInputs[0].Description, stripe.itemInputs[1].Description})
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now.Add(time.Hour)}))
 	require.Len(t, listAllAllocationFixtures(t, db, organizationID), 2)

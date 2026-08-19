@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -710,7 +711,14 @@ func allocationPeriodAndDescription(claim repo.ClaimNextStripeInvoiceAllocationR
 
 func allocationDescription(claim repo.ClaimNextStripeInvoiceAllocationRow) string {
 	if claim.SourceKind == stripeAllocationSourceOpenRouter && claim.SourceDay.Valid {
-		return "OpenRouter inference usage for " + claim.SourceDay.Time.UTC().Format(time.DateOnly)
+		label := "OpenRouter inference"
+		switch {
+		case strings.HasSuffix(claim.SourceKey, ":"+string(openrouter.KeyTypeChat)):
+			label = "Other inference"
+		case strings.HasSuffix(claim.SourceKey, ":"+string(openrouter.KeyTypeInternal)):
+			label = "Security inference"
+		}
+		return label + " usage for " + claim.SourceDay.Time.UTC().Format(time.DateOnly)
 	}
 	if claim.SourceKind == stripeAllocationSourceTUM && claim.SourcePeriodStart.Valid && claim.SourcePeriodEnd.Valid {
 		return fmt.Sprintf("TUM usage adjustment for %s to %s",
