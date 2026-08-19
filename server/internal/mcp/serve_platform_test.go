@@ -345,7 +345,7 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	body := w.Body.String()
 	require.Contains(t, body, `"get_platform_context"`)
 	require.Contains(t, body, `"list_projects"`)
-	require.Contains(t, body, `"list_project_mcps"`)
+	require.Contains(t, body, `"find_mcp"`)
 	require.Contains(t, body, `"get_mcp"`)
 	require.NotContains(t, body, platformtools.ToolNameListProjects, "the legacy prefixed set must not be served on this variant")
 

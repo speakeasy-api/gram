@@ -27,7 +27,7 @@ var externalOnly = []Audience{AudienceExternal}
 
 type Reader interface {
 	ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error)
-	ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error)
+	FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error)
 	GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 
@@ -52,22 +52,61 @@ type ListProjectsOutput struct {
 	Truncated bool      `json:"truncated"`
 }
 
-type ListProjectMCPsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID to inspect"`
-	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+type FindMCPInput struct {
+	// At most one project selector may be supplied. When neither is supplied,
+	// the organization's Default project is used. The assistant policy injects
+	// project_id and removes both fields from its model-visible schema.
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional AICP project ID; defaults to the organization's Default project"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional AICP project slug; defaults to the organization's Default project"`
+	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search within the selected project"`
+	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
+}
+
+type MCPSource struct {
+	Kind      string `json:"kind"`
+	Provider  string `json:"provider,omitempty"`
+	Reference string `json:"reference,omitempty"`
+}
+
+type MCPReadiness struct {
+	State     string `json:"state"`
+	CheckedAt string `json:"checked_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+type MCPDistribution struct {
+	PluginID         string `json:"plugin_id"`
+	State            string `json:"state"`
+	PublicationState string `json:"publication_state"`
 }
 
 type MCP struct {
-	ID         string `json:"id"`
-	ProjectID  string `json:"project_id"`
-	Name       string `json:"name,omitempty"`
-	Slug       string `json:"slug,omitempty"`
-	Visibility string `json:"visibility"`
+	ID               string            `json:"id"`
+	ProjectID        string            `json:"project_id"`
+	ProjectName      string            `json:"project_name,omitempty"`
+	ProjectSlug      string            `json:"project_slug,omitempty"`
+	Name             string            `json:"name,omitempty"`
+	Slug             string            `json:"slug,omitempty"`
+	Visibility       string            `json:"visibility"`
+	EffectiveEnabled bool              `json:"effective_enabled"`
+	Model            string            `json:"model"`
+	Source           MCPSource         `json:"source"`
+	Registration     *MCPRegistration  `json:"registration,omitempty"`
+	Readiness        MCPReadiness      `json:"readiness"`
+	Distributions    []MCPDistribution `json:"distributions"`
+	Operations       []string          `json:"operations"`
+	DashboardPath    string            `json:"dashboard_path,omitempty"`
 }
 
-type ListProjectMCPsOutput struct {
-	MCPs      []MCP `json:"mcps"`
-	Truncated bool  `json:"truncated"`
+type MCPRegistration struct {
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	ComponentsComplete bool   `json:"components_complete"`
+}
+
+type FindMCPOutput struct {
+	MCPs       []MCP  `json:"mcps"`
+	NextCursor string `json:"next_cursor,omitempty"`
 }
 
 type GetMCPInput struct {
@@ -103,7 +142,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 
 	reg := newRegistrar(server)
 
-	registerReadTools(reg, reader)
+	registerReadTools(reg, reader, cursorKeyMaterial)
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
 		registerUnavailableSearchDocsTool(reg)
@@ -158,10 +197,10 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	return server, reg
 }
 
-func registerReadTools(reg *Registrar, reader Reader) {
+func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) {
 	registerGetPlatformContextTool(reg)
 	registerListProjectsTool(reg, reader)
-	registerListProjectMCPsTool(reg, reader)
+	registerFindMCPTool(reg, reader, cursorKeyMaterial)
 	registerGetMCPTool(reg, reader)
 }
 

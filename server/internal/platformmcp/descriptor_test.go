@@ -99,7 +99,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
-		"list_project_mcps",
+		"find_mcp",
 		"get_mcp",
 		"register_catalog_mcp",
 		"search_mcp_catalog",
