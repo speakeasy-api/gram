@@ -149,6 +149,10 @@ func (e *SetupGuideUnavailableError) Unwrap() error { return ErrSetupGuideUnavai
 
 // TrustedLinks returns the guide's published page followed by its canonical
 // upstream sources, deduplicated, for a caller assembling a fallback answer.
+//
+// Never empty: a guide with no page and no canonical sources still has the
+// documentation index, and the whole point of the refusal is to hand the caller
+// somewhere trustworthy to send the reader rather than leave it inventing one.
 func (e *SetupGuideUnavailableError) TrustedLinks() []string {
 	links := make([]string, 0, len(e.Links)+1)
 	if e.DocsURL != "" {
@@ -158,6 +162,9 @@ func (e *SetupGuideUnavailableError) TrustedLinks() []string {
 		if link != e.DocsURL {
 			links = append(links, link)
 		}
+	}
+	if len(links) == 0 {
+		return []string{docsIndexURL}
 	}
 	return links
 }

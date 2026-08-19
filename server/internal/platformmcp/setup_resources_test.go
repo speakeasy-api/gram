@@ -110,3 +110,20 @@ func TestSetupResourceReadWarnsThenWithholds(t *testing.T) {
 	require.Equal(t, resource.URI, withheld.URI)
 	require.Equal(t, []string{"https://example.test/docs", "https://example.test/guide"}, withheld.TrustedLinks())
 }
+
+// A guide with no published page and no canonical sources — the local fixture
+// is exactly that — still has to hand back somewhere trustworthy, or the
+// refusal leaves the caller with nothing but its own recollection.
+func TestWithheldGuideAlwaysOffersATrustedDestination(t *testing.T) {
+	t.Parallel()
+
+	bare := &SetupGuideUnavailableError{URI: SetupResourceURI("fixture", "provider_setup")}
+	require.Equal(t, []string{docsIndexURL}, bare.TrustedLinks())
+
+	published := &SetupGuideUnavailableError{
+		URI:     SetupResourceURI("acme", "provider_setup"),
+		DocsURL: "https://example.test/docs",
+		Links:   []string{"https://example.test/docs", "https://example.test/guide"},
+	}
+	require.Equal(t, []string{"https://example.test/docs", "https://example.test/guide"}, published.TrustedLinks())
+}
