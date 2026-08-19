@@ -20,6 +20,9 @@ import { cn } from "@/lib/utils";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 import { useCimdClientPresets } from "@gram/client/react-query/cimdClientPresets.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
@@ -98,6 +101,11 @@ export function CimdAdmissionModeField({
       await Promise.all([
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllUserSessionIssuer(queryClient, { refetchType: "all" }),
+        // Also invalidate MCP server and remote session client queries so the
+        // sidebar readiness bar refreshes (AGE-3279).
+        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
       ]);
       toast.success("Client admission policy updated");
     },

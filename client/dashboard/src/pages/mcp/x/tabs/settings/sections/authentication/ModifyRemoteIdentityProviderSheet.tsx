@@ -14,7 +14,11 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import {
+  invalidateAllMcpServers,
+  useMcpServers,
+} from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
@@ -281,6 +285,10 @@ function ModifyRemoteIdentityProviderSheetBody({
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        // Also invalidate MCP server queries so the sidebar readiness bar
+        // refreshes (AGE-3279).
+        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
       toast.success("Identity provider updated");
       onClose();
