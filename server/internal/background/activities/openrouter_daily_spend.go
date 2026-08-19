@@ -90,7 +90,8 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		}
 	}
 	for i, target := range targets {
-		keyType := openrouter.KeyType(target.KeyType)
+		keyType := openrouter.KeyType(target.KeyType).OrDefault()
+		canonicalKeyType := string(keyType)
 		isBillable := keyType.IsBillable()
 		if err := keyType.Validate(); err != nil {
 			failures = append(failures, fmt.Errorf("collect spend for organization %s: %w", target.OrganizationID, err))
@@ -105,7 +106,7 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		}
 		if isBillable {
 			recoveryStart, err := queries.GetOpenRouterDailySpendRecoveryStartDay(ctx, repo.GetOpenRouterDailySpendRecoveryStartDayParams{
-				TargetKeyType:        target.KeyType,
+				TargetKeyType:        canonicalKeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
 				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
 				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
@@ -131,11 +132,11 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		// A slow management API must not hold a database connection or locks.
 		result, err := c.spendClient.GetDailySpend(ctx, target.KeyHash, targetStart, endDay)
 		if err != nil {
-			wrapped := fmt.Errorf("collect spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err)
+			wrapped := fmt.Errorf("collect spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err)
 			failures = append(failures, wrapped)
 			c.logger.ErrorContext(ctx, "collect openrouter daily spend",
 				attr.SlogOrganizationID(target.OrganizationID),
-				attr.SlogOpenRouterKeyType(target.KeyType),
+				attr.SlogOpenRouterKeyType(canonicalKeyType),
 				attr.SlogError(err),
 			)
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -144,16 +145,16 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 
 		spendByDay, err := validateDailySpendResult(result, targetStart, endDay)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("validate spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err))
+			failures = append(failures, fmt.Errorf("validate spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err))
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
 		}
 
-		if err := c.storeTargetDays(ctx, target.OrganizationID, target.KeyType, targetStart, endDay, spendByDay); err != nil {
-			failures = append(failures, fmt.Errorf("store spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err))
+		if err := c.storeTargetDays(ctx, target.OrganizationID, canonicalKeyType, targetStart, endDay, spendByDay); err != nil {
+			failures = append(failures, fmt.Errorf("store spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err))
 			c.logger.ErrorContext(ctx, "store openrouter daily spend",
 				attr.SlogOrganizationID(target.OrganizationID),
-				attr.SlogOpenRouterKeyType(target.KeyType),
+				attr.SlogOpenRouterKeyType(canonicalKeyType),
 				attr.SlogError(err),
 			)
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -161,7 +162,7 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		}
 		if isBillable {
 			missing, err := queries.CountOpenRouterInvoiceSpendGaps(ctx, repo.CountOpenRouterInvoiceSpendGapsParams{
-				TargetKeyType:        target.KeyType,
+				TargetKeyType:        canonicalKeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
 				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
 				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},

@@ -216,6 +216,35 @@ func TestCollectOpenRouterDailySpend_InternalFailureBlocksInvoiceReadiness(t *te
 	client.AssertExpectations(t)
 }
 
+func TestCollectOpenRouterDailySpend_NormalizesDefaultKeyType(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, orgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_default_key_type")
+	keyHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyType(""), 'i')
+	startDay := utcDay(0)
+	endDay := utcDay(1)
+
+	client := &mockOpenRouterSpendClient{}
+	client.On("GetDailySpend", mock.Anything, keyHash, startDay, endDay).
+		Return(openrouter.DailySpendResult{
+			Days:   []openrouter.DailySpendDay{{Day: startDay, SpendUSD: "1.25"}},
+			Source: openrouter.DailySpendSourceAnalytics,
+		}, nil).Once()
+
+	result, err := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client).
+		DoWithResult(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, result.ReadyOrganizationIDs)
+	rows, err := backgroundrepo.New(conn).ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "1.250000", numericString(t, rows[0].SpendUsd))
+	client.AssertExpectations(t)
+}
+
 func TestCollectOpenRouterDailySpend_RejectsUnrepresentableSpend(t *testing.T) {
 	t.Parallel()
 
