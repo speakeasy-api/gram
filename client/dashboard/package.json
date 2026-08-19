@@ -55,7 +55,7 @@
     "@stripe/react-stripe-js": "^5.6.1",
     "@stripe/stripe-js": "^8.11.0",
     "@tailwindcss/vite": "catalog:",
-    "@tanstack/react-form": "^1.33.3",
+    "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-virtual": "^3.14.9",
     "@xstate/react": "^6.1.0",
