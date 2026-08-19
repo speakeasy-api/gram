@@ -4758,6 +4758,7 @@ examples:
         header:
           Gram-Device-Serial: "C02XK1ABCDEF"
           Gram-Device-Hostname: "dev-macbook-pro"
+          Gram-User-Email: "dev@acme.corp"
       responses:
         "200":
           application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}

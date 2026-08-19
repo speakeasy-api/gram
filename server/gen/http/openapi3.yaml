@@ -6673,13 +6673,12 @@ paths:
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
-                  description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                  description: 'Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.'
                   example: dev@acme.corp
                   in: query
                   name: email
-                  required: true
                   schema:
-                    description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                    description: 'Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.'
                     example: dev@acme.corp
                     type: string
                 - allowEmptyValue: true
@@ -6688,6 +6687,15 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                  example: dev@acme.corp
+                  in: header
+                  name: Gram-User-Email
+                  schema:
+                    description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                    example: dev@acme.corp
                     type: string
                 - allowEmptyValue: true
                   description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
