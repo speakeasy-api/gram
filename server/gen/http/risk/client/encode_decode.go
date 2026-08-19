@@ -11605,6 +11605,10 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		MatchRedacted:     v.MatchRedacted,
 		CreatedAt:         *v.CreatedAt,
 		FalsePositiveAt:   v.FalsePositiveAt,
+		SuppressedAt:      v.SuppressedAt,
+		SuppressedReason:  v.SuppressedReason,
+		SuppressedDetail:  v.SuppressedDetail,
+		ExclusionID:       v.ExclusionID,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

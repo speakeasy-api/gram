@@ -10298,9 +10298,22 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When this result was manually marked as a false positive. Null when not
-	// dismissed.
+	// Deprecated: mirror of suppressed_at, kept while clients migrate to the
+	// suppressed_* fields. Null when not suppressed.
 	FalsePositiveAt *string `form:"false_positive_at,omitempty" json:"false_positive_at,omitempty" xml:"false_positive_at,omitempty"`
+	// When this result was suppressed (hidden from open-finding listings). Null
+	// when not suppressed.
+	SuppressedAt *string `form:"suppressed_at,omitempty" json:"suppressed_at,omitempty" xml:"suppressed_at,omitempty"`
+	// Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id),
+	// 'manual' (dismissed by a user), or 'automated' (the automated false-positive
+	// sweep). Null when not suppressed.
+	SuppressedReason *string `form:"suppressed_reason,omitempty" json:"suppressed_reason,omitempty" xml:"suppressed_reason,omitempty"`
+	// Free-form suppression context: the user-supplied dismissal reason for manual
+	// suppressions, the catalog reason for automated ones. Null when absent.
+	SuppressedDetail *string `form:"suppressed_detail,omitempty" json:"suppressed_detail,omitempty" xml:"suppressed_detail,omitempty"`
+	// The exclusion rule that suppressed this result. Only set when
+	// suppressed_reason is 'rule'.
+	ExclusionID *string `form:"exclusion_id,omitempty" json:"exclusion_id,omitempty" xml:"exclusion_id,omitempty"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.

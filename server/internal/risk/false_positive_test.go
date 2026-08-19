@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -442,6 +443,16 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	require.NotNil(t, first.FalsePositiveAt)
 	require.Equal(t, manualAt.Format(time.RFC3339), *first.FalsePositiveAt)
 
+	// The suppressed_* fields carry the converged suppression state;
+	// false_positive_at above is their deprecated mirror.
+	require.NotNil(t, first.SuppressedAt)
+	require.Equal(t, *first.FalsePositiveAt, *first.SuppressedAt)
+	require.NotNil(t, first.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonManual, *first.SuppressedReason)
+	require.NotNil(t, first.SuppressedDetail)
+	require.Equal(t, "noise", *first.SuppressedDetail)
+	require.Nil(t, first.ExclusionID, "manual suppression carries no exclusion id")
+
 	// Postgres display enrichment, same as the Risk Events listing.
 	require.NotNil(t, first.ChatTitle)
 	require.Equal(t, "test chat", *first.ChatTitle)
@@ -456,6 +467,27 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	require.Equal(t, int64(4), page2.TotalCount)
 	require.NotNil(t, page2.Results[1].FalsePositiveAt)
 	require.Equal(t, legacyAt.Format(time.RFC3339), *page2.Results[1].FalsePositiveAt)
+	// A legacy row carries no excluded_reason; the API maps it to manual so
+	// the reason enum stays closed while the TTL retires such rows.
+	require.NotNil(t, page2.Results[1].SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonManual, *page2.Results[1].SuppressedReason)
+	require.NotNil(t, page2.Results[1].SuppressedAt)
+	require.Equal(t, legacyAt.Format(time.RFC3339), *page2.Results[1].SuppressedAt)
+	require.Nil(t, page2.Results[1].SuppressedDetail)
+
+	// The automated dismissal keeps its reason and catalog detail wherever the
+	// tied pair landed.
+	var automated *types.RiskResult
+	for _, r := range append(page1.Results, page2.Results...) {
+		if r.ID == tiedA.ID.String() {
+			automated = r
+		}
+	}
+	require.NotNil(t, automated)
+	require.NotNil(t, automated.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonAutomated, *automated.SuppressedReason)
+	require.NotNil(t, automated.SuppressedDetail)
+	require.Equal(t, "known test fixture", *automated.SuppressedDetail)
 
 	// The tied pair is split across the boundary exactly once: no repeat, no
 	// skip. Which of the two lands on which page is ClickHouse's UUID ordering

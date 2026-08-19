@@ -32,6 +32,15 @@ type DismissedRiskFindingRow struct {
 	// back to the legacy false_positive_at on rows the suppression backfill
 	// did not reach.
 	SuppressedAt time.Time
+
+	// SuppressedReason is the row's excluded_reason — manual or automated on
+	// this listing (rule rows are gated out), empty on a legacy row carrying
+	// only false_positive_at. SuppressedDetail is the free-form context (user
+	// dismissal note or sweep catalog reason). ExclusionID rides along for
+	// shape parity with the API type; nil on every row this listing serves.
+	SuppressedReason string
+	SuppressedDetail string
+	ExclusionID      *uuid.UUID
 }
 
 // dismissedStateCond selects the findings the Dismissed tab lists: user and
@@ -52,10 +61,11 @@ const dismissedStateCond = "(excluded_reason IN ('" + ExcludedReasonManual + "',
 // backfill.
 const suppressedAtExpr = "coalesce(excluded_at, false_positive_at)"
 
-// dismissedStateColumns are the suppression columns dismissedStateCond and
-// suppressedAtExpr read off each id's latest copy. They ride along in the
-// dedup subquery's projection only; callers never select them.
-var dismissedStateColumns = []string{"dead_letter_reason", "excluded_reason", "excluded_at", "false_positive_at"}
+// dismissedStateColumns are the suppression columns dismissedStateCond,
+// suppressedAtExpr, and the listing's suppression projection read off each
+// id's latest copy. They ride along in the dedup subquery's projection; the
+// list query additionally selects the reason/detail/exclusion columns.
+var dismissedStateColumns = []string{"dead_letter_reason", "excluded_reason", "excluded_at", "false_positive_at", "excluded_detail", "exclusion_id"}
 
 // dismissedRiskFindingsLatest builds the row source both the list and the count
 // read from: every id in the tenant resolved to its most-recently-inserted
@@ -91,7 +101,8 @@ func dismissedRiskFindingsLatest(p ListDismissedRiskFindingsParams, innerColumns
 // suppression time — the pre-dismissal copy has none at all — so a cursor
 // applied first could drop the copy that carries the state this listing reads.
 func (q *Queries) ListDismissedRiskFindings(ctx context.Context, p ListDismissedRiskFindingsParams) ([]DismissedRiskFindingRow, error) {
-	outerColumns := append(slices.Clone(riskFindingListColumns), suppressedAtExpr+" AS suppressed_at")
+	outerColumns := append(slices.Clone(riskFindingListColumns),
+		suppressedAtExpr+" AS suppressed_at", "excluded_reason", "excluded_detail", "exclusion_id")
 	sb := dismissedRiskFindingsLatest(p, riskFindingListColumns, outerColumns...)
 
 	if p.CursorTime != nil && p.CursorID.Valid {
@@ -120,7 +131,7 @@ func (q *Queries) ListDismissedRiskFindings(ctx context.Context, p ListDismissed
 	var out []DismissedRiskFindingRow
 	for rows.Next() {
 		var row DismissedRiskFindingRow
-		if err := rows.Scan(append(row.scanTargets(), &row.SuppressedAt)...); err != nil {
+		if err := rows.Scan(append(row.scanTargets(), &row.SuppressedAt, &row.SuppressedReason, &row.SuppressedDetail, &row.ExclusionID)...); err != nil {
 			return nil, fmt.Errorf("scan dismissed risk findings list row: %w", err)
 		}
 		out = append(out, row)
