@@ -2,15 +2,19 @@ package agent_test
 
 import (
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 // ptr takes the address of a literal. conv.PtrEmpty collapses the zero value
@@ -126,6 +130,122 @@ func TestGetPlugins_DeliversUserAndRoleAssignments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{wantObservability}, pluginSlugs(nonMember),
 		"user:/role: assignments are withheld from non-members")
+}
+
+func TestGetPlugins_DeliversDirectoryGroupAssignmentsToUnlinkedUsers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	group := seedDirectoryGroup(t, ctx, ti.conn, ti.orgID, "group-directory-audience")
+	user := seedDirectoryUser(t, ctx, ti.conn, ti.orgID, "user-directory-audience", "Unlinked@Example.com")
+	seedDirectoryGroupMembership(t, ctx, ti.conn, user, group, "user-directory-audience", "group-directory-audience")
+	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "directory-group-tool")
+	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "unlinked@example.com"})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantObservability, "directory-group-tool"}, pluginSlugs(res))
+}
+
+func TestGetPlugins_DeliversDirectoryAttributeAssignments(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	const email = "directory-attributes@example.com"
+	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-1", email, []byte(`{"department":"Engineering"}`))
+	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-2", email, []byte(`{"manager.email":"lead@example.com"}`))
+	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-3", email, []byte(`{"department":"Engineering"}`))
+	audiences, err := plugins.ResolveDirectoryAudiencePrincipalsByEmails(ctx, ti.conn, ti.orgID, []string{email})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{
+		plugins.DirectoryAttributePrincipal("department", "Engineering"),
+		plugins.DirectoryAttributePrincipal("manager.email", "lead@example.com"),
+	}, audiences[email])
+	departmentPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "department-tool")
+	assignPlugin(t, ctx, ti.conn, departmentPlugin, ti.orgID, plugins.DirectoryAttributePrincipal("department", "Engineering"))
+	managerPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "manager-tool")
+	assignPlugin(t, ctx, ti.conn, managerPlugin, ti.orgID, plugins.DirectoryAttributePrincipal("manager.email", "lead@example.com"))
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantObservability, "department-tool", "manager-tool"}, pluginSlugs(res))
+}
+
+func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	const email = "directory-user@example.com"
+	alpha := seedDirectoryGroup(t, ctx, ti.conn, ti.orgID, "group-alpha")
+	beta := seedDirectoryGroup(t, ctx, ti.conn, ti.orgID, "group-beta")
+	gamma := seedDirectoryGroup(t, ctx, ti.conn, ti.orgID, "group-gamma")
+	alphaUser := seedDirectoryUser(t, ctx, ti.conn, ti.orgID, "user-alpha", email)
+	betaUser := seedDirectoryUser(t, ctx, ti.conn, ti.orgID, "user-beta", email)
+	gammaUser := seedDirectoryUser(t, ctx, ti.conn, ti.orgID, "user-gamma", email)
+	seedDirectoryGroupMembership(t, ctx, ti.conn, alphaUser, alpha, "user-alpha", "group-alpha")
+	seedDirectoryGroupMembership(t, ctx, ti.conn, betaUser, beta, "user-beta", "group-beta")
+	seedDirectoryGroupMembership(t, ctx, ti.conn, gammaUser, gamma, "user-gamma", "group-gamma")
+
+	for _, assignment := range []struct {
+		group uuid.UUID
+		slug  string
+	}{{alpha, "alpha-tool"}, {beta, "beta-tool"}, {gamma, "gamma-tool"}} {
+		plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, assignment.slug)
+		assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(assignment.group))
+	}
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantObservability, "alpha-tool", "beta-tool", "gamma-tool"}, pluginSlugs(res))
+
+	_, err = workosrepo.New(ti.conn).CloseDirectoryUserGroupMembership(ctx, workosrepo.CloseDirectoryUserGroupMembershipParams{
+		DirectoryUserID:  alphaUser,
+		DirectoryGroupID: alpha,
+	})
+	require.NoError(t, err)
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantObservability, "beta-tool", "gamma-tool"}, pluginSlugs(res))
+
+	_, err = workosrepo.New(ti.conn).DeleteDirectoryGroupByWorkOSID(ctx, workosrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		WorkosDirectoryGroupID: "group-beta",
+		WorkosDeletedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:      conv.ToPGText("event-group-beta-deleted"),
+	})
+	require.NoError(t, err)
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantObservability, "gamma-tool"}, pluginSlugs(res))
+
+	_, err = workosrepo.New(ti.conn).DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
+		WorkosDirectoryUserID: "user-gamma",
+		WorkosDeletedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:     conv.ToPGText("event-user-gamma-deleted"),
+	})
+	require.NoError(t, err)
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	require.NoError(t, err)
+	require.Equal(t, []string{wantObservability}, pluginSlugs(res))
+}
+
+func TestGetPlugins_DirectoryGroupsAreOrganizationScoped(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	seedSecondOrg(t, ctx, ti.conn)
+
+	group := seedDirectoryGroup(t, ctx, ti.conn, "other-org-id", "group-other-org")
+	user := seedDirectoryUser(t, ctx, ti.conn, "other-org-id", "user-other-org", "directory-user@example.com")
+	seedDirectoryGroupMembership(t, ctx, ti.conn, user, group, "user-other-org", "group-other-org")
+	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "other-org-group-tool")
+	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "directory-user@example.com"})
+	require.NoError(t, err)
+	require.Equal(t, []string{wantObservability}, pluginSlugs(res))
 }
 
 func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {

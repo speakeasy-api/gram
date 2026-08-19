@@ -378,6 +378,103 @@ func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkD
 	return result.RowsAffected(), nil
 }
 
+const listActiveDirectoryGroupIDsByEmails = `-- name: ListActiveDirectoryGroupIDsByEmails :many
+SELECT DISTINCT
+  LOWER(du.email) AS email,
+  dg.id AS directory_group_id
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND LOWER(du.email) = ANY($2::text[])
+ORDER BY email, directory_group_id
+`
+
+type ListActiveDirectoryGroupIDsByEmailsParams struct {
+	OrganizationID string
+	Emails         []string
+}
+
+type ListActiveDirectoryGroupIDsByEmailsRow struct {
+	Email            string
+	DirectoryGroupID uuid.UUID
+}
+
+func (q *Queries) ListActiveDirectoryGroupIDsByEmails(ctx context.Context, arg ListActiveDirectoryGroupIDsByEmailsParams) ([]ListActiveDirectoryGroupIDsByEmailsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryGroupIDsByEmails, arg.OrganizationID, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDirectoryGroupIDsByEmailsRow
+	for rows.Next() {
+		var i ListActiveDirectoryGroupIDsByEmailsRow
+		if err := rows.Scan(&i.Email, &i.DirectoryGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveDirectoryUserAttributesByEmails = `-- name: ListActiveDirectoryUserAttributesByEmails :many
+SELECT DISTINCT
+  LOWER(du.email) AS email,
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND LOWER(du.email) = ANY($2::text[])
+ORDER BY email, attribute.key, attribute.value
+`
+
+type ListActiveDirectoryUserAttributesByEmailsParams struct {
+	OrganizationID string
+	Emails         []string
+}
+
+type ListActiveDirectoryUserAttributesByEmailsRow struct {
+	Email          string
+	AttributeKey   string
+	AttributeValue string
+}
+
+func (q *Queries) ListActiveDirectoryUserAttributesByEmails(ctx context.Context, arg ListActiveDirectoryUserAttributesByEmailsParams) ([]ListActiveDirectoryUserAttributesByEmailsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryUserAttributesByEmails, arg.OrganizationID, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDirectoryUserAttributesByEmailsRow
+	for rows.Next() {
+		var i ListActiveDirectoryUserAttributesByEmailsRow
+		if err := rows.Scan(&i.Email, &i.AttributeKey, &i.AttributeValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCurrentDirectoryGroupsByUserID = `-- name: ListCurrentDirectoryGroupsByUserID :many
 SELECT DISTINCT ON (dg.workos_directory_group_id)
   dg.workos_directory_group_id,
