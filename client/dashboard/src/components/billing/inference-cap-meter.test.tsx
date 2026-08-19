@@ -106,9 +106,8 @@ describe("InferenceCapMeter", () => {
     });
   });
 
-  // The meter under the invoice estimate is the only place a customer can tell
-  // the invoiced cap from the one Gram funds, so the note has to be exact about
-  // which of the two figures above it belongs to.
+  // The meter under the invoice estimate explains that each independently
+  // capped inference category contributes to the cycle's billable spend.
   describe("the billing note", () => {
     // The threshold note comes first because it is the part that has changed;
     // the billing note is the standing fact about where the spend lands.
@@ -125,14 +124,11 @@ describe("InferenceCapMeter", () => {
       );
     });
 
-    // The platform-funded cap spends money too, but none of it is invoiced —
-    // so its note must never claim a line on the bill or a place in the
-    // estimate printed directly above it.
     it.each<[string, number]>([
       ["with a cap set", 200],
       ["with no cap set", 0],
     ])(
-      "never claims the platform-funded cap is invoiced, %s",
+      "includes platform-initiated inference in PAYG billing, %s",
       (_label, monthlyCredits) => {
         const { container } = render(
           <InferenceCapMeter
@@ -142,11 +138,9 @@ describe("InferenceCapMeter", () => {
         );
 
         const note = lastLine(container);
-        expect(note).toMatch(/it never reaches your invoice/);
-        expect(note).toMatch(/isn't part of the estimate above/);
-        expect(note).not.toMatch(
-          /billed to this organization as its own line/i,
-        );
+        expect(note).toMatch(/included in the inference spend/i);
+        expect(note).toMatch(/invoice/i);
+        expect(note).not.toMatch(/estimate above/i);
       },
     );
 

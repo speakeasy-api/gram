@@ -30,10 +30,11 @@ type CollectOpenRouterDailySpendArgs struct {
 	EndDay time.Time
 }
 
-// CollectOpenRouterDailySpendResult identifies organizations whose chat spend
-// is fresh and gap-free for every known invoice source day.
+// CollectOpenRouterDailySpendResult identifies organizations whose billable
+// key spend is fresh and gap-free for every known invoice source day.
 type CollectOpenRouterDailySpendResult struct {
-	ReadyOrganizationIDs []string
+	ReadyOrganizationIDs         []string
+	BillableKeyPolicyFingerprint string
 }
 
 // CollectOpenRouterDailySpend stores billing-grade daily spend for every live
@@ -81,10 +82,16 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 	}
 
 	var failures []error
-	readyOrganizations := make(map[string]struct{})
+	billableTargets := make(map[string]int)
+	readyBillableTargets := make(map[string]int)
+	for _, target := range targets {
+		if openrouter.KeyType(target.KeyType).IsBillable() {
+			billableTargets[target.OrganizationID]++
+		}
+	}
 	for i, target := range targets {
 		keyType := openrouter.KeyType(target.KeyType)
-		isChat := keyType == openrouter.KeyTypeChat
+		isBillable := keyType.IsBillable()
 		if err := keyType.Validate(); err != nil {
 			failures = append(failures, fmt.Errorf("collect spend for organization %s: %w", target.OrganizationID, err))
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -96,8 +103,9 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		if createdDay.After(targetStart) {
 			targetStart = createdDay
 		}
-		if isChat {
+		if isBillable {
 			recoveryStart, err := queries.GetOpenRouterDailySpendRecoveryStartDay(ctx, repo.GetOpenRouterDailySpendRecoveryStartDayParams{
+				TargetKeyType:        target.KeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
 				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
 				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
@@ -112,8 +120,8 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 			}
 		}
 		if !targetStart.Before(endDay) {
-			if isChat {
-				readyOrganizations[target.OrganizationID] = struct{}{}
+			if isBillable {
+				readyBillableTargets[target.OrganizationID]++
 			}
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
@@ -151,7 +159,7 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
 		}
-		if isChat {
+		if isBillable {
 			missing, err := queries.CountOpenRouterInvoiceSpendGaps(ctx, repo.CountOpenRouterInvoiceSpendGapsParams{
 				TargetKeyType:        target.KeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
@@ -163,19 +171,21 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 			} else if missing > 0 {
 				failures = append(failures, fmt.Errorf("organization %s has %d unresolved invoice spend gaps", target.OrganizationID, missing))
 			} else {
-				readyOrganizations[target.OrganizationID] = struct{}{}
+				readyBillableTargets[target.OrganizationID]++
 			}
 		}
 		c.recordHeartbeat(ctx, i+1, len(targets))
 	}
 
 	result := CollectOpenRouterDailySpendResult{
-		ReadyOrganizationIDs: make([]string, 0, len(readyOrganizations)),
+		ReadyOrganizationIDs:         make([]string, 0, len(billableTargets)),
+		BillableKeyPolicyFingerprint: openrouter.BillableKeyPolicyFingerprint(),
 	}
 	for _, target := range targets {
-		if _, ready := readyOrganizations[target.OrganizationID]; ready {
+		required, seen := billableTargets[target.OrganizationID]
+		if seen && readyBillableTargets[target.OrganizationID] == required {
 			result.ReadyOrganizationIDs = append(result.ReadyOrganizationIDs, target.OrganizationID)
-			delete(readyOrganizations, target.OrganizationID)
+			delete(billableTargets, target.OrganizationID)
 		}
 	}
 

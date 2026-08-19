@@ -142,7 +142,7 @@ function BillingSummary({
         {formatExactUsd(summary.tum_unit_price_usd) ?? "—"} per token
       </Row>
       <Row label="TUM cost">{formatExactUsd(summary.tum_cost_usd) ?? "—"}</Row>
-      <Row label="Other inference spend">
+      <Row label="Inference spend">
         {formatExactUsd(summary.other_inference_spend_usd) ?? "—"}
       </Row>
       {recordedThrough && (

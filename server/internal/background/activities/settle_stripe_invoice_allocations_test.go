@@ -19,7 +19,7 @@ import (
 	backgroundrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -176,11 +176,16 @@ func addStripeInvoice(t *testing.T, db *pgxpool.Pool, stripe *allocationStripeMo
 
 func putDailySpend(t *testing.T, db *pgxpool.Pool, organizationID string, day time.Time, amount string) {
 	t.Helper()
+	putDailySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, day, amount)
+}
+
+func putDailySpendForKey(t *testing.T, db *pgxpool.Pool, organizationID string, keyType openrouter.KeyType, day time.Time, amount string) {
+	t.Helper()
 	var spend pgtype.Numeric
 	require.NoError(t, spend.Scan(amount))
 	require.NoError(t, backgroundrepo.New(db).UpsertOpenRouterDailySpend(t.Context(), backgroundrepo.UpsertOpenRouterDailySpendParams{
 		TargetOrganizationID: organizationID,
-		TargetKeyType:        "chat",
+		TargetKeyType:        string(keyType),
 		TargetDay:            pgtype.Date{Time: day.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		TargetSpendUsd:       spend,
 	}))
@@ -188,15 +193,23 @@ func putDailySpend(t *testing.T, db *pgxpool.Pool, organizationID string, day ti
 
 func createChatKeyAt(t *testing.T, db *pgxpool.Pool, organizationID string, createdAt time.Time) {
 	t.Helper()
-	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
-		OrganizationID: organizationID,
-		KeyType:        "chat",
-		KeyEncrypted:   pgtype.Text{},
-		KeyHash:        strings.Repeat("a", 64),
-		MonthlyCredits: 0,
-	})
-	require.NoError(t, err)
-	setChatKeyCreatedAt(t, db, organizationID, createdAt)
+	createInferenceKeyAt(t, db, organizationID, openrouter.KeyTypeChat, createdAt)
+}
+
+func createInferenceKeyAt(t *testing.T, db *pgxpool.Pool, organizationID string, keyType openrouter.KeyType, createdAt time.Time) {
+	t.Helper()
+	hashRune := 'a'
+	if keyType == openrouter.KeyTypeInternal {
+		hashRune = 'b'
+	}
+	createOpenRouterSpendTarget(t, db, organizationID, keyType, hashRune)
+	require.NoError(t, backgroundrepo.New(db).SetOpenRouterAPIKeyCreatedAtFixture(
+		t.Context(), backgroundrepo.SetOpenRouterAPIKeyCreatedAtFixtureParams{
+			CreatedAt:      pgtype.Timestamptz{Time: createdAt.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		},
+	))
 }
 
 func setChatKeyCreatedAt(t *testing.T, db *pgxpool.Pool, organizationID string, createdAt time.Time) {
@@ -246,7 +259,7 @@ func addOpenRouterCarryFixture(
 			AmountUsd:            amountNumeric,
 			OriginalInvoiceID:    pgtype.Text{String: invoiceID, Valid: true},
 			DestinationInvoiceID: pgtype.Text{String: invoiceID, Valid: true},
-			IdempotencyKey:       "openrouter:" + organizationID + ":" + day.UTC().Format(time.DateOnly) + ":2",
+			IdempotencyKey:       "openrouter:" + organizationID + ":" + day.UTC().Format(time.DateOnly) + ":chat:2",
 			DeliveryState:        "confirmed",
 			ConfirmedAt:          pgtype.Timestamptz{Time: now, InfinityModifier: pgtype.Finite, Valid: true},
 		},
@@ -254,12 +267,31 @@ func addOpenRouterCarryFixture(
 	require.NoError(t, err)
 }
 
-func listAllocationFixtures(t *testing.T, db *pgxpool.Pool, organizationID string) []backgroundrepo.ListStripeInvoiceAllocationsFixtureRow {
+func listAllAllocationFixtures(t *testing.T, db *pgxpool.Pool, organizationID string) []backgroundrepo.ListStripeInvoiceAllocationsFixtureRow {
 	t.Helper()
 	rows, err := backgroundrepo.New(db).ListStripeInvoiceAllocationsFixture(
 		t.Context(), pgtype.Text{String: organizationID, Valid: true})
 	require.NoError(t, err)
 	return rows
+}
+
+func listAllocationFixturesForKeyType(t *testing.T, db *pgxpool.Pool, organizationID string, keyType openrouter.KeyType) []backgroundrepo.ListStripeInvoiceAllocationsFixtureRow {
+	t.Helper()
+	rows := listAllAllocationFixtures(t, db, organizationID)
+	filtered := make([]backgroundrepo.ListStripeInvoiceAllocationsFixtureRow, 0, len(rows))
+	for _, row := range rows {
+		if row.SourceKind != "openrouter_daily_spend" || strings.HasSuffix(row.SourceKey, ":"+string(keyType)) {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
+}
+
+// Existing allocation tests predate per-key billing and intentionally assert
+// only the chat rounding chain. Multi-key edge tests use the all/key helpers.
+func listChatAllocationFixtures(t *testing.T, db *pgxpool.Pool, organizationID string) []backgroundrepo.ListStripeInvoiceAllocationsFixtureRow {
+	t.Helper()
+	return listAllocationFixturesForKeyType(t, db, organizationID, openrouter.KeyTypeChat)
 }
 
 func addTUMCarry(t *testing.T, db *pgxpool.Pool, organizationID string, start, end time.Time, cents int64, key string) {
@@ -284,6 +316,78 @@ func addTUMCarry(t *testing.T, db *pgxpool.Pool, organizationID string, start, e
 	}))
 }
 
+func TestSettleStripeInvoiceAllocations_BillsEveryCanonicalKeyTypeExactlyOnce(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_billable_key_types")
+	start := time.Date(2026, time.January, 10, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	createInferenceKeyAt(t, db, organizationID, openrouter.KeyTypeInternal, start.Add(-time.Hour))
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	putDailySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, start, "1.000000")
+	putDailySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, start, "2.000000")
+	now := end.Add(48 * time.Hour)
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
+	rows := listAllAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 2)
+	require.Equal(t, start.Format(time.DateOnly)+":chat", rows[0].SourceKey)
+	require.Equal(t, start.Format(time.DateOnly)+":internal", rows[1].SourceKey)
+	require.NotEqual(t, rows[0].IdempotencyKey, rows[1].IdempotencyKey)
+	require.ElementsMatch(t, []int64{100, 200}, []int64{stripe.itemInputs[0].AmountCents, stripe.itemInputs[1].AmountCents})
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now.Add(time.Hour)}))
+	require.Len(t, listAllAllocationFixtures(t, db, organizationID), 2)
+	require.Len(t, stripe.itemInputs, 2)
+
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
+	stripe.invoices["in_original"].Status = "open"
+	stripe.invoices["in_original"].FinalizedAt = end.Add(time.Hour)
+	putDailySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, start, "1.500000")
+	putDailySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, start, "2.500000")
+	reconcileAt := end.Add(72 * time.Hour)
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: reconcileAt}))
+	rows = listAllAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 4)
+	for _, keyType := range openrouter.BillableKeyTypeStrings() {
+		sourceKey := start.Format(time.DateOnly) + ":" + keyType
+		count := 0
+		for _, row := range rows {
+			if row.SourceKey == sourceKey {
+				count++
+			}
+		}
+		require.Equal(t, 2, count, "each billable key has one baseline and one carry")
+	}
+	require.Len(t, stripe.itemInputs, 4)
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: reconcileAt.Add(time.Hour)}))
+	require.Len(t, listAllAllocationFixtures(t, db, organizationID), 4)
+	require.Len(t, stripe.itemInputs, 4)
+}
+
+func TestSettleStripeInvoiceAllocations_RequiresMatchingBillablePolicyForReadyOrganizations(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_policy_version")
+	start := time.Date(2026, time.January, 10, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	putDailySpend(t, db, organizationID, start, "1.000000")
+
+	args := activities.SettleStripeInvoiceAllocationsArgs{
+		Now:                                    end.Add(48 * time.Hour),
+		RestrictOpenRouterToReadyOrganizations: true,
+		OpenRouterReadyOrganizationIDs:         []string{organizationID},
+		OpenRouterBillableKeyPolicyFingerprint: "internal\x00chat",
+	}
+	require.NoError(t, activity.Do(t.Context(), args))
+	require.Empty(t, listAllAllocationFixtures(t, db, organizationID))
+
+	args.OpenRouterBillableKeyPolicyFingerprint = openrouter.BillableKeyPolicyFingerprint()
+	require.NoError(t, activity.Do(t.Context(), args))
+	require.Len(t, listAllAllocationFixtures(t, db, organizationID), len(openrouter.BillableKeyTypes()))
+	require.Len(t, stripe.itemInputs, 1)
+}
+
 func TestSettleStripeInvoiceAllocations_BoundariesAndHalfAwayFromZero(t *testing.T) {
 	t.Parallel()
 	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_boundaries")
@@ -295,12 +399,12 @@ func TestSettleStripeInvoiceAllocations_BoundariesAndHalfAwayFromZero(t *testing
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
 		Now: end.Add(48*time.Hour - time.Nanosecond),
 	}))
-	require.Empty(t, listAllocationFixtures(t, db, organizationID))
+	require.Empty(t, listChatAllocationFixtures(t, db, organizationID))
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
 		Now: end.Add(48 * time.Hour),
 	}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	require.Equal(t, "1.005000", numericString(t, rows[0].SourceSnapshotUsd))
 	require.Equal(t, "1.010000", numericString(t, rows[0].AmountUsd))
@@ -314,7 +418,7 @@ func TestSettleStripeInvoiceAllocations_BoundariesAndHalfAwayFromZero(t *testing
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
 		Now: end.Add(72 * time.Hour),
 	}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, int32(2), rows[1].Seq)
 	require.Equal(t, "1.014999", numericString(t, rows[1].SourceSnapshotUsd))
@@ -334,7 +438,7 @@ func TestSettleStripeInvoiceAllocations_MissedWindowRecoversAfter96Hours(t *test
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
 		Now: end.Add(120 * time.Hour),
 	}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, int32(1), rows[0].Seq)
 	require.Equal(t, "0", numericString(t, rows[0].SourceSnapshotUsd))
@@ -367,7 +471,7 @@ func TestSettleStripeInvoiceAllocations_AssignsEarliestDraftWithinTenant(t *test
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
 		Now: end.Add(52 * time.Hour),
 	}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	require.Equal(t, "0.020000", numericString(t, rows[0].AmountUsd))
 	require.Equal(t, "in_earlier", rows[0].DestinationInvoiceID.String)
@@ -391,7 +495,7 @@ func TestSettleStripeInvoiceAllocations_NegativeCarryCreditsPaidPortion(t *testi
 	state.AmountRemaining = 40
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)}))
 
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, "-1.010000", numericString(t, rows[1].AmountUsd))
 	require.Equal(t, "in_original", rows[1].DestinationInvoiceID.String)
@@ -447,7 +551,7 @@ func TestSettleStripeInvoiceAllocations_ReconcilesAfter24Hours(t *testing.T) {
 	firstAttempt := end.Add(48 * time.Hour)
 	require.Error(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt}))
 
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	stripe.foundItem = &stripeclient.InvoiceItem{
 		ID:          "ii_reconciled",
@@ -456,7 +560,7 @@ func TestSettleStripeInvoiceAllocations_ReconcilesAfter24Hours(t *testing.T) {
 		AmountCents: 125,
 	}
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(25 * time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Equal(t, "confirmed", rows[0].DeliveryState)
 	require.Equal(t, "ii_reconciled", rows[0].StripeInvoiceItemID.String)
 	require.True(t, rows[0].ReconciledAt.Valid)
@@ -497,7 +601,7 @@ func TestSettleStripeInvoiceAllocations_MissingBaselineBecomesPositiveCarry(t *t
 	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(52 * time.Hour)}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	require.Equal(t, "0", numericString(t, rows[0].SourceSnapshotUsd))
 	require.Equal(t, "0", numericString(t, rows[0].AmountUsd))
@@ -505,7 +609,7 @@ func TestSettleStripeInvoiceAllocations_MissingBaselineBecomesPositiveCarry(t *t
 
 	putDailySpend(t, db, organizationID, start, "0.015000")
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, "0.020000", numericString(t, rows[1].AmountUsd))
 	require.Equal(t, "in_future", rows[1].DestinationInvoiceID.String)
@@ -521,14 +625,14 @@ func TestSettleStripeInvoiceAllocations_MissingFinalSourceRemainsRecoverable(t *
 	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1, "missing durable spend must not be finalized as a zero carry")
 	require.Equal(t, int32(1), rows[0].Seq)
 	require.Equal(t, "0", numericString(t, rows[0].SourceSnapshotUsd))
 
 	putDailySpend(t, db, organizationID, start, "0.015000")
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(77 * time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, int32(2), rows[1].Seq)
 	require.Equal(t, "0.020000", numericString(t, rows[1].AmountUsd))
@@ -549,7 +653,7 @@ func TestSettleStripeInvoiceAllocations_PreKeyDaysFinalizeAsDurableZero(t *testi
 	now := end.Add(76 * time.Hour)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 6)
 	require.Equal(t, int32(2), rows[1].Seq)
 	require.Equal(t, "0", numericString(t, rows[1].SourceSnapshotUsd))
@@ -563,11 +667,14 @@ func TestSettleStripeInvoiceAllocations_PreKeyDaysFinalizeAsDurableZero(t *testi
 	require.Len(t, stripe.itemInputs, 1)
 
 	candidates, err := backgroundrepo.New(db).ListStripeInvoiceBillingOrganizations(
-		t.Context(), pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
+		t.Context(), backgroundrepo.ListStripeInvoiceBillingOrganizationsParams{
+			BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+			Now:              pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		})
 	require.NoError(t, err)
 	require.Empty(t, candidates, "authoritative pre-key zeroes must finish the invoice candidate")
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now.Add(time.Hour)}))
-	require.Len(t, listAllocationFixtures(t, db, organizationID), 6)
+	require.Len(t, listChatAllocationFixtures(t, db, organizationID), 6)
 	require.Len(t, stripe.itemInputs, 1)
 }
 
@@ -580,7 +687,7 @@ func TestSettleStripeInvoiceAllocations_NoKeyDaysFinalizeAsDurableZero(t *testin
 	now := end.Add(76 * time.Hour)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 4)
 	for _, row := range rows {
 		require.Equal(t, "0", numericString(t, row.SourceSnapshotUsd))
@@ -590,7 +697,10 @@ func TestSettleStripeInvoiceAllocations_NoKeyDaysFinalizeAsDurableZero(t *testin
 	require.Empty(t, stripe.itemInputs)
 
 	candidates, err := backgroundrepo.New(db).ListStripeInvoiceBillingOrganizations(
-		t.Context(), pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
+		t.Context(), backgroundrepo.ListStripeInvoiceBillingOrganizationsParams{
+			BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+			Now:              pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		})
 	require.NoError(t, err)
 	require.Empty(t, candidates, "an organization without a chat key cannot have chat spend")
 }
@@ -610,7 +720,7 @@ func TestSettleStripeInvoiceAllocations_PostDeletionDaysFinalizeAsDurableZero(t 
 	now := end.Add(76 * time.Hour)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 6)
 	require.Equal(t, "0.010000", numericString(t, rows[1].SourceSnapshotUsd))
 	require.Equal(t, "0.020000", numericString(t, rows[3].SourceSnapshotUsd), "deletion-day spend remains billable")
@@ -618,9 +728,42 @@ func TestSettleStripeInvoiceAllocations_PostDeletionDaysFinalizeAsDurableZero(t 
 	require.Equal(t, int32(2), rows[5].Seq)
 
 	candidates, err := backgroundrepo.New(db).ListStripeInvoiceBillingOrganizations(
-		t.Context(), pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
+		t.Context(), backgroundrepo.ListStripeInvoiceBillingOrganizationsParams{
+			BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+			Now:              pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		})
 	require.NoError(t, err)
 	require.Empty(t, candidates, "post-deletion zeroes must finish the invoice candidate")
+}
+
+func TestSettleStripeInvoiceAllocations_UnresolvedKeyDoesNotBlockAnotherKeyCarry(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_independent_key_readiness")
+	start := time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 2)
+	createInferenceKeyAt(t, db, organizationID, openrouter.KeyTypeInternal, start.Add(-time.Hour))
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "open", 0)
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
+	putDailySpend(t, db, organizationID, start, "0.010000")
+	putDailySpend(t, db, organizationID, start.AddDate(0, 0, 1), "0.020000")
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)}))
+	rows := listAllAllocationFixtures(t, db, organizationID)
+	chatCarries := 0
+	internalCarries := 0
+	for _, row := range rows {
+		if row.Seq != 2 {
+			continue
+		}
+		if strings.HasSuffix(row.SourceKey, ":chat") {
+			chatCarries++
+		}
+		if strings.HasSuffix(row.SourceKey, ":internal") {
+			internalCarries++
+		}
+	}
+	require.Equal(t, 2, chatCarries, "complete chat chain must reconcile")
+	require.Zero(t, internalCarries, "unresolved internal chain must remain recoverable")
 }
 
 func TestSettleStripeInvoiceAllocations_LateMiddleDayReconcilesExistingLaterCarry(t *testing.T) {
@@ -636,7 +779,7 @@ func TestSettleStripeInvoiceAllocations_LateMiddleDayReconcilesExistingLaterCarr
 	now := end.Add(76 * time.Hour)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 4)
 	require.Equal(t, start.Format(time.DateOnly)+":chat", rows[1].SourceKey)
 	require.Equal(t, int32(2), rows[1].Seq)
@@ -645,7 +788,7 @@ func TestSettleStripeInvoiceAllocations_LateMiddleDayReconcilesExistingLaterCarr
 
 	putDailySpend(t, db, organizationID, middleDay, "0.004000")
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now.Add(time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 6)
 	require.Equal(t, middleDay.Format(time.DateOnly)+":chat", rows[3].SourceKey)
 	require.Equal(t, int32(2), rows[3].Seq)
@@ -660,7 +803,7 @@ func TestSettleStripeInvoiceAllocations_LateMiddleDayReconcilesExistingLaterCarr
 	require.Empty(t, stripe.itemInputs)
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now.Add(2 * time.Hour)}))
-	require.Len(t, listAllocationFixtures(t, db, organizationID), 6)
+	require.Len(t, listChatAllocationFixtures(t, db, organizationID), 6)
 }
 
 func TestSettleStripeInvoiceAllocations_RoundsCumulativeCycleTotalsAndDrainsBatch(t *testing.T) {
@@ -675,7 +818,7 @@ func TestSettleStripeInvoiceAllocations_RoundsCumulativeCycleTotalsAndDrainsBatc
 	putDailySpend(t, db, organizationID, secondDay, "0.004000")
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(48 * time.Hour)}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, "0", numericString(t, rows[0].AmountUsd))
 	require.Equal(t, "0.010000", numericString(t, rows[1].AmountUsd))
@@ -689,7 +832,7 @@ func TestSettleStripeInvoiceAllocations_RoundsCumulativeCycleTotalsAndDrainsBatc
 	state.FinalizedAt = end.Add(time.Hour)
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(72 * time.Hour)}))
 
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 4)
 	require.Equal(t, "0.010000", numericString(t, rows[1].AmountUsd))
 	require.Equal(t, "0.010000", numericString(t, rows[2].AmountUsd))
@@ -719,7 +862,7 @@ func TestSettleStripeInvoiceAllocations_TUMPositiveCarryIgnoresChatReadinessAndB
 		RestrictOpenRouterToReadyOrganizations: true,
 		OpenRouterReadyOrganizationIDs:         []string{},
 	}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	require.Equal(t, "in_original", rows[0].OriginalInvoiceID.String)
 	require.Equal(t, "in_future", rows[0].DestinationInvoiceID.String)
@@ -739,7 +882,7 @@ func TestSettleStripeInvoiceAllocations_TUMNegativeCarryCreditsOriginal(t *testi
 	addTUMCarry(t, db, organizationID, start, end, -35, "negative")
 
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(24 * time.Hour)}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 1)
 	require.Equal(t, "in_original", rows[0].DestinationInvoiceID.String)
 	require.Equal(t, "confirmed", rows[0].DeliveryState)
@@ -766,12 +909,12 @@ func TestSettleStripeInvoiceAllocations_AmbiguousItemWaitsForVisibilityBeforeClo
 	state.FinalizedAt = end.Add(time.Hour)
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(time.Hour)}))
 	require.Zero(t, stripe.findItems, "eventual visibility cannot be decided inside 24 hours")
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Equal(t, "in_original", rows[0].DestinationInvoiceID.String)
 
 	stripe.foundItem = &stripeclient.InvoiceItem{ID: "ii_visible_later", InvoiceID: "in_original", Currency: "usd", AmountCents: 100}
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(25 * time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Equal(t, "confirmed", rows[0].DeliveryState)
 	require.Equal(t, "in_original", rows[0].DestinationInvoiceID.String)
 	require.Equal(t, "ii_visible_later", rows[0].StripeInvoiceItemID.String)
@@ -796,14 +939,14 @@ func TestSettleStripeInvoiceAllocations_ProvenAbsentClosedItemRebindsWithRotated
 	state.Status = "open"
 	state.FinalizedAt = end.Add(time.Hour)
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(25 * time.Hour)}))
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.False(t, rows[0].DestinationInvoiceID.Valid, "proven-absent closed destination is released")
 	require.True(t, rows[0].ReconciledAt.Valid)
 	require.LessOrEqual(t, len(rows[0].IdempotencyKey), 255)
 
 	require.Error(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(25*time.Hour + 6*time.Minute)}))
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: firstAttempt.Add(51 * time.Hour)}))
-	rows = listAllocationFixtures(t, db, organizationID)
+	rows = listChatAllocationFixtures(t, db, organizationID)
 	require.Equal(t, "in_future", rows[0].DestinationInvoiceID.String)
 	require.Equal(t, "confirmed", rows[0].DeliveryState)
 	require.Len(t, stripe.itemInputs, 3)
@@ -895,7 +1038,7 @@ func TestM3FreezeObservationAndCarrySettlementLifecycle(t *testing.T) {
 	require.Equal(t, int64(100_000), tumCarries[0].DeltaTokens.Int64)
 	require.Equal(t, "0.040000", numericString(t, tumCarries[0].AmountUsd))
 
-	allocations := listAllocationFixtures(t, db, organizationID)
+	allocations := listChatAllocationFixtures(t, db, organizationID)
 	amountsBySource := make(map[string][]string)
 	for _, allocation := range allocations {
 		require.Equal(t, "confirmed", allocation.DeliveryState)
@@ -955,7 +1098,7 @@ func TestSettleStripeInvoiceAllocations_BackfilledSpendKeepsFrozenChain(t *testi
 	putDailySpend(t, db, organizationID, start, "0.006000")
 	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
 
-	rows := listAllocationFixtures(t, db, organizationID)
+	rows := listChatAllocationFixtures(t, db, organizationID)
 	require.Len(t, rows, 2)
 	require.Equal(t, "0.004000", numericString(t, rows[0].SourceSnapshotUsd),
 		"the frozen day keeps the snapshot it was written with, not the backfill")

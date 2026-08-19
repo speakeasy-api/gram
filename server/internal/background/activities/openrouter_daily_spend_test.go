@@ -194,6 +194,28 @@ func TestCollectOpenRouterDailySpend_ContinuesAfterUpstreamFailure(t *testing.T)
 	client.AssertExpectations(t)
 }
 
+func TestCollectOpenRouterDailySpend_InternalFailureBlocksInvoiceReadiness(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, orgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_internal_failure")
+	chatHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeChat, 'g')
+	internalHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeInternal, 'h')
+	startDay := utcDay(0)
+	endDay := utcDay(1)
+
+	client := &mockOpenRouterSpendClient{}
+	client.On("GetDailySpend", mock.Anything, chatHash, startDay, endDay).
+		Return(openrouter.DailySpendResult{Days: nil, Source: openrouter.DailySpendSourceActivity}, nil).Once()
+	client.On("GetDailySpend", mock.Anything, internalHash, startDay, endDay).
+		Return(openrouter.DailySpendResult{}, errors.New("management API unavailable")).Once()
+
+	act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
+	result, err := act.DoWithResult(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+	require.NoError(t, err)
+	require.Empty(t, result.ReadyOrganizationIDs)
+	client.AssertExpectations(t)
+}
+
 func TestCollectOpenRouterDailySpend_RejectsUnrepresentableSpend(t *testing.T) {
 	t.Parallel()
 

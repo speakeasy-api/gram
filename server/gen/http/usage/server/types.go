@@ -192,7 +192,8 @@ type GetPaygBillingSummaryResponseBody struct {
 	TumUnitPriceUsd string `form:"tum_unit_price_usd" json:"tum_unit_price_usd" xml:"tum_unit_price_usd"`
 	// Exact estimated tokens-under-management cost in USD
 	TumCostUsd string `form:"tum_cost_usd" json:"tum_cost_usd" xml:"tum_cost_usd"`
-	// Exact durable Other inference spend in USD through recorded_through
+	// Exact durable customer-billable OpenRouter inference spend in USD through
+	// recorded_through
 	OtherInferenceSpendUsd string `form:"other_inference_spend_usd" json:"other_inference_spend_usd" xml:"other_inference_spend_usd"`
 	// Most recent completed durable UTC spend day included in the estimate
 	RecordedThrough *string `form:"recorded_through,omitempty" json:"recorded_through,omitempty" xml:"recorded_through,omitempty"`

@@ -15,7 +15,7 @@ export type PaygBillingSummary = {
    */
   estimatedTotalUsd: string;
   /**
-   * Exact durable Other inference spend in USD through recorded_through
+   * Exact durable customer-billable OpenRouter inference spend in USD through recorded_through
    */
   otherInferenceSpendUsd: string;
   /**

@@ -258,7 +258,7 @@ describe("Billing", () => {
           featureBullets: ["Enterprise feature set"],
           includedBullets: [
             "Other inference billed at provider cost",
-            "Security inference funded by Speakeasy",
+            "Security inference billed at provider cost",
           ],
           tumPricePerMillionUsd: "0.35",
         },
