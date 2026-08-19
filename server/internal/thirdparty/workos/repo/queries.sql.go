@@ -431,10 +431,11 @@ SELECT
   attribute.value::text AS attribute_value,
   COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count
 FROM directory_users AS du
-CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+CROSS JOIN LATERAL jsonb_each_text(CASE jsonb_typeof(du.attributes) WHEN 'object' THEN du.attributes ELSE '{}'::jsonb END) AS attribute(key, value)
 WHERE du.organization_id = $1
   AND du.deleted IS FALSE
   AND du.workos_deleted IS FALSE
+  AND attribute.value IS NOT NULL
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value
 `
@@ -569,12 +570,13 @@ SELECT DISTINCT
   attribute.key::text AS attribute_key,
   attribute.value::text AS attribute_value
 FROM directory_users AS du
-CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+CROSS JOIN LATERAL jsonb_each_text(CASE jsonb_typeof(du.attributes) WHEN 'object' THEN du.attributes ELSE '{}'::jsonb END) AS attribute(key, value)
 WHERE du.organization_id = $1
   AND du.deleted IS FALSE
   AND du.workos_deleted IS FALSE
   AND du.email IS NOT NULL
   AND LOWER(du.email) = ANY($2::text[])
+  AND attribute.value IS NOT NULL
 ORDER BY email, attribute.key, attribute.value
 `
 
