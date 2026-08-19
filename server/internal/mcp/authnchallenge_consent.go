@@ -29,7 +29,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -227,21 +226,14 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
 }
 
-// consentToolFilteringEnabled reports whether the consent-screen tool picker
-// is on for the organization: via the staged engineering rollout flag or via
-// the organization admin's own opt-in (the consent_tool_filtering product
-// feature, managed from the MCP Connections page). Provider outages and an
-// unavailable checker both degrade to off.
-func (s *Service) consentToolFilteringEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagConsentToolFiltering, organizationID, nil)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate consent tool filtering flag", attr.SlogError(err))
-		enabled = false
+// consentToolFilteringEnabled reports the organization admin's durable opt-in
+// from the consent_tool_filtering product feature managed on MCP Connections.
+// An unavailable checker degrades to off.
+func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
+	if s.platformFeatureChecker == nil {
+		return false
 	}
-	if !enabled && s.platformFeatureChecker != nil {
-		enabled = s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
-	}
-	return enabled
+	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
 }
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
@@ -412,7 +404,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	// The picker island renders only while tool filtering is enabled for the
-	// org (provider outage reads as off): enforcement of stored selections
+	// org (an unavailable checker reads as off): enforcement of stored selections
 	// is always live, but authoring new ones stays dark until every runtime
 	// pod enforces them. Without the island the approve button must not
 	// depend on it for enabling — the template couples the two.
@@ -582,7 +574,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// incomplete, or expired snapshot is retryable — reload the page — and
 	// must not consume the challenge; a store outage is an operational 503.
 	// Approvals without tool_filtering=on (pages rendered before the picker
-	// deployed or with the rollout flag off) skip the binding: they mint the
+	// deployed or with the product feature off) skip the binding: they mint the
 	// unrestricted grant the pre-picker flow always minted, so stripping the
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory

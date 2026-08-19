@@ -396,7 +396,7 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 }
 
 // TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled pins the
-// non-island path's gate: with the rollout flag off, disconnected required
+// non-island path's gate: with the product feature off, disconnected required
 // services must still disable Give Access.
 func TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled(t *testing.T) {
 	t.Parallel()

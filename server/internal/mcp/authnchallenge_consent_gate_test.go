@@ -6,14 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// TestConsentToolFilteringEnabled pins the two enablement paths for the
-// consent-screen tool picker: the staged rollout flag and the organization
-// admin's product-feature opt-in, either of which turns it on.
+// TestConsentToolFilteringEnabled pins the organization-admin product feature
+// as the consent-screen tool picker's only enablement path.
 func TestConsentToolFilteringEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -28,18 +26,14 @@ func TestConsentToolFilteringEnabled(t *testing.T) {
 		}
 	}
 
-	flagOn := &feature.InMemory{}
-	flagOn.SetFlag(feature.FlagConsentToolFiltering, orgID, true)
-
 	cases := []struct {
 		name    string
 		service *Service
 		want    bool
 	}{
-		{"all off", &Service{features: &feature.InMemory{}, platformFeatureChecker: checker(false)}, false},
-		{"flag on", &Service{features: flagOn, platformFeatureChecker: checker(false)}, true},
-		{"org feature on", &Service{features: &feature.InMemory{}, platformFeatureChecker: checker(true)}, true},
-		{"nil checker degrades to flag", &Service{features: &feature.InMemory{}, platformFeatureChecker: nil}, false},
+		{"org feature off", &Service{platformFeatureChecker: checker(false)}, false},
+		{"org feature on", &Service{platformFeatureChecker: checker(true)}, true},
+		{"nil checker degrades to off", &Service{platformFeatureChecker: nil}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

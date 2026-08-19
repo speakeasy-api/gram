@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -459,10 +458,8 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 func hydrateConsentInventory(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID, csrfToken string) string {
 	t.Helper()
 
-	// The consent transport 404s while the picker rollout flag is off.
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ti.features.SetFlag(feature.FlagConsentToolFiltering, authCtx.ActiveOrganizationID, true)
+	// The consent transport 404s while the organization product feature is off.
+	ti.consentToolFilteringEnabled.Store(true)
 
 	attempt := uuid.NewString()
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
@@ -1383,10 +1380,10 @@ func consentApproveButtonTag(t *testing.T, page string) string {
 	return page[start : start+end]
 }
 
-// TestHandleConsentGet_ToolPickerGatedByRolloutFlag asserts the picker
-// island renders only while the rollout flag is on for the org, and that the
+// TestHandleConsentGet_ToolPickerGatedByProductFeature asserts the picker
+// island renders only while the product feature is on for the org, and that the
 // approve button is not island-coupled (disabled) when the island is absent.
-func TestHandleConsentGet_ToolPickerGatedByRolloutFlag(t *testing.T) {
+func TestHandleConsentGet_ToolPickerGatedByProductFeature(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -1394,12 +1391,10 @@ func TestHandleConsentGet_ToolPickerGatedByRolloutFlag(t *testing.T) {
 	stateID, _ := seedConsentChallenge(t, ctx, ti, toolset, client)
 
 	page := consentGetPage(t, ti, toolset.McpSlug.String, stateID)
-	require.NotContains(t, page, "consent-tools-root", "island must stay dark while the flag is off")
+	require.NotContains(t, page, "consent-tools-root", "island must stay dark while the product feature is off")
 	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "approve must not depend on the absent island")
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ti.features.SetFlag(feature.FlagConsentToolFiltering, authCtx.ActiveOrganizationID, true)
+	ti.consentToolFilteringEnabled.Store(true)
 
 	page = consentGetPage(t, ti, toolset.McpSlug.String, stateID)
 	require.Contains(t, page, "consent-tools-root")
@@ -1423,7 +1418,7 @@ func TestHandleConsentGet_CustomDomainLockdownHidesPlatformPicker(t *testing.T) 
 		IpAllowlist:    []string{"203.0.113.0/24"},
 	})
 	require.NoError(t, err)
-	ti.features.SetFlag(feature.FlagConsentToolFiltering, authCtx.ActiveOrganizationID, true)
+	ti.consentToolFilteringEnabled.Store(true)
 	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
 
 	page := consentGetPageWithContext(t, context.Background(), ti, toolset.McpSlug.String, stateID)
@@ -1453,9 +1448,9 @@ func TestHandleConsentGet_CustomDomainLockdownHidesPlatformPicker(t *testing.T) 
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-// TestHandleConsentMCP_NotFoundWhenFlagOff asserts the consent transport is
-// dark while the picker rollout flag is off.
-func TestHandleConsentMCP_NotFoundWhenFlagOff(t *testing.T) {
+// TestHandleConsentMCP_NotFoundWhenProductFeatureOff asserts the consent
+// transport is dark while the organization product feature is off.
+func TestHandleConsentMCP_NotFoundWhenProductFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -1490,7 +1485,7 @@ func TestHandleConsentMCP_PrivateToolsetRequiresConnect(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	ti.features.SetFlag(feature.FlagConsentToolFiltering, authCtx.ActiveOrganizationID, true)
+	ti.consentToolFilteringEnabled.Store(true)
 
 	subject := urn.NewUserSubject("ungranted-user-" + uuid.NewString())
 	stateID := uuid.NewString()
