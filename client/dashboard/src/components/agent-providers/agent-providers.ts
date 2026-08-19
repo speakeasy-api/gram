@@ -19,6 +19,11 @@ export const AGENT_PROVIDERS = {
     description: "Codex CLI & Codex mode in the ChatGPT app",
     iconSource: "codex",
   },
+  litellm: {
+    name: "LiteLLM",
+    description: "Open-source LLM gateway and proxy",
+    iconSource: "litellm",
+  },
   opencode: {
     name: "opencode",
     description: "Open-source terminal coding agent",

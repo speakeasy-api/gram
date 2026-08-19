@@ -1,5 +1,7 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AGENT_PROVIDERS } from "./agent-providers";
+import { agentProviderIconKind } from "./agent-provider-icon-kind";
 import { AgentProviderIcon, CopilotIcon } from "./AgentProviderIcon";
 
 afterEach(() => {
@@ -19,6 +21,43 @@ describe("CopilotIcon", () => {
 });
 
 describe("AgentProviderIcon", () => {
+  it("includes LiteLLM in the shared provider catalog", () => {
+    expect(AGENT_PROVIDERS.litellm).toMatchObject({
+      name: "LiteLLM",
+      iconSource: "litellm",
+    });
+  });
+
+  it.each([
+    ["anthropic", "claude"],
+    ["claude", "claude"],
+    ["claude-chat-desktop", "claude"],
+    ["claude-code-desktop", "claude"],
+    ["cowork", "claude"],
+    ["openai", "codex"],
+    ["codex-web", "codex"],
+    ["chatgpt-work", "codex"],
+    ["google", "gemini"],
+    ["gemini", "gemini"],
+    ["aws", "bedrock"],
+    ["aws-bedrock", "bedrock"],
+    ["github-copilot", "copilot"],
+    ["microsoft", "copilot"],
+    ["opencode", "opencode"],
+    ["LiteLLM", "litellm"],
+    ["devin", "devin"],
+    ["mistral", "mistral"],
+    ["glean", "glean"],
+  ])("maps %s to the %s icon", (source, expected) => {
+    expect(agentProviderIconKind(source)).toBe(expected);
+  });
+
+  it("has an icon mapping for every catalog provider", () => {
+    for (const provider of Object.values(AGENT_PROVIDERS)) {
+      expect(agentProviderIconKind(provider.iconSource)).not.toBe("unknown");
+    }
+  });
+
   it("renders the LiteLLM logo", () => {
     const { container } = render(<AgentProviderIcon source="litellm" />);
 
