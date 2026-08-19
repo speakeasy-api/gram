@@ -107,6 +107,10 @@ func TestIdentityRejectsInvalidValues(t *testing.T) {
 		{name: "empty id", value: "user:"},
 		{name: "unknown kind", value: "role:admin"},
 		{name: "email without address", value: "email:dev"},
+		{name: "email that is only an at sign", value: "email:@"},
+		{name: "email with two at signs", value: "email:a@b@c"},
+		{name: "email with a display name", value: "email:Dev <dev@acme.corp>"},
+		{name: "apikey that is not a uuid", value: "apikey:not-a-uuid"},
 		{name: "id too long", value: "user:" + strings.Repeat("a", 129)},
 	}
 

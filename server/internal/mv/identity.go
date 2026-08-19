@@ -8,9 +8,9 @@ import (
 
 // BuildIdentityView converts a resolved identity into the API response type.
 //
-// Absent attributes are returned as null rather than as empty strings so a
-// client can tell "the directory has no job title for this person" from "the
-// directory recorded a blank job title".
+// Attributes the directory did not supply are returned as null rather than as
+// empty strings, so a client renders a missing job title as absent instead of
+// as a blank value.
 func BuildIdentityView(resolved identity.Identity) *gen.IdentityModel {
 	return &gen.IdentityModel{
 		Kind:            string(resolved.Kind),

@@ -4,7 +4,10 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"net/mail"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // IdentityKind represents the kind segment of an Identity URN.
@@ -249,9 +252,27 @@ func (u *Identity) validate() error {
 		return u.err
 	}
 
-	if u.Kind == IdentityKindEmail && !strings.Contains(u.ID, "@") {
-		u.err = fmt.Errorf("%w: email identity id must be an address", ErrInvalid)
-		return u.err
+	// Email and apikey ids address rows in stores that key on those exact
+	// shapes, so a malformed one would resolve to an identity that can never
+	// match anything. Both are validated the way Principal and SessionSubject
+	// validate theirs.
+	if u.Kind == IdentityKindEmail {
+		addr, err := mail.ParseAddress(u.ID)
+		if err != nil {
+			u.err = fmt.Errorf("%w: invalid email identity id: %w", ErrInvalid, err)
+			return u.err
+		}
+		if addr.Address != u.ID || addr.Name != "" {
+			u.err = fmt.Errorf("%w: email identity id must be the bare address", ErrInvalid)
+			return u.err
+		}
+	}
+
+	if u.Kind == IdentityKindAPIKey {
+		if _, err := uuid.Parse(u.ID); err != nil {
+			u.err = fmt.Errorf("%w: apikey identity id must be a uuid", ErrInvalid)
+			return u.err
+		}
 	}
 
 	return nil
