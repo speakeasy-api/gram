@@ -4455,6 +4455,43 @@ CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
 
+-- Meta MCP servers expose one plugin's live MCP membership through a dedicated
+-- runtime. V0 intentionally keeps this identity separate from mcp_servers so
+-- gateway-specific behavior can evolve without changing existing backends.
+CREATE TABLE IF NOT EXISTS meta_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  plugin_id uuid NOT NULL,
+  user_session_issuer_id uuid,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT meta_mcp_servers_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT meta_mcp_servers_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE RESTRICT,
+  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
+ON meta_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_organization_id_project_id_slug_key
+ON meta_mcp_servers (organization_id, project_id, slug)
+WHERE deleted IS FALSE;
+
+-- A plugin is the single source of membership for at most one live meta MCP.
+CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_plugin_id_key
+ON meta_mcp_servers (project_id, plugin_id)
+WHERE deleted IS FALSE;
+
 -- Join table linking servers to collections (for catalog publishing)
 CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
   published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
