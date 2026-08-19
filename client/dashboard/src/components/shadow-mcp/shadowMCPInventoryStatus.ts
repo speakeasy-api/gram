@@ -12,6 +12,7 @@ export type ShadowMCPPolicyState =
 export type ShadowMCPInventoryStatus =
   | "allowed"
   | "blocked"
+  | "restricted"
   | "observed"
   | "pending"
   | "unavailable";
@@ -86,6 +87,13 @@ export function shadowMCPInventoryStatus(
   if (server.requestCount > 0) return "pending";
   if (server.access === "allowed") return "allowed";
   if (server.access === "blocked") return "blocked";
+  if (server.access === "restricted") {
+    // A denied review is a definitive block decision, so it outranks a
+    // targeted policy's partial "restricted" (blocked for some users).
+    return server.approvalRequest?.status === "denied"
+      ? "blocked"
+      : "restricted";
+  }
   if (policyState === "unavailable") return "unavailable";
   if (policyState === "blocking") return "blocked";
   return "observed";
@@ -99,6 +107,8 @@ export function shadowMCPInventoryStatusLabel(
       return "Allowed";
     case "blocked":
       return "Blocked";
+    case "restricted":
+      return "Restricted";
     case "observed":
       return "Observed";
     case "pending":
@@ -116,6 +126,8 @@ export function shadowMCPInventoryStatusBadgeVariant(
       return "success";
     case "blocked":
       return "destructive";
+    case "restricted":
+      return "warning";
     case "observed":
       return "neutral";
     case "pending":
@@ -139,11 +151,36 @@ export function shadowMCPInventoryStatusDescription(
       : "Allowed by URL rule";
   }
   if (server.access === "blocked") {
+    // A denied review is a distinct reason from the policy default. Under
+    // allow_all the block *is* the review's doing; under block_all the policy
+    // already blocks it and the deny compounds that.
+    if (server.approvalRequest?.status === "denied") {
+      return disposition === "allow_all"
+        ? "Blocked by review"
+        : "Blocked by policy & review";
+    }
     return disposition === "allow_all"
       ? "Blocked by rule"
       : "Blocked by policy";
   }
+  if (server.access === "restricted") {
+    // A denied review outranks the targeted policy: the deny is a definitive
+    // block, so the row reads as blocked rather than "for some users". Credit
+    // it the same disposition-aware way as the blocked branch — under allow_all
+    // the deny is the whole block, so it is not "by policy". Absent a deny, the
+    // targeted policy blocks the server for its audience only.
+    if (server.approvalRequest?.status === "denied") {
+      return disposition === "allow_all"
+        ? "Blocked by review"
+        : "Blocked by policy & review";
+    }
+    return "Blocked for some users";
+  }
   if (policyState === "unavailable") return "Policy status unavailable";
-  if (policyState === "blocking") return "Blocked by policy";
+  if (policyState === "blocking") {
+    return server.approvalRequest?.status === "denied"
+      ? "Blocked by policy & review"
+      : "Blocked by policy";
+  }
   return "Not blocking";
 }

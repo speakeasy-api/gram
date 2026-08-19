@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrganization } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 // Assignments only gate delivery for the device agent (agent.getPlugins);
@@ -12,8 +13,11 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 // Shared by the plugin detail page and its sidebar nav so the two never drift
 // on whether the Assignments section exists.
 export function usePluginAssignmentsVisible(): boolean {
+  const organization = useOrganization();
   const isDeviceAgentEnabled =
     useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
-  const { data: productFeatures } = useProductFeatures();
+  const { data: productFeatures } = useProductFeatures({
+    organizationId: organization.id,
+  });
   return isDeviceAgentEnabled || (productFeatures?.deviceAgent ?? false);
 }

@@ -230,6 +230,13 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
 }
 
+// ListAudiencesResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body.
+type ListAudiencesResponseBody struct {
+	// Audiences that can be assigned to plugins.
+	Audiences []*PluginAudienceResponseBody `form:"audiences" json:"audiences" xml:"audiences"`
+}
+
 // GetPlatformMCPPackageStatusResponseBody is the type of the "plugins" service
 // "getPlatformMCPPackageStatus" endpoint HTTP response body.
 type GetPlatformMCPPackageStatusResponseBody struct {
@@ -2018,6 +2025,188 @@ type SetPluginAssignmentsUnexpectedResponseBody struct {
 // service "setPluginAssignments" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetPluginAssignmentsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnauthorizedResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unauthorized" error.
+type ListAudiencesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesForbiddenResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "forbidden" error.
+type ListAudiencesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesBadRequestResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "bad_request" error.
+type ListAudiencesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesNotFoundResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "not_found" error.
+type ListAudiencesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesConflictResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "conflict" error.
+type ListAudiencesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnsupportedMediaResponseBody is the type of the "plugins"
+// service "listAudiences" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAudiencesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesInvalidResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "invalid" error.
+type ListAudiencesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesInvariantViolationResponseBody is the type of the "plugins"
+// service "listAudiences" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAudiencesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesUnexpectedResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unexpected" error.
+type ListAudiencesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAudiencesGatewayErrorResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "gateway_error" error.
+type ListAudiencesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4033,6 +4222,18 @@ type PluginAssignmentResponseBody struct {
 	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
+// PluginAudienceResponseBody is used to define fields on response body types.
+type PluginAudienceResponseBody struct {
+	// Audience kind.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Display name for the audience.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Number of current members, when the audience has an enumerable membership.
+	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// Principal URN used to assign the audience to a plugin.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -4227,6 +4428,25 @@ func NewSetPluginAssignmentsResponseBody(res *plugins.SetPluginAssignmentsResult
 		}
 	} else {
 		body.Assignments = []*PluginAssignmentResponseBody{}
+	}
+	return body
+}
+
+// NewListAudiencesResponseBody builds the HTTP response body from the result
+// of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesResponseBody(res *plugins.ListAudiencesResult) *ListAudiencesResponseBody {
+	body := &ListAudiencesResponseBody{}
+	if res.Audiences != nil {
+		body.Audiences = make([]*PluginAudienceResponseBody, len(res.Audiences))
+		for i, val := range res.Audiences {
+			if val == nil {
+				body.Audiences[i] = nil
+				continue
+			}
+			body.Audiences[i] = marshalPluginsPluginAudienceToPluginAudienceResponseBody(val)
+		}
+	} else {
+		body.Audiences = []*PluginAudienceResponseBody{}
 	}
 	return body
 }
@@ -5606,6 +5826,146 @@ func NewSetPluginAssignmentsUnexpectedResponseBody(res *goa.ServiceError) *SetPl
 // service.
 func NewSetPluginAssignmentsGatewayErrorResponseBody(res *goa.ServiceError) *SetPluginAssignmentsGatewayErrorResponseBody {
 	body := &SetPluginAssignmentsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnauthorizedResponseBody(res *goa.ServiceError) *ListAudiencesUnauthorizedResponseBody {
+	body := &ListAudiencesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesForbiddenResponseBody(res *goa.ServiceError) *ListAudiencesForbiddenResponseBody {
+	body := &ListAudiencesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesBadRequestResponseBody(res *goa.ServiceError) *ListAudiencesBadRequestResponseBody {
+	body := &ListAudiencesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesNotFoundResponseBody(res *goa.ServiceError) *ListAudiencesNotFoundResponseBody {
+	body := &ListAudiencesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesConflictResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesConflictResponseBody(res *goa.ServiceError) *ListAudiencesConflictResponseBody {
+	body := &ListAudiencesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAudiencesUnsupportedMediaResponseBody {
+	body := &ListAudiencesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesInvalidResponseBody builds the HTTP response body from the
+// result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesInvalidResponseBody(res *goa.ServiceError) *ListAudiencesInvalidResponseBody {
+	body := &ListAudiencesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesInvariantViolationResponseBody(res *goa.ServiceError) *ListAudiencesInvariantViolationResponseBody {
+	body := &ListAudiencesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesUnexpectedResponseBody(res *goa.ServiceError) *ListAudiencesUnexpectedResponseBody {
+	body := &ListAudiencesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAudiencesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listAudiences" endpoint of the "plugins" service.
+func NewListAudiencesGatewayErrorResponseBody(res *goa.ServiceError) *ListAudiencesGatewayErrorResponseBody {
+	body := &ListAudiencesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7278,6 +7638,16 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 	for i, val := range body.PrincipalUrns {
 		v.PrincipalUrns[i] = val
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListAudiencesPayload builds a plugins service listAudiences endpoint
+// payload.
+func NewListAudiencesPayload(sessionToken *string, projectSlugInput *string) *plugins.ListAudiencesPayload {
+	v := &plugins.ListAudiencesPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

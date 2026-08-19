@@ -2,10 +2,8 @@ import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
-import {
-  formatRemoteSessionIssuerDisplay,
-  remoteSessionScopeTier,
-} from "@/lib/sources";
+import { remoteSessionScopeTier } from "@/lib/sources";
+import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
 import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@/components/ui/Button";
@@ -105,7 +103,7 @@ function RemoteIdentityProviderRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Text small className="truncate font-medium">
-              {formatRemoteSessionIssuerDisplay(issuer)}
+              <IssuerLink issuer={issuer} />
             </Text>
             <ScopeBadge
               projectId={issuer.projectId}

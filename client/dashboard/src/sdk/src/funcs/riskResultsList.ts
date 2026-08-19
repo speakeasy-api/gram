@@ -112,6 +112,7 @@ async function $do(
     "category": payload?.category,
     "chat_id": payload?.chat_id,
     "cursor": payload?.cursor,
+    "external_user_ids": payload?.external_user_ids,
     "from": payload?.from,
     "limit": payload?.limit,
     "non_assistant": payload?.non_assistant,

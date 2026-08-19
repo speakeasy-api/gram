@@ -31,7 +31,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 2 toolsets (+versions)           | `[~]`  |
 | Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                 | `[~]`  |
 | Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                     | `[~]`  |
-| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×4 + `hooks:` telemetry rows                                                                                              | `[~]`  |
+| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×15 + `hooks:` telemetry rows                                                                                             | `[~]`  |
 | Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                        | `[~]`  |
 
 ## Local only (RunLocalFixtures, never the demo org)

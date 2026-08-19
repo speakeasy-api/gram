@@ -132,6 +132,60 @@ func TestListRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 	require.Equal(t, int64(3), page2.TotalCount)
 }
 
+// TestListRiskResults_ClickHouseLegacyFalsePositiveOnlyRowIsHidden pins the
+// live listing's transitional suppression semantics. A dismissal written before
+// the suppression convergence carries only the legacy false_positive_at, and no
+// backfill is coming to give it an excluded_at copy — such rows simply stop
+// being written once the converged writers deploy, then expire under the
+// table's 90-day TTL. Until that window closes the listing must keep honoring
+// the legacy column, so a false-positive-only row stays hidden here exactly
+// like a converged one.
+func TestListRiskResults_ClickHouseLegacyFalsePositiveOnlyRowIsHidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("List CH Legacy FP")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+	dismissedAt := base.Add(2 * time.Hour)
+
+	legacyFP := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=aaaaaaaa>", "fp-legacy", "")
+	legacyFP.FalsePositiveAt = &dismissedAt
+
+	// The converged shape of the same dismissal, hidden by excluded_at.
+	converged := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(90*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=bbbbbbbb>", "fp-converged", "")
+	converged.ExcludedAt = &dismissedAt
+	converged.ExcludedReason = chrepo.ExcludedReasonManual
+	converged.FalsePositiveAt = &dismissedAt
+
+	// An untouched finding, so the assertion distinguishes "both suppressed
+	// rows are hidden" from "the listing returned nothing at all".
+	open := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(4*time.Hour), base.Add(30*time.Minute), "gitleaks", "secret.slack_token", "alice@example.com", "<redacted len=6 sha=cccccccc>", "fp-open", "")
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyFP, converged, open}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(page.Results))
+	for _, r := range page.Results {
+		ids = append(ids, r.ID)
+	}
+	require.Equal(t, []string{open.ID.String()}, ids, "both the legacy and the converged dismissal stay hidden")
+	require.Equal(t, int64(1), page.TotalCount)
+}
+
 // TestListRiskResults_ClickHouseFilters exercises the pushed-down filters:
 // category, rule and user substrings, assistant scoping, the enabled-policy
 // pushdown (disabled policies hidden by default, surfaced by an explicit

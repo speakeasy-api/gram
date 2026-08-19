@@ -43,7 +43,6 @@ const (
 	// server-side per organization with distinctID = the issuer's org ID and
 	// no groups.
 	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
-
 	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
 	// durable platform_mcp product feature remains the organization-admin opt-in
 	// once this release flag permits access.

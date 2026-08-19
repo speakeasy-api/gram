@@ -1,4 +1,5 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { useOrganization } from "@/contexts/Auth";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -215,7 +216,10 @@ export default function PluginDetail(): JSX.Element | null {
   );
 
   const showAssignments = usePluginAssignmentsVisible();
-  const { data: productFeatures } = useProductFeatures();
+  const organization = useOrganization();
+  const { data: productFeatures } = useProductFeatures({
+    organizationId: organization.id,
+  });
 
   // Device-agent reach powers the Installs stat. It's an admin-only, org-scoped
   // list, so it's fetched only for device-agent orgs and degrades quietly

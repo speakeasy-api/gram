@@ -115,6 +115,15 @@ func TestGetPaygBillingSummaryRequiresOrganizationRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestGetPaygBillingSummaryForOrganizationUsesExplicitID(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	result, err := ti.service.GetPaygBillingSummaryForOrganization(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	assert.Equal(t, ti.start.Format(time.RFC3339), result.PeriodStart)
+}
+
 func TestGetPaygBillingSummaryReturnsExactCycleAlignedEstimate(t *testing.T) {
 	t.Parallel()
 

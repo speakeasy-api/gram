@@ -455,6 +455,16 @@ WHERE d.organization_id = @organization_id
   AND (sqlc.narg('provider')::text IS NULL OR c.provider = sqlc.narg('provider')::text)
   AND (sqlc.narg('cursor_id')::uuid IS NULL OR d.id < sqlc.narg('cursor_id')::uuid)
   AND (sqlc.narg('bucket')::text IS NULL OR sqlc.narg('bucket')::text = cov.coverage_bucket)
+  -- One person's devices. Both legs are needed and neither subsumes the other:
+  -- user_id is only set when the MDM's reported email resolved to a member, so
+  -- matching on it alone would drop the devices of someone whose MDM email is
+  -- a work alias, while matching on email alone would drop a device whose
+  -- assigned email the MDM has since changed.
+  AND (
+    (COALESCE(cardinality(@user_ids::text[]), 0) = 0 AND COALESCE(cardinality(@user_emails::text[]), 0) = 0)
+    OR d.user_id = ANY(@user_ids::text[])
+    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest(@user_emails::text[]) AS e))
+  )
 ORDER BY d.id DESC
 LIMIT @page_limit;
 

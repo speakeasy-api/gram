@@ -84,16 +84,58 @@ func (e *ToolRefusalError) Error() string {
 	return e.Payload
 }
 
-// Registrar collects the tools composed for one deployment while registering
-// them with the MCP server, so the external endpoint and any other admitted
-// audience are built from a single pass rather than two lists that can drift.
+// ResourceMeta is what a resource declares beyond its content: who may read
+// it. Resources carry no project scope — a reviewed guide is the same document
+// for every project in the organization.
+type ResourceMeta struct {
+	Audiences []Audience
+}
+
+func (m ResourceMeta) servesAudience(audience Audience) bool {
+	return slices.Contains(m.Audiences, audience)
+}
+
+// ResourceDescriptor is one registered resource, reachable either through the
+// MCP server's resources/* methods or by direct read.
+//
+// The direct path exists for the same reason Descriptor's does: a surface that
+// speaks Go rather than MCP — the project assistant — must serve the same
+// corpus, gated the same way, or a citation link returned by search would
+// resolve on one surface and dangle on the other.
+type ResourceDescriptor struct {
+	URI         string
+	Name        string
+	Title       string
+	Description string
+	MIMEType    string
+	Meta        ResourceMeta
+
+	read func(ctx context.Context) (string, error)
+}
+
+// Read returns the resource's current text. It is a function rather than a
+// field because freshness is evaluated per read: a guide that passes its
+// revalidation date while the process is running must not keep being served as
+// though it were reviewed today.
+func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
+	if d.read == nil {
+		return "", ErrUnavailable
+	}
+	return d.read(ctx)
+}
+
+// Registrar collects the tools and resources composed for one deployment while
+// registering them with the MCP server, so the external endpoint and any other
+// admitted audience are built from a single pass rather than two lists that can
+// drift.
 type Registrar struct {
 	server      *mcp.Server
 	descriptors []Descriptor
+	resources   []ResourceDescriptor
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil}
 }
 
 // Descriptors returns everything registered, before any audience filter.
@@ -118,10 +160,66 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 	return admitted
 }
 
-// addTool registers one tool with the MCP server and records the descriptor
-// that lets an admitted non-MCP audience call the same handler directly.
+// ResourceFor returns one admitted resource by URI. An audience that is not
+// admitted to a resource cannot tell it apart from one that does not exist.
+func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
+	if r == nil {
+		return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+	}
+	for _, resource := range r.resources {
+		if resource.URI == uri && resource.Meta.servesAudience(audience) {
+			return resource, true
+		}
+	}
+	return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+}
+
+// addResource registers one resource with the MCP server and records the
+// descriptor that lets an admitted non-MCP audience read the same content.
+func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
+	// Registered with the MCP server only when the external endpoint is an
+	// admitted audience: the server IS that endpoint, so registering regardless
+	// would serve a resource the audience list says it withholds.
+	if meta.servesAudience(AudienceExternal) {
+		r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			if request.Params.URI != resource.URI {
+				return nil, mcp.ResourceNotFoundError(request.Params.URI)
+			}
+			text, err := read(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+				Contents: []*mcp.ResourceContents{{
+					URI:      resource.URI,
+					MIMEType: resource.MIMEType,
+					Text:     text,
+				}}}, nil
+		})
+	}
+
+	r.resources = append(r.resources, ResourceDescriptor{
+		URI:         resource.URI,
+		Name:        resource.Name,
+		Title:       resource.Title,
+		Description: resource.Description,
+		MIMEType:    resource.MIMEType,
+		Meta:        meta,
+		read:        read,
+	})
+}
+
+// addTool records the descriptor that lets an admitted audience call this
+// handler, and registers the tool with the MCP server when the external
+// endpoint is one of those audiences.
+//
+// The MCP server IS the external surface, so registering unconditionally would
+// serve every tool there regardless of what it declared — an audience list
+// that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
-	mcp.AddTool(r.server, tool, handler)
+	if meta.servesAudience(AudienceExternal) {
+		mcp.AddTool(r.server, tool, handler)
+	}
 
 	resolved := resolveInputSchema[In](tool.Name)
 

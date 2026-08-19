@@ -9,6 +9,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 
 import { Badge } from "@/components/ui/Badge";
+import { useOrganization } from "@/contexts/Auth";
 import { Button } from "@/components/ui/Button";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -25,8 +26,12 @@ import { useState } from "react";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function PlatformAdminFeatures(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+
   return (
     <Page>
       <Page.Header>
@@ -44,7 +49,11 @@ export default function PlatformAdminFeatures(): JSX.Element {
           <Page.Section.Body>
             <PlatformAdminGate>
               <div className="space-y-8">
-                <ProductFeaturesSection />
+                <ProductFeaturesSection
+                  key={organization.id}
+                  organizationId={organization.id}
+                  isCurrentOrganization={isCurrentOrganization}
+                />
                 <ChatAnalysisSection />
                 <DeveloperSection />
               </div>
@@ -120,9 +129,21 @@ const PRODUCT_FEATURES: {
   },
 ];
 
-function ProductFeaturesSection(): JSX.Element {
+function ProductFeaturesSection({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
-  const { data: features, isLoading, error } = useProductFeatures();
+  const {
+    data: features,
+    isLoading,
+    error,
+  } = useProductFeatures({
+    organizationId,
+  });
   const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
   const visibleFeatures = PRODUCT_FEATURES.filter(
     (feature) =>
@@ -137,6 +158,7 @@ function ProductFeaturesSection(): JSX.Element {
     variables,
   } = useFeaturesSetMutation({
     onSuccess: () => {
+      if (!isCurrentOrganization()) return;
       void invalidateAllProductFeatures(queryClient);
     },
   });
@@ -185,6 +207,7 @@ function ProductFeaturesSection(): JSX.Element {
                     mutate({
                       request: {
                         setProductFeatureRequestBody: {
+                          organizationId,
                           featureName: feature.featureName,
                           enabled: next,
                         },
@@ -221,6 +244,7 @@ const WORK_UNITS_MAX_CAP = 10_000;
 const WORK_UNITS_SUGGESTED_CAP = 100;
 
 function RunChatAnalysisNow(): JSX.Element {
+  const organization = useOrganization();
   const trigger = useTriggerChatAnalysisMutation({
     onSuccess: (data) => {
       toast.success(
@@ -243,7 +267,15 @@ function RunChatAnalysisNow(): JSX.Element {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => trigger.mutate({})}
+        onClick={() =>
+          trigger.mutate({
+            request: {
+              triggerAnalysisRequestBody: {
+                organizationId: organization.id,
+              },
+            },
+          })
+        }
         disabled={trigger.isPending}
       >
         {trigger.isPending ? "Running…" : "Run now"}
@@ -257,14 +289,16 @@ function RunChatAnalysisNow(): JSX.Element {
 // reservation spends against, so they get their own section beside the
 // entitlement toggles rather than rows among them.
 function ChatAnalysisSection(): JSX.Element {
+  const organization = useOrganization();
+
   return (
     <AdminSection
       title="Chat analysis"
       description="Caps are evaluations per UTC day; a cap of 0 disables the pipeline."
     >
       <div className="divide-border divide-y">
-        <WorkUnitsAnalysisRow />
-        <BusinessMemoryAnalysisRow />
+        <WorkUnitsAnalysisRow key={`work-units-${organization.id}`} />
+        <BusinessMemoryAnalysisRow key={`business-memory-${organization.id}`} />
       </div>
     </AdminSection>
   );
@@ -389,10 +423,15 @@ function AnalysisRow({
 }
 
 function WorkUnitsAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertChatAnalysisSettingsMutation();
 
   return (
@@ -415,6 +454,7 @@ function WorkUnitsAnalysisRow(): JSX.Element {
           {
             request: {
               upsertWorkUnitsSettingsRequestBody: {
+                organizationId: organization.id,
                 workUnitsEnabled: enabled,
                 workUnitsDailyCap: dailyCap,
               },
@@ -433,10 +473,15 @@ function WorkUnitsAnalysisRow(): JSX.Element {
 }
 
 function BusinessMemoryAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertBusinessMemoryAnalysisSettingsMutation();
 
   return (
@@ -459,6 +504,7 @@ function BusinessMemoryAnalysisRow(): JSX.Element {
           {
             request: {
               upsertBusinessMemorySettingsRequestBody: {
+                organizationId: organization.id,
                 businessMemoryEnabled: enabled,
                 businessMemoryDailyCap: dailyCap,
               },

@@ -905,3 +905,90 @@ func encodeRawInventoryURLCursor(t *testing.T, payload map[string]any) string {
 	require.NoError(t, err)
 	return base64.RawURLEncoding.EncodeToString(data)
 }
+
+// The inverse of the users listing: which servers did one person reach. The
+// inventory table is URL-keyed with no user column, so this has to come from
+// that person's telemetry.
+func TestListShadowMCPInventoryUsage_FiltersByUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 14, 0, 0, 0, time.UTC)
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://one.example.com/mcp",
+		ServerName: "One",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://two.example.com/mcp",
+		ServerName: "Two",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base.Add(time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://three.example.com/mcp",
+		ServerName: "Three",
+		UserEmail:  "grace@example.com",
+		ObservedAt: base.Add(2 * time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
+		OrganizationID:      uuid.NewString(),
+		GramProjectID:       projectID,
+		CanonicalServerURLs: nil,
+		UserKeys:            []string{"ada@example.com"},
+		Limit:               50,
+	})
+	require.NoError(t, err)
+
+	urls := make([]string, 0, len(usage))
+	for _, row := range usage {
+		urls = append(urls, row.CanonicalServerURL)
+	}
+	require.ElementsMatch(t, []string{"https://one.example.com/mcp", "https://two.example.com/mcp"}, urls)
+}
+
+// Without user keys the usage listing is unchanged, so the project-wide
+// inventory page and the per-person one share a query.
+func TestListShadowMCPInventoryUsage_NoUserKeysIsUnnarrowed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 14, 0, 0, 0, time.UTC)
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://one.example.com/mcp",
+		ServerName: "One",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://three.example.com/mcp",
+		ServerName: "Three",
+		UserEmail:  "grace@example.com",
+		ObservedAt: base.Add(2 * time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
+		OrganizationID:      "",
+		GramProjectID:       projectID,
+		CanonicalServerURLs: nil,
+		UserKeys:            nil,
+		Limit:               50,
+	})
+	require.NoError(t, err)
+	require.Len(t, usage, 2)
+}

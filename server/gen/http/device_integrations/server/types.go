@@ -3970,10 +3970,12 @@ func NewRetrySchedulePayload(body *RetryScheduleRequestBody, apikeyToken *string
 
 // NewListManagedDevicesPayload builds a deviceIntegrations service
 // listManagedDevices endpoint payload.
-func NewListManagedDevicesPayload(provider *string, coverageBucket *string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
+func NewListManagedDevicesPayload(provider *string, coverageBucket *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
 	v := &deviceintegrations.ListManagedDevicesPayload{}
 	v.Provider = provider
 	v.CoverageBucket = coverageBucket
+	v.UserIds = userIds
+	v.UserEmails = userEmails
 	v.Cursor = cursor
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken
