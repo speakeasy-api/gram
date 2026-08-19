@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -39,12 +40,16 @@ type ListRiskFindingsParams struct {
 	Category       string
 	RuleIDSubstr   string
 	UserIDSubstr   string
-	AssistantID    string
-	NonAssistant   bool
-	UniqueMatch    bool
-	CursorTime     *time.Time
-	CursorID       uuid.NullUUID
-	Limit          uint64
+	// ExternalUserIDs matches whole external user ids rather than a substring.
+	// The identity page needs exactly one subject's findings, and a substring
+	// of one person's id routinely matches another's.
+	ExternalUserIDs []string
+	AssistantID     string
+	NonAssistant    bool
+	UniqueMatch     bool
+	CursorTime      *time.Time
+	CursorID        uuid.NullUUID
+	Limit           uint64
 }
 
 // riskFindingListColumns is the projection every findings listing serves, in
@@ -189,6 +194,13 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	}
 	if p.UserIDSubstr != "" {
 		sb = sb.Where("positionCaseInsensitive(external_user_id, ?) > 0", p.UserIDSubstr)
+	}
+	if len(p.ExternalUserIDs) > 0 {
+		lowered := make([]string, 0, len(p.ExternalUserIDs))
+		for _, id := range p.ExternalUserIDs {
+			lowered = append(lowered, strings.ToLower(id))
+		}
+		sb = sb.Where("lower(external_user_id) IN (?)", lowered)
 	}
 	if p.AssistantID != "" {
 		sb = sb.Where("assistant_id = ?", p.AssistantID)

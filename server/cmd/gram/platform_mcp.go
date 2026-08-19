@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -75,7 +76,9 @@ const platformMCPLocalFixtureReadinessLifetime = 15 * time.Minute
 // Platform MCP runtime.
 // AssistantSurface is what a project's managed assistant needs to reach the
 // Platform MCP catalogue: the tools admitted to its audience, and the
-// authorizer every one of its calls is rechecked against.
+// authorizer every one of its calls is rechecked against. Reviewed guides
+// reach it through read_gram_doc rather than a second resource channel — the
+// assistant's tool transport has no resources/* methods to serve.
 type AssistantSurface struct {
 	Tools      []platformmcp.Descriptor
 	Authorizer platformmcp.Authorizer
@@ -172,6 +175,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
 		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
 		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		// Documentation search is metered on its own allowances rather than the
+		// shared five-per-minute budget: retrieval is in-process and reading is
+		// what the corpus is for, so a caller researching a setup should not
+		// spend the budget that its registration call needs.
+		Docs: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -193,6 +204,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
+	setupResources, err := platformMCPSetupResources(config)
+	if err != nil {
+		return AssistantSurface{}, err
+	}
 	distributions := newPlatformMCPDistributionService(config)
 
 	registryHandler := localfixture.NewRegistryHTTP(fixtureConfig).Handler()
@@ -216,7 +231,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		catalog,
 		registrations,
 		platformmcp.NewPostgresReadinessRecorder(config.DB),
-		fixtureConfig.SetupResources(),
+		// The fixture guide plus the reviewed corpus: local runs exercise the
+		// synthetic provider, but they must see the same real guides production
+		// serves or a corpus defect would only ever surface in production.
+		append(fixtureConfig.SetupResources(), setupResources...),
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
@@ -227,6 +245,21 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+// platformMCPSetupResources builds the reviewed setup corpus this deployment
+// serves. A failure here is a composition failure, not a degraded feature: a
+// corpus that silently lost a provider looks exactly like one that never
+// covered it, and the model would be left to invent the steps.
+func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
+	// The one redirect_uri for every provider and slug, derived the same way
+	// externalmcp, remotesessions, and the dashboard derive it.
+	callbackURL := config.ServerURL.JoinPath("mcp", "remote_login_callback").String()
+	resources, err := setupcorpus.Build(setupcorpus.Options{OAuthCallbackURL: callbackURL})
+	if err != nil {
+		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)
+	}
+	return resources, nil
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.DistributionService {
@@ -317,6 +350,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
 		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
 		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		// Documentation search is metered on its own allowances rather than the
+		// shared five-per-minute budget: retrieval is in-process and reading is
+		// what the corpus is for, so a caller researching a setup should not
+		// spend the budget that its registration call needs.
+		Docs: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -338,6 +379,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
+	setupResources, err := platformMCPSetupResources(config)
+	if err != nil {
+		return AssistantSurface{}, err
+	}
 	distributions := platformmcp.NewDistributionService(
 		config.DB,
 		config.AuditLogger,
@@ -370,7 +415,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		catalog,
 		registrations,
 		platformmcp.NewPostgresReadinessRecorder(config.DB),
-		nil,
+		setupResources,
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,

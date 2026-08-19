@@ -104,6 +104,8 @@ function inventoryAccessStatus(
       return "allowed";
     case "blocked":
       return "blocked";
+    case "restricted":
+      return "restricted";
     case "none":
       return "observed";
   }

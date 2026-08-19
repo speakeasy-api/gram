@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useOrganization } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -20,18 +21,20 @@ import type { ExternalKeySummary } from "@gram/client/models/components/external
 import { useDeleteGcpKmsKeyMutation } from "@gram/client/react-query/deleteGcpKmsKey";
 import { invalidateAllGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
 import {
+  buildListExternalKeysQuery,
   invalidateAllListExternalKeys,
-  useListExternalKeys,
 } from "@gram/client/react-query/listExternalKeys";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useVerifyGcpKmsKeyMutation } from "@gram/client/react-query/verifyGcpKmsKey";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { CreateExternalKeySheet } from "./CreateExternalKeySheet";
 import { providerLabel, providerSlug } from "./providers";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export function EncryptionKeysRoot(): JSX.Element {
   return <Outlet />;
@@ -51,8 +54,10 @@ export function EncryptionKeysPage(): JSX.Element {
 // passes. A gated-but-authorized org sees only the framed refusal, with no
 // header or toolbar.
 function EncryptionKeysGate(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    undefined,
+    { organizationId: organization.id },
     undefined,
     { staleTime: 30_000, throwOnError: false },
   );
@@ -79,16 +84,33 @@ function EncryptionKeysGate(): JSX.Element {
     );
   }
 
-  return <EncryptionKeysOverview />;
+  return (
+    <EncryptionKeysOverview
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
+  );
 }
 
-function EncryptionKeysOverview(): JSX.Element {
+function EncryptionKeysOverview({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const client = useGramContext();
   const [createOpen, setCreateOpen] = useState(false);
   // GCP is the only provider with a detail page today, so scope the list to it
   // rather than linking rows to a route that cannot render them.
-  const { data, isLoading, isError, refetch } = useListExternalKeys({
+  const externalKeysQuery = buildListExternalKeysQuery(client, {
     provider: "gcp_kms",
+  });
+  const { data, isLoading, isError, refetch } = useQuery({
+    ...externalKeysQuery,
+    queryKey: [...externalKeysQuery.queryKey, { organizationId }],
   });
   const keys = data?.keys ?? [];
 
@@ -114,6 +136,7 @@ function EncryptionKeysOverview(): JSX.Element {
           isLoading={isLoading}
           isError={isError}
           onRetry={() => void refetch()}
+          isCurrentOrganization={isCurrentOrganization}
           detailHref={(key) =>
             orgRoutes.encryptionKeys.keyDetail.href(
               providerSlug(key.provider),
@@ -123,7 +146,11 @@ function EncryptionKeysOverview(): JSX.Element {
         />
       </ResourceListPage>
 
-      <CreateExternalKeySheet open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateExternalKeySheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        isCurrentOrganization={isCurrentOrganization}
+      />
     </>
   );
 }
@@ -137,7 +164,10 @@ function EncryptionKeysOverview(): JSX.Element {
 // the first — and a verify is a real KMS round trip, so an operator working down
 // the list would leave the earlier rows' toasts spinning forever and never see
 // their outcome. mutateAsync keeps each toast id in its own call closure.
-function useVerifyGcpKmsKey(externalKey: ExternalKeySummary): {
+function useVerifyGcpKmsKey(
+  externalKey: ExternalKeySummary,
+  isCurrentOrganization: () => boolean,
+): {
   verify: () => void;
   isPending: boolean;
 } {
@@ -151,6 +181,10 @@ function useVerifyGcpKmsKey(externalKey: ExternalKeySummary): {
         request: { id: externalKey.id },
       })
       .then((result) => {
+        if (!isCurrentOrganization()) {
+          toast.dismiss(toastId);
+          return;
+        }
         if (!result.verified) {
           toast.error(result.detail || "Key could not be verified.", {
             id: toastId,
@@ -162,6 +196,10 @@ function useVerifyGcpKmsKey(externalKey: ExternalKeySummary): {
         });
       })
       .catch((error: unknown) => {
+        if (!isCurrentOrganization()) {
+          toast.dismiss(toastId);
+          return;
+        }
         toast.error(
           error instanceof Error ? error.message : "Verification failed.",
           { id: toastId },
@@ -178,12 +216,14 @@ function KeyTable({
   isError,
   onRetry,
   detailHref,
+  isCurrentOrganization,
 }: {
   keys: ExternalKeySummary[];
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
   detailHref: (key: ExternalKeySummary) => string;
+  isCurrentOrganization: () => boolean;
 }): JSX.Element {
   if (isError) {
     return (
@@ -247,7 +287,10 @@ function KeyTable({
             </Text>
           </td>
           <td className="px-3 py-3 text-right">
-            <RowActions externalKey={key} />
+            <RowActions
+              externalKey={key}
+              isCurrentOrganization={isCurrentOrganization}
+            />
           </td>
         </DotRow>
       ))}
@@ -260,10 +303,15 @@ function KeyTable({
 // an item) never navigates to the detail page.
 function RowActions({
   externalKey,
+  isCurrentOrganization,
 }: {
   externalKey: ExternalKeySummary;
+  isCurrentOrganization: () => boolean;
 }): JSX.Element {
-  const { verify, isPending } = useVerifyGcpKmsKey(externalKey);
+  const { verify, isPending } = useVerifyGcpKmsKey(
+    externalKey,
+    isCurrentOrganization,
+  );
 
   return (
     <div className="relative z-20" onClick={(e) => e.stopPropagation()}>

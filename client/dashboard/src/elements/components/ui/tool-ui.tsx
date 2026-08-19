@@ -9,6 +9,7 @@ import {
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
+  FileTextIcon,
   LoaderIcon,
   SearchIcon,
   TriangleAlertIcon,
@@ -53,6 +54,17 @@ type ContentItem =
       type: "image";
       data: string;
       _meta?: { "getgram.ai/mime-type"?: string };
+    }
+  // An MCP resource link: a pointer to a document the server serves, returned
+  // alongside the text that cites it. Rendered as a citation rather than raw
+  // JSON so the reader can see what a claim was sourced from.
+  | {
+      type: "resource_link";
+      uri: string;
+      name?: string;
+      title?: string;
+      description?: string;
+      mimeType?: string;
     };
 
 /** MCP tool annotations providing hints about tool behavior */
@@ -634,6 +646,56 @@ function ImageContent({ data }: { data: string }) {
  * StructuredResultContent - Renders structured content array
  * -------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------------
+ * ResourceLinkContent - Citation pointing at a document the server serves
+ * -------------------------------------------------------------------------- */
+
+function ResourceLinkContent({
+  item,
+}: {
+  item: Extract<ContentItem, { type: "resource_link" }>;
+}): React.JSX.Element {
+  // Only http(s) resources are somewhere a browser can go. Scheme-specific URIs
+  // like gram:// address a document on the MCP server, so they are shown and
+  // copyable rather than dressed up as a link that would fail to open.
+  const href = /^https?:\/\//i.test(item.uri) ? item.uri : undefined;
+  const label = item.title ?? item.name ?? item.uri;
+
+  return (
+    <div
+      data-slot="tool-ui-resource-link"
+      className="flex items-start justify-between gap-3 border-b border-border px-5 py-3 last:border-b-0"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="truncate underline underline-offset-2 hover:text-primary"
+            >
+              {label}
+            </a>
+          ) : (
+            <span className="truncate">{label}</span>
+          )}
+        </div>
+        {item.description && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {item.description}
+          </p>
+        )}
+        <p className="mt-1 truncate font-mono text-xs text-muted-foreground/80">
+          {item.uri}
+        </p>
+      </div>
+      <CopyButton content={item.uri} />
+    </div>
+  );
+}
+
 function StructuredResultContent({
   content,
 }: {
@@ -658,6 +720,9 @@ function StructuredResultContent({
           }
           case "image": {
             return <ImageContent key={index} data={item.data} />;
+          }
+          case "resource_link": {
+            return <ResourceLinkContent key={index} item={item} />;
           }
           default:
             return (

@@ -19,6 +19,17 @@ const (
 	SetupOrganizationLimitName        = "platform-mcp-setup-organization"
 	RepairConnectionLimitName         = "platform-mcp-repair-connection"
 	RepairOrganizationLimitName       = "platform-mcp-repair-organization"
+	DocsConnectionLimitName           = "platform-mcp-docs-connection"
+	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
+)
+
+const (
+	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
+	// bound documentation search. Retrieval is in-process and cheap, so these
+	// exist to stop a loop from spending the caller's context on repeated
+	// queries rather than to protect a backend.
+	DocsQueriesPerConnectionPerMinute   = 10
+	DocsQueriesPerOrganizationPerMinute = 100
 )
 
 var (
@@ -89,8 +100,9 @@ type OperationBudgets struct {
 	Handoff      OperationBudget
 	SetupStart   OperationBudget
 	Repair       OperationBudget
+	Docs         OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid()
 }

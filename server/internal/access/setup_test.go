@@ -119,7 +119,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{})
 
 	return ctx, &testInstance{
 		service:     svc,
@@ -309,3 +309,9 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 	})
 	require.NoError(t, err)
 }
+
+// foldAlwaysOn keeps the canonical identity fold enabled in tests, so
+// identity-folded queries are exercised rather than silently skipped.
+type foldAlwaysOn struct{}
+
+func (foldAlwaysOn) CanonicalOrgFor(_ context.Context, orgID string) string { return orgID }

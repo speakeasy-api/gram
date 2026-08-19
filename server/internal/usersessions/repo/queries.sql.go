@@ -70,7 +70,8 @@ INSERT INTO user_sessions (
     jti,
     refresh_token_hash,
     refresh_expires_at,
-    expires_at
+    expires_at,
+    tool_selection
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -80,7 +81,8 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
 RETURNING id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
@@ -93,6 +95,7 @@ type CreateUserSessionParams struct {
 	RefreshTokenHash    string
 	RefreshExpiresAt    pgtype.Timestamptz
 	ExpiresAt           pgtype.Timestamptz
+	ToolSelection       []byte
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -107,6 +110,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresAt,
 		arg.ExpiresAt,
+		arg.ToolSelection,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -451,6 +455,46 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 	return i, err
 }
 
+const getLatestLiveUserSessionToolSelection = `-- name: GetLatestLiveUserSessionToolSelection :one
+SELECT tool_selection
+FROM user_sessions
+WHERE project_id = $1
+  AND user_session_issuer_id = $2
+  AND user_session_client_id = $3
+  AND subject_urn = $4
+  AND tool_selection ->> 'resource' = $5::text
+  AND deleted IS FALSE
+  AND refresh_expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestLiveUserSessionToolSelectionParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	Resource            string
+}
+
+// Reauth prefill: the identified subject's newest live restrictive policy
+// for the same issuer + client + endpoint resource. Filtering by resource in
+// SQL keeps a newer session on a sibling endpoint from shadowing this
+// endpoint's policy. Anonymous subjects never prefill (each authorization
+// mints a fresh random subject).
+func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg GetLatestLiveUserSessionToolSelectionParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLatestLiveUserSessionToolSelection,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+		arg.Resource,
+	)
+	var tool_selection []byte
+	err := row.Scan(&tool_selection)
+	return tool_selection, err
+}
+
 const getUserSessionByID = `-- name: GetUserSessionByID :one
 SELECT s.id, s.project_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM user_sessions AS s
@@ -782,6 +826,36 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getUserSessionToolSelectionByJTI = `-- name: GetUserSessionToolSelectionByJTI :one
+SELECT tool_selection, expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+`
+
+type GetUserSessionToolSelectionByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+type GetUserSessionToolSelectionByJTIRow struct {
+	ToolSelection []byte
+	ExpiresAt     pgtype.Timestamptz
+}
+
+// Serve-path lookup for the consent-screen tool selection, keyed the same way
+// runtime requests are addressed (issuer + jti). Deliberately narrow: request
+// handling must not haul refresh-token material around. Project scoping is
+// intentionally NOT applied here -- the OAuth surface is public and the
+// issuer_id is the authoritative scope.
+func (q *Queries) GetUserSessionToolSelectionByJTI(ctx context.Context, arg GetUserSessionToolSelectionByJTIParams) (GetUserSessionToolSelectionByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionToolSelectionByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i GetUserSessionToolSelectionByJTIRow
+	err := row.Scan(&i.ToolSelection, &i.ExpiresAt)
 	return i, err
 }
 

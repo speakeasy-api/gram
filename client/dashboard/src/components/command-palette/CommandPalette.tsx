@@ -106,9 +106,6 @@ export function CommandPalette(): JSX.Element {
   // moves to the bottom once the user starts typing (see below), so both branch
   // on whether there's an active query.
   const hasQuery = trimmedQuery.length > 0;
-  const askAiLabel = trimmedQuery
-    ? `Ask AI: "${trimmedQuery}"`
-    : "Ask the Project Assistant…";
 
   const handleAskAi = () => {
     requestAskAi(trimmedQuery);
@@ -117,6 +114,10 @@ export function CommandPalette(): JSX.Element {
 
   // Free-form AI escape hatch — always offered regardless of the filter
   // (forceMount) so the typed query can always be sent to the assistant.
+  // forceMount is needed on the *group* too: cmdk hides a group whose id isn't
+  // in `filtered.groups` while a search is active, which would hide the
+  // forceMounted row inside it exactly when the query matches nothing — the
+  // case where it matters most.
   // Project Assistant is project-scoped, so only at the project level. Rendered
   // near the top when the palette is idle (discoverable) but pushed below the
   // results while searching: cmdk auto-selects the first item in DOM order after
@@ -124,7 +125,7 @@ export function CommandPalette(): JSX.Element {
   // the highlight from the closest result and force an extra ↓ keypress to reach
   // it (AGE-2807).
   const askAiGroup = inProject ? (
-    <CommandGroup heading="Assistant">
+    <CommandGroup forceMount heading="Assistant">
       <CommandItem
         forceMount
         value="__ask_ai__"
@@ -132,7 +133,16 @@ export function CommandPalette(): JSX.Element {
         className="flex items-center gap-2"
       >
         <Icon name="sparkles" className="text-primary size-4 shrink-0" />
-        <span className="truncate">{askAiLabel}</span>
+        <div className="flex min-w-0 flex-col">
+          <span className="shimmer truncate">
+            {hasQuery ? "Ask Project Assistant" : "Ask the Project Assistant…"}
+          </span>
+          {hasQuery && (
+            <span className="text-muted-foreground truncate text-xs">
+              &ldquo;{trimmedQuery}&rdquo;
+            </span>
+          )}
+        </div>
       </CommandItem>
     </CommandGroup>
   ) : null;
@@ -174,7 +184,9 @@ export function CommandPalette(): JSX.Element {
         }}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        {/* The Ask row is always mounted inside a project, so an unmatched
+            query there is an offer to ask the assistant, not a dead end. */}
+        {!inProject && <CommandEmpty>No results found.</CommandEmpty>}
 
         {/* Recently visited pages (most-recent first), client-side localStorage.
             Only a zero-state affordance: once the user types, hide it so search

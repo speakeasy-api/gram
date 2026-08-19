@@ -40,9 +40,11 @@ import {
 export function CreateExternalKeySheet({
   open,
   onOpenChange,
+  isCurrentOrganization,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  isCurrentOrganization: () => boolean;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -57,7 +59,9 @@ export function CreateExternalKeySheet({
 
   const createMutation = useCreateGcpKmsKeyMutation({
     onSuccess: async (created) => {
+      if (!isCurrentOrganization()) return;
       await invalidateAllListExternalKeys(queryClient);
+      if (!isCurrentOrganization()) return;
       toast.success("Encryption key created");
       onOpenChange(false);
       orgRoutes.encryptionKeys.keyDetail.goTo(
@@ -66,6 +70,7 @@ export function CreateExternalKeySheet({
       );
     },
     onError: (error) => {
+      if (!isCurrentOrganization()) return;
       console.error("Create external key failed", error);
     },
   });

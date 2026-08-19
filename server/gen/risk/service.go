@@ -819,6 +819,10 @@ type ListRiskResultsPayload struct {
 	// Optional user identifier substring to filter by (case-insensitive, matched
 	// against the chat's external user id).
 	UserID *string
+	// Optional external user identifiers to filter by, matched whole rather than
+	// as a substring. Pass every identifier a subject is known by; unlike user_id
+	// this cannot pull in another person whose identifier merely contains theirs.
+	ExternalUserIds []string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.

@@ -18907,13 +18907,14 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, externalUserIds []string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
+	v.ExternalUserIds = externalUserIds
 	v.UniqueMatch = uniqueMatch
 	v.NonAssistant = nonAssistant
 	v.AssistantID = assistantID

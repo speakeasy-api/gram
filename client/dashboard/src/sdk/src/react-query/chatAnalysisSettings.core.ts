@@ -22,7 +22,7 @@ export type ChatAnalysisSettingsQueryData = ChatAnalysisSettings;
 export function prefetchChatAnalysisSettings(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -38,7 +38,7 @@ export function prefetchChatAnalysisSettings(
 
 export function buildChatAnalysisSettingsQuery(
   client$: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -49,7 +49,8 @@ export function buildChatAnalysisSettingsQuery(
 } {
   return {
     queryKey: queryKeyChatAnalysisSettings({
-      gramSession: request?.gramSession,
+      organizationId: request.organizationId,
+      gramSession: request.gramSession,
     }),
     queryFn: async function chatAnalysisSettingsQueryFn(
       ctx,
@@ -76,7 +77,7 @@ export function buildChatAnalysisSettingsQuery(
 }
 
 export function queryKeyChatAnalysisSettings(
-  parameters: { gramSession?: string | undefined },
+  parameters: { organizationId: string; gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "adminChatAnalysis", "getSettings", parameters];
 }

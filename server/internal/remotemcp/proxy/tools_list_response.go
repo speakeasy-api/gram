@@ -115,6 +115,19 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 // HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a
 // user-facing JSON-RPC rejection.
 func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
+	return r.setTools(tools, false)
+}
+
+// SetPrivateTools replaces the tools array and marks the rewritten result as
+// private. Use it for per-principal filters whose output varies with the
+// caller's authorization: MCP defaults an absent cacheScope to public, so
+// merely preserving an upstream result without a hint could let a shared
+// intermediary serve one caller's filtered inventory to another.
+func (r *ToolsListResponse) SetPrivateTools(tools []*mcp.Tool) error {
+	return r.setTools(tools, true)
+}
+
+func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
 	}
@@ -138,6 +151,12 @@ func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 	result, err := spliceTopLevelKey(rpcResp.Result, "tools", payload)
 	if err != nil {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("splice replacement tools array: %w", err)}
+	}
+	if private {
+		result, err = spliceTopLevelKey(result, "cacheScope", json.RawMessage(`"private"`))
+		if err != nil {
+			return &MutationError{Op: "set tools", Cause: fmt.Errorf("mark filtered tools private: %w", err)}
+		}
 	}
 
 	r.Result.Tools = tools

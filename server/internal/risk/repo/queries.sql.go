@@ -3613,16 +3613,22 @@ FROM (
     AND ($5::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < $5::timestamptz)
     AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
     AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
-    AND (NOT $8::boolean OR NOT EXISTS (
+    -- Whole-id matching, unlike @user_id above: one subject's findings, not
+    -- everyone whose id happens to contain theirs as a substring.
+    AND (
+      COALESCE(cardinality($8::text[]), 0) = 0
+      OR lower(c.external_user_id) = ANY(ARRAY(SELECT lower(e) FROM unnest($8::text[]) AS e))
+    )
+    AND (NOT $9::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
     ))
-    AND ($9::uuid IS NULL OR EXISTS (
+    AND ($10::uuid IS NULL OR EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
-        AND at.assistant_id = $9::uuid
+        AND at.assistant_id = $10::uuid
     ))
-    AND ($10::text = '' OR (
+    AND ($11::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -3668,15 +3674,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $10::text)
+  ) = $11::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $11::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($11::timestamptz, $12::uuid)
+    $12::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($12::timestamptz, $13::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $13
+LIMIT $14
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -3687,6 +3693,7 @@ type ListRiskResultsByProjectFoundParams struct {
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
 	UserID                 string
+	ExternalUserIds        []string
 	NonAssistant           bool
 	AssistantID            uuid.NullUUID
 	Category               string
@@ -3754,6 +3761,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.ToTime,
 		arg.RuleID,
 		arg.UserID,
+		arg.ExternalUserIds,
 		arg.NonAssistant,
 		arg.AssistantID,
 		arg.Category,

@@ -26,6 +26,23 @@ const (
 	stripeBillingActionResumeSubscription
 )
 
+type StripeSubscription struct {
+	Status             string
+	CurrentPeriodStart string
+	CurrentPeriodEnd   string
+	TrialStart         *string
+	TrialEnd           *string
+	CancelAtPeriodEnd  bool
+	CancelAt           *string
+	CanceledAt         *string
+	PaymentFailed      bool
+}
+
+type BillingActor struct {
+	Principal   urn.Principal
+	DisplayName *string
+}
+
 func (s *Service) GetStripeSubscription(ctx context.Context, _ *gen.GetStripeSubscriptionPayload) (*gen.StripeSubscription, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -35,11 +52,11 @@ func (s *Service) GetStripeSubscription(ctx context.Context, _ *gen.GetStripeSub
 		return nil, err
 	}
 
-	_, state, err := s.getStripeBillingState(ctx, authCtx.ActiveOrganizationID)
+	result, err := s.GetStripeSubscriptionForOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
-	return buildStripeSubscriptionView(state), nil
+	return stripeSubscriptionGenView(result), nil
 }
 
 func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateStripePortalSessionPayload) (string, error) {
@@ -68,7 +85,9 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	if portal == nil || portal.CustomerID != state.CustomerID || portal.URL == "" {
 		return "", oops.E(oops.CodeUnavailable, nil, "Stripe billing portal state does not match billing metadata").LogWarn(ctx, s.logger)
 	}
-	if err := s.recordStripeBillingAction(ctx, authCtx, metadata, stripeBillingActionCreatePortal); err != nil {
+	if err := s.recordStripeBillingAction(ctx, authCtx.ActiveOrganizationID, BillingActor{
+		Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email,
+	}, metadata, stripeBillingActionCreatePortal); err != nil {
 		return "", err
 	}
 	return portal.URL, nil
@@ -82,6 +101,19 @@ func (s *Service) ResumeStripeSubscription(ctx context.Context, _ *gen.ResumeStr
 	return s.setStripeSubscriptionCancelAtPeriodEnd(ctx, false)
 }
 
+// GetStripeSubscriptionForOrganization reads live Stripe state for an already
+// authorized, canonical organization ID.
+func (s *Service) GetStripeSubscriptionForOrganization(ctx context.Context, organizationID string) (*StripeSubscription, error) {
+	if organizationID == "" {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	_, state, err := s.getStripeBillingState(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	return buildStripeSubscriptionView(state), nil
+}
+
 func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, cancelAtPeriodEnd bool) (*gen.StripeSubscription, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -91,7 +123,22 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, ca
 		return nil, err
 	}
 
-	metadata, state, err := s.getStripeBillingState(ctx, authCtx.ActiveOrganizationID)
+	result, err := s.SetStripeSubscriptionCancelAtPeriodEndForOrganization(ctx, authCtx.ActiveOrganizationID, BillingActor{
+		Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email,
+	}, cancelAtPeriodEnd)
+	if err != nil {
+		return nil, err
+	}
+	return stripeSubscriptionGenView(result), nil
+}
+
+// SetStripeSubscriptionCancelAtPeriodEndForOrganization changes live Stripe
+// state for an already authorized, canonical organization ID and records actor.
+func (s *Service) SetStripeSubscriptionCancelAtPeriodEndForOrganization(ctx context.Context, organizationID string, actor BillingActor, cancelAtPeriodEnd bool) (*StripeSubscription, error) {
+	if organizationID == "" {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	metadata, state, err := s.getStripeBillingState(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +164,7 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, ca
 	if cancelAtPeriodEnd {
 		action = stripeBillingActionCancelSubscription
 	}
-	if err := s.recordStripeBillingAction(ctx, authCtx, metadata, action); err != nil {
+	if err := s.recordStripeBillingAction(ctx, organizationID, actor, metadata, action); err != nil {
 		return nil, err
 	}
 	return buildStripeSubscriptionView(updated), nil
@@ -172,7 +219,8 @@ func validateStripeBillingIdentity(metadata repo.BillingMetadatum, state *stripe
 
 func (s *Service) recordStripeBillingAction(
 	ctx context.Context,
-	authCtx *contextvalues.AuthContext,
+	organizationID string,
+	actor BillingActor,
 	expected repo.BillingMetadatum,
 	action stripeBillingAction,
 ) error {
@@ -182,7 +230,7 @@ func (s *Service) recordStripeBillingAction(
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	current, err := repo.New(dbtx).LockBillingMetadata(ctx, authCtx.ActiveOrganizationID)
+	current, err := repo.New(dbtx).LockBillingMetadata(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeConflict, err, "billing state changed while Stripe was being updated").LogWarn(ctx, s.logger)
@@ -195,30 +243,29 @@ func (s *Service) recordStripeBillingAction(
 		return oops.E(oops.CodeConflict, nil, "billing state changed while Stripe was being updated").LogWarn(ctx, s.logger)
 	}
 
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	subject := urn.NewBillingMetadata(current.ID)
 	switch action {
 	case stripeBillingActionCreatePortal:
 		err = s.auditLogger.LogBillingMetadataCreateStripePortal(ctx, dbtx, audit.LogBillingMetadataCreateStripePortalEvent{
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			Actor:              actor,
-			ActorDisplayName:   authCtx.Email,
+			OrganizationID:     organizationID,
+			Actor:              actor.Principal,
+			ActorDisplayName:   actor.DisplayName,
 			ActorSlug:          nil,
 			BillingMetadataURN: subject,
 		})
 	case stripeBillingActionCancelSubscription:
 		err = s.auditLogger.LogBillingMetadataCancelStripeSubscription(ctx, dbtx, audit.LogBillingMetadataCancelStripeSubscriptionEvent{
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			Actor:              actor,
-			ActorDisplayName:   authCtx.Email,
+			OrganizationID:     organizationID,
+			Actor:              actor.Principal,
+			ActorDisplayName:   actor.DisplayName,
 			ActorSlug:          nil,
 			BillingMetadataURN: subject,
 		})
 	case stripeBillingActionResumeSubscription:
 		err = s.auditLogger.LogBillingMetadataResumeStripeSubscription(ctx, dbtx, audit.LogBillingMetadataResumeStripeSubscriptionEvent{
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			Actor:              actor,
-			ActorDisplayName:   authCtx.Email,
+			OrganizationID:     organizationID,
+			Actor:              actor.Principal,
+			ActorDisplayName:   actor.DisplayName,
 			ActorSlug:          nil,
 			BillingMetadataURN: subject,
 		})
@@ -234,8 +281,8 @@ func (s *Service) recordStripeBillingAction(
 	return nil
 }
 
-func buildStripeSubscriptionView(state *stripeclient.SubscriptionState) *gen.StripeSubscription {
-	return &gen.StripeSubscription{
+func buildStripeSubscriptionView(state *stripeclient.SubscriptionState) *StripeSubscription {
+	return &StripeSubscription{
 		Status:             state.Status,
 		CurrentPeriodStart: state.CurrentPeriodStart.Format(time.RFC3339),
 		CurrentPeriodEnd:   state.CurrentPeriodEnd.Format(time.RFC3339),
@@ -245,6 +292,14 @@ func buildStripeSubscriptionView(state *stripeclient.SubscriptionState) *gen.Str
 		CancelAt:           formatOptionalStripeTime(state.CancelAt),
 		CanceledAt:         formatOptionalStripeTime(state.CanceledAt),
 		PaymentFailed:      state.PaymentFailed,
+	}
+}
+
+func stripeSubscriptionGenView(value *StripeSubscription) *gen.StripeSubscription {
+	return &gen.StripeSubscription{
+		Status: value.Status, CurrentPeriodStart: value.CurrentPeriodStart, CurrentPeriodEnd: value.CurrentPeriodEnd,
+		TrialStart: value.TrialStart, TrialEnd: value.TrialEnd, CancelAtPeriodEnd: value.CancelAtPeriodEnd,
+		CancelAt: value.CancelAt, CanceledAt: value.CanceledAt, PaymentFailed: value.PaymentFailed,
 	}
 }
 

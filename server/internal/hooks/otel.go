@@ -11,7 +11,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -378,7 +377,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 
 	params := make([]telemetry.LogParams, 0)
 	stagedParams := make([]telemetry.LogParams, 0)
-	correlationSessionIDs := make(map[string]struct{})
 	// claudeSessionSurface consults the SessionStart agent-variant cache (a
 	// Redis GET per call), and this loop runs per log record — memoize the
 	// resolved surface per session + merged service name so each session pays
@@ -432,9 +430,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 				logAttrs[attr.HookSourceKey] = surface
 				stampAccountAttribution(logAttrs, sessionMeta)
-				if shouldTriggerClaudePromptCorrelation(logAttrs) {
-					correlationSessionIDs[sessionID] = struct{}{}
-				}
 
 				if body := otelLogBody(logRecord); body != "" {
 					logAttrs[attr.LogBodyKey] = body
@@ -506,9 +501,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		s.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
-	for sessionID := range correlationSessionIDs {
-		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
-	}
 }
 
 // isRedactedClaudeAPIRequest reports whether this OTEL log row is a Claude
@@ -520,29 +512,6 @@ func isRedactedClaudeAPIRequest(logAttrs map[attr.Key]any) bool {
 	}
 	return stringAttr(logAttrs, attribute.Key("event.name")) == "api_request" ||
 		stringAttr(logAttrs, attr.LogBodyKey) == "claude_code.api_request"
-}
-
-func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {
-	return stringAttr(logAttrs, attribute.Key("event.name")) == "user_prompt"
-}
-
-func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, sessionID string) {
-	workflowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	if _, err := background.ExecuteCorrelateClaudePromptsWorkflow(workflowCtx, s.temporalEnv, background.CorrelateClaudePromptsParams{
-		ProjectID:              projectID,
-		ChatID:                 chatID,
-		SessionID:              sessionID,
-		AfterMessageSeq:        0,
-		AfterEventSequence:     0,
-		AfterEventTimeUnixNano: 0,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to schedule Claude prompt correlation",
-			attr.SlogError(err),
-			attr.SlogGenAIConversationID(sessionID),
-			attr.SlogProjectID(projectID.String()),
-		)
-	}
 }
 
 // claudeOTELLogToolInfo labels an OTEL log row with the session's product

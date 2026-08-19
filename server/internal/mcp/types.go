@@ -103,5 +103,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		mcpServerID:           nil,
 		tags:                  nil,
 		protocolVersionHeader: "",
+		toolSelection:         nil,
 	}
 }

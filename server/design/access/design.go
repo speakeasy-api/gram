@@ -373,6 +373,43 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
+	Method("listShadowMCPInventoryServersForUser", func() {
+		Description("List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.", func() {
+				MinLength(1)
+				MaxLength(200)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("project_id", "user_keys")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listShadowMCPInventoryServersForUser")
+			Param("project_id")
+			Param("user_keys")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServersForUser"}`)
+	})
+
 	Method("resolveShadowMCPInventoryRequest", func() {
 		Description("Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.")
 		Security(security.Session)
@@ -783,7 +820,7 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
 	Attribute("access", String, func() {
-		Enum("none", "allowed", "blocked")
+		Enum("none", "allowed", "blocked", "restricted")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
@@ -826,7 +863,9 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
 	Required("access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
-	Attribute("access", String)
+	Attribute("access", String, func() {
+		Enum("none", "allowed", "blocked", "restricted")
+	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)

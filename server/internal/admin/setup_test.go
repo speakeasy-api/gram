@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -47,12 +48,15 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	logger := testenv.NewLogger(t)
 	conn, err := infra.CloneTestDatabase(t, "admintestdb")
 	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
 
 	svc := &Service{
-		logger: logger,
-		db:     conn,
-		audit:  audit.NewLogger(),
-		trial:  trialemails.NoopNotifier{},
+		logger:          logger,
+		db:              conn,
+		audit:           audit.NewLogger(),
+		trial:           trialemails.NoopNotifier{},
+		productFeatures: productfeatures.NewClient(logger, testenv.NewTracerProvider(t), conn, redisClient),
 	}
 
 	return ctx, svc, conn

@@ -54,6 +54,10 @@ type Client struct {
 	// setPluginAssignments endpoint.
 	SetPluginAssignmentsDoer goahttp.Doer
 
+	// ListAudiences Doer is the HTTP client used to make requests to the
+	// listAudiences endpoint.
+	ListAudiencesDoer goahttp.Doer
+
 	// DownloadPluginPackage Doer is the HTTP client used to make requests to the
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
@@ -123,6 +127,7 @@ func NewClient(
 		UpdatePluginServerDoer:          doer,
 		RemovePluginServerDoer:          doer,
 		SetPluginAssignmentsDoer:        doer,
+		ListAudiencesDoer:               doer,
 		DownloadPluginPackageDoer:       doer,
 		DownloadPlatformMCPPluginDoer:   doer,
 		DownloadObservabilityPluginDoer: doer,
@@ -352,6 +357,30 @@ func (c *Client) SetPluginAssignments() goa.Endpoint {
 		resp, err := c.SetPluginAssignmentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("plugins", "setPluginAssignments", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAudiences returns an endpoint that makes HTTP requests to the plugins
+// service listAudiences server.
+func (c *Client) ListAudiences() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAudiencesRequest(c.encoder)
+		decodeResponse = DecodeListAudiencesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAudiencesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAudiencesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "listAudiences", err)
 		}
 		return decodeResponse(resp)
 	}

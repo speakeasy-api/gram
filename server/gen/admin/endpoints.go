@@ -32,6 +32,11 @@ type Endpoints struct {
 	CreateOrganization       goa.Endpoint
 	RearmTrial               goa.Endpoint
 	GetOrganizationStats     goa.Endpoint
+	GetInferenceKeys         goa.Endpoint
+	GetPaygBillingSummary    goa.Endpoint
+	GetStripeSubscription    goa.Endpoint
+	CancelStripeSubscription goa.Endpoint
+	ResumeStripeSubscription goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -55,6 +60,11 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateOrganization:       NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
 		RearmTrial:               NewRearmTrialEndpoint(s, a.APIKeyAuth),
 		GetOrganizationStats:     NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:         NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:    NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:    NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription: NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription: NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -76,6 +86,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateOrganization = m(e.CreateOrganization)
 	e.RearmTrial = m(e.RearmTrial)
 	e.GetOrganizationStats = m(e.GetOrganizationStats)
+	e.GetInferenceKeys = m(e.GetInferenceKeys)
+	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
+	e.GetStripeSubscription = m(e.GetStripeSubscription)
+	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
+	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -401,5 +416,120 @@ func NewGetOrganizationStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetOrganizationStats(ctx, p)
+	}
+}
+
+// NewGetInferenceKeysEndpoint returns an endpoint function that calls the
+// method "getInferenceKeys" of service "admin".
+func NewGetInferenceKeysEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetInferenceKeysPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetInferenceKeys(ctx, p)
+	}
+}
+
+// NewGetPaygBillingSummaryEndpoint returns an endpoint function that calls the
+// method "getPaygBillingSummary" of service "admin".
+func NewGetPaygBillingSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPaygBillingSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPaygBillingSummary(ctx, p)
+	}
+}
+
+// NewGetStripeSubscriptionEndpoint returns an endpoint function that calls the
+// method "getStripeSubscription" of service "admin".
+func NewGetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStripeSubscription(ctx, p)
+	}
+}
+
+// NewCancelStripeSubscriptionEndpoint returns an endpoint function that calls
+// the method "cancelStripeSubscription" of service "admin".
+func NewCancelStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CancelStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CancelStripeSubscription(ctx, p)
+	}
+}
+
+// NewResumeStripeSubscriptionEndpoint returns an endpoint function that calls
+// the method "resumeStripeSubscription" of service "admin".
+func NewResumeStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ResumeStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ResumeStripeSubscription(ctx, p)
 	}
 }

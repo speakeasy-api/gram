@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,8 +22,22 @@ func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 		require.NotEmpty(t, descriptor.InputSchema, "tool %q advertises no input schema", descriptor.Name)
 	}
 
+	// The external endpoint serves everything except the tools that exist only
+	// to give the assistant a Go-level equivalent of an MCP method it cannot
+	// speak. read_gram_doc is one: external clients read the same guides with
+	// resources/read, and serving both would be two names for one thing.
 	external := registrar.For(AudienceExternal)
-	require.Len(t, external, len(descriptors), "the external endpoint serves the full catalogue today")
+	externalNames := make(map[string]bool, len(external))
+	for _, descriptor := range external {
+		externalNames[descriptor.Name] = true
+	}
+	for _, descriptor := range descriptors {
+		if descriptor.Name == "read_gram_doc" {
+			require.False(t, externalNames[descriptor.Name], "read_gram_doc duplicates resources/read for external clients")
+			continue
+		}
+		require.True(t, externalNames[descriptor.Name], "tool %q is not served to the external endpoint", descriptor.Name)
+	}
 
 	assistant := registrar.For(AudienceAssistant)
 	require.NotEmpty(t, assistant, "the assistant audience is admitted to the catalogue")
@@ -94,4 +109,45 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
+}
+
+// The audience list must bind the MCP endpoint, not just the descriptor
+// registry: the server IS the external surface, so a tool withheld from the
+// external audience must not be listed or callable there.
+func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
+	t.Parallel()
+
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+
+	admitted := make(map[string]bool)
+	for _, descriptor := range registrar.For(AudienceExternal) {
+		admitted[descriptor.Name] = true
+	}
+
+	// Listed through a real MCP session rather than the registrar, so the
+	// assertion covers what a client actually sees.
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "audience-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, tools.Tools)
+	for _, tool := range tools.Tools {
+		require.Truef(t, admitted[tool.Name], "the external endpoint lists %q, which is not admitted to the external audience", tool.Name)
+	}
+
+	withheld := 0
+	for _, descriptor := range registrar.Descriptors() {
+		if !admitted[descriptor.Name] {
+			withheld++
+		}
+	}
+	require.Positive(t, withheld, "the catalogue withholds at least one tool from the external endpoint, so this test can fail")
 }

@@ -15,6 +15,8 @@ import (
 // UpsertWorkUnitsSettingsRequestBody is the type of the "adminChatAnalysis"
 // service "upsertWorkUnitsSettings" endpoint HTTP request body.
 type UpsertWorkUnitsSettingsRequestBody struct {
+	// Organization whose settings to replace.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Whether work-units chat analysis is enabled.
 	WorkUnitsEnabled bool `form:"work_units_enabled" json:"work_units_enabled" xml:"work_units_enabled"`
 	// Maximum work-units evaluations reserved across the organization each UTC
@@ -26,11 +28,20 @@ type UpsertWorkUnitsSettingsRequestBody struct {
 // "adminChatAnalysis" service "upsertBusinessMemorySettings" endpoint HTTP
 // request body.
 type UpsertBusinessMemorySettingsRequestBody struct {
+	// Organization whose settings to replace.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Whether completed sessions are mined for business memories.
 	BusinessMemoryEnabled bool `form:"business_memory_enabled" json:"business_memory_enabled" xml:"business_memory_enabled"`
 	// Maximum business-memory extraction evaluations reserved across the
 	// organization each UTC day. 0 disables extraction.
 	BusinessMemoryDailyCap int `form:"business_memory_daily_cap" json:"business_memory_daily_cap" xml:"business_memory_daily_cap"`
+}
+
+// TriggerAnalysisRequestBody is the type of the "adminChatAnalysis" service
+// "triggerAnalysis" endpoint HTTP request body.
+type TriggerAnalysisRequestBody struct {
+	// Organization whose projects to signal.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
 // GetSettingsResponseBody is the type of the "adminChatAnalysis" service
@@ -861,6 +872,7 @@ type TriggerAnalysisGatewayErrorResponseBody struct {
 // service.
 func NewUpsertWorkUnitsSettingsRequestBody(p *adminchatanalysis.UpsertWorkUnitsSettingsPayload) *UpsertWorkUnitsSettingsRequestBody {
 	body := &UpsertWorkUnitsSettingsRequestBody{
+		OrganizationID:    p.OrganizationID,
 		WorkUnitsEnabled:  p.WorkUnitsEnabled,
 		WorkUnitsDailyCap: p.WorkUnitsDailyCap,
 	}
@@ -872,8 +884,18 @@ func NewUpsertWorkUnitsSettingsRequestBody(p *adminchatanalysis.UpsertWorkUnitsS
 // "adminChatAnalysis" service.
 func NewUpsertBusinessMemorySettingsRequestBody(p *adminchatanalysis.UpsertBusinessMemorySettingsPayload) *UpsertBusinessMemorySettingsRequestBody {
 	body := &UpsertBusinessMemorySettingsRequestBody{
+		OrganizationID:         p.OrganizationID,
 		BusinessMemoryEnabled:  p.BusinessMemoryEnabled,
 		BusinessMemoryDailyCap: p.BusinessMemoryDailyCap,
+	}
+	return body
+}
+
+// NewTriggerAnalysisRequestBody builds the HTTP request body from the payload
+// of the "triggerAnalysis" endpoint of the "adminChatAnalysis" service.
+func NewTriggerAnalysisRequestBody(p *adminchatanalysis.TriggerAnalysisPayload) *TriggerAnalysisRequestBody {
+	body := &TriggerAnalysisRequestBody{
+		OrganizationID: p.OrganizationID,
 	}
 	return body
 }

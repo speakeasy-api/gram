@@ -35,6 +35,27 @@ func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *tes
 	require.Equal(t, stripeclient.Catalog{}, client.Catalog())
 }
 
+func TestNewAdminStripeClientDegradesInvalidCatalog(t *testing.T) {
+	t.Parallel()
+
+	ctx := newStripeCLIContext(t, map[string]string{
+		"environment":                    "prod",
+		"stripe-api-key":                 "sk_test_placeholder",
+		"stripe-price-id-tum":            "partial-price",
+		"stripe-meter-id-tum":            "",
+		"stripe-meter-event-name":        "",
+		"stripe-portal-configuration-id": "",
+	})
+
+	client := newAdminStripeClient(
+		t.Context(),
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		ctx,
+	)
+	require.Nil(t, client)
+}
+
 func TestNewStripeClientRealClientValidatesCatalog(t *testing.T) {
 	t.Parallel()
 
