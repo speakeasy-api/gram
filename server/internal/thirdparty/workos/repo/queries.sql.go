@@ -142,6 +142,53 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, arg DeleteD
 	return result.RowsAffected(), nil
 }
 
+const directoryAttributeValueExists = `-- name: DirectoryAttributeValueExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_users AS du
+  WHERE du.organization_id = $1
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND du.attributes ->> $2 = $3
+)
+`
+
+type DirectoryAttributeValueExistsParams struct {
+	OrganizationID string
+	AttributeKey   []byte
+	AttributeValue []byte
+}
+
+func (q *Queries) DirectoryAttributeValueExists(ctx context.Context, arg DirectoryAttributeValueExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, directoryAttributeValueExists, arg.OrganizationID, arg.AttributeKey, arg.AttributeValue)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const directoryGroupExists = `-- name: DirectoryGroupExists :one
+SELECT EXISTS(
+  SELECT 1
+  FROM directory_groups
+  WHERE id = $1
+    AND organization_id = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+`
+
+type DirectoryGroupExistsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DirectoryGroupExists(ctx context.Context, arg DirectoryGroupExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, directoryGroupExists, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getDirectoryGroupByWorkOSID = `-- name: GetDirectoryGroupByWorkOSID :one
 SELECT organization_id, name, attributes, deleted
 FROM directory_groups
@@ -378,6 +425,46 @@ func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkD
 	return result.RowsAffected(), nil
 }
 
+const listActiveDirectoryAttributeValues = `-- name: ListActiveDirectoryAttributeValues :many
+SELECT
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value,
+  COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+GROUP BY attribute.key, attribute.value
+ORDER BY attribute.key, attribute.value
+`
+
+type ListActiveDirectoryAttributeValuesRow struct {
+	AttributeKey   string
+	AttributeValue string
+	MemberCount    int64
+}
+
+func (q *Queries) ListActiveDirectoryAttributeValues(ctx context.Context, organizationID string) ([]ListActiveDirectoryAttributeValuesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryAttributeValues, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDirectoryAttributeValuesRow
+	for rows.Next() {
+		var i ListActiveDirectoryAttributeValuesRow
+		if err := rows.Scan(&i.AttributeKey, &i.AttributeValue, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveDirectoryGroupIDsByEmails = `-- name: ListActiveDirectoryGroupIDsByEmails :many
 SELECT DISTINCT
   LOWER(du.email) AS email,
@@ -419,6 +506,53 @@ func (q *Queries) ListActiveDirectoryGroupIDsByEmails(ctx context.Context, arg L
 	for rows.Next() {
 		var i ListActiveDirectoryGroupIDsByEmailsRow
 		if err := rows.Scan(&i.Email, &i.DirectoryGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveDirectoryGroups = `-- name: ListActiveDirectoryGroups :many
+SELECT
+  dg.id,
+  dg.name,
+  COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count
+FROM directory_groups AS dg
+LEFT JOIN directory_user_group_memberships AS m
+  ON m.directory_group_id = dg.id
+  AND m.deleted IS FALSE
+LEFT JOIN directory_users AS du
+  ON du.id = m.directory_user_id
+  AND du.organization_id = dg.organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+WHERE dg.organization_id = $1
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+GROUP BY dg.id, dg.name
+ORDER BY dg.name, dg.id
+`
+
+type ListActiveDirectoryGroupsRow struct {
+	ID          uuid.UUID
+	Name        string
+	MemberCount int64
+}
+
+func (q *Queries) ListActiveDirectoryGroups(ctx context.Context, organizationID string) ([]ListActiveDirectoryGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryGroups, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDirectoryGroupsRow
+	for rows.Next() {
+		var i ListActiveDirectoryGroupsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.MemberCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -30933,6 +30933,96 @@ paths:
       x-speakeasy-name-override: getPublishStatus
       x-speakeasy-react-hook:
         name: PublishStatus
+  /rpc/plugins.listAudiences:
+    get:
+      description: List the audiences that can be assigned to plugins.
+      operationId: listAudiences
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAudiencesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listAudiences plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: listAudiences
+      x-speakeasy-react-hook:
+        name: Audiences
   /rpc/plugins.listPlugins:
     get:
       description: List all plugins for the current project.
@@ -66320,6 +66410,16 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAudiencesResult:
+      type: object
+      properties:
+        audiences:
+          type: array
+          items:
+            $ref: '#/components/schemas/PluginAudience'
+          description: Audiences that can be assigned to plugins.
+      required:
+        - audiences
     ListAuditLogFacetsForm:
       type: object
       properties:
@@ -70062,6 +70162,31 @@ components:
         - id
         - principal_urn
         - created_at
+    PluginAudience:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Display name for the audience.
+        kind:
+          type: string
+          description: Audience kind.
+          enum:
+            - everyone
+            - role
+            - directory_group
+            - directory_attribute
+        member_count:
+          type: integer
+          description: Number of current members, when the audience has an enumerable membership.
+          format: int64
+        principal_urn:
+          type: string
+          description: Principal URN used to assign the audience to a plugin.
+      required:
+        - kind
+        - display_name
+        - principal_urn
     PluginServer:
       type: object
       properties:

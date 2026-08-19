@@ -2132,6 +2132,240 @@ func DecodeSetPluginAssignmentsResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildListAudiencesRequest instantiates a HTTP request object with method and
+// path set to call the "plugins" service "listAudiences" endpoint
+func (c *Client) BuildListAudiencesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAudiencesPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "listAudiences", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAudiencesRequest returns an encoder for requests sent to the
+// plugins listAudiences server.
+func EncodeListAudiencesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.ListAudiencesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "listAudiences", "*plugins.ListAudiencesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAudiencesResponse returns a decoder for responses returned by the
+// plugins listAudiences endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListAudiencesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAudiencesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAudiencesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			res := NewListAudiencesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAudiencesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAudiencesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAudiencesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAudiencesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAudiencesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAudiencesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAudiencesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAudiencesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+				}
+				err = ValidateListAudiencesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+				}
+				return nil, NewListAudiencesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAudiencesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+				}
+				err = ValidateListAudiencesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+				}
+				return nil, NewListAudiencesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "listAudiences", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAudiencesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "listAudiences", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDownloadPluginPackageRequest instantiates a HTTP request object with
 // method and path set to call the "plugins" service "downloadPluginPackage"
 // endpoint
@@ -4625,6 +4859,20 @@ func unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(v *PluginAss
 		ID:           *v.ID,
 		PrincipalUrn: *v.PrincipalUrn,
 		CreatedAt:    *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalPluginAudienceResponseBodyToPluginsPluginAudience builds a value of
+// type *plugins.PluginAudience from a value of type
+// *PluginAudienceResponseBody.
+func unmarshalPluginAudienceResponseBodyToPluginsPluginAudience(v *PluginAudienceResponseBody) *plugins.PluginAudience {
+	res := &plugins.PluginAudience{
+		Kind:         *v.Kind,
+		DisplayName:  *v.DisplayName,
+		MemberCount:  v.MemberCount,
+		PrincipalUrn: *v.PrincipalUrn,
 	}
 
 	return res
