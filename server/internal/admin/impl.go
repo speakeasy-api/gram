@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -47,14 +48,16 @@ import (
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	verifier       *Verifier
-	loginStates    cache.TypedCacheObject[LoginState]
-	oidc           *OIDCClient
-	sessions       *SessionStore
-	allowedOrigins []string
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	verifier             *Verifier
+	loginStates          cache.TypedCacheObject[LoginState]
+	oidc                 *OIDCClient
+	sessions             *SessionStore
+	allowedOrigins       []string
+	dashboardURL         *url.URL
+	supportHandoffIssuer supportHandoffIssuer
 
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
@@ -111,6 +114,7 @@ func NewService(
 	openRouter TrialKeyReviver,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	dashboardURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -129,13 +133,17 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:          logger,
-		db:              db,
-		oidc:            oidcClient,
-		sessions:        sessionStore,
-		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins:  allowedOrigins,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:         logger,
+		db:             db,
+		oidc:           oidcClient,
+		sessions:       sessionStore,
+		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins: allowedOrigins,
+		dashboardURL:   dashboardURL,
+		supportHandoffIssuer: supporthandoff.NewIssuer(
+			supporthandoff.NewStore(adminCache),
+		),
 		workos:          workosClient,
 		openRouter:      openRouter,
 		productFeatures: productFeatures,
@@ -164,6 +172,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		http.MethodGet,
 		"/admin/session.get",
 		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.open-dashboard",
+		oops.ErrHandle(service.logger, service.handleOpenOrganizationInDashboard).ServeHTTP,
 	)
 }
 
