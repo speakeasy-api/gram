@@ -25,6 +25,10 @@ vi.mock("@/pages/catalog/useRemoteMcpInstallWorkflow", () => ({
   },
 }));
 
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "project-guide-test",
+}));
+
 import { ThirdPartyMcpJourney } from "./ThirdPartyMcpJourney";
 
 function server(
@@ -156,6 +160,7 @@ describe("ThirdPartyMcpJourney", () => {
     expect(workflowOptions.current).toMatchObject({
       servers: [selected],
       autoSelectRemotes: true,
+      projectSlug: "project-guide-test",
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
@@ -47,6 +48,7 @@ export function ThirdPartyMcpJourney({
   onSwitchJourney: () => void;
   expanded?: boolean;
 }): JSX.Element | null {
+  const gramProject = useProjectSlugForRequests();
   const [phase, setPhase] = useState(() => initialPhase(status));
   const [selectedServer, setSelectedServer] = useState<PulseMCPServer>();
   const [showMore, setShowMore] = useState(false);
@@ -67,6 +69,7 @@ export function ThirdPartyMcpJourney({
   );
   const workflow = useRemoteMcpInstallWorkflow({
     servers: selectedServer ? [filterToHttpRemotes(selectedServer)] : [],
+    projectSlug: gramProject,
     autoSelectRemotes: true,
   });
 
@@ -149,8 +152,9 @@ export function ThirdPartyMcpJourney({
       onSwitchJourney={onSwitchJourney}
     >
       <p className="text-muted-foreground text-[13px] leading-[1.6]">
-        Choose a server Speakeasy can configure without asking you for
-        credentials.
+        The catalog lists servers from the official MCP Registry. Installing one
+        creates a governed endpoint in front of the vendor's server — the
+        vendor's URL is already known, and nothing upstream changes.
       </p>
       {catalog.isPending ? (
         <span className="text-muted-foreground font-mono text-[10px] tracking-[0.05em] uppercase">
