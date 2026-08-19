@@ -17,7 +17,17 @@ import (
 
 // BuildListPluginsPayload builds the payload for the plugins listPlugins
 // endpoint from CLI flags.
-func BuildListPluginsPayload(pluginsListPluginsSessionToken string, pluginsListPluginsProjectSlugInput string) (*plugins.ListPluginsPayload, error) {
+func BuildListPluginsPayload(pluginsListPluginsPrincipalUrns string, pluginsListPluginsSessionToken string, pluginsListPluginsProjectSlugInput string) (*plugins.ListPluginsPayload, error) {
+	var err error
+	var principalUrns []string
+	{
+		if pluginsListPluginsPrincipalUrns != "" {
+			err = json.Unmarshal([]byte(pluginsListPluginsPrincipalUrns), &principalUrns)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for principalUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if pluginsListPluginsSessionToken != "" {
@@ -31,6 +41,7 @@ func BuildListPluginsPayload(pluginsListPluginsSessionToken string, pluginsListP
 		}
 	}
 	v := &plugins.ListPluginsPayload{}
+	v.PrincipalUrns = principalUrns
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

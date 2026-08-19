@@ -3217,17 +3217,27 @@ WHERE project_id = $1
     $3::text IS NULL
     OR status = $3::text
   )
+  AND (
+    COALESCE(cardinality($4::text[]), 0) = 0
+    OR requester_user_id = ANY($4::text[])
+  )
 ORDER BY updated_at DESC
 `
 
 type ListRiskPolicyBypassRequestsParams struct {
-	ProjectID    uuid.UUID
-	RiskPolicyID uuid.NullUUID
-	Status       pgtype.Text
+	ProjectID        uuid.UUID
+	RiskPolicyID     uuid.NullUUID
+	Status           pgtype.Text
+	RequesterUserIds []string
 }
 
 func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRiskPolicyBypassRequestsParams) ([]RiskPolicyBypassRequest, error) {
-	rows, err := q.db.Query(ctx, listRiskPolicyBypassRequests, arg.ProjectID, arg.RiskPolicyID, arg.Status)
+	rows, err := q.db.Query(ctx, listRiskPolicyBypassRequests,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.Status,
+		arg.RequesterUserIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3251,6 +3261,74 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 			&i.DecidedBy,
 			&i.GrantedPrincipalUrns,
 			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyChallengesByUsers = `-- name: ListRiskPolicyChallengesByUsers :many
+SELECT id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_challenges
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND user_id = ANY($2::text[])
+  AND (
+    $3::text IS NULL
+    OR status = $3::text
+  )
+ORDER BY updated_at DESC
+LIMIT $4::int
+`
+
+type ListRiskPolicyChallengesByUsersParams struct {
+	ProjectID   uuid.UUID
+	UserIds     []string
+	Status      pgtype.Text
+	ResultLimit int32
+}
+
+// The warn/challenge history for one or more user identifiers, newest first.
+// The identity page passes every identifier a subject is known by, because the
+// id recorded here is whatever the agent reported at challenge time.
+func (q *Queries) ListRiskPolicyChallengesByUsers(ctx context.Context, arg ListRiskPolicyChallengesByUsersParams) ([]RiskPolicyChallenge, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyChallengesByUsers,
+		arg.ProjectID,
+		arg.UserIds,
+		arg.Status,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyChallenge
+	for rows.Next() {
+		var i RiskPolicyChallenge
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.RiskPolicyID,
+			&i.UserID,
+			&i.ToolName,
+			&i.Status,
+			&i.PolicyName,
+			&i.Entity,
+			&i.RuleID,
+			&i.CallFingerprint,
+			&i.ChallengedAt,
+			&i.AcknowledgedAt,
+			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

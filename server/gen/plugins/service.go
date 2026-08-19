@@ -240,6 +240,11 @@ type GetPublishStatusPayload struct {
 // ListPluginsPayload is the payload type of the plugins service listPlugins
 // method.
 type ListPluginsPayload struct {
+	// Optional principal URNs to narrow the listing to the plugins those
+	// principals receive. Plugins distributed to everyone ('*' or 'user:all') are
+	// always included, because from a principal's side an org-wide plugin is one
+	// they get.
+	PrincipalUrns    []string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

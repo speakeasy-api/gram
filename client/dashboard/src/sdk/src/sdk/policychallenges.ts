@@ -5,10 +5,12 @@
 import { riskPolicyChallengesAcknowledge } from "../funcs/riskPolicyChallengesAcknowledge.js";
 import { riskPolicyChallengesDecline } from "../funcs/riskPolicyChallengesDecline.js";
 import { riskPolicyChallengesGet } from "../funcs/riskPolicyChallengesGet.js";
+import { riskPolicyChallengesList } from "../funcs/riskPolicyChallengesList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AcknowledgeRiskPolicyChallengeResponseBody } from "../models/components/acknowledgeriskpolicychallengeresponsebody.js";
 import { DeclineRiskPolicyChallengeResponseBody } from "../models/components/declineriskpolicychallengeresponsebody.js";
 import { GetRiskPolicyChallengeResponseBody } from "../models/components/getriskpolicychallengeresponsebody.js";
+import { ListRiskPolicyChallengesResult } from "../models/components/listriskpolicychallengesresult.js";
 import {
   AcknowledgeRiskPolicyChallengeRequest,
   AcknowledgeRiskPolicyChallengeSecurity,
@@ -21,6 +23,10 @@ import {
   GetRiskPolicyChallengeRequest,
   GetRiskPolicyChallengeSecurity,
 } from "../models/operations/getriskpolicychallenge.js";
+import {
+  ListRiskPolicyChallengesRequest,
+  ListRiskPolicyChallengesSecurity,
+} from "../models/operations/listriskpolicychallenges.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class PolicyChallenges extends ClientSDK {
@@ -74,6 +80,25 @@ export class PolicyChallenges extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskPolicyChallenges risk
+   *
+   * @remarks
+   * List the warn/challenge history for one or more user identifiers.
+   */
+  async list(
+    request: ListRiskPolicyChallengesRequest,
+    security?: ListRiskPolicyChallengesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRiskPolicyChallengesResult> {
+    return unwrapAsync(riskPolicyChallengesList(
       this,
       request,
       security,

@@ -27,6 +27,7 @@ type Server struct {
 	ListScopes                         http.Handler
 	ListMembers                        http.Handler
 	ListGrants                         http.Handler
+	ListMemberGrants                   http.Handler
 	UpdateMemberRoles                  http.Handler
 	ListShadowMCPInventory             http.Handler
 	GetShadowMCPInventoryServer        http.Handler
@@ -74,6 +75,7 @@ func New(
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
+			{"ListMemberGrants", "GET", "/rpc/access.listMemberGrants"},
 			{"UpdateMemberRoles", "PUT", "/rpc/access.updateMemberRoles"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
 			{"GetShadowMCPInventoryServer", "GET", "/rpc/access.getShadowMCPInventoryServer"},
@@ -93,6 +95,7 @@ func New(
 		ListScopes:                         NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                        NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                         NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
+		ListMemberGrants:                   NewListMemberGrantsHandler(e.ListMemberGrants, mux, decoder, encoder, errhandler, formatter),
 		UpdateMemberRoles:                  NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventory:             NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
 		GetShadowMCPInventoryServer:        NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
@@ -119,6 +122,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
+	s.ListMemberGrants = m(s.ListMemberGrants)
 	s.UpdateMemberRoles = m(s.UpdateMemberRoles)
 	s.ListShadowMCPInventory = m(s.ListShadowMCPInventory)
 	s.GetShadowMCPInventoryServer = m(s.GetShadowMCPInventoryServer)
@@ -144,6 +148,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
+	MountListMemberGrantsHandler(mux, h.ListMemberGrants)
 	MountUpdateMemberRolesHandler(mux, h.UpdateMemberRoles)
 	MountListShadowMCPInventoryHandler(mux, h.ListShadowMCPInventory)
 	MountGetShadowMCPInventoryServerHandler(mux, h.GetShadowMCPInventoryServer)
@@ -562,6 +567,59 @@ func NewListGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMemberGrantsHandler configures the mux to serve the "access"
+// service "listMemberGrants" endpoint.
+func MountListMemberGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listMemberGrants", f)
+}
+
+// NewListMemberGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listMemberGrants" endpoint.
+func NewListMemberGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMemberGrantsRequest(mux, decoder)
+		encodeResponse = EncodeListMemberGrantsResponse(encoder)
+		encodeError    = EncodeListMemberGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMemberGrants")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

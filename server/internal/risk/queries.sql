@@ -387,6 +387,22 @@ WHERE project_id = @project_id
   AND expires_at > clock_timestamp()
   AND deleted IS FALSE;
 
+-- name: ListRiskPolicyChallengesByUsers :many
+-- The warn/challenge history for one or more user identifiers, newest first.
+-- The identity page passes every identifier a subject is known by, because the
+-- id recorded here is whatever the agent reported at challenge time.
+SELECT *
+FROM risk_policy_challenges
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND user_id = ANY(@user_ids::text[])
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR status = sqlc.narg(status)::text
+  )
+ORDER BY updated_at DESC
+LIMIT @result_limit::int;
+
 -- name: ListRiskPolicyBypassRequests :many
 SELECT *
 FROM risk_policy_bypass_requests
@@ -399,6 +415,10 @@ WHERE project_id = @project_id
   AND (
     sqlc.narg(status)::text IS NULL
     OR status = sqlc.narg(status)::text
+  )
+  AND (
+    COALESCE(cardinality(@requester_user_ids::text[]), 0) = 0
+    OR requester_user_id = ANY(@requester_user_ids::text[])
   )
 ORDER BY updated_at DESC;
 

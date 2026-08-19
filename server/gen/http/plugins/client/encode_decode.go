@@ -50,6 +50,11 @@ func EncodeListPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		for _, value := range p.PrincipalUrns {
+			values.Add("principal_urns", value)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

@@ -47,6 +47,7 @@ export function buildPluginsQuery(
 } {
   return {
     queryKey: queryKeyPlugins({
+      principalUrns: request?.principalUrns,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -74,6 +75,7 @@ export function buildPluginsQuery(
 
 export function queryKeyPlugins(
   parameters: {
+    principalUrns?: Array<string> | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

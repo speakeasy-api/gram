@@ -895,6 +895,43 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeclinePolicyChallenge", "type": "mutation"}`)
 	})
 
+	Method("listRiskPolicyChallenges", func() {
+		Description("List the warn/challenge history for one or more user identifiers.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("user_ids", ArrayOf(String), "The user identifiers to list challenges for. Pass every identifier a subject is known by: the id recorded on a challenge is whichever one the agent reported at the time.")
+			Attribute("status", String, "Optional status to filter by.", func() {
+				Enum(riskPolicyChallengeStatuses...)
+			})
+			Attribute("limit", Int, "Maximum number of challenges to return.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("user_ids")
+		})
+
+		Result(ListRiskPolicyChallengesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listPolicyChallenges")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("user_ids")
+			Param("status")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPolicyChallenges")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskPolicyChallenges"}`)
+	})
+
 	Method("getRiskBlock", func() {
 		Description("Get a tool call block by its risk result ID for the durable block page.")
 		Security(security.Session)
@@ -964,6 +1001,7 @@ var _ = Service("risk", func() {
 			Attribute("status", String, "Optional request status filter.", func() {
 				Enum("requested", "approved", "denied", "revoked")
 			})
+			Attribute("requester_user_ids", ArrayOf(String), "Optional requester identifiers to filter by. Pass every identifier a subject is known by, since the id recorded on a request is whichever one they were authenticated as.")
 		})
 
 		Result(ListRiskPolicyBypassRequestsResult)
@@ -975,6 +1013,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("status")
+			Param("requester_user_ids")
 			Response(StatusOK)
 		})
 
@@ -1977,6 +2016,46 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+// riskPolicyChallengeStatuses is the challenge lifecycle vocabulary. The
+// filter and the result type both read it so a new state cannot be added to
+// one and missed on the other.
+var riskPolicyChallengeStatuses = []any{"challenged", "acknowledged", "declined"}
+
+var RiskPolicyChallenge = Type("RiskPolicyChallenge", func() {
+	Description("One warn/challenge lifecycle record: a warn-action policy matched, and the user was asked to acknowledge before proceeding.")
+
+	Attribute("id", String, "Challenge identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_id", String, "The policy that issued the warning.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_name", String, "Display name of the policy that issued the warning.")
+	Attribute("user_id", String, "The user identifier the challenge was recorded against.")
+	Attribute("tool_name", String, "The tool the challenge applies to. Absent for a non-tool challenge.")
+	Attribute("status", String, "Where the challenge got to.", func() {
+		Enum(riskPolicyChallengeStatuses...)
+	})
+	Attribute("entity", String, "Log-safe description of what was flagged. Never the matched value itself.")
+	Attribute("rule_id", String, "The rule that matched.")
+	Attribute("challenged_at", String, "When the warning was issued.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("acknowledged_at", String, "When the user acknowledged, if they did.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the acknowledgement stops suppressing re-challenge.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "risk_policy_id", "user_id", "status", "challenged_at")
+})
+
+var ListRiskPolicyChallengesResult = Type("ListRiskPolicyChallengesResult", func() {
+	Attribute("challenges", ArrayOf(RiskPolicyChallenge), "Matching challenge records, newest first.")
+	Required("challenges")
 })
 
 var RiskSignalTopUser = Type("RiskSignalTopUser", func() {

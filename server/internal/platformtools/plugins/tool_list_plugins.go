@@ -87,6 +87,7 @@ func (t *ListPlugins) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 	}
 
 	result, err := t.plugins.ListPlugins(ctx, &genplugins.ListPluginsPayload{
+		PrincipalUrns:    nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})

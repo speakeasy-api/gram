@@ -226,6 +226,34 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Grants"}`)
 	})
 
+	Method("listMemberGrants", func() {
+		Description("List another member's effective grants, including the ones inherited from their roles.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ListMemberGrantsForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListUserGrantsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listMemberGrants")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Param("user_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMemberGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMemberGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MemberGrants"}`)
+	})
+
 	Method("updateMemberRoles", func() {
 		Description("Update a team member's role assignments.")
 		Security(security.ByKey, func() {
@@ -712,6 +740,13 @@ var ListMembersResult = Type("ListMembersResult", func() {
 var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 	Required("grants")
 	Attribute("grants", ArrayOf(ListRoleGrantModel), "The user's effective grants in this organization.")
+})
+
+var ListMemberGrantsForm = Type("ListMemberGrantsForm", func() {
+	Required("user_id")
+	Attribute("user_id", String, func() {
+		Description("The Gram user id of the member whose grants to list.")
+	})
 })
 
 var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {

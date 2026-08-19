@@ -19,6 +19,9 @@ var _ = Service("plugins", func() {
 		Description("List all plugins for the current project.")
 
 		Payload(func() {
+			Attribute("principal_urns", ArrayOf(String), func() {
+				Description("Optional principal URNs to narrow the listing to the plugins those principals receive. Plugins distributed to everyone ('*' or 'user:all') are always included, because from a principal's side an org-wide plugin is one they get.")
+			})
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -29,6 +32,7 @@ var _ = Service("plugins", func() {
 			GET("/rpc/plugins.listPlugins")
 			security.SessionHeader()
 			security.ProjectHeader()
+			Param("principal_urns")
 			Response(StatusOK)
 		})
 

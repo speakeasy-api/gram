@@ -1210,12 +1210,21 @@ FROM plugins p
 WHERE p.organization_id = $1
   AND p.project_id = $2
   AND p.deleted IS FALSE
+  AND (
+    COALESCE(cardinality($3::text[]), 0) = 0
+    OR EXISTS (
+      SELECT 1 FROM plugin_assignments pa
+      WHERE pa.plugin_id = p.id
+        AND (pa.principal_urn = ANY($3::text[]) OR pa.principal_urn IN ('*', 'user:all'))
+    )
+  )
 ORDER BY p.created_at DESC
 `
 
 type ListPluginsParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
+	PrincipalUrns  []string
 }
 
 type ListPluginsRow struct {
@@ -1235,8 +1244,12 @@ type ListPluginsRow struct {
 	AssignmentCount int64
 }
 
+// @principal_urns optionally narrows the listing to the plugins one principal
+// receives. A plugin assigned to everyone (the '*' or 'user:all' wildcards)
+// counts as assigned: from the principal's side, a plugin distributed org-wide
+// is one they get, however it was targeted.
 func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]ListPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listPlugins, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listPlugins, arg.OrganizationID, arg.ProjectID, arg.PrincipalUrns)
 	if err != nil {
 		return nil, err
 	}

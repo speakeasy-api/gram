@@ -756,9 +756,10 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 
 	q := riskrepo.New(db)
 	requests, err := q.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
-		ProjectID:    projectID,
-		RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Status:       conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
+		ProjectID:        projectID,
+		RiskPolicyID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Status:           conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
+		RequesterUserIds: nil,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory requests").LogError(ctx, s.logger)
@@ -965,9 +966,10 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 
 	requests, err := repo.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
-		ProjectID:    projectID,
-		RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Status:       conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
+		ProjectID:        projectID,
+		RiskPolicyID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Status:           conv.ToPGText(shadowMCPInventoryBypassStatusRequested),
+		RequesterUserIds: nil,
 	})
 	if err != nil {
 		return state, fmt.Errorf("listing shadow mcp bypass requests: %w", err)

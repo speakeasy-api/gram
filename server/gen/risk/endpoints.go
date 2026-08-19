@@ -40,6 +40,7 @@ type Endpoints struct {
 	AcknowledgeRiskPolicyChallenge goa.Endpoint
 	GetRiskPolicyChallenge         goa.Endpoint
 	DeclineRiskPolicyChallenge     goa.Endpoint
+	ListRiskPolicyChallenges       goa.Endpoint
 	GetRiskBlock                   goa.Endpoint
 	SubmitRiskBlockFeedback        goa.Endpoint
 	ListRiskPolicyBypassRequests   goa.Endpoint
@@ -94,6 +95,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		DeclineRiskPolicyChallenge:     NewDeclineRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
+		ListRiskPolicyChallenges:       NewListRiskPolicyChallengesEndpoint(s, a.APIKeyAuth),
 		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
 		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
@@ -146,6 +148,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
 	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
 	e.DeclineRiskPolicyChallenge = m(e.DeclineRiskPolicyChallenge)
+	e.ListRiskPolicyChallenges = m(e.ListRiskPolicyChallenges)
 	e.GetRiskBlock = m(e.GetRiskBlock)
 	e.SubmitRiskBlockFeedback = m(e.SubmitRiskBlockFeedback)
 	e.ListRiskPolicyBypassRequests = m(e.ListRiskPolicyBypassRequests)
@@ -1452,6 +1455,65 @@ func NewDeclineRiskPolicyChallengeEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return s.DeclineRiskPolicyChallenge(ctx, p)
+	}
+}
+
+// NewListRiskPolicyChallengesEndpoint returns an endpoint function that calls
+// the method "listRiskPolicyChallenges" of service "risk".
+func NewListRiskPolicyChallengesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRiskPolicyChallengesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRiskPolicyChallenges(ctx, p)
 	}
 }
 

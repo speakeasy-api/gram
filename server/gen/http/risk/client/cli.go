@@ -1498,6 +1498,79 @@ func BuildDeclineRiskPolicyChallengePayload(riskDeclineRiskPolicyChallengeBody s
 	return v, nil
 }
 
+// BuildListRiskPolicyChallengesPayload builds the payload for the risk
+// listRiskPolicyChallenges endpoint from CLI flags.
+func BuildListRiskPolicyChallengesPayload(riskListRiskPolicyChallengesUserIds string, riskListRiskPolicyChallengesStatus string, riskListRiskPolicyChallengesLimit string, riskListRiskPolicyChallengesApikeyToken string, riskListRiskPolicyChallengesSessionToken string, riskListRiskPolicyChallengesProjectSlugInput string) (*risk.ListRiskPolicyChallengesPayload, error) {
+	var err error
+	var userIds []string
+	{
+		err = json.Unmarshal([]byte(riskListRiskPolicyChallengesUserIds), &userIds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for userIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+		}
+	}
+	var status *string
+	{
+		if riskListRiskPolicyChallengesStatus != "" {
+			status = &riskListRiskPolicyChallengesStatus
+			if !(*status == "challenged" || *status == "acknowledged" || *status == "declined") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"challenged", "acknowledged", "declined"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if riskListRiskPolicyChallengesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskPolicyChallengesLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskPolicyChallengesApikeyToken != "" {
+			apikeyToken = &riskListRiskPolicyChallengesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskPolicyChallengesSessionToken != "" {
+			sessionToken = &riskListRiskPolicyChallengesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskPolicyChallengesProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskPolicyChallengesProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskPolicyChallengesPayload{}
+	v.UserIds = userIds
+	v.Status = status
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskBlockPayload builds the payload for the risk getRiskBlock
 // endpoint from CLI flags.
 func BuildGetRiskBlockPayload(riskGetRiskBlockID string, riskGetRiskBlockSessionToken string) (*risk.GetRiskBlockPayload, error) {
@@ -1558,7 +1631,7 @@ func BuildSubmitRiskBlockFeedbackPayload(riskSubmitRiskBlockFeedbackBody string,
 
 // BuildListRiskPolicyBypassRequestsPayload builds the payload for the risk
 // listRiskPolicyBypassRequests endpoint from CLI flags.
-func BuildListRiskPolicyBypassRequestsPayload(riskListRiskPolicyBypassRequestsPolicyID string, riskListRiskPolicyBypassRequestsStatus string, riskListRiskPolicyBypassRequestsApikeyToken string, riskListRiskPolicyBypassRequestsSessionToken string, riskListRiskPolicyBypassRequestsProjectSlugInput string) (*risk.ListRiskPolicyBypassRequestsPayload, error) {
+func BuildListRiskPolicyBypassRequestsPayload(riskListRiskPolicyBypassRequestsPolicyID string, riskListRiskPolicyBypassRequestsStatus string, riskListRiskPolicyBypassRequestsRequesterUserIds string, riskListRiskPolicyBypassRequestsApikeyToken string, riskListRiskPolicyBypassRequestsSessionToken string, riskListRiskPolicyBypassRequestsProjectSlugInput string) (*risk.ListRiskPolicyBypassRequestsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -1579,6 +1652,15 @@ func BuildListRiskPolicyBypassRequestsPayload(riskListRiskPolicyBypassRequestsPo
 			}
 			if err != nil {
 				return nil, err
+			}
+		}
+	}
+	var requesterUserIds []string
+	{
+		if riskListRiskPolicyBypassRequestsRequesterUserIds != "" {
+			err = json.Unmarshal([]byte(riskListRiskPolicyBypassRequestsRequesterUserIds), &requesterUserIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for requesterUserIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
 			}
 		}
 	}
@@ -1603,6 +1685,7 @@ func BuildListRiskPolicyBypassRequestsPayload(riskListRiskPolicyBypassRequestsPo
 	v := &risk.ListRiskPolicyBypassRequestsPayload{}
 	v.PolicyID = policyID
 	v.Status = status
+	v.RequesterUserIds = requesterUserIds
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

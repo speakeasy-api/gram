@@ -53,6 +53,7 @@ export function buildRiskListPolicyBypassRequestsQuery(
     queryKey: queryKeyRiskListPolicyBypassRequests({
       policyId: request?.policyId,
       status: request?.status,
+      requesterUserIds: request?.requesterUserIds,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -85,6 +86,7 @@ export function queryKeyRiskListPolicyBypassRequests(
   parameters: {
     policyId?: string | undefined;
     status?: Status | undefined;
+    requesterUserIds?: Array<string> | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

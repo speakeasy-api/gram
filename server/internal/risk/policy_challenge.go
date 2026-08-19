@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,7 +13,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -317,4 +320,79 @@ func ptrValOr(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// defaultChallengeListLimit bounds an unbounded request. Challenge rows are
+// per (user, policy, tool, call) so an active user accumulates many; the
+// identity page only ever renders a recent slice.
+const defaultChallengeListLimit = 50
+
+// maxChallengeListLimit mirrors the design's ceiling so a hand-built request
+// cannot ask for an unbounded page.
+const maxChallengeListLimit = 200
+
+// ListRiskPolicyChallenges returns the warn/challenge history recorded against
+// a set of user identifiers.
+//
+// It takes a set rather than one id because the identifier on a challenge row
+// is whichever one the agent reported at the time, and one person is commonly
+// known by several.
+func (s *Service) ListRiskPolicyChallenges(ctx context.Context, payload *gen.ListRiskPolicyChallengesPayload) (*gen.ListRiskPolicyChallengesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	userIDs := make([]string, 0, len(payload.UserIds))
+	for _, id := range payload.UserIds {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			userIDs = append(userIDs, trimmed)
+		}
+	}
+	if len(userIDs) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one user id is required")
+	}
+
+	limit := defaultChallengeListLimit
+	if payload.Limit != nil && *payload.Limit > 0 {
+		limit = min(*payload.Limit, maxChallengeListLimit)
+	}
+
+	rows, err := s.repo.ListRiskPolicyChallengesByUsers(ctx, repo.ListRiskPolicyChallengesByUsersParams{
+		ProjectID:   *authCtx.ProjectID,
+		UserIds:     userIDs,
+		Status:      conv.PtrToPGText(payload.Status),
+		ResultLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk policy challenges").LogError(ctx, s.logger)
+	}
+
+	challenges := make([]*gen.RiskPolicyChallenge, 0, len(rows))
+	for _, row := range rows {
+		challenges = append(challenges, riskPolicyChallengeView(row))
+	}
+
+	return &gen.ListRiskPolicyChallengesResult{Challenges: challenges}, nil
+}
+
+// riskPolicyChallengeView converts a challenge row into the API type. The
+// matched value never appears on the row, so nothing here needs redacting.
+func riskPolicyChallengeView(row repo.RiskPolicyChallenge) *gen.RiskPolicyChallenge {
+	return &gen.RiskPolicyChallenge{
+		ID:             row.ID.String(),
+		RiskPolicyID:   row.RiskPolicyID.String(),
+		PolicyName:     conv.FromPGText[string](row.PolicyName),
+		UserID:         row.UserID,
+		ToolName:       conv.FromPGText[string](row.ToolName),
+		Status:         row.Status,
+		Entity:         conv.FromPGText[string](row.Entity),
+		RuleID:         conv.FromPGText[string](row.RuleID),
+		ChallengedAt:   conv.FromPGTimestamptz(row.ChallengedAt),
+		AcknowledgedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.AcknowledgedAt)),
+		ExpiresAt:      conv.PtrEmpty(conv.FromPGTimestamptz(row.ExpiresAt)),
+	}
 }

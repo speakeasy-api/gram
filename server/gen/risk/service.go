@@ -95,6 +95,8 @@ type Service interface {
 	// Decline a risk policy warn/challenge from a warning-link token: invalidate
 	// the link and mark the challenge declined. The blocked action stays blocked.
 	DeclineRiskPolicyChallenge(context.Context, *DeclineRiskPolicyChallengePayload) (res *DeclineRiskPolicyChallengeResult, err error)
+	// List the warn/challenge history for one or more user identifiers.
+	ListRiskPolicyChallenges(context.Context, *ListRiskPolicyChallengesPayload) (res *ListRiskPolicyChallengesResult, err error)
 	// Get a tool call block by its risk result ID for the durable block page.
 	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
 	// Record thumbs-up/thumbs-down feedback for a tool call block from the block
@@ -190,7 +192,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [48]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "listRiskPolicyChallenges", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -722,6 +724,10 @@ type ListRiskPolicyBypassRequestsPayload struct {
 	PolicyID *string
 	// Optional request status filter.
 	Status *string
+	// Optional requester identifiers to filter by. Pass every identifier a subject
+	// is known by, since the id recorded on a request is whichever one they were
+	// authenticated as.
+	RequesterUserIds []string
 }
 
 // ListRiskPolicyBypassRequestsResult is the result type of the risk service
@@ -729,6 +735,29 @@ type ListRiskPolicyBypassRequestsPayload struct {
 type ListRiskPolicyBypassRequestsResult struct {
 	// Current risk policy bypass request records.
 	Requests []*RiskPolicyBypassRequest
+}
+
+// ListRiskPolicyChallengesPayload is the payload type of the risk service
+// listRiskPolicyChallenges method.
+type ListRiskPolicyChallengesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The user identifiers to list challenges for. Pass every identifier a subject
+	// is known by: the id recorded on a challenge is whichever one the agent
+	// reported at the time.
+	UserIds []string
+	// Optional status to filter by.
+	Status *string
+	// Maximum number of challenges to return.
+	Limit *int
+}
+
+// ListRiskPolicyChallengesResult is the result type of the risk service
+// listRiskPolicyChallenges method.
+type ListRiskPolicyChallengesResult struct {
+	// Matching challenge records, newest first.
+	Challenges []*RiskPolicyChallenge
 }
 
 // ListRiskResultsByChatPayload is the payload type of the risk service
@@ -1085,6 +1114,33 @@ type RiskPolicyBypassRequest struct {
 	CreatedAt string
 	// Last update timestamp.
 	UpdatedAt string
+}
+
+// One warn/challenge lifecycle record: a warn-action policy matched, and the
+// user was asked to acknowledge before proceeding.
+type RiskPolicyChallenge struct {
+	// Challenge identifier.
+	ID string
+	// The policy that issued the warning.
+	RiskPolicyID string
+	// Display name of the policy that issued the warning.
+	PolicyName *string
+	// The user identifier the challenge was recorded against.
+	UserID string
+	// The tool the challenge applies to. Absent for a non-tool challenge.
+	ToolName *string
+	// Where the challenge got to.
+	Status string
+	// Log-safe description of what was flagged. Never the matched value itself.
+	Entity *string
+	// The rule that matched.
+	RuleID *string
+	// When the warning was issued.
+	ChallengedAt string
+	// When the user acknowledged, if they did.
+	AcknowledgedAt *string
+	// When the acknowledgement stops suppressing re-challenge.
+	ExpiresAt *string
 }
 
 type RiskRuleBreakdownEntry struct {

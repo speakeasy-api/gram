@@ -45,6 +45,10 @@ export type ListRiskPolicyBypassRequestsRequest = {
    */
   status?: Status | undefined;
   /**
+   * Optional requester identifiers to filter by. Pass every identifier a subject is known by, since the id recorded on a request is whichever one they were authenticated as.
+   */
+  requesterUserIds?: Array<string> | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -174,6 +178,7 @@ export const Status$outboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
 export type ListRiskPolicyBypassRequestsRequest$Outbound = {
   policy_id?: string | undefined;
   status?: string | undefined;
+  requester_user_ids?: Array<string> | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -187,6 +192,7 @@ export const ListRiskPolicyBypassRequestsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     policyId: z.optional(z.string()),
     status: z.optional(Status$outboundSchema),
+    requesterUserIds: z.optional(z.array(z.string())),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -194,6 +200,7 @@ export const ListRiskPolicyBypassRequestsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       policyId: "policy_id",
+      requesterUserIds: "requester_user_ids",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

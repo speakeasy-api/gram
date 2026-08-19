@@ -32,6 +32,9 @@ type Service interface {
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// List the current user's effective grants, including inherited role grants.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListUserGrantsResult, err error)
+	// List another member's effective grants, including the ones inherited from
+	// their roles.
+	ListMemberGrants(context.Context, *ListMemberGrantsPayload) (res *ListUserGrantsResult, err error)
 	// Update a team member's role assignments.
 	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
@@ -84,7 +87,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "listMemberGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -329,6 +332,15 @@ type ListChallengesResult struct {
 type ListGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// ListMemberGrantsPayload is the payload type of the access service
+// listMemberGrants method.
+type ListMemberGrantsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The Gram user id of the member whose grants to list.
+	UserID string
 }
 
 // ListMembersPayload is the payload type of the access service listMembers

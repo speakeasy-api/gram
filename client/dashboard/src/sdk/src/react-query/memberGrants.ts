@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ListPluginsRequest,
-  ListPluginsSecurity,
-} from "../models/operations/listplugins.js";
+  ListMemberGrantsRequest,
+  ListMemberGrantsSecurity,
+} from "../models/operations/listmembergrants.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildPluginsQuery,
-  PluginsQueryData,
-  prefetchPlugins,
-  queryKeyPlugins,
-} from "./plugins.core.js";
+  buildMemberGrantsQuery,
+  MemberGrantsQueryData,
+  prefetchMemberGrants,
+  queryKeyMemberGrants,
+} from "./memberGrants.core.js";
 export {
-  buildPluginsQuery,
-  type PluginsQueryData,
-  prefetchPlugins,
-  queryKeyPlugins,
+  buildMemberGrantsQuery,
+  type MemberGrantsQueryData,
+  prefetchMemberGrants,
+  queryKeyMemberGrants,
 };
 
-export type PluginsQueryError =
+export type MemberGrantsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -56,19 +56,19 @@ export type PluginsQueryError =
   | SDKValidationError;
 
 /**
- * listPlugins plugins
+ * listMemberGrants access
  *
  * @remarks
- * List all plugins for the current project.
+ * List another member's effective grants, including the ones inherited from their roles.
  */
-export function usePlugins(
-  request?: ListPluginsRequest | undefined,
-  security?: ListPluginsSecurity | undefined,
-  options?: QueryHookOptions<PluginsQueryData, PluginsQueryError>,
-): UseQueryResult<PluginsQueryData, PluginsQueryError> {
+export function useMemberGrants(
+  request: ListMemberGrantsRequest,
+  security?: ListMemberGrantsSecurity | undefined,
+  options?: QueryHookOptions<MemberGrantsQueryData, MemberGrantsQueryError>,
+): UseQueryResult<MemberGrantsQueryData, MemberGrantsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildPluginsQuery(
+    ...buildMemberGrantsQuery(
       client,
       request,
       security,
@@ -79,19 +79,22 @@ export function usePlugins(
 }
 
 /**
- * listPlugins plugins
+ * listMemberGrants access
  *
  * @remarks
- * List all plugins for the current project.
+ * List another member's effective grants, including the ones inherited from their roles.
  */
-export function usePluginsSuspense(
-  request?: ListPluginsRequest | undefined,
-  security?: ListPluginsSecurity | undefined,
-  options?: SuspenseQueryHookOptions<PluginsQueryData, PluginsQueryError>,
-): UseSuspenseQueryResult<PluginsQueryData, PluginsQueryError> {
+export function useMemberGrantsSuspense(
+  request: ListMemberGrantsRequest,
+  security?: ListMemberGrantsSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    MemberGrantsQueryData,
+    MemberGrantsQueryError
+  >,
+): UseSuspenseQueryResult<MemberGrantsQueryData, MemberGrantsQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildPluginsQuery(
+    ...buildMemberGrantsQuery(
       client,
       request,
       security,
@@ -101,45 +104,45 @@ export function usePluginsSuspense(
   });
 }
 
-export function setPluginsData(
+export function setMemberGrantsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      principalUrns?: Array<string> | undefined;
+      userId: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
-  data: PluginsQueryData,
-): PluginsQueryData | undefined {
-  const key = queryKeyPlugins(...queryKeyBase);
+  data: MemberGrantsQueryData,
+): MemberGrantsQueryData | undefined {
+  const key = queryKeyMemberGrants(...queryKeyBase);
 
-  return client.setQueryData<PluginsQueryData>(key, data);
+  return client.setQueryData<MemberGrantsQueryData>(key, data);
 }
 
-export function invalidatePlugins(
+export function invalidateMemberGrants(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      principalUrns?: Array<string> | undefined;
+      userId: string;
+      gramKey?: string | undefined;
       gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "listPlugins", ...queryKeyBase],
+    queryKey: ["@gram/client", "access", "listMemberGrants", ...queryKeyBase],
   });
 }
 
-export function invalidateAllPlugins(
+export function invalidateAllMemberGrants(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "listPlugins"],
+    queryKey: ["@gram/client", "access", "listMemberGrants"],
   });
 }

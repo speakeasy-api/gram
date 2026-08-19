@@ -310,6 +310,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	rows, err := s.repo.ListPlugins(ctx, repo.ListPluginsParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
+		PrincipalUrns:  payload.PrincipalUrns,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").LogError(ctx, s.logger)

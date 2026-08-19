@@ -99,7 +99,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|list-member-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -153,7 +153,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|list-risk-policy-challenges|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -242,6 +242,11 @@ func ParseEndpoint(
 		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
 		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
 		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
+
+		accessListMemberGrantsFlags            = flag.NewFlagSet("list-member-grants", flag.ExitOnError)
+		accessListMemberGrantsUserIDFlag       = accessListMemberGrantsFlags.String("user-id", "REQUIRED", "")
+		accessListMemberGrantsApikeyTokenFlag  = accessListMemberGrantsFlags.String("apikey-token", "", "")
+		accessListMemberGrantsSessionTokenFlag = accessListMemberGrantsFlags.String("session-token", "", "")
 
 		accessUpdateMemberRolesFlags            = flag.NewFlagSet("update-member-roles", flag.ExitOnError)
 		accessUpdateMemberRolesBodyFlag         = accessUpdateMemberRolesFlags.String("body", "REQUIRED", "")
@@ -1717,6 +1722,7 @@ func ParseEndpoint(
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
 		pluginsListPluginsFlags                = flag.NewFlagSet("list-plugins", flag.ExitOnError)
+		pluginsListPluginsPrincipalUrnsFlag    = pluginsListPluginsFlags.String("principal-urns", "", "")
 		pluginsListPluginsSessionTokenFlag     = pluginsListPluginsFlags.String("session-token", "", "")
 		pluginsListPluginsProjectSlugInputFlag = pluginsListPluginsFlags.String("project-slug-input", "", "")
 
@@ -2443,6 +2449,14 @@ func ParseEndpoint(
 		riskDeclineRiskPolicyChallengeBodyFlag         = riskDeclineRiskPolicyChallengeFlags.String("body", "REQUIRED", "")
 		riskDeclineRiskPolicyChallengeSessionTokenFlag = riskDeclineRiskPolicyChallengeFlags.String("session-token", "", "")
 
+		riskListRiskPolicyChallengesFlags                = flag.NewFlagSet("list-risk-policy-challenges", flag.ExitOnError)
+		riskListRiskPolicyChallengesUserIdsFlag          = riskListRiskPolicyChallengesFlags.String("user-ids", "REQUIRED", "")
+		riskListRiskPolicyChallengesStatusFlag           = riskListRiskPolicyChallengesFlags.String("status", "", "")
+		riskListRiskPolicyChallengesLimitFlag            = riskListRiskPolicyChallengesFlags.String("limit", "", "")
+		riskListRiskPolicyChallengesApikeyTokenFlag      = riskListRiskPolicyChallengesFlags.String("apikey-token", "", "")
+		riskListRiskPolicyChallengesSessionTokenFlag     = riskListRiskPolicyChallengesFlags.String("session-token", "", "")
+		riskListRiskPolicyChallengesProjectSlugInputFlag = riskListRiskPolicyChallengesFlags.String("project-slug-input", "", "")
+
 		riskGetRiskBlockFlags            = flag.NewFlagSet("get-risk-block", flag.ExitOnError)
 		riskGetRiskBlockIDFlag           = riskGetRiskBlockFlags.String("id", "REQUIRED", "")
 		riskGetRiskBlockSessionTokenFlag = riskGetRiskBlockFlags.String("session-token", "", "")
@@ -2454,6 +2468,7 @@ func ParseEndpoint(
 		riskListRiskPolicyBypassRequestsFlags                = flag.NewFlagSet("list-risk-policy-bypass-requests", flag.ExitOnError)
 		riskListRiskPolicyBypassRequestsPolicyIDFlag         = riskListRiskPolicyBypassRequestsFlags.String("policy-id", "", "")
 		riskListRiskPolicyBypassRequestsStatusFlag           = riskListRiskPolicyBypassRequestsFlags.String("status", "", "")
+		riskListRiskPolicyBypassRequestsRequesterUserIdsFlag = riskListRiskPolicyBypassRequestsFlags.String("requester-user-ids", "", "")
 		riskListRiskPolicyBypassRequestsApikeyTokenFlag      = riskListRiskPolicyBypassRequestsFlags.String("apikey-token", "", "")
 		riskListRiskPolicyBypassRequestsSessionTokenFlag     = riskListRiskPolicyBypassRequestsFlags.String("session-token", "", "")
 		riskListRiskPolicyBypassRequestsProjectSlugInputFlag = riskListRiskPolicyBypassRequestsFlags.String("project-slug-input", "", "")
@@ -3510,6 +3525,7 @@ func ParseEndpoint(
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
+	accessListMemberGrantsFlags.Usage = accessListMemberGrantsUsage
 	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
 	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
@@ -4016,6 +4032,7 @@ func ParseEndpoint(
 	riskAcknowledgeRiskPolicyChallengeFlags.Usage = riskAcknowledgeRiskPolicyChallengeUsage
 	riskGetRiskPolicyChallengeFlags.Usage = riskGetRiskPolicyChallengeUsage
 	riskDeclineRiskPolicyChallengeFlags.Usage = riskDeclineRiskPolicyChallengeUsage
+	riskListRiskPolicyChallengesFlags.Usage = riskListRiskPolicyChallengesUsage
 	riskGetRiskBlockFlags.Usage = riskGetRiskBlockUsage
 	riskSubmitRiskBlockFeedbackFlags.Usage = riskSubmitRiskBlockFeedbackUsage
 	riskListRiskPolicyBypassRequestsFlags.Usage = riskListRiskPolicyBypassRequestsUsage
@@ -4448,6 +4465,9 @@ func ParseEndpoint(
 
 			case "list-grants":
 				epf = accessListGrantsFlags
+
+			case "list-member-grants":
+				epf = accessListMemberGrantsFlags
 
 			case "update-member-roles":
 				epf = accessUpdateMemberRolesFlags
@@ -5859,6 +5879,9 @@ func ParseEndpoint(
 			case "decline-risk-policy-challenge":
 				epf = riskDeclineRiskPolicyChallengeFlags
 
+			case "list-risk-policy-challenges":
+				epf = riskListRiskPolicyChallengesFlags
+
 			case "get-risk-block":
 				epf = riskGetRiskBlockFlags
 
@@ -6524,6 +6547,9 @@ func ParseEndpoint(
 			case "list-grants":
 				endpoint = c.ListGrants()
 				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
+			case "list-member-grants":
+				endpoint = c.ListMemberGrants()
+				data, err = accessc.BuildListMemberGrantsPayload(*accessListMemberGrantsUserIDFlag, *accessListMemberGrantsApikeyTokenFlag, *accessListMemberGrantsSessionTokenFlag)
 			case "update-member-roles":
 				endpoint = c.UpdateMemberRoles()
 				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
@@ -7528,7 +7554,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-plugins":
 				endpoint = c.ListPlugins()
-				data, err = pluginsc.BuildListPluginsPayload(*pluginsListPluginsSessionTokenFlag, *pluginsListPluginsProjectSlugInputFlag)
+				data, err = pluginsc.BuildListPluginsPayload(*pluginsListPluginsPrincipalUrnsFlag, *pluginsListPluginsSessionTokenFlag, *pluginsListPluginsProjectSlugInputFlag)
 			case "get-plugin":
 				endpoint = c.GetPlugin()
 				data, err = pluginsc.BuildGetPluginPayload(*pluginsGetPluginIDFlag, *pluginsGetPluginSessionTokenFlag, *pluginsGetPluginProjectSlugInputFlag)
@@ -7952,6 +7978,9 @@ func ParseEndpoint(
 			case "decline-risk-policy-challenge":
 				endpoint = c.DeclineRiskPolicyChallenge()
 				data, err = riskc.BuildDeclineRiskPolicyChallengePayload(*riskDeclineRiskPolicyChallengeBodyFlag, *riskDeclineRiskPolicyChallengeSessionTokenFlag)
+			case "list-risk-policy-challenges":
+				endpoint = c.ListRiskPolicyChallenges()
+				data, err = riskc.BuildListRiskPolicyChallengesPayload(*riskListRiskPolicyChallengesUserIdsFlag, *riskListRiskPolicyChallengesStatusFlag, *riskListRiskPolicyChallengesLimitFlag, *riskListRiskPolicyChallengesApikeyTokenFlag, *riskListRiskPolicyChallengesSessionTokenFlag, *riskListRiskPolicyChallengesProjectSlugInputFlag)
 			case "get-risk-block":
 				endpoint = c.GetRiskBlock()
 				data, err = riskc.BuildGetRiskBlockPayload(*riskGetRiskBlockIDFlag, *riskGetRiskBlockSessionTokenFlag)
@@ -7960,7 +7989,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildSubmitRiskBlockFeedbackPayload(*riskSubmitRiskBlockFeedbackBodyFlag, *riskSubmitRiskBlockFeedbackSessionTokenFlag)
 			case "list-risk-policy-bypass-requests":
 				endpoint = c.ListRiskPolicyBypassRequests()
-				data, err = riskc.BuildListRiskPolicyBypassRequestsPayload(*riskListRiskPolicyBypassRequestsPolicyIDFlag, *riskListRiskPolicyBypassRequestsStatusFlag, *riskListRiskPolicyBypassRequestsApikeyTokenFlag, *riskListRiskPolicyBypassRequestsSessionTokenFlag, *riskListRiskPolicyBypassRequestsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskPolicyBypassRequestsPayload(*riskListRiskPolicyBypassRequestsPolicyIDFlag, *riskListRiskPolicyBypassRequestsStatusFlag, *riskListRiskPolicyBypassRequestsRequesterUserIdsFlag, *riskListRiskPolicyBypassRequestsApikeyTokenFlag, *riskListRiskPolicyBypassRequestsSessionTokenFlag, *riskListRiskPolicyBypassRequestsProjectSlugInputFlag)
 			case "approve-risk-policy-bypass-request":
 				endpoint = c.ApproveRiskPolicyBypassRequest()
 				data, err = riskc.BuildApproveRiskPolicyBypassRequestPayload(*riskApproveRiskPolicyBypassRequestBodyFlag, *riskApproveRiskPolicyBypassRequestApikeyTokenFlag, *riskApproveRiskPolicyBypassRequestSessionTokenFlag, *riskApproveRiskPolicyBypassRequestProjectSlugInputFlag)
@@ -8630,6 +8659,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
+	fmt.Fprintln(os.Stderr, `    list-member-grants: List another member's effective grants, including the ones inherited from their roles.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
@@ -8810,6 +8840,28 @@ func accessListGrantsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListMemberGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-member-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List another member's effective grants, including the ones inherited from their roles.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-member-grants --user-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateMemberRolesUsage() {
@@ -15546,6 +15598,7 @@ func pluginsUsage() {
 func pluginsListPluginsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-urns JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -15555,12 +15608,13 @@ func pluginsListPluginsUsage() {
 	fmt.Fprintln(os.Stderr, `List all plugins for the current project.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-urns JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-plugins --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-plugins --principal-urns '[\n      \"abc123\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPluginUsage() {
@@ -18097,6 +18151,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-challenge: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).`)
 	fmt.Fprintln(os.Stderr, `    decline-risk-policy-challenge: Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policy-challenges: List the warn/challenge history for one or more user identifiers.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-block: Get a tool call block by its risk result ID for the durable block page.`)
 	fmt.Fprintln(os.Stderr, `    submit-risk-block-feedback: Record thumbs-up/thumbs-down feedback for a tool call block from the block page.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records.`)
@@ -18740,6 +18795,34 @@ func riskDeclineRiskPolicyChallengeUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk decline-risk-policy-challenge --body '{\n      \"ack_token\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
+func riskListRiskPolicyChallengesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policy-challenges", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-ids JSON")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the warn/challenge history for one or more user identifiers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policy-challenges --user-ids '[\n      \"abc123\"\n   ]' --status \"acknowledged\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func riskGetRiskBlockUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-block", os.Args[0])
@@ -18785,6 +18868,7 @@ func riskListRiskPolicyBypassRequestsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policy-bypass-requests", os.Args[0])
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -requester-user-ids JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -18797,13 +18881,14 @@ func riskListRiskPolicyBypassRequestsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -requester-user-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policy-bypass-requests --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"approved\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policy-bypass-requests --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"approved\" --requester-user-ids '[\n      \"abc123\"\n   ]' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskApproveRiskPolicyBypassRequestUsage() {
