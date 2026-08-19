@@ -31,6 +31,7 @@ type Client struct {
 	CreateOrganizationEndpoint       goa.Endpoint
 	RearmTrialEndpoint               goa.Endpoint
 	GetOrganizationStatsEndpoint     goa.Endpoint
+	GetOrganizationFeaturesEndpoint  goa.Endpoint
 	GetInferenceKeysEndpoint         goa.Endpoint
 	GetPaygBillingSummaryEndpoint    goa.Endpoint
 	GetStripeSubscriptionEndpoint    goa.Endpoint
@@ -39,7 +40,7 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getOrganizationFeatures, getInferenceKeys, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                    login,
 		CallbackEndpoint:                 callback,
@@ -57,6 +58,7 @@ func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpda
 		CreateOrganizationEndpoint:       createOrganization,
 		RearmTrialEndpoint:               rearmTrial,
 		GetOrganizationStatsEndpoint:     getOrganizationStats,
+		GetOrganizationFeaturesEndpoint:  getOrganizationFeatures,
 		GetInferenceKeysEndpoint:         getInferenceKeys,
 		GetPaygBillingSummaryEndpoint:    getPaygBillingSummary,
 		GetStripeSubscriptionEndpoint:    getStripeSubscription,
@@ -420,6 +422,29 @@ func (c *Client) GetOrganizationStats(ctx context.Context, p *GetOrganizationSta
 		return
 	}
 	return ires.(*AdminOrganizationStats), nil
+}
+
+// GetOrganizationFeatures calls the "getOrganizationFeatures" endpoint of the
+// "admin" service.
+// GetOrganizationFeatures may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationFeatures(ctx context.Context, p *GetOrganizationFeaturesPayload) (res *AdminOrganizationFeatures, err error) {
+	var ires any
+	ires, err = c.GetOrganizationFeaturesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganizationFeatures), nil
 }
 
 // GetInferenceKeys calls the "getInferenceKeys" endpoint of the "admin"

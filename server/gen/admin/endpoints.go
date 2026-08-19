@@ -32,6 +32,7 @@ type Endpoints struct {
 	CreateOrganization       goa.Endpoint
 	RearmTrial               goa.Endpoint
 	GetOrganizationStats     goa.Endpoint
+	GetOrganizationFeatures  goa.Endpoint
 	GetInferenceKeys         goa.Endpoint
 	GetPaygBillingSummary    goa.Endpoint
 	GetStripeSubscription    goa.Endpoint
@@ -60,6 +61,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateOrganization:       NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
 		RearmTrial:               NewRearmTrialEndpoint(s, a.APIKeyAuth),
 		GetOrganizationStats:     NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationFeatures:  NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
 		GetInferenceKeys:         NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
 		GetPaygBillingSummary:    NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:    NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -86,6 +88,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateOrganization = m(e.CreateOrganization)
 	e.RearmTrial = m(e.RearmTrial)
 	e.GetOrganizationStats = m(e.GetOrganizationStats)
+	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
 	e.GetInferenceKeys = m(e.GetInferenceKeys)
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
@@ -416,6 +419,29 @@ func NewGetOrganizationStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetOrganizationStats(ctx, p)
+	}
+}
+
+// NewGetOrganizationFeaturesEndpoint returns an endpoint function that calls
+// the method "getOrganizationFeatures" of service "admin".
+func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationFeaturesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationFeatures(ctx, p)
 	}
 }
 

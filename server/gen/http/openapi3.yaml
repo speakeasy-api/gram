@@ -581,6 +581,83 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.features:
+        get:
+            tags:
+                - admin
+            summary: getOrganizationFeatures admin
+            description: Returns the curated organization-targeted product features used by the admin Features page.
+            operationId: adminGetOrganizationFeatures
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganizationFeatures'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.get:
         get:
             tags:
@@ -59222,6 +59299,35 @@ components:
                 - member_count
                 - created_at
                 - updated_at
+        AdminOrganizationFeatures:
+            type: object
+            properties:
+                consent_tool_filtering_enabled:
+                    type: boolean
+                hooks_browser_login_enabled:
+                    type: boolean
+                hooks_fail_open_enabled:
+                    type: boolean
+                platform_mcp_enabled:
+                    type: boolean
+                remote_session_auto_refresh_enabled:
+                    type: boolean
+                session_capture_enabled:
+                    type: boolean
+                skill_capture_metadata_only:
+                    type: boolean
+                skills_enabled:
+                    type: boolean
+            description: Curated organization-targeted product features surfaced in the admin app.
+            required:
+                - consent_tool_filtering_enabled
+                - hooks_browser_login_enabled
+                - hooks_fail_open_enabled
+                - platform_mcp_enabled
+                - remote_session_auto_refresh_enabled
+                - session_capture_enabled
+                - skill_capture_metadata_only
+                - skills_enabled
         AdminOrganizationMember:
             type: object
             properties:
