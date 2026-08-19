@@ -77,10 +77,25 @@ function listHarnesses(harnesses: string[]): string {
 // SessionLineageIcons is the at-a-glance lineage cluster on a session row:
 // one icon per state — continued elsewhere (navigable continuation exists),
 // derived from an earlier session, and moved with no captured continuation.
-function SessionLineageIcons({ summary }: { summary?: LineageSummary }) {
+// The cluster sits above the row's stretched select button (tooltips need
+// pointer events), so clicking it forwards to the same row selection; the
+// stretched button remains the tab stop, hence tabIndex={-1}.
+function SessionLineageIcons({
+  summary,
+  onActivate,
+}: {
+  summary?: LineageSummary;
+  onActivate: () => void;
+}) {
   if (!summary) return null;
   return (
-    <span className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 items-center gap-1">
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={onActivate}
+      aria-label="Open session details"
+      className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 cursor-pointer items-center gap-1"
+    >
       {summary.continuedIn.length > 0 && (
         <SimpleTooltip
           tooltip={`Continued in ${listHarnesses(summary.continuedIn)}`}
@@ -109,7 +124,7 @@ function SessionLineageIcons({ summary }: { summary?: LineageSummary }) {
           />
         </SimpleTooltip>
       )}
-    </span>
+    </button>
   );
 }
 
@@ -355,6 +370,7 @@ export function ChatLogsTable({
                       </h3>
                       <SessionLineageIcons
                         summary={lineageByChat.get(chat.id)}
+                        onActivate={() => onSelectChat(chat)}
                       />
                     </div>
 
