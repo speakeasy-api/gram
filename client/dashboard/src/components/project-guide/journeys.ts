@@ -8,11 +8,12 @@ export function otherProjectGuideJourney(id: JourneyId): JourneyId {
 
 /** Catalog entries we surface first in the automatic project-guide chooser. */
 export const AUTOMATIC_CATALOG_SERVER_NAMES = [
-  "Linear",
+  "GitHub",
   "Notion",
-  "Vercel",
-  "Granola",
-  "Ramp",
+  "Stripe",
+  "Figma",
+  "Linear",
+  "Cloudflare",
 ] as const;
 
 export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {

@@ -1,4 +1,7 @@
-import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import {
+  JourneyRun,
+  useProjectGuideRun,
+} from "@/components/project-guide/JourneyRun";
 import type { ProjectGuideEventCard } from "@/components/project-guide/projectGuideMachine";
 import { catalogBackedMcpServers } from "@/components/project-guide/journeyStatus";
 import type { JourneyStatus } from "@/components/project-guide/journeys";
@@ -48,6 +51,7 @@ function catalogServerName(server: PulseMCPServer): string {
 }
 
 function compareCatalogServers(a: PulseMCPServer, b: PulseMCPServer): number {
+  const legacyOrder = ["Linear", "Notion", "Vercel", "Granola", "Ramp"];
   const aIndex = AUTOMATIC_CATALOG_SERVER_NAMES.indexOf(
     catalogServerName(a) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
   );
@@ -56,8 +60,15 @@ function compareCatalogServers(a: PulseMCPServer, b: PulseMCPServer): number {
   );
   const aRank = aIndex === -1 ? Infinity : aIndex;
   const bRank = bIndex === -1 ? Infinity : bIndex;
+  const aLegacyRank = legacyOrder.indexOf(catalogServerName(a));
+  const bLegacyRank = legacyOrder.indexOf(catalogServerName(b));
+  const aEffectiveRank =
+    aIndex === -1 && aLegacyRank !== -1 ? aLegacyRank : aRank;
+  const bEffectiveRank =
+    bIndex === -1 && bLegacyRank !== -1 ? bLegacyRank : bRank;
   return (
-    aRank - bRank || catalogServerName(a).localeCompare(catalogServerName(b))
+    aEffectiveRank - bEffectiveRank ||
+    catalogServerName(a).localeCompare(catalogServerName(b))
   );
 }
 
@@ -106,6 +117,9 @@ export function ThirdPartyMcpJourney({
   expanded?: boolean;
 }): JSX.Element | null {
   const gramProject = useProjectSlugForRequests();
+  const run = useProjectGuideRun();
+  const snapshot = run?.snapshot;
+  const send = run?.send;
   const routes = useRoutes();
   const [phase, setPhase] = useState(() => initialPhase(status));
   const [selectedServer, setSelectedServer] = useState<PulseMCPServer>();
@@ -117,6 +131,7 @@ export function ThirdPartyMcpJourney({
   const [hasCopiedConfig, setHasCopiedConfig] = useState(false);
   const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false);
   const [activityBaseline, setActivityBaseline] = useState<number>();
+  const installStarted = useRef(false);
   const completionNotified = useRef(false);
   const shouldReduceMotion = useReducedMotion();
   const catalog = useListMCPCatalog(
@@ -254,20 +269,91 @@ export function ThirdPartyMcpJourney({
     serverActivity.totalToolCalls > activityBaseline,
   );
   const activityCompletesJourney = Boolean(
-    serverActivity && (!isPromptPhase || activityAfterPrompt),
+    serverActivity &&
+    (status === "done" || (isListening && activityAfterPrompt)),
   );
   const completedWorkflowStatuses =
     workflow.phase === "complete" ? workflow.statuses : undefined;
 
   useEffect(() => {
-    if (!activityCompletesJourney || completionNotified.current) return;
+    if (!isPromptPhase || activityBaseline !== undefined) return;
+    setActivityBaseline(serverActivity?.totalToolCalls ?? 0);
+  }, [activityBaseline, isPromptPhase, serverActivity?.totalToolCalls]);
+
+  useEffect(() => {
+    if (!selectedServer || snapshot?.value !== "running") return;
+    if (
+      workflow.phase === "configure" &&
+      workflow.canInstall &&
+      !installStarted.current
+    ) {
+      installStarted.current = true;
+      void workflow.startInstall();
+    }
+  }, [selectedServer, snapshot?.value, workflow]);
+
+  useEffect(() => {
+    if (workflow.phase !== "complete" || !completedWorkflowStatuses || !send)
+      return;
+    if (completedWorkflowStatuses.some((item) => item.status === "failed")) {
+      installStarted.current = false;
+      return;
+    }
+    send({ type: "OPERATION_SUCCESS", result: "governed endpoint installed" });
+  }, [completedWorkflowStatuses, send, workflow.phase]);
+
+  useEffect(() => {
+    if (
+      !deploymentComplete ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 1
+    )
+      return;
+    send?.({ type: "OPERATION_SUCCESS", result: "endpoint verified" });
+  }, [deploymentComplete, send, snapshot?.context.step, snapshot?.value]);
+
+  useEffect(() => {
+    if (!activityCompletesJourney || !serverActivity || !send) return;
+    send({
+      type: "EVENT_RECEIVED",
+      event: {
+        kind: "Governed call",
+        tone: "allow",
+        title: serverActivity.targetLabel,
+        rows: [
+          { key: "server", value: mcpServer?.name ?? "catalog server" },
+          { key: "calls", value: String(serverActivity.totalToolCalls) },
+        ],
+        note: "It sits in Observe → Tool Logs next to every other server.",
+      },
+    });
+  }, [activityCompletesJourney, mcpServer?.name, send, serverActivity]);
+
+  useEffect(() => {
+    if (!activityCompletesJourney || send || completionNotified.current) return;
     completionNotified.current = true;
     onComplete();
-  }, [activityCompletesJourney, onComplete]);
+  }, [activityCompletesJourney, onComplete, send]);
+
+  useEffect(() => {
+    if (snapshot?.value !== "complete" || completionNotified.current) return;
+    completionNotified.current = true;
+    onComplete();
+  }, [onComplete, snapshot?.value]);
 
   useEffect(() => {
     if (deploymentComplete) setPhase("verification");
   }, [deploymentComplete]);
+
+  useEffect(() => {
+    if (
+      !isListening ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 4
+    )
+      return;
+    send?.({ type: "LISTEN" });
+  }, [isListening, send, snapshot?.context.step, snapshot?.value]);
 
   useEffect(() => {
     if (workflow.phase !== "complete" || !completedWorkflowStatuses) return;
@@ -326,6 +412,7 @@ export function ThirdPartyMcpJourney({
   const chooseServer = (server: PulseMCPServer) => {
     setSelectedServer(server);
     setPhase("deployment");
+    send?.({ type: "SELECT", value: catalogServerName(server) });
   };
 
   if (phase === "deployment" && !deploymentComplete) {
@@ -445,14 +532,20 @@ export function ThirdPartyMcpJourney({
       endpointUrl && serverSlug
         ? clientConfig(client, serverSlug, endpointUrl)
         : undefined;
-    const prompt = `Using the ${serverName} MCP server: First list the available tools. Then call one tool explicitly described as read-only, using the smallest valid input. Do not use a tool that creates, updates, deletes, sends, or triggers anything.`;
+    const prompt = `Using the ${serverName} MCP server, list the read-only tools you can call and summarise what each one reads.`;
     const startPrompt = () => {
       setIsPromptPhase(true);
+      send?.({ type: "CONFIRM" });
+      send?.({ type: "OPERATION_SUCCESS", result: "client connected" });
     };
     const startListening = () => {
-      setActivityBaseline(serverActivity?.totalToolCalls ?? 0);
       setChecksPaused(false);
       setIsListening(true);
+      send?.({ type: "CONFIRM" });
+      send?.({
+        type: "OPERATION_SUCCESS",
+        result: "prompt sent from your client",
+      });
     };
 
     return (
@@ -474,6 +567,14 @@ export function ThirdPartyMcpJourney({
                 note: "It sits in Observe → Tool Logs next to every other server.",
               }
             : null
+        }
+        completionPrimary={
+          <a
+            href={routes.logs?.href?.() ?? "#"}
+            className="bg-[#121212] px-[18px] py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase"
+          >
+            Open tool logs
+          </a>
         }
         currentStep={
           activityCompletesJourney ? 4 : isListening ? 4 : isPromptPhase ? 3 : 2
@@ -535,7 +636,10 @@ export function ThirdPartyMcpJourney({
                       code={tabConfig.code}
                       language={tabConfig.language}
                       copyable
-                      onSelectOrCopy={() => setHasCopiedConfig(true)}
+                      onSelectOrCopy={() => {
+                        setHasCopiedConfig(true);
+                        send?.({ type: "COPY" });
+                      }}
                     />
                   </TabsContent>
                 );
@@ -556,7 +660,10 @@ export function ThirdPartyMcpJourney({
               code={prompt}
               language="text"
               copyable
-              onSelectOrCopy={() => setHasCopiedPrompt(true)}
+              onSelectOrCopy={() => {
+                setHasCopiedPrompt(true);
+                send?.({ type: "COPY" });
+              }}
             />
             {!isListening && (
               <button

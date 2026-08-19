@@ -699,6 +699,8 @@ describe("SecretBlockJourney", () => {
     );
 
     expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
     expect(screen.getByRole("status").textContent).toContain(
       "Listening for risk events on this project",
     );
@@ -736,6 +738,8 @@ describe("SecretBlockJourney", () => {
     );
 
     expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
     expect(
       screen.getByText("Could not check for blocked risk events."),
     ).toBeTruthy();
@@ -763,6 +767,8 @@ describe("SecretBlockJourney", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
     expect(screen.getByRole("status").textContent).toContain(
       "Listening for risk events on this project",
     );

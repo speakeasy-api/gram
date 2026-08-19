@@ -253,6 +253,10 @@ describe("ThirdPartyMcpJourney", () => {
       server("SSE only", { remotes: ["sse"] }),
       { ...server("Mutating"), isReadOnly: false },
       server("Granola"),
+      server("GitHub"),
+      server("Stripe"),
+      server("Figma"),
+      server("Cloudflare"),
       {
         ...server("Not a Pulse entry"),
         meta: undefined,
@@ -272,11 +276,11 @@ describe("ThirdPartyMcpJourney", () => {
         .getAllByTestId("project-guide-catalog-server")
         .map((button) => button.textContent),
     ).toEqual([
-      "Linear1 tools",
+      "GitHub1 tools",
       "Notion1 tools",
+      "Stripe1 tools",
       "Vercel1 tools",
-      "Granola1 tools",
-      "Ramp1 tools",
+      "Figma1 tools",
     ]);
     fireEvent.click(
       screen.getByRole("button", { name: "More automatic servers" }),
@@ -782,24 +786,14 @@ describe("ThirdPartyMcpJourney", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
-    );
-    expect(
-      screen.getByText(/call one tool explicitly described as read-only/),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        /Do not use a tool that creates, updates, deletes, sends, or triggers anything/,
-      ),
-    ).toBeTruthy();
+    const safePrompt =
+      /Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads\./;
+    await waitFor(() => expect(screen.getByText(safePrompt)).toBeTruthy());
     expect(
       (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    fireEvent.click(
-      screen.getByText(/First list the available tools/).closest("pre")!,
-    );
+    fireEvent.click(screen.getByText(safePrompt).closest("pre")!);
     expect(
       (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
         .disabled,
@@ -846,7 +840,7 @@ describe("ThirdPartyMcpJourney", () => {
 
     render(
       <ThirdPartyMcpJourney
-        status="in-progress"
+        status="done"
         onComplete={() => {
           onComplete();
         }}
@@ -1012,7 +1006,7 @@ describe("ThirdPartyMcpJourney", () => {
     ).toBeTruthy();
   });
 
-  it("captures the server activity baseline only when listening starts", async () => {
+  it("captures the server activity baseline before the prompt is sent", async () => {
     setVerifiedServer();
     const activity = { current: [] as Array<Record<string, unknown>> };
     queries.activity.mockImplementation(() => ({
@@ -1034,11 +1028,6 @@ describe("ThirdPartyMcpJourney", () => {
 
     await waitFor(() => expect(screen.getByText('"url"')).toBeTruthy());
     fireEvent.click(screen.getByText('"url"').closest("pre")!);
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await waitFor(() =>
-      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
-    );
-
     activity.current = [
       {
         lastToolCallAt: new Date("2026-08-19T12:00:00Z"),
@@ -1058,9 +1047,11 @@ describe("ThirdPartyMcpJourney", () => {
         onSwitchJourney={noop}
       />,
     );
-    fireEvent.click(
-      screen.getByText(/First list the available tools/).closest("pre")!,
-    );
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    const safePrompt =
+      /Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads\./;
+    await waitFor(() => expect(screen.getByText(safePrompt)).toBeTruthy());
+    fireEvent.click(screen.getByText(safePrompt).closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
 
     expect(onComplete).not.toHaveBeenCalled();
@@ -1105,12 +1096,10 @@ describe("ThirdPartyMcpJourney", () => {
     await waitFor(() => expect(screen.getByText('"url"')).toBeTruthy());
     fireEvent.click(screen.getByText('"url"').closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await waitFor(() =>
-      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
-    );
-    fireEvent.click(
-      screen.getByText(/First list the available tools/).closest("pre")!,
-    );
+    const safePrompt =
+      /Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads\./;
+    await waitFor(() => expect(screen.getByText(safePrompt)).toBeTruthy());
+    fireEvent.click(screen.getByText(safePrompt).closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause live checks" }));
 

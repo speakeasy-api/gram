@@ -1,5 +1,8 @@
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
-import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import {
+  JourneyRun,
+  useProjectGuideRun,
+} from "@/components/project-guide/JourneyRun";
 import type { ProjectGuideEventCard } from "@/components/project-guide/projectGuideMachine";
 import {
   SECRET_BLOCK_STEPS,
@@ -25,7 +28,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Client = "claude" | "cursor" | "codex";
 type PluginStage = "download" | "install";
@@ -252,6 +255,9 @@ export function SecretBlockJourney({
   onSwitchJourney: () => void;
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
+  const run = useProjectGuideRun();
+  const snapshot = run?.snapshot;
+  const send = run?.send;
   const queryClient = useQueryClient();
   const { fetch: authFetch } = useFetcher();
   const routes = useRoutes();
@@ -264,6 +270,11 @@ export function SecretBlockJourney({
   const [downloadError, setDownloadError] = useState(false);
   const [checksPaused, setChecksPaused] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [promptSent, setPromptSent] = useState(false);
+  const [pluginInstalled, setPluginInstalled] = useState(false);
+  const [installCommandsCopied, setInstallCommandsCopied] = useState(false);
+  const policyStarted = useRef(false);
+  const downloadStarted = useRef(false);
   const [downloadedFilenames, setDownloadedFilenames] = useState<
     Partial<Record<Client, string>>
   >({});
@@ -301,6 +312,10 @@ export function SecretBlockJourney({
   });
   const hasHookTrace =
     !tracesQuery.isError && Boolean(tracesQuery.data?.traces.length);
+
+  useEffect(() => {
+    if (hasHookTrace) setPluginInstalled(true);
+  }, [hasHookTrace]);
   const resultsQuery = useRiskListResults(
     { gramProject, category: "secrets", limit: 10 },
     undefined,
@@ -308,13 +323,13 @@ export function SecretBlockJourney({
       enabled: hasHookTrace && !checksPaused,
       refetchInterval: (query) => {
         if (query.state.data?.results.length) return false;
-        return hasHookTrace && !checksPaused ? 2_000 : false;
+        return hasHookTrace && promptSent && !checksPaused ? 2_000 : false;
       },
       throwOnError: false,
     },
   );
   const riskResults = resultsQuery.data?.results;
-  let latestRiskResult;
+  let latestRiskResult: RiskResult | undefined;
   if (hasHookTrace && !resultsQuery.isError && riskResults?.length) {
     latestRiskResult = riskResults.reduce((latest, result) =>
       result.createdAt > latest.createdAt ? result : latest,
@@ -324,12 +339,65 @@ export function SecretBlockJourney({
   const createPolicy = useRiskCreatePolicyMutation();
 
   useEffect(() => {
-    if (!hasRiskResult || completionNotified.current) return;
+    if (
+      !hasRiskResult ||
+      !promptSent ||
+      !send ||
+      snapshot?.context.step !== 4 ||
+      (snapshot.value !== "running" && snapshot.value !== "waiting")
+    )
+      return;
+    const result = latestRiskResult;
+    if (!result) return;
+    send({
+      type: "EVENT_RECEIVED",
+      event: {
+        kind: "Denied · risk event",
+        tone: "deny",
+        title: "request denied by secrets policy",
+        rows: [
+          { key: "rule", value: getRuleTitleFallback(result.ruleId) },
+          {
+            key: "match",
+            value: "synthetic credential · highlighted in the transcript",
+          },
+        ],
+        note: "The prompt was rejected before the model saw it.",
+      },
+    });
+  }, [
+    hasRiskResult,
+    latestRiskResult,
+    onComplete,
+    promptSent,
+    send,
+    snapshot?.context.step,
+    snapshot?.value,
+  ]);
+
+  useEffect(() => {
+    if (
+      !promptSent ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 4
+    )
+      return;
+    send?.({ type: "LISTEN" });
+  }, [promptSent, send, snapshot?.context.step, snapshot?.value]);
+
+  useEffect(() => {
+    if (!hasRiskResult || send || completionNotified.current) return;
     completionNotified.current = true;
     onComplete();
-  }, [hasRiskResult, onComplete]);
+  }, [hasRiskResult, onComplete, send]);
 
-  const publishPolicy = async () => {
+  useEffect(() => {
+    if (snapshot?.value !== "complete" || completionNotified.current) return;
+    completionNotified.current = true;
+    onComplete();
+  }, [onComplete, snapshot?.value]);
+
+  const publishPolicy = useCallback(async () => {
     if (policiesQuery.isError || policiesQuery.isPending || hasPolicy) return;
     setPolicyError(false);
     setIsCreating(true);
@@ -349,14 +417,45 @@ export function SecretBlockJourney({
         },
       });
       await invalidateRiskListPolicies(queryClient, [{ gramProject }]);
+      send?.({
+        type: "OPERATION_SUCCESS",
+        result: "policy live · deny on match",
+      });
     } catch {
       setPolicyError(true);
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [
+    createPolicy,
+    gramProject,
+    hasPolicy,
+    policiesQuery.isError,
+    policiesQuery.isPending,
+    queryClient,
+    send,
+  ]);
 
-  const downloadPlugin = async () => {
+  useEffect(() => {
+    if (
+      hasPolicy ||
+      policiesQuery.isPending ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 0 ||
+      policyStarted.current
+    )
+      return;
+    policyStarted.current = true;
+    void publishPolicy();
+  }, [
+    hasPolicy,
+    policiesQuery.isPending,
+    publishPolicy,
+    snapshot?.context.step,
+    snapshot?.value,
+  ]);
+
+  const downloadPlugin = useCallback(async () => {
     setDownloadError(false);
     setIsDownloading(true);
     try {
@@ -380,12 +479,48 @@ export function SecretBlockJourney({
         [client]: downloadedFilename,
       }));
       setPluginStage("install");
+      send?.({
+        type: "OPERATION_SUCCESS",
+        result: "observability plugin downloaded",
+      });
     } catch {
       setDownloadError(true);
     } finally {
       setIsDownloading(false);
     }
-  };
+  }, [authFetch, client, send]);
+
+  useEffect(() => {
+    if (
+      !hasPolicy ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 0
+    )
+      return;
+    send?.({
+      type: "OPERATION_SUCCESS",
+      result: "policy already live · deny on match",
+    });
+  }, [hasPolicy, send, snapshot?.context.step, snapshot?.value]);
+
+  useEffect(() => {
+    if (
+      !hasPolicy ||
+      snapshot?.value !== "running" ||
+      snapshot.context.step !== 1 ||
+      pluginStage !== "download" ||
+      downloadStarted.current
+    )
+      return;
+    downloadStarted.current = true;
+    void downloadPlugin();
+  }, [
+    downloadPlugin,
+    hasPolicy,
+    pluginStage,
+    snapshot?.context.step,
+    snapshot?.value,
+  ]);
 
   if (latestRiskResult) {
     return (
@@ -494,11 +629,11 @@ export function SecretBlockJourney({
     );
   }
 
-  if (hasHookTrace) {
+  if (pluginInstalled) {
     return (
       <Section
-        currentStep={promptCopied ? 4 : 3}
-        error={resultsQuery.isError}
+        currentStep={promptSent ? 4 : 3}
+        error={promptSent && resultsQuery.isError}
         paused={checksPaused}
         status={status}
         title="Watch the block land"
@@ -520,6 +655,7 @@ export function SecretBlockJourney({
           onClick={() => {
             setPromptCopied(true);
             void navigator.clipboard?.writeText(SYNTHETIC_SECRET_PROMPT);
+            send?.({ type: "COPY" });
           }}
           className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
         >
@@ -528,7 +664,21 @@ export function SecretBlockJourney({
         <p className="font-mono text-[10px] tracking-[0.05em] uppercase text-muted-foreground">
           Expected result: blocked
         </p>
-        {resultsQuery.isError ? (
+        {!promptSent && (
+          <button
+            type="button"
+            disabled={!promptCopied}
+            onClick={() => {
+              setPromptSent(true);
+              send?.({ type: "CONFIRM" });
+              send?.({ type: "LISTEN" });
+            }}
+            className="bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground w-fit px-3 py-2 font-mono text-[11px] uppercase"
+          >
+            Sent it
+          </button>
+        )}
+        {promptSent && resultsQuery.isError ? (
           <div className="grid gap-3">
             <p className="text-destructive text-[13px] leading-[1.6]">
               Could not check for blocked risk events.
@@ -541,9 +691,9 @@ export function SecretBlockJourney({
               Retry risk events
             </button>
           </div>
-        ) : (
+        ) : promptSent ? (
           <WaitingForRiskEvent />
-        )}
+        ) : null}
       </Section>
     );
   }
@@ -573,9 +723,24 @@ export function SecretBlockJourney({
               return (
                 <div className="grid gap-2">
                   {downloadedFilename ? (
-                    <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
-                      {`unzip ${shellFilename(downloadedFilename)} -d ${currentClient.directory}`}
-                    </pre>
+                    <div className="grid gap-2">
+                      <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
+                        {`unzip ${shellFilename(downloadedFilename)} -d ${currentClient.directory}`}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInstallCommandsCopied(true);
+                          void navigator.clipboard?.writeText(
+                            `unzip ${shellFilename(downloadedFilename)} -d ${currentClient.directory}`,
+                          );
+                          send?.({ type: "COPY" });
+                        }}
+                        className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
+                      >
+                        {installCommandsCopied ? "✓ Copied" : "Copy commands"}
+                      </button>
+                    </div>
                   ) : (
                     <p className="text-muted-foreground text-[13px] leading-[1.6]">
                       Download this client's ZIP before extracting it.
@@ -586,6 +751,21 @@ export function SecretBlockJourney({
             }}
           </ClientTabs>
           <WaitingForHookEvent />
+          <button
+            type="button"
+            disabled={!downloadedFilenames[client] || !installCommandsCopied}
+            onClick={() => {
+              setPluginInstalled(true);
+              send?.({ type: "CONFIRM" });
+              send?.({
+                type: "OPERATION_SUCCESS",
+                result: "plugin hooked at transport · streaming",
+              });
+            }}
+            className="bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground w-fit px-3 py-2 font-mono text-[11px] uppercase"
+          >
+            I've installed it
+          </button>
           <button
             type="button"
             onClick={() => setPluginStage("download")}
