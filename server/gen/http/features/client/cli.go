@@ -19,11 +19,9 @@ import (
 // BuildGetProductFeaturesPayload builds the payload for the features
 // getProductFeatures endpoint from CLI flags.
 func BuildGetProductFeaturesPayload(featuresGetProductFeaturesOrganizationID string, featuresGetProductFeaturesSessionToken string) (*features.GetProductFeaturesPayload, error) {
-	var organizationID *string
+	var organizationID string
 	{
-		if featuresGetProductFeaturesOrganizationID != "" {
-			organizationID = &featuresGetProductFeaturesOrganizationID
-		}
+		organizationID = featuresGetProductFeaturesOrganizationID
 	}
 	var sessionToken *string
 	{

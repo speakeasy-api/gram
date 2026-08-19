@@ -31800,6 +31800,7 @@ paths:
           description: Organization whose product features to read.
           in: query
           name: organization_id
+          required: true
           schema:
             description: Organization whose product features to read.
             type: string
@@ -74713,6 +74714,7 @@ components:
           type: string
           description: Organization whose product feature to update.
       required:
+        - organization_id
         - feature_name
         - enabled
     SetProjectLogoForm:
@@ -74744,6 +74746,7 @@ components:
             - user_controlled
             - enforced
       required:
+        - organization_id
         - policy
     SetRootMcpEndpointRequestBody:
       type: object

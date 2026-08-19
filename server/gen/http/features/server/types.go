@@ -1119,7 +1119,7 @@ func NewSetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody(res *goa.Servi
 
 // NewGetProductFeaturesPayload builds a features service getProductFeatures
 // endpoint payload.
-func NewGetProductFeaturesPayload(organizationID *string, sessionToken *string) *features.GetProductFeaturesPayload {
+func NewGetProductFeaturesPayload(organizationID string, sessionToken *string) *features.GetProductFeaturesPayload {
 	v := &features.GetProductFeaturesPayload{}
 	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
@@ -1131,7 +1131,7 @@ func NewGetProductFeaturesPayload(organizationID *string, sessionToken *string) 
 // endpoint payload.
 func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
-		OrganizationID: body.OrganizationID,
+		OrganizationID: *body.OrganizationID,
 		FeatureName:    *body.FeatureName,
 		Enabled:        *body.Enabled,
 	}
@@ -1144,7 +1144,7 @@ func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToke
 // setRemoteSessionAutoRefreshPolicy endpoint payload.
 func NewSetRemoteSessionAutoRefreshPolicyPayload(body *SetRemoteSessionAutoRefreshPolicyRequestBody, sessionToken *string) *features.SetRemoteSessionAutoRefreshPolicyPayload {
 	v := &features.SetRemoteSessionAutoRefreshPolicyPayload{
-		OrganizationID: body.OrganizationID,
+		OrganizationID: *body.OrganizationID,
 		Policy:         *body.Policy,
 	}
 	v.SessionToken = sessionToken
@@ -1155,6 +1155,9 @@ func NewSetRemoteSessionAutoRefreshPolicyPayload(body *SetRemoteSessionAutoRefre
 // ValidateSetProductFeatureRequestBody runs the validations defined on
 // SetProductFeatureRequestBody
 func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.FeatureName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("feature_name", "body"))
 	}
@@ -1177,6 +1180,9 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 // ValidateSetRemoteSessionAutoRefreshPolicyRequestBody runs the validations
 // defined on SetRemoteSessionAutoRefreshPolicyRequestBody
 func ValidateSetRemoteSessionAutoRefreshPolicyRequestBody(body *SetRemoteSessionAutoRefreshPolicyRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Policy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy", "body"))
 	}

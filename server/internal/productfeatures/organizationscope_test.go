@@ -3,6 +3,7 @@ package productfeatures_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,15 +42,15 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 	_, err := q.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: activeOrganizationID, FeatureName: string(productfeatures.FeatureLogs)})
 	require.NoError(t, err)
 
-	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(targetOrganizationID)})
+	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: targetOrganizationID})
 	require.NoError(t, err)
 	require.False(t, result.LogsEnabled)
-	activeResult, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(activeOrganizationID)})
+	activeResult, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: activeOrganizationID})
 	require.NoError(t, err)
 	require.True(t, activeResult.LogsEnabled)
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		OrganizationID: conv.PtrEmpty(targetOrganizationID),
+		OrganizationID: targetOrganizationID,
 		FeatureName:    string(productfeatures.FeatureLogs),
 		Enabled:        true,
 	}))
@@ -64,7 +65,7 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 	require.True(t, targetEnabled)
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		OrganizationID: conv.PtrEmpty(targetOrganizationID),
+		OrganizationID: targetOrganizationID,
 		FeatureName:    string(productfeatures.FeatureLogs),
 		Enabled:        false,
 	}))
@@ -79,10 +80,10 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 		OrganizationID: targetOrganizationID,
 		Email:          "device@example.com",
 	}))
-	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(targetOrganizationID)})
+	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: targetOrganizationID})
 	require.NoError(t, err)
 	require.True(t, result.DeviceAgent)
-	activeResult, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(activeOrganizationID)})
+	activeResult, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: activeOrganizationID})
 	require.NoError(t, err)
 	require.False(t, activeResult.DeviceAgent)
 }
@@ -113,7 +114,7 @@ func TestProductFeaturesService_RemoteSessionPolicyTargetsRequestedOrganization(
 		{policy: "disabled"},
 	} {
 		require.NoError(t, ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
-			OrganizationID: conv.PtrEmpty(targetOrganizationID),
+			OrganizationID: targetOrganizationID,
 			Policy:         tc.policy,
 		}))
 		visible, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: targetOrganizationID, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefresh)})
@@ -147,20 +148,20 @@ func TestProductFeaturesService_AuthorizesBeforeOrganizationLookup(t *testing.T)
 	seedOrganization(t, ctx, ti.conn, targetOrganizationID)
 
 	readActiveOnly := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, activeOrganizationID))
-	_, err := ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(targetOrganizationID)})
+	_, err := ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: targetOrganizationID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	adminActiveOnly := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, activeOrganizationID))
-	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: conv.PtrEmpty(targetOrganizationID), FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
+	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: targetOrganizationID, FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: conv.PtrEmpty(targetOrganizationID), Policy: "enforced"})
+	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: targetOrganizationID, Policy: "enforced"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	unknownOrganizationID := uuid.NewString()
-	_, err = ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: conv.PtrEmpty(unknownOrganizationID)})
+	_, err = ti.service.GetProductFeatures(readActiveOnly, &gen.GetProductFeaturesPayload{OrganizationID: unknownOrganizationID})
 	requireOopsCode(t, err, oops.CodeForbidden, "unauthorized unknown target must not be enumerable")
-	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: conv.PtrEmpty(unknownOrganizationID), FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
+	err = ti.service.SetProductFeature(adminActiveOnly, &gen.SetProductFeaturePayload{OrganizationID: unknownOrganizationID, FeatureName: string(productfeatures.FeatureLogs), Enabled: true})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: conv.PtrEmpty(unknownOrganizationID), Policy: "enforced"})
+	err = ti.service.SetRemoteSessionAutoRefreshPolicy(adminActiveOnly, &gen.SetRemoteSessionAutoRefreshPolicyPayload{OrganizationID: unknownOrganizationID, Policy: "enforced"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -172,7 +173,7 @@ func TestProductFeaturesService_HooksFailOpenAuditTargetsRequestedOrganization(t
 	seedOrganization(t, ctx, ti.conn, targetOrganizationID)
 	seedRequestedOrganizationRole(t, ctx, ti, targetOrganizationID, authz.SystemRoleAdmin)
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		OrganizationID: conv.PtrEmpty(targetOrganizationID),
+		OrganizationID: targetOrganizationID,
 		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
 		Enabled:        true,
 	}))
@@ -271,33 +272,37 @@ func requireOopsCode(t *testing.T, err error, code oops.Code, msgAndArgs ...any)
 	require.Equal(t, code, shareable.Code, msgAndArgs...)
 }
 
-func TestProductFeaturesService_OmittedOrganizationUsesActiveOrganization(t *testing.T) {
+func TestProductFeaturesHTTP_RequiresOrganizationID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
-	organizationID := activeOrganizationID(t, ctx)
-
-	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.SessionID)
+	session, err := ti.sessionManager.GetSession(ctx, *authCtx.SessionID)
 	require.NoError(t, err)
-	require.False(t, result.LogsEnabled)
 
-	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureLogs),
-		Enabled:     true,
-	}))
-	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(productfeatures.FeatureLogs),
-	})
+	mux := goahttp.NewMuxer()
+	productfeatures.Attach(mux, ti.service)
+	setBody, err := json.Marshal(map[string]any{"feature_name": "logs", "enabled": true})
 	require.NoError(t, err)
-	require.True(t, enabled)
+	policyBody, err := json.Marshal(map[string]any{"policy": "enforced"})
+	require.NoError(t, err)
 
-	require.NoError(t, ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
-		Policy: "enforced",
-	}))
-	enforced, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
-	})
-	require.NoError(t, err)
-	require.True(t, enforced)
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequestWithContext(t.Context(), method, target, bytes.NewBufferString(body))
+		req.Header.Set("Gram-Session", session.SessionID)
+		req.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, req)
+		return recorder
+	}
+
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"get":           do(http.MethodGet, "/rpc/productFeatures.get", ""),
+		"set":           do(http.MethodPost, "/rpc/productFeatures.set", string(setBody)),
+		"remote policy": do(http.MethodPost, "/rpc/productFeatures.setRemoteSessionAutoRefreshPolicy", string(policyBody)),
+	} {
+		require.Equal(t, http.StatusBadRequest, response.Code, "%s: %s", name, response.Body.String())
+	}
 }
