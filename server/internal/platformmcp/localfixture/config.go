@@ -5,6 +5,7 @@ package localfixture
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -159,20 +160,40 @@ func (c *Config) RegistryDetailsPath() string {
 	return "/" + registryURL.JoinPath("v0.1", "servers", url.PathEscape(CanonicalRef), "versions", "latest").EscapedPath()
 }
 
+// SetupResources returns the fixture's own guide. It is kept alongside the
+// reviewed mcp-setup-docs corpus rather than replaced by it: the fixture
+// provider does not exist upstream, and the local composition must be able to
+// exercise the setup handoff without depending on a real provider's guide.
+//
+// Its observation date tracks the clock so the fixture never drifts into the
+// stale or withheld paths that a real guide is subject to — a local fixture
+// that expires would fail the local flow for reasons unrelated to the change
+// under test.
 func (c *Config) SetupResources() []platformmcp.SetupResource {
+	observedAt := time.Now().UTC().Truncate(24 * time.Hour)
+	body := "## Complete the fixture setup handoff\n\n" +
+		"1. Start the authenticated dashboard setup handoff returned by `get_setup_handoff`.\n" +
+		"2. Complete the local synthetic authorization page.\n" +
+		"3. Recheck authenticated readiness after the completion landing page.\n\n" +
+		"Trusted links: use only the same-origin dashboard handoff and completion route returned by the AI Control Plane.\n"
 	return []platformmcp.SetupResource{{
-		URI:         "gram://platform-mcp/setup/local-fixture/provider_setup",
+		URI:         platformmcp.SetupResourceURI(ProviderKey, SetupIntent),
 		Name:        "local-fixture-provider-setup",
 		Title:       "Local fixture provider setup",
 		Description: "Reviewed local-only setup instructions for the synthetic Platform MCP fixture.",
-		Text: "# Local fixture provider setup\n\n" +
-			"Owner: Speakeasy AICP Platform MCP\n\n" +
-			"Source/version: " + SetupGuideVersion + "\n\n" +
-			"Review/freshness: static synthetic fixture; reviewed with the local Platform MCP test composition.\n\n" +
-			"1. Start the authenticated dashboard setup handoff returned by `get_setup_handoff`.\n" +
-			"2. Complete the local synthetic authorization page.\n" +
-			"3. Recheck authenticated readiness after the completion landing page.\n\n" +
-			"Trusted links: use only the same-origin dashboard handoff and completion route returned by the AI Control Plane.\n",
+		Text:        "# Local fixture provider setup\n\n" + body,
+		Body:        body,
+
+		Provider:     ProviderKey,
+		Intent:       SetupIntent,
+		Owner:        "Speakeasy AICP Platform MCP",
+		Source:       SetupGuideVersion,
+		ObservedAt:   observedAt,
+		RevalidateBy: observedAt.AddDate(0, 0, 90),
+		Aliases:      []string{CanonicalRef},
+		Links:        nil,
+		// The fixture provider is synthetic, so it has no published page.
+		DocsURL: "",
 	}}
 }
 

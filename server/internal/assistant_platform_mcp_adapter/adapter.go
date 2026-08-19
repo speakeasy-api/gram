@@ -73,6 +73,51 @@ func ExternalTools(admitted []platformmcp.Descriptor, authorizer platformmcp.Aut
 	return tools
 }
 
+// Resource is one admitted resource, readable by the assistant.
+type Resource struct {
+	descriptor platformmcp.ResourceDescriptor
+	authorizer platformmcp.Authorizer
+}
+
+// Resources composes the assistant's readable resource set from the catalogue.
+//
+// The assistant's tool channel has no resources/* methods, so this is how the
+// same reviewed corpus reaches it: in process, through the descriptors the
+// registrar admitted, rather than by re-serving MCP to ourselves. Anything the
+// assistant cites is therefore something it can also open.
+func Resources(admitted []platformmcp.ResourceDescriptor, authorizer platformmcp.Authorizer) []Resource {
+	resources := make([]Resource, 0, len(admitted))
+	for _, descriptor := range admitted {
+		resources = append(resources, Resource{descriptor: descriptor, authorizer: authorizer})
+	}
+	return resources
+}
+
+func (r Resource) URI() string   { return r.descriptor.URI }
+func (r Resource) Title() string { return r.descriptor.Title }
+
+// Read returns the resource's current content under the assistant's identity.
+//
+// Authorization is rechecked per read for the same reason Call rechecks it: the
+// HTTP handler that authorizes the external surface does not run on this path.
+func (r Resource) Read(ctx context.Context) (string, error) {
+	principal, err := principalFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	if r.authorizer == nil {
+		return "", platformmcp.ErrUnavailable
+	}
+	if err := r.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		return "", fmt.Errorf("authorize assistant platform resource %q: %w", r.descriptor.URI, err)
+	}
+	text, err := r.descriptor.Read(platformmcp.ContextWithPrincipal(ctx, principal))
+	if err != nil {
+		return "", fmt.Errorf("read assistant platform resource %q: %w", r.descriptor.URI, err)
+	}
+	return text, nil
+}
+
 func (t Tool) Descriptor() core.ToolDescriptor {
 	return core.ToolDescriptor{
 		SourceSlug:  platformtools.SourcePlatform,

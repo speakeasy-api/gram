@@ -21,8 +21,22 @@ func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 		require.NotEmpty(t, descriptor.InputSchema, "tool %q advertises no input schema", descriptor.Name)
 	}
 
+	// The external endpoint serves everything except the tools that exist only
+	// to give the assistant a Go-level equivalent of an MCP method it cannot
+	// speak. read_gram_doc is one: external clients read the same guides with
+	// resources/read, and serving both would be two names for one thing.
 	external := registrar.For(AudienceExternal)
-	require.Len(t, external, len(descriptors), "the external endpoint serves the full catalogue today")
+	externalNames := make(map[string]bool, len(external))
+	for _, descriptor := range external {
+		externalNames[descriptor.Name] = true
+	}
+	for _, descriptor := range descriptors {
+		if descriptor.Name == "read_gram_doc" {
+			require.False(t, externalNames[descriptor.Name], "read_gram_doc duplicates resources/read for external clients")
+			continue
+		}
+		require.True(t, externalNames[descriptor.Name], "tool %q is not served to the external endpoint", descriptor.Name)
+	}
 
 	assistant := registrar.For(AudienceAssistant)
 	require.NotEmpty(t, assistant, "the assistant audience is admitted to the catalogue")

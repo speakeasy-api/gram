@@ -102,3 +102,20 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 
 	require.Empty(t, Tools(nil, nil), "an empty admission list composes no tools")
 }
+
+// Resources are admitted the same way tools are. The assistant must be able to
+// open what it cites, and only what the registrar admitted to it.
+func TestOnlyAdmittedResourcesAreComposed(t *testing.T) {
+	t.Parallel()
+
+	admitted := []platformmcp.ResourceDescriptor{
+		{URI: "gram://platform-mcp/setup/acme/provider_setup", Title: "Acme — provider setup"},
+	}
+
+	resources := Resources(admitted, nil)
+	require.Len(t, resources, 1)
+	require.Equal(t, admitted[0].URI, resources[0].URI())
+	require.Equal(t, admitted[0].Title, resources[0].Title())
+
+	require.Empty(t, Resources(nil, nil), "an empty admission list composes no resources")
+}
