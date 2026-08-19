@@ -2,8 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import type { JSX, ReactNode } from "react";
 
-import { organizationFeaturesQuery, organizationQuery } from "@/lib/adminQueries";
-import type { AdminOrganization, AdminOrganizationFeatures } from "@/lib/gramAdminApi";
+import {
+  organizationFeaturesQuery,
+  organizationQuery,
+} from "@/lib/adminQueries";
+import type {
+  AdminOrganization,
+  AdminOrganizationFeatures,
+} from "@/lib/gramAdminApi";
 
 function Group({
   title,
@@ -104,10 +110,7 @@ function FeaturesView({
             features.remote_session_auto_refresh_policy,
           )}
         />
-        <Row
-          label="Session capture"
-          value={features.session_capture_enabled}
-        />
+        <Row label="Session capture" value={features.session_capture_enabled} />
         <Row
           label="Skill capture metadata only"
           value={features.skill_capture_metadata_only}

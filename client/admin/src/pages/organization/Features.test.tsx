@@ -52,7 +52,9 @@ describe("Features", () => {
   });
 
   it("shows a loading state while the query is pending", async () => {
-    mocks.getOrganizationFeatures.mockImplementation(() => new Promise(() => {}));
+    mocks.getOrganizationFeatures.mockImplementation(
+      () => new Promise(() => {}),
+    );
 
     await renderFeatures();
 
