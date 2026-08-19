@@ -30,6 +30,15 @@ type RegistryBackend interface {
 	Authorize(req *http.Request) error
 }
 
+// RegistryReader is the narrow, normalized registry contract consumed by both
+// dashboard and Platform MCP catalogue projections. RegistryClient remains the
+// Pulse-compatible transport implementation; CatalogService selects an adapter
+// before delegating to it.
+type RegistryReader interface {
+	ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error)
+	GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error)
+}
+
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
 	policy       *guardian.Policy

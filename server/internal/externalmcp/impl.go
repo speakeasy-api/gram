@@ -41,13 +41,14 @@ type Service struct {
 	authz          *authz.Engine
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
+	catalog        *CatalogService
 	serverURL      *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, authzEngine *authz.Engine, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -59,6 +60,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:          authzEngine,
 		sessions:       sessions,
 		registryClient: registryClient,
+		catalog:        catalog,
 		serverURL:      serverURL,
 	}
 }
@@ -159,77 +161,34 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
-	// If a specific registry is requested, fetch just that one
+	var registryID *uuid.UUID
 	if payload.RegistryID != nil {
-		registryID, err := uuid.Parse(*payload.RegistryID)
+		parsed, err := uuid.Parse(*payload.RegistryID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
-
-		registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.C(oops.CodeNotFound)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").LogError(ctx, s.logger)
-		}
-
-		result, err := s.registryClient.ListServers(ctx, Registry{
-			ID:  registry.ID,
-			URL: registry.Url,
-		}, ListServersParams{
-			Search: payload.Search,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").LogError(ctx, s.logger)
-		}
-
-		return &gen.ListCatalogResult{
-			Servers:    result.Servers,
-			NextCursor: nil,
-		}, nil
+		registryID = &parsed
 	}
-
-	// Fetch all registries from the database
-	registries, err := s.repo.ListMCPRegistries(ctx)
+	if s.catalog == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "catalogue service is not configured").LogError(ctx, s.logger)
+	}
+	servers, err := s.catalog.List(ctx, payload.Search, registryID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").LogError(ctx, s.logger)
-	}
-
-	// Aggregate servers from all registries
-	var allServers []*types.ExternalMCPServerEntry
-	for _, registry := range registries {
-		result, err := s.registryClient.ListServers(ctx, Registry{
-			ID:  registry.ID,
-			URL: registry.Url,
-		}, ListServersParams{
-			Search: payload.Search,
-		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to fetch servers from registry",
-				attr.SlogMCPRegistryID(registry.ID.String()),
-				attr.SlogMCPRegistryURL(registry.Url),
-				attr.SlogError(err),
-			)
-			continue
+		if errors.Is(err, ErrCatalogSourceNotFound) || errors.Is(err, ErrCatalogSourceDisabled) {
+			return nil, oops.C(oops.CodeNotFound)
 		}
-		allServers = append(allServers, result.Servers...)
+		return nil, oops.E(oops.CodeUnexpected, err, "list reviewed catalogue").LogError(ctx, s.logger)
 	}
 
-	// Cap at 100 servers for v0. Multi-registry pagination is tracked in
-	// AGE-2153; until then anything past the cap is silently dropped, so warn.
-	if len(allServers) > 100 {
+	// Preserve the existing public cap until cursor pagination is upgraded.
+	if len(servers) > 100 {
 		s.logger.WarnContext(ctx, "catalog result truncated to cap",
-			attr.SlogStatsMCPServerCount(len(allServers)),
+			attr.SlogStatsMCPServerCount(len(servers)),
 			attr.SlogPaginationLimit(100),
 		)
-		allServers = allServers[:100]
+		servers = servers[:100]
 	}
-
-	return &gen.ListCatalogResult{
-		Servers:    allServers,
-		NextCursor: nil,
-	}, nil
+	return &gen.ListCatalogResult{Servers: servers, NextCursor: nil}, nil
 }
 
 func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
@@ -247,16 +206,39 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 	}
 
-	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
+	if s.catalog == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "catalogue service is not configured").LogError(ctx, s.logger)
+	}
+	// Authorize the source through the same reviewed admission boundary as
+	// listCatalog, while retaining the dashboard's existing full-detail shape.
+	source, err := s.catalog.Source(ctx, registryID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, ErrCatalogSourceNotFound) || errors.Is(err, ErrCatalogSourceDisabled) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve reviewed catalogue source").LogError(ctx, s.logger)
+	}
+	reader, err := s.catalog.ReaderFor(source)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve catalogue source adapter").LogError(ctx, s.logger)
 	}
 
-	// Fetch all server details in a single HTTP call
-	details, err := s.fetchServerDetails(ctx, registry, payload.ServerSpecifier)
+	var details *serverDetailsResult
+	if _, ok := reader.(*RegistryClient); ok {
+		// Preserve the dashboard's existing Pulse detail projection, which includes
+		// every remote and the Pulse-specific per-remote tool metadata.
+		details, err = s.fetchServerDetails(ctx, source.Registry, payload.ServerSpecifier)
+	} else {
+		// Source-specific adapters normalize their selected detail result through
+		// the shared catalogue boundary, keeping reader selection aligned with
+		// source admission as new certified sources are enabled.
+		registryDetails, detailErr := s.catalog.Details(ctx, registryID, payload.ServerSpecifier, nil)
+		if detailErr != nil {
+			err = detailErr
+		} else {
+			details = serverDetailsResultFromRegistryDetails(registryDetails)
+		}
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").LogError(ctx, s.logger)
 	}
@@ -312,9 +294,47 @@ type serverDetailsResult struct {
 	Remotes     []*types.ExternalMCPRemote
 }
 
+func serverDetailsResultFromRegistryDetails(details *ServerDetails) *serverDetailsResult {
+	if details == nil {
+		return nil
+	}
+
+	var tools []*types.ExternalMCPTool
+	if details.Tools != nil {
+		tools = make([]*types.ExternalMCPTool, 0, len(details.Tools))
+		for i := range details.Tools {
+			tool := &details.Tools[i]
+			tools = append(tools, &types.ExternalMCPTool{
+				Name:        &tool.Name,
+				Description: &tool.Description,
+				InputSchema: tool.InputSchema,
+				Annotations: tool.Annotations,
+			})
+		}
+	}
+
+	var remotes []*types.ExternalMCPRemote
+	if details.RemoteURL != "" {
+		remotes = []*types.ExternalMCPRemote{{
+			URL:           details.RemoteURL,
+			TransportType: string(details.TransportType),
+			Headers:       toExternalMCPRemoteHeaders(details.Headers),
+			Variables:     toExternalMCPRemoteVariables(details.Variables),
+		}}
+	}
+
+	return &serverDetailsResult{
+		Name:        details.Name,
+		Description: details.Description,
+		Version:     details.Version,
+		Tools:       tools,
+		Remotes:     remotes,
+	}
+}
+
 // fetchServerDetails fetches all server details from the registry in a single HTTP call.
-func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRegistryByIDRow, serverName string) (*serverDetailsResult, error) {
-	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.Url, url.PathEscape(serverName))
+func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, serverName string) (*serverDetailsResult, error) {
+	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.URL, url.PathEscape(serverName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
