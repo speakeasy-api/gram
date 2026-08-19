@@ -39,7 +39,7 @@ type ReleasesManifest = {
   >;
 };
 
-function usePinnedAgentCLI() {
+function usePinnedAgentDaemon() {
   const query = useQuery<ReleasesManifest>({
     queryKey: ["device-agent-releases"],
     queryFn: async () => {
@@ -52,7 +52,7 @@ function usePinnedAgentCLI() {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
-  const release = query.data?.latest?.speakeasy;
+  const release = query.data?.latest?.speakeasyd;
   const version =
     release?.version && PINNED_AGENT_VERSION.test(release.version)
       ? release.version
@@ -205,9 +205,10 @@ function CloudSetupScript({
       </Alert>
       <Text small muted>
         Paste this into the environment&apos;s <strong>Setup script</strong>{" "}
-        field. It only downloads and verifies the device-agent CLI, then lets{" "}
-        <code>speakeasy setup --anthropic-cloud</code> configure the machine and
-        install the SessionStart hook.
+        field. It installs the pinned agent, writes managed enrollment, and
+        registers a SessionStart hook that starts the agent in each session.
+        From there the agent&apos;s normal policy sync installs plugins and
+        keeps enforcement reconciled — the same flow as any other machine.
       </Text>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={identityEmailId}>Shared session identity</Label>
@@ -317,7 +318,7 @@ function CloudSetupScript({
 }
 
 export function RemoteSetupScriptStep(): React.JSX.Element {
-  const { release, isError, isLoading } = usePinnedAgentCLI();
+  const { release, isError, isLoading } = usePinnedAgentDaemon();
 
   if (release) {
     return (

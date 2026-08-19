@@ -11,6 +11,10 @@ export const PINNED_AGENT_VERSION =
 
 export const RELEASE_SHA256 = /^[0-9a-f]{64}$/;
 
+// Email and token land inside a JSON heredoc the script expands, so beyond
+// shell quoting they must not carry JSON-breaking characters.
+const JSON_SAFE_VALUE = /^[^"\\\s]+$/;
+
 export type CloudSetupCommandInput = {
   version: string;
   sha256: string;
@@ -18,33 +22,84 @@ export type CloudSetupCommandInput = {
   orgToken: string;
 };
 
+/**
+ * Renders the Anthropic environment's setup script. It runs once as root
+ * before the filesystem snapshot and does exactly three things: install the
+ * pinned daemon, write managed enrollment, and register a SessionStart hook
+ * that revives the daemon in each session. Everything after daemon start is
+ * the agent's normal policy-sync loop — plugin install, tool config, and
+ * enforcement all ride the same infrastructure as any other machine.
+ */
 export function buildCloudSetupCommand(input: CloudSetupCommandInput): string {
   const email = input.email.trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    !JSON_SAFE_VALUE.test(email)
+  ) {
     throw new Error("a valid remote session identity email is required");
+  }
+  if (!input.orgToken || !JSON_SAFE_VALUE.test(input.orgToken)) {
+    throw new Error("a valid org token is required");
   }
   if (!PINNED_AGENT_VERSION.test(input.version)) {
     throw new Error("a valid pinned device agent version is required");
   }
   if (!RELEASE_SHA256.test(input.sha256)) {
-    throw new Error("a valid device agent CLI checksum is required");
+    throw new Error("a valid device agent daemon checksum is required");
   }
-
-  const cliURL = `${RELEASES_BASE}/v${input.version}/speakeasy_${input.version}_linux_amd64`;
 
   return `#!/usr/bin/env bash
 set -euo pipefail
 
-CLI="$(mktemp)"
-trap 'rm -f "$CLI"' EXIT
+# Values from the Gram dashboard.
+VERSION=${shellQuote(input.version)}
+SHA256=${shellQuote(input.sha256)}
+EMAIL=${shellQuote(email)}
+ORG_TOKEN=${shellQuote(input.orgToken)}
 
-curl -fsSL -o "$CLI" ${shellQuote(cliURL)}
-printf '%s  %s\\n' ${shellQuote(input.sha256)} "$CLI" | sha256sum -c -
-chmod 0755 "$CLI"
+# 1) Install the device agent daemon (pinned, checksum-verified).
+curl -fsSL -o /usr/local/bin/speakeasyd \\
+  "${RELEASES_BASE}/v\${VERSION}/speakeasyd_\${VERSION}_linux_amd64"
+printf '%s  /usr/local/bin/speakeasyd\\n' "$SHA256" | sha256sum -c -
+chmod 0755 /usr/local/bin/speakeasyd
 
-SPEAKEASY_EMAIL=${shellQuote(email)} \\
-SPEAKEASY_ORG_TOKEN=${shellQuote(input.orgToken)} \\
-"$CLI" setup --anthropic-cloud
+# 2) Managed enrollment: the identity the daemon reads at startup, and the
+#    same file that answers daemonless identity lookups from hooks.
+install -d -m 0755 /etc/speakeasy
+cat > /etc/speakeasy/managed.json <<JSON
+{
+  "v": 1,
+  "email": "\${EMAIL}",
+  "org_token": "\${ORG_TOKEN}",
+  "auto_update": "disabled",
+  "hide_ui": true
+}
+JSON
+chmod 0644 /etc/speakeasy/managed.json
+
+# 3) SessionStart hook: starts the daemon in each session (Anthropic
+#    snapshots files, not processes). flock holds the lock for the daemon's
+#    lifetime, so a startup/resume double-fire can never double-start it.
+install -d /root/.local/state/speakeasy/logs
+install -d /root/.claude
+cat > /root/.claude/settings.json <<'JSON'
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "setsid flock -n /run/speakeasyd.lock /usr/local/bin/speakeasyd >>/root/.local/state/speakeasy/logs/speakeasyd.log 2>&1 &",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+JSON
 `;
 }
 
