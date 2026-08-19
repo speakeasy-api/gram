@@ -8,7 +8,6 @@ import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { CLOUD_SESSIONS_ANCHOR } from "@/pages/device-agent/cloud-setup";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 
@@ -37,12 +36,6 @@ export function InstrumentAgentsStep({
   const openCoworkManualSetup = () => {
     setActiveTab("manual");
     setDrawerPlatformId("claude-cowork");
-  };
-
-  const scrollToCloudSessions = () => {
-    document
-      .getElementById(CLOUD_SESSIONS_ANCHOR)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const availablePlatforms = AGENT_PLATFORMS.filter(
@@ -87,21 +80,10 @@ export function InstrumentAgentsStep({
 
         <TabsContent value="device-agent" className="space-y-4">
           <Alert variant="info">
-            <AlertTitle>
-              Cowork and Claude Code on the web need extra setup
-            </AlertTitle>
+            <AlertTitle>Cowork needs separate setup</AlertTitle>
             <AlertDescription>
-              The OS tiles below cover coding assistants on a developer machine.
-              Claude Code on the web runs in an Anthropic-hosted VM — follow{" "}
-              <button
-                type="button"
-                onClick={scrollToCloudSessions}
-                className="text-foreground underline underline-offset-2"
-              >
-                Cloud sessions
-              </button>{" "}
-              further down this page. Cowork still isn&apos;t covered by the
-              device agent.{" "}
+              The Remote sessions tile below covers Claude Code on the web.
+              Cowork isn&apos;t covered by the device agent.{" "}
               <button
                 type="button"
                 onClick={openCoworkManualSetup}

@@ -1,7 +1,7 @@
 // Builders for the Claude Code on the web (Anthropic-hosted VM) device-agent
 // path. Kept pure so the install contract is unit-tested: the setup script
-// only lays down binaries + helper + managed.json; SessionStart only starts
-// the agent. We never emit Claude observability hook commands here.
+// lays down binaries, managed.json, and the per-session bootstrap; SessionStart
+// only invokes that bootstrap. We never emit Claude observability hooks here.
 
 export const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
@@ -11,8 +11,11 @@ export const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 /** Sentinel spliced into the setup script until an org_token is minted. */
 export const CLOUD_ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";
 
-/** Anchor for the Cloud sessions section and the onboarding alert jump-link. */
-export const CLOUD_SESSIONS_ANCHOR = "cloud-sessions";
+/** Stable path provisioned by the setup script and invoked by SessionStart. */
+export const CLOUD_AGENT_BOOTSTRAP_PATH = "/usr/local/bin/speakeasy-bootstrap";
+
+const CLOUD_HELPER_PATH = "/usr/lib/speakeasy/speakeasy-helper";
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Same charset the OS-tile snippets require: a manifest version is inlined
 // into a root shell script, so reject anything that isn't strict semver
@@ -25,20 +28,22 @@ export type CloudSetupScriptInput = {
   orgSlug: string;
   orgName: string;
   orgToken: string;
-  /** Required for getPlugins. Omit for degraded mode (daemon runs, syncs nothing). */
-  email?: string;
+  /** Identity used by agent.getPlugins and remote-session reporting. */
+  email: string;
 };
 
 export function buildCloudManagedConfig(
   input: Omit<CloudSetupScriptInput, "version">,
 ): Record<string, unknown> {
+  const email = input.email.trim();
+  if (!EMAIL_PATTERN.test(email)) {
+    throw new Error("a valid remote session identity email is required");
+  }
+
   const config: Record<string, unknown> = {
     v: 1,
+    email,
   };
-  const email = input.email?.trim();
-  if (email) {
-    config.email = email;
-  }
   config.org_token = input.orgToken;
   config.org_slug = input.orgSlug;
   config.org_name = input.orgName;
@@ -57,13 +62,83 @@ function assertPinnedAgentVersion(version: string): string {
 }
 
 /**
+ * Idempotent, cloud-only bootstrap installed into the cached filesystem.
+ * It mirrors the device-agent ephemeral-VM contract: the helper runs as root,
+ * the daemon runs as the same user as Claude, and startup waits for the first
+ * policy sync without making a transient agent failure block Claude entirely.
+ */
+export function buildCloudAgentBootstrapScript(): string {
+  return `#!/usr/bin/env bash
+# Start Speakeasy enforcement for an Anthropic-hosted Claude Code session.
+set -uo pipefail
+
+if [ "\${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+  exit 0
+fi
+
+LOG_DIR="\${SPEAKEASY_LOG_DIR:-\${TMPDIR:-/tmp}}"
+WAIT_SECS="\${SPEAKEASY_WAIT_SECS:-30}"
+HELPER="${CLOUD_HELPER_PATH}"
+DAEMON="/usr/local/bin/speakeasyd"
+CLI="/usr/local/bin/speakeasy"
+
+log() { printf 'speakeasy-bootstrap: %s\\n' "$*" >&2; }
+
+EXPECT_ROOT=0
+if [ -S /run/com.speakeasy.helper.sock ] && pgrep -f '(^|/)speakeasy-helper($| )' >/dev/null 2>&1; then
+  EXPECT_ROOT=1
+else
+  if [ ! -x "$HELPER" ]; then
+    log "helper not found at $HELPER; managed enforcement will fall back to the user layer"
+  elif [ "$(id -u)" = "0" ]; then
+    "$HELPER" >>"$LOG_DIR/speakeasy-helper.log" 2>&1 &
+    EXPECT_ROOT=1
+  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo -n "$HELPER" >>"$LOG_DIR/speakeasy-helper.log" 2>&1 &
+    EXPECT_ROOT=1
+  else
+    log "cannot start the root helper; managed enforcement will fall back to the user layer"
+  fi
+fi
+
+if ! pgrep -u "$(id -u)" -x speakeasyd >/dev/null 2>&1; then
+  "$DAEMON" >>"$LOG_DIR/speakeasyd.log" 2>&1 &
+fi
+
+deadline=$((SECONDS + WAIT_SECS))
+last_sync_nudge=-5
+while [ "$SECONDS" -lt "$deadline" ]; do
+  if status=$("$CLI" status 2>/dev/null) && printf '%s' "$status" | grep -q '^synced:'; then
+    if [ "$EXPECT_ROOT" = "1" ] && printf '%s' "$status" | grep -q 'pending:'; then
+      if [ -S /run/com.speakeasy.helper.sock ] && [ $((SECONDS - last_sync_nudge)) -ge 5 ]; then
+        last_sync_nudge=$SECONDS
+        "$CLI" sync >/dev/null 2>&1 || true
+      fi
+      sleep 0.5
+      continue
+    fi
+    log "policy synced"
+    exit 0
+  fi
+  sleep 0.5
+done
+
+log "policy did not sync within \${WAIT_SECS}s; check $LOG_DIR/speakeasyd.log"
+"$CLI" status 2>&1 || true
+exit 0
+`;
+}
+
+/**
  * Anthropic environment setup script (runs as root, cache miss only).
- * Installs linux_amd64 binaries + the helper .deb and writes managed.json.
- * Does not start the agent and does not write Claude settings.
+ * Installs linux_amd64 binaries + the helper .deb, writes managed.json, and
+ * installs the bootstrap that SessionStart invokes. It does not start the
+ * agent and does not write Claude settings.
  */
 export function buildCloudSetupScript(input: CloudSetupScriptInput): string {
   const version = assertPinnedAgentVersion(input.version);
   const managedJson = JSON.stringify(buildCloudManagedConfig(input), null, 2);
+  const bootstrapScript = buildCloudAgentBootstrapScript();
   const base = `${RELEASES_BASE}/v${version}`;
   const daemon = `speakeasyd_${version}_linux_amd64`;
   const cli = `speakeasy_${version}_linux_amd64`;
@@ -96,37 +171,26 @@ install -m 0755 "${cli}" /usr/local/bin/speakeasy
 fetch_and_verify "${helperPkg}"
 DEBIAN_FRONTEND=noninteractive apt-get install -y "./${helperPkg}"
 
+cat >${CLOUD_AGENT_BOOTSTRAP_PATH} <<'SPEAKEASY_BOOTSTRAP'
+${bootstrapScript}SPEAKEASY_BOOTSTRAP
+chmod 0755 ${CLOUD_AGENT_BOOTSTRAP_PATH}
+
 install -d -m 0755 /etc/speakeasy
 cat >/etc/speakeasy/managed.json <<'SPEAKEASY_MANAGED_JSON'
 ${managedJson}
 SPEAKEASY_MANAGED_JSON
-# 0640 matches the fleet managed.json contract. Setup is root; SessionStart
-# starts speakeasyd as the session user (typically uid 1000 on this Ubuntu VM).
-chmod 0640 /etc/speakeasy/managed.json
-chgrp "$(id -gn 1000 2>/dev/null || echo root)" /etc/speakeasy/managed.json
+# The daemon runs as Claude's session user and must be able to read this file.
+chmod 0644 /etc/speakeasy/managed.json
 `;
 }
 
 /**
- * Idempotent start for a VM with no service manager. Mirrors the measured
- * ephemeral-vm bootstrap: start speakeasyd as the current user, and the
- * helper as root when possible. Gated so pasting into laptop Managed
- * Settings is a no-op outside Claude Code on the web.
+ * SessionStart invokes the bootstrap installed by the environment setup
+ * script. Process management stays in that script instead of being embedded
+ * as a multiline JSON command.
  */
 export function buildCloudAgentStartCommand(): string {
-  return [
-    '[ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0',
-    'if ! pgrep -u "$(id -u)" -x speakeasyd >/dev/null 2>&1; then',
-    '  speakeasyd >>"${TMPDIR:-/tmp}/speakeasyd.log" 2>&1 &',
-    "fi",
-    "if ! { [ -S /run/com.speakeasy.helper.sock ] && pgrep -f '(^|/)speakeasy-helper($| )' >/dev/null 2>&1; }; then",
-    '  if [ "$(id -u)" = "0" ]; then',
-    '    speakeasy-helper >>"${TMPDIR:-/tmp}/speakeasy-helper.log" 2>&1 &',
-    "  elif command -v sudo >/dev/null 2>&1; then",
-    '    sudo -n speakeasy-helper >>"${TMPDIR:-/tmp}/speakeasy-helper.log" 2>&1 &',
-    "  fi",
-    "fi",
-  ].join("\n");
+  return CLOUD_AGENT_BOOTSTRAP_PATH;
 }
 
 /**
@@ -139,11 +203,12 @@ export function buildCloudAgentStartHook(): string {
       hooks: {
         SessionStart: [
           {
+            matcher: "startup|resume",
             hooks: [
               {
                 type: "command",
                 command: buildCloudAgentStartCommand(),
-                timeout: 30,
+                timeout: 45,
               },
             ],
           },

@@ -3,13 +3,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { Link } from "react-router";
 
 import {
@@ -17,12 +19,12 @@ import {
   buildCloudDefaultEnvironmentSnippet,
   buildCloudSetupScript,
   CLOUD_ORG_TOKEN_SENTINEL,
-  CLOUD_SESSIONS_ANCHOR,
   MANIFEST_URL,
   PINNED_AGENT_VERSION,
 } from "./cloud-setup";
 
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ReleasesManifest = {
   latest: Record<string, { version: string }>;
@@ -65,35 +67,17 @@ function InlineLink({
   );
 }
 
-function CloudSetupStep({
-  n,
-  title,
-  children,
-}: {
-  n: number;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-baseline gap-3">
-        <span className="text-eyebrow">{String(n).padStart(2, "0")}</span>
-        <Text className="font-medium">{title}</Text>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 function GenerateInlineButton({
   onClick,
   pending,
   disabled,
+  disabledReason,
   existing,
 }: {
   onClick: () => void;
   pending: boolean;
   disabled?: boolean;
+  disabledReason?: string;
   existing: boolean;
 }) {
   const label = existing ? "Rotate token" : "Generate token";
@@ -106,7 +90,7 @@ function GenerateInlineButton({
       disabled={pending || disabled}
       title={
         disabled
-          ? "Generating an agent token requires the org:admin role."
+          ? disabledReason
           : existing
             ? "An agent token already exists — this rotates it and splices the new token into the setup script."
             : undefined
@@ -124,6 +108,8 @@ function GenerateInlineButton({
 function CloudSetupScript({ version }: { version: string }) {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const identityEmailId = useId();
+  const [identityEmail, setIdentityEmail] = useState("");
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   const buildScript = (orgToken: string) =>
@@ -132,6 +118,7 @@ function CloudSetupScript({ version }: { version: string }) {
       orgSlug: orgSlug || "acme-corp",
       orgName: orgName || "Acme Corporation",
       orgToken,
+      email: identityEmail.trim(),
     });
 
   const {
@@ -144,7 +131,10 @@ function CloudSetupScript({ version }: { version: string }) {
     generate,
   } = useAgentToken({ buildCopyText: buildScript });
 
-  const script = buildScript(generatedToken ?? CLOUD_ORG_TOKEN_SENTINEL);
+  const hasIdentityEmail = EMAIL_PATTERN.test(identityEmail.trim());
+  const script = hasIdentityEmail
+    ? buildScript(generatedToken ?? CLOUD_ORG_TOKEN_SENTINEL)
+    : "# Enter a reporting email above to generate the setup script.";
 
   const handleGenerateOrRotate = () => {
     if (hasExistingAgentKey) {
@@ -162,7 +152,12 @@ function CloudSetupScript({ version }: { version: string }) {
             <GenerateInlineButton
               onClick={handleGenerateOrRotate}
               pending={isPending}
-              disabled={!canGenerate}
+              disabled={!canGenerate || !hasIdentityEmail}
+              disabledReason={
+                hasIdentityEmail
+                  ? "Generating an agent token requires the org:admin role."
+                  : "Enter the reporting email before generating a token."
+              }
               existing={hasExistingAgentKey}
             />
           ),
@@ -171,13 +166,30 @@ function CloudSetupScript({ version }: { version: string }) {
       };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <Text small muted>
         Paste this into the environment&apos;s <strong>Setup script</strong>{" "}
-        field. It runs as root on a cache miss only. Do not put the token in
-        Anthropic&apos;s Environment variables field — it belongs in{" "}
-        <code>managed.json</code> on disk.
+        field. It installs the agent, its root helper, a per-session bootstrap,
+        and <code>managed.json</code>. It runs as root on a cache miss only.
       </Text>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={identityEmailId}>Shared session identity</Label>
+        <Input
+          id={identityEmailId}
+          type="email"
+          value={identityEmail}
+          onChange={setIdentityEmail}
+          placeholder="claude-code-web@your-company.com"
+          validate={(value) =>
+            EMAIL_PATTERN.test(value.trim()) || "Enter a valid email"
+          }
+        />
+        <Text small muted>
+          Every session using this shared environment receives the policy and
+          attribution of this identity. Use a dedicated org member or service
+          account with the intended permissions, not your own email.
+        </Text>
+      </div>
       <CodeBlock language="bash" slots={slots}>
         {script}
       </CodeBlock>
@@ -187,10 +199,10 @@ function CloudSetupScript({ version }: { version: string }) {
           {hasExistingAgentKey ? "Rotate token" : "Generate token"}
         </strong>{" "}
         to mint the <code>org_token</code>. Pin this version; auto-update is
-        disabled because the VM lives minutes. After pasting, add an{" "}
-        <code>email</code> field to <code>managed.json</code> (a shared org
-        mailbox is fine) if you want policy to sync — without it the daemon
-        starts but fetches nothing.
+        disabled because the VM lives minutes. Do not put the token in
+        Anthropic&apos;s Environment variables field: anyone who can use the
+        environment can read either surface, and the agent expects the token in{" "}
+        <code>managed.json</code>.
       </Text>
 
       {generatedToken && (
@@ -204,7 +216,7 @@ function CloudSetupScript({ version }: { version: string }) {
             {autoCopied
               ? "We've copied the full setup script — with the new org_token — to your clipboard."
               : "The new org_token is spliced into the script above — copy it now."}{" "}
-            Anyone who can open the Claude environment can read this token.
+            Anyone who can use the Claude environment can read this token.
             Manage or revoke agent tokens under Settings →{" "}
             <Link to={apiKeysHref} className={LINK_CLASS}>
               API Keys
@@ -232,16 +244,17 @@ function CloudSetupScript({ version }: { version: string }) {
           <Dialog.Header>
             <Dialog.Title>Rotate device agent token?</Dialog.Title>
             <Dialog.Description>
-              This expires the token currently baked into your Claude Code
+              This expires the token currently stored in your Claude Code
               environment.
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="error">
-            <AlertTitle>Cloud sessions will stop syncing policy</AlertTitle>
+            <AlertTitle>Remote sessions will stop syncing policy</AlertTitle>
             <AlertDescription>
-              Re-paste the updated setup script and recreate the shared
-              environment (or wait for a cache miss) so every session picks up
-              the new <code>org_token</code>. Until then, policy will not sync.
+              Save the updated setup script in the shared environment. Anthropic
+              rebuilds the cached filesystem when the script changes, so
+              subsequent sessions pick up the new <code>org_token</code>. Until
+              then, policy will not sync.
             </AlertDescription>
           </Alert>
           <Dialog.Footer>
@@ -267,7 +280,7 @@ function CloudSetupScript({ version }: { version: string }) {
   );
 }
 
-function SetupScriptStep() {
+export function RemoteSetupScriptStep(): React.JSX.Element {
   const { version, isError, isLoading } = usePinnedAgentVersion();
 
   if (version) {
@@ -299,95 +312,88 @@ function SetupScriptStep() {
   );
 }
 
-/**
- * Cloud sessions walkthrough for Anthropic-hosted Claude Code on the web.
- * Rendered below the OS tiles on DeviceAgentSetup (standalone page and
- * onboarding Instrument agents).
- */
-export function DeviceAgentCloudSetup(): React.JSX.Element {
+export function RemoteNetworkAccessStep(): React.JSX.Element {
   return (
-    <div id={CLOUD_SESSIONS_ANCHOR} className="flex flex-col gap-8">
-      <div>
-        <p className="text-eyebrow mb-2">Cloud sessions</p>
-        <h2 className="text-display-xs font-thin">Claude Code on the web</h2>
-        <Text small muted className="mt-2">
-          Claude Code on the web is an Anthropic Ubuntu 24.04 x86_64 VM. Paste
-          the pieces below into a <strong>shared</strong> Anthropic-hosted
-          environment (Team/Enterprise). The agent then pulls org policy from
-          Gram and writes Claude&apos;s config — you do not paste Speakeasy
-          observability hooks yourself. Self-hosted <code>ccpool_…</code>{" "}
-          environments are not covered here.
-        </Text>
-      </div>
+    <div className="flex flex-col gap-4">
+      <Text muted>
+        Create a <strong>shared</strong> Anthropic-hosted environment in{" "}
+        <InlineLink href="https://claude.ai/admin-settings">
+          Claude admin settings
+        </InlineLink>{" "}
+        for Claude Code on the web. Self-hosted <code>ccpool_…</code>{" "}
+        environments use their runner image instead and are not covered by this
+        walkthrough.
+      </Text>
+      <Text small muted>
+        Trusted network access does not include Gram. Set{" "}
+        <strong className="text-foreground">Custom</strong>, check{" "}
+        <strong className="text-foreground">
+          Also include default list of common package managers
+        </strong>{" "}
+        so GCS and package registries remain available, and add{" "}
+        <code>app.getgram.ai</code> on its own line. Without that host the agent
+        cannot fetch policy or send hook events.
+      </Text>
+    </div>
+  );
+}
 
-      <CloudSetupStep n={1} title="Network access">
-        <Text small muted>
-          Trusted network access does not include Gram. Set{" "}
-          <strong className="text-foreground">Custom</strong>, check{" "}
-          <strong className="text-foreground">
-            Also include default list of common package managers
-          </strong>{" "}
-          (keeps GCS for the agent binaries and the usual registries), and add{" "}
-          <code>app.getgram.ai</code> on its own line. Without that host the
-          daemon cannot call <code>agent.getPlugins</code> or ingest hooks.
-        </Text>
-      </CloudSetupStep>
+export function RemoteSessionStartStep(): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-4">
+      <Text small muted>
+        Anthropic caches files from the setup script but not running processes.
+        Add this to org{" "}
+        <InlineLink href="https://claude.ai/admin-settings/claude-code">
+          Managed Settings
+        </InlineLink>{" "}
+        or the repo&apos;s <code>.claude/settings.json</code> so every new or
+        resumed session invokes the bootstrap installed in the previous step.
+      </Text>
+      <CodeBlock language="json">{buildCloudAgentStartHook()}</CodeBlock>
+      <Text small muted>
+        The hook only invokes <code>/usr/local/bin/speakeasy-bootstrap</code>.
+        That script is cloud-gated, starts the daemon as Claude&apos;s user,
+        starts the root helper when available, and waits for the first policy
+        sync. The device agent then writes Claude&apos;s managed observability
+        hooks itself.
+      </Text>
+    </div>
+  );
+}
 
-      <CloudSetupStep n={2} title="Setup script">
-        <SetupScriptStep />
-      </CloudSetupStep>
-
-      <CloudSetupStep n={3} title="Start the agent">
-        <Text small muted>
-          Anthropic snapshots the filesystem and skips the setup script on later
-          sessions; running processes are not in the snapshot. Merge this
-          SessionStart hook into org{" "}
-          <InlineLink href="https://claude.ai/admin-settings/claude-code">
-            Managed Settings
-          </InlineLink>{" "}
-          or repo <code>.claude/settings.json</code>. User{" "}
-          <code>~/.claude/settings.json</code> does not load in cloud. It only
-          starts the agent — it is not Claude hook policy.
-        </Text>
-        <CodeBlock language="json">{buildCloudAgentStartHook()}</CodeBlock>
-      </CloudSetupStep>
-
-      <CloudSetupStep n={4} title="Make this the org default">
-        <Text small muted>
-          Anthropic has no lock-members-to-this-environment switch. After
-          creating the shared environment at{" "}
-          <InlineLink href="https://claude.ai/admin-settings">
-            Claude admin settings
-          </InlineLink>
-          , set it as the org default at{" "}
-          <InlineLink href="https://claude.ai/admin-settings/claude-code">
-            claude.ai/admin-settings/claude-code
-          </InlineLink>
-          . That fills the selector on web, desktop, and mobile when a member
-          has not picked one — members can still choose a personal or Default
-          environment.
-        </Text>
-        <Text small muted>
-          For CLI <code>claude --cloud</code>, merge this into Managed Settings
-          (copy the <code>env_…</code> id from Claude after you create the
-          environment). It wins over a user <code>/remote-env</code> value.{" "}
-          <code>--environment</code> cannot target Anthropic-hosted{" "}
-          <code>env_…</code> ids.
-        </Text>
-        <CodeBlock language="json">
-          {buildCloudDefaultEnvironmentSnippet()}
-        </CodeBlock>
-      </CloudSetupStep>
-
+export function RemoteOrganizationDefaultStep(): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-4">
+      <Text small muted>
+        Anthropic has no lock-members-to-this-environment switch. After creating
+        the shared environment at{" "}
+        <InlineLink href="https://claude.ai/admin-settings">
+          Claude admin settings
+        </InlineLink>
+        , set it as the org default at{" "}
+        <InlineLink href="https://claude.ai/admin-settings/claude-code">
+          Claude Code admin settings
+        </InlineLink>
+        . This preselects it on web, desktop, and mobile when a member has not
+        chosen another environment.
+      </Text>
+      <Text small muted>
+        For CLI <code>claude --cloud</code>, merge this into Managed Settings
+        after replacing <code>env_…</code> with the shared environment&apos;s
+        ID. The managed value overrides a user&apos;s <code>/remote-env</code>{" "}
+        default.
+      </Text>
+      <CodeBlock language="json">
+        {buildCloudDefaultEnvironmentSnippet()}
+      </CodeBlock>
       <Alert variant="info">
-        <AlertTitle>First session may be pending</AlertTitle>
+        <AlertTitle>The first session may briefly show pending</AlertTitle>
         <AlertDescription>
-          Managed Claude hooks point at the observability plugin under{" "}
-          <code>$HOME</code>. A fresh VM reports <code>pending</code> until
-          Claude clones the marketplace. Server-managed{" "}
-          <code>enabledPlugins</code> already does that clone in cloud sessions;
-          enforcement arms on the next agent tick (~0.3s if the bundle is
-          already there, otherwise after the first clone).
+          On a fresh VM, Claude must clone the org&apos;s observability plugin
+          before the agent can enforce its managed hooks. Server-managed{" "}
+          <code>enabledPlugins</code> triggers that clone; the agent reconciles
+          again after the bundle appears.
         </AlertDescription>
       </Alert>
     </div>

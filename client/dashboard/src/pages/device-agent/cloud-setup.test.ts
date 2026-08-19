@@ -1,11 +1,14 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCloudAgentBootstrapScript,
   buildCloudAgentStartCommand,
   buildCloudAgentStartHook,
   buildCloudDefaultEnvironmentSnippet,
   buildCloudManagedConfig,
   buildCloudSetupScript,
+  CLOUD_AGENT_BOOTSTRAP_PATH,
   CLOUD_ORG_TOKEN_SENTINEL,
   RELEASES_BASE,
 } from "./cloud-setup";
@@ -15,6 +18,7 @@ const input = {
   orgSlug: "acme-corp",
   orgName: "Acme Corporation",
   orgToken: "spk_org_test_token",
+  email: "claude-code-web@acme.example",
 };
 
 function managedJsonFromScript(script: string): Record<string, unknown> {
@@ -29,6 +33,7 @@ describe("buildCloudManagedConfig", () => {
   it("writes the ephemeral-VM identity contract", () => {
     expect(buildCloudManagedConfig(input)).toEqual({
       v: 1,
+      email: "claude-code-web@acme.example",
       org_token: "spk_org_test_token",
       org_slug: "acme-corp",
       org_name: "Acme Corporation",
@@ -37,18 +42,38 @@ describe("buildCloudManagedConfig", () => {
     });
   });
 
-  it("includes email when provided and omits it otherwise", () => {
+  it("trims the required reporting identity", () => {
     expect(
-      buildCloudManagedConfig({ ...input, email: "ai@acme.example" }),
+      buildCloudManagedConfig({ ...input, email: "  ai@acme.example  " }),
     ).toMatchObject({ email: "ai@acme.example" });
-    expect(
-      buildCloudManagedConfig({ ...input, email: "  " }),
-    ).not.toHaveProperty("email");
+  });
+
+  it("rejects an empty reporting identity", () => {
+    expect(() => buildCloudManagedConfig({ ...input, email: "  " })).toThrow(
+      /valid remote session identity email is required/,
+    );
+  });
+
+  it("rejects a malformed reporting identity", () => {
+    expect(() => buildCloudManagedConfig({ ...input, email: "@" })).toThrow(
+      /valid remote session identity email is required/,
+    );
   });
 });
 
 describe("buildCloudSetupScript", () => {
   const script = buildCloudSetupScript(input);
+
+  it("renders syntactically valid Bash for setup and per-session startup", () => {
+    for (const candidate of [script, buildCloudAgentBootstrapScript()]) {
+      const result = spawnSync("bash", ["-n"], {
+        input: candidate,
+        encoding: "utf8",
+      });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+    }
+  });
 
   it("pins linux_amd64 binaries and the helper .deb from the release bucket", () => {
     expect(script).toContain(`${RELEASES_BASE}/v0.1.20`);
@@ -67,22 +92,23 @@ describe("buildCloudSetupScript", () => {
     );
   });
 
-  it("writes managed.json 0640 and group-readable by the session user", () => {
-    expect(script).toContain("chmod 0640 /etc/speakeasy/managed.json");
-    expect(script).toContain('chgrp "$(id -gn 1000 2>/dev/null || echo root)"');
-    expect(script).not.toContain("chmod 0644");
+  it("writes managed.json using the agent's documented Linux permissions", () => {
+    expect(script).toContain("chmod 0644 /etc/speakeasy/managed.json");
+    expect(script).not.toContain("chgrp");
+    expect(script).not.toContain("id -gn 1000");
   });
 
-  it("writes managed.json only — no Claude settings and no process start", () => {
+  it("writes managed.json and the bootstrap, but no Claude settings", () => {
     const json = managedJsonFromScript(script);
     expect(json).toEqual(buildCloudManagedConfig(input));
     expect(script).toContain("/etc/speakeasy/managed.json");
+    expect(script).toContain(`cat >${CLOUD_AGENT_BOOTSTRAP_PATH}`);
+    expect(script).toContain(`chmod 0755 ${CLOUD_AGENT_BOOTSTRAP_PATH}`);
     expect(script).not.toContain("settings.json");
     expect(script).not.toContain("managed-settings.json");
     expect(script).not.toContain("agenthooks");
-    expect(script).not.toMatch(/speakeasyd\s+>>/);
     expect(script).not.toContain("-service start");
-    expect(script).not.toContain("speakeasy-helper >>");
+    expect(script).not.toContain(`\n${CLOUD_AGENT_BOOTSTRAP_PATH}\n`);
   });
 
   it("embeds a minted token sentinel unchanged so the UI can slot a button", () => {
@@ -103,21 +129,31 @@ describe("buildCloudSetupScript", () => {
 });
 
 describe("buildCloudAgentStartHook", () => {
+  const bootstrap = buildCloudAgentBootstrapScript();
   const command = buildCloudAgentStartCommand();
   const hook = buildCloudAgentStartHook();
   const parsed = JSON.parse(hook) as {
-    hooks: { SessionStart: { hooks: { type: string; command: string }[] }[] };
+    hooks: {
+      SessionStart: {
+        matcher: string;
+        hooks: { type: string; command: string; timeout: number }[];
+      }[];
+    };
   };
 
-  it("gates on CLAUDE_CODE_REMOTE and only starts the agent", () => {
-    expect(command).toContain("CLAUDE_CODE_REMOTE:-}");
-    expect(command).toContain('= "true"');
-    expect(command).toContain("speakeasyd >>");
-    expect(command).toContain("speakeasy-helper");
-    expect(command).not.toContain("agenthooks");
-    expect(command).not.toContain("managed.json");
+  it("keeps process management in the installed bootstrap", () => {
+    expect(command).toBe(CLOUD_AGENT_BOOTSTRAP_PATH);
+    expect(bootstrap).toContain("CLAUDE_CODE_REMOTE:-}");
+    expect(bootstrap).toContain("/usr/local/bin/speakeasyd");
+    expect(bootstrap).toContain("/usr/lib/speakeasy/speakeasy-helper");
+    expect(bootstrap).toContain("grep -q 'pending:'");
+    expect(bootstrap).toContain('"$CLI" sync');
+    expect(bootstrap).toContain("policy synced");
+    expect(bootstrap).not.toContain("agenthooks");
     expect(parsed.hooks.SessionStart[0]?.hooks[0]?.type).toBe("command");
     expect(parsed.hooks.SessionStart[0]?.hooks[0]?.command).toBe(command);
+    expect(parsed.hooks.SessionStart[0]?.matcher).toBe("startup|resume");
+    expect(parsed.hooks.SessionStart[0]?.hooks[0]?.timeout).toBe(45);
   });
 
   it("does not paste Speakeasy observability commands into settings.json", () => {
