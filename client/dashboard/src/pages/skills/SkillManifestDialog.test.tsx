@@ -438,7 +438,9 @@ describe("SkillManifestDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Insert template" }));
 
-    expect((textarea as HTMLTextAreaElement).value).toBe(SKILL_MANIFEST_TEMPLATE);
+    expect((textarea as HTMLTextAreaElement).value).toBe(
+      SKILL_MANIFEST_TEMPLATE,
+    );
   });
 
   it("hides the template button outside create mode", () => {
