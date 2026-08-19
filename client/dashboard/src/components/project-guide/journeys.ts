@@ -41,6 +41,21 @@ export type JourneyMeta = {
     primaryAction: string;
   };
   steps: string[];
+  stepBlurbs: string[];
+};
+
+export type JourneyFixture = {
+  meta: string;
+  accent: string;
+  activity: string;
+  event: {
+    label: string;
+    kind: string;
+    title: string;
+    rows: Array<{ key: string; value: string }>;
+    note: string;
+    tone: "allow" | "deny";
+  };
 };
 
 export const SECRET_BLOCK_STEPS = [
@@ -73,26 +88,75 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     id: "secret-block",
     index: "01",
     title: "Block a leaked credential mid-prompt",
-    win: "Watch a synthetic credential get blocked before it reaches the model.",
+    win: "A secrets policy denies any prompt carrying a credential. The attempt lands in Risk Events with the rule that caught it, the matched span, and who sent it.",
     completion: {
       eyebrow: "Journey B complete",
       heading: "The prompt was denied.",
-      body: "The synthetic credential was denied before it reached the model.",
+      body: "The prompt matched the secrets policy and was rejected before the model answered. The finding sits in Risk Events with the rule that fired, the matched span, the severity, and who sent it.",
       primaryAction: "Open Risk Events",
     },
     steps: SECRET_BLOCK_STEPS,
+    stepBlurbs: [
+      "A policy goes live that looks for secrets — API keys, tokens, private keys — in the prompts people send. It denies anything that matches, for everyone in the org.",
+      "Speakeasy builds the observability plugin for this project and signs it. You get a package to download — the next step installs it in your client.",
+      "The plugin goes into the agent's plugin directory. On the next restart it connects to this project and starts streaming what the agent does.",
+      "This key is synthetic and inert. It exists so the rule has something real-shaped to catch. The call should not survive the machine.",
+      "The policy denies the request and a finding lands in Risk Events. It carries the rule that fired, the matched span, the severity, and who sent it.",
+    ],
   },
   {
     id: "third-party-mcp",
     index: "02",
     title: "Govern a third-party MCP",
-    win: "Your agent reaches a third-party MCP through Speakeasy, as a governed endpoint.",
+    win: "Install a vendor's MCP server, connect your agent to it, and watch the first call arrive with the actor, the tools, and the result attached.",
     completion: {
       eyebrow: "Journey A complete",
       heading: "The path is governed.",
-      body: "Your client traffic is governed and recorded in Tool Logs.",
-      primaryAction: "Open Tool Logs",
+      body: "Your client now reaches linear through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
+      primaryAction: "Open tool logs",
     },
     steps: THIRD_PARTY_MCP_STEPS,
+    stepBlurbs: [
+      "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+      "Installing created your endpoint. Confirming it proves the upstream is reachable and speaking MCP, and shows what the endpoint already covers.",
+      "Point the client at your endpoint instead of the vendor's URL. The proxy drops the client's own Authorization header and substitutes the credential resolved for that caller, so no vendor key sits on a developer's machine.",
+      "Run this in the client you just configured. Listing tools reads nothing and writes nothing — it puts the first real request on the governed path.",
+      "The endpoint checks the call against the caller's tool access and records it before forwarding. This is the first entry.",
+    ],
   },
 ];
+
+export const PROJECT_GUIDE_FIXTURES: Record<JourneyId, JourneyFixture> = {
+  "third-party-mcp": {
+    meta: "govern a third-party MCP",
+    accent: "#2879D8",
+    activity: "Endpoint verified, client connected, no calls recorded.",
+    event: {
+      label: "The call you watched",
+      kind: "Governed call",
+      title: "linear.tools/list",
+      rows: [
+        { key: "access", value: "allowed · 27 of 27 tools visible" },
+        { key: "upstream", value: "forwarded with the resolved credential" },
+      ],
+      note: "The call landed in Tool Logs before it reached the upstream.",
+      tone: "allow",
+    },
+  },
+  "secret-block": {
+    meta: "block a leaked credential",
+    accent: "#B45A28",
+    activity: "Policy enforcing, one agent streaming, no findings yet.",
+    event: {
+      label: "The event you watched",
+      kind: "Denied · risk event",
+      title: "request denied by secrets policy",
+      rows: [
+        { key: "rule", value: "secrets.aws_access_key_id" },
+        { key: "match", value: "AKIA···· · highlighted in the transcript" },
+      ],
+      note: "The request was blocked before the model answered.",
+      tone: "deny",
+    },
+  },
+};

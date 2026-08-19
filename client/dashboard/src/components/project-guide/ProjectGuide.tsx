@@ -1,61 +1,43 @@
-import { ProjectGuideRunProvider } from "@/components/project-guide/JourneyRun";
-import { SecretBlockJourney } from "@/components/project-guide/SecretBlockJourney";
-import { ThirdPartyMcpJourney } from "@/components/project-guide/ThirdPartyMcpJourney";
 import {
-  PROJECT_GUIDE_COMPLETE,
-  PROJECT_GUIDE_JOURNEYS,
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import { ProjectGuideRun } from "@/components/project-guide/ProjectGuideRun";
+import {
   JOURNEY_STATUS_LABELS,
+  PROJECT_GUIDE_COMPLETE,
+  PROJECT_GUIDE_FIXTURES,
+  PROJECT_GUIDE_JOURNEYS,
   otherProjectGuideJourney,
   type JourneyId,
   type JourneyMeta,
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { invalidateGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
-import { invalidateRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
 
 /**
- * The zero-data guide that takes project home's space when the gate opens it.
- * Two journeys, each ending in something the user watches happen. The cards are
- * an accordion: no overlay, no drawer, no navigation away.
+ * Fixture-backed project-home guide. Real journey operations are deliberately
+ * not connected here; the existing progress result only selects display state.
  */
 export function ProjectGuide(): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
-  const [expanded, setExpanded] = useState<JourneyId | null>(null);
+  const [selected, setSelected] = useState<JourneyId | null>(null);
   const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
     useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const queryClient = useQueryClient();
-  const gramProject = useProjectSlugForRequests();
-  const shouldReduceMotion = useReducedMotion();
+  const reducedMotion = useReducedMotion();
+  const selectedJourney = PROJECT_GUIDE_JOURNEYS.find(
+    (journey) => journey.id === selected,
+  );
   const isComplete =
     statusByJourney["third-party-mcp"] === "done" &&
     statusByJourney["secret-block"] === "done";
 
-  const toggle = useCallback((id: JourneyId) => {
-    setExpanded((current) => (current === id ? null : id));
-  }, []);
-  const switchJourney = useCallback((id: JourneyId) => {
-    setExpanded(id);
-  }, []);
-  const markJourneyComplete = useCallback(
-    (id: JourneyId) => {
-      if (id === "third-party-mcp") {
-        void invalidateGetMcpServerActivity(queryClient, [{ gramProject }]);
-      } else {
-        void invalidateRiskListResults(queryClient, [{ gramProject }]);
-      }
-      setExpanded(id);
-    },
-    [gramProject, queryClient],
-  );
   const returnToProjectHome = useCallback(() => {
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("showGuide");
@@ -64,219 +46,185 @@ export function ProjectGuide(): JSX.Element {
 
   if (isComplete && !reviewingCompletedJourneys) {
     return (
-      <ProjectGuideComplete
-        reducedMotion={shouldReduceMotion}
-        onReturnToProjectHome={returnToProjectHome}
-        onReview={() => setReviewingCompletedJourneys(true)}
-      />
+      <GuideCanvas>
+        <ProjectGuideComplete
+          reducedMotion={reducedMotion}
+          onReturnToProjectHome={returnToProjectHome}
+          onReview={() => setReviewingCompletedJourneys(true)}
+        />
+      </GuideCanvas>
     );
   }
 
   return (
-    <div className="w-full pt-2 pb-6">
-      <div className="bg-card border-border mx-auto flex w-full max-w-[960px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#DBDBDB] px-6.5 py-6">
-          <div className="flex max-w-[62ch] flex-col gap-2">
-            <span className="text-eyebrow">Journey</span>
-            <h2 className="text-foreground font-display text-[28px] leading-[1] font-thin tracking-[-0.03em]">
-              Put your agent traffic under control
-            </h2>
-            <p className="text-muted-foreground text-[13px] leading-[1.6]">
-              Choose a path to govern a third-party MCP or block a synthetic
-              credential before it reaches a model.
-            </p>
-          </div>
-          {expanded && (
+    <GuideCanvas>
+      <section className="bg-card border-border mx-auto flex w-full max-w-[960px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
+        <header className="flex items-baseline gap-3.5 border-b border-[#121212]/10 px-6 py-[18px] pb-[14px]">
+          <h2 className="font-display text-[28px] leading-[.95] font-thin tracking-[-0.03em]">
+            {selectedJourney?.title ?? "Put your agent traffic under control"}
+          </h2>
+          {selected && (
             <button
               type="button"
-              onClick={() => setExpanded(null)}
-              className="text-muted-foreground shrink-0 font-mono text-[10px] tracking-[0.05em] uppercase"
+              onClick={() => setSelected(null)}
+              className="ml-auto font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
             >
               ← Back to start
             </button>
           )}
+        </header>
+        <div className="flex min-h-[400px] flex-col md:flex-row">
+          {PROJECT_GUIDE_JOURNEYS.map((journey) => {
+            const status = statusByJourney[journey.id];
+            const isSelected = selected === journey.id;
+            const isSpine = selected !== null && !isSelected;
+            return (
+              <motion.section
+                key={journey.id}
+                layout={!reducedMotion}
+                transition={
+                  reducedMotion
+                    ? { duration: 0 }
+                    : { layout: { duration: 0.5, ease: [0.65, 0, 0.25, 1] } }
+                }
+                data-testid={`project-guide-${journey.id}-card`}
+                data-state={isSelected ? "open" : isSpine ? "spine" : "closed"}
+                className={cn(
+                  "min-w-0 overflow-hidden",
+                  isSpine
+                    ? "bg-[#F7F7F7] md:w-[54px] md:flex-none"
+                    : "md:flex-1",
+                  journey.id === "third-party-mcp" &&
+                    "border-l border-[#121212]/10",
+                )}
+              >
+                {isSpine ? (
+                  <JourneySpine
+                    journey={journey}
+                    status={status}
+                    onSelect={() => setSelected(journey.id)}
+                  />
+                ) : isSelected ? (
+                  <ProjectGuideRun
+                    journey={journey}
+                    status={status}
+                    onSwitchJourney={() =>
+                      setSelected(otherProjectGuideJourney(journey.id))
+                    }
+                  />
+                ) : (
+                  <JourneyChoice
+                    journey={journey}
+                    status={status}
+                    statusPending={progressPending}
+                    onSelect={() => setSelected(journey.id)}
+                  />
+                )}
+              </motion.section>
+            );
+          })}
         </div>
-        <div className="flex flex-col overflow-hidden md:flex-row">
-          {PROJECT_GUIDE_JOURNEYS.map((journey) => (
-            <JourneyCard
-              key={journey.id}
-              journey={journey}
-              status={statusByJourney[journey.id]}
-              statusPending={progressPending}
-              expanded={expanded === journey.id}
-              spine={expanded !== null && expanded !== journey.id}
-              onToggle={() => toggle(journey.id)}
-              onComplete={() => markJourneyComplete(journey.id)}
-              onSwitchJourney={() =>
-                switchJourney(otherProjectGuideJourney(journey.id))
-              }
-            />
-          ))}
-        </div>
+      </section>
+    </GuideCanvas>
+  );
+}
+
+function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div
+      className={cn(
+        BRAND_MESH_SURFACE_CLASS,
+        "relative flex min-h-[calc(100dvh-var(--header-height))] w-full p-4 sm:p-8",
+      )}
+    >
+      <BrandMeshLayers />
+      <div className="relative z-10 flex w-full items-start justify-center">
+        {children}
       </div>
     </div>
   );
 }
 
-function JourneyCard({
+function JourneyChoice({
   journey,
   status,
   statusPending,
-  expanded,
-  spine,
-  onToggle,
-  onComplete,
-  onSwitchJourney,
+  onSelect,
 }: {
   journey: JourneyMeta;
   status: JourneyStatus;
   statusPending: boolean;
-  expanded: boolean;
-  spine: boolean;
-  onToggle: () => void;
-  onComplete: () => void;
-  onSwitchJourney: () => void;
+  onSelect: () => void;
 }): JSX.Element {
-  const reducedMotion = useReducedMotion();
-  const triggerId = `project-guide-${journey.id}-trigger`;
-  const panelId = `project-guide-${journey.id}-panel`;
+  const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
+  const isComplete = status === "done";
+  const isInProgress = status === "in-progress";
+  const isUnavailable = status === "unreadable";
+  const statusLabel = statusPending ? "Loading" : JOURNEY_STATUS_LABELS[status];
+  const progressLabel = isUnavailable
+    ? "Progress unavailable"
+    : isComplete
+      ? "Complete"
+      : isInProgress
+        ? "1 of 5 done"
+        : "Not started";
 
   return (
-    <motion.section
-      layout={!reducedMotion}
-      transition={
-        reducedMotion
-          ? { duration: 0 }
-          : { layout: { duration: 0.5, ease: [0.65, 0, 0.25, 1] } }
-      }
-      data-testid={`project-guide-${journey.id}-card`}
-      data-state={expanded ? "open" : spine ? "spine" : "closed"}
-      className={cn(
-        "min-w-0 overflow-hidden",
-        expanded || !spine ? "md:flex-1" : "md:w-[54px] md:flex-none",
-        journey.id === "third-party-mcp" && "border-border md:border-l",
-      )}
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-label={journey.title}
+      className="flex h-full w-full flex-col text-left"
     >
-      <h3 className={expanded ? "hidden" : undefined}>
-        <button
-          id={triggerId}
-          type="button"
-          onClick={onToggle}
-          aria-controls={panelId}
-          aria-expanded={expanded}
-          aria-label={spine ? `Switch to ${journey.title} journey` : undefined}
-          className={cn(
-            "flex w-full flex-col items-start gap-2 px-6.5 py-5 text-left",
-            spine && "md:h-full md:w-[54px] md:items-center md:px-2 md:py-4",
-          )}
-        >
-          <span
-            className={cn(
-              "flex w-full items-center gap-2.5",
-              spine && "md:flex-col",
-            )}
-          >
+      <JourneyGraphic journey={journey} status={status} />
+      <span className="flex flex-col gap-2 border-t border-[#121212]/10 bg-[#FAFAFA] p-[22px] transition-[background,box-shadow] hover:bg-card hover:shadow-[inset_0_-3px_0_#121212]">
+        <span className="flex items-center gap-2.5">
+          {journey.steps.map((step, index) => (
             <span
-              className={cn(
-                "text-muted-foreground font-mono text-xs tracking-wider",
-                spine && "md:hidden",
-              )}
-            >
-              {journey.index}
-            </span>
-            <span
-              className={cn(
-                "text-foreground text-[19px] leading-[1.25]",
-                spine &&
-                  "md:[writing-mode:vertical-rl] md:rotate-180 md:whitespace-nowrap",
-              )}
-            >
-              {journey.title}
-            </span>
-            <span
-              role={statusPending ? "status" : undefined}
-              aria-label={
-                statusPending
-                  ? `Loading ${journey.title} journey status`
-                  : undefined
-              }
-              className={cn(
-                "border-border text-muted-foreground ml-auto border px-1.5 py-px font-mono text-[9px] tracking-[0.08em] uppercase",
-                spine && "md:ml-0",
-              )}
-            >
-              {statusPending ? "Loading" : JOURNEY_STATUS_LABELS[status]}
-            </span>
+              key={step}
+              aria-hidden="true"
+              className="h-[3px] w-4"
+              style={{
+                backgroundColor:
+                  isComplete || (isInProgress && index === 0)
+                    ? fixture.accent
+                    : "#DCDCDC",
+              }}
+            />
+          ))}
+          <span className="font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/40 uppercase">
+            {progressLabel}
+          </span>
+        </span>
+        <span className="text-[18px] leading-[1.2]">{journey.title}</span>
+        <span className="text-[12.5px] leading-[1.55] text-[#121212]/62">
+          {journey.win}
+        </span>
+        <span className="flex items-center gap-3 pt-1">
+          <span className="font-mono text-[11.5px]">
+            {isComplete
+              ? "Review"
+              : isInProgress
+                ? "Resume the run"
+                : "Open the journey"}
           </span>
           <span
-            className={cn(
-              "text-muted-foreground max-w-[64ch] text-[13px] leading-[1.6]",
-              spine && "md:hidden",
-            )}
-          >
-            {journey.win}
-          </span>
-        </button>
-      </h3>
-
-      {!expanded && !spine && (
-        <JourneyGraphic journey={journey} status={status} />
-      )}
-      {!expanded && !spine && (
-        <div
-          onClick={onToggle}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") onToggle();
-          }}
-          tabIndex={0}
-          className="border-border flex w-full items-center gap-3 border-t px-6.5 py-4 text-left"
-        >
-          <span className="font-mono text-[10px] text-[#121212]/40">
-            {journey.index}
-          </span>
-          <span className="min-w-0 flex-1 text-[13px]">{journey.title}</span>
-          <span className="font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/45 uppercase">
+            className="h-px flex-1"
+            style={{ backgroundColor: fixture.accent }}
+          />
+          <span className="font-mono text-[11px] text-[#121212]/40">
             5 steps · ~4 min
           </span>
-          <span aria-hidden="true">→</span>
-        </div>
-      )}
-
-      {expanded && (
-        <motion.div
-          id={panelId}
-          role="region"
-          aria-labelledby={triggerId}
-          data-testid="journey-body"
-          initial={reducedMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: reducedMotion ? 0 : 0.3,
-            ease: [0.2, 0.7, 0.3, 1],
-          }}
-          className="border-border border-t px-6.5 py-5"
-        >
-          <ProjectGuideRunProvider
-            journeyId={journey.id}
-            currentStep={status === "in-progress" ? 1 : 0}
+          <span
+            className="font-mono text-[11.5px]"
+            style={{ color: fixture.accent }}
           >
-            {journey.id === "third-party-mcp" ? (
-              <ThirdPartyMcpJourney
-                status={status}
-                onComplete={onComplete}
-                onSwitchJourney={onSwitchJourney}
-              />
-            ) : (
-              <SecretBlockJourney
-                status={status}
-                onComplete={onComplete}
-                onSwitchJourney={onSwitchJourney}
-              />
-            )}
-          </ProjectGuideRunProvider>
-        </motion.div>
-      )}
-    </motion.section>
+            →
+          </span>
+        </span>
+        <span className="sr-only">{statusLabel}</span>
+      </span>
+    </button>
   );
 }
 
@@ -287,10 +235,10 @@ function JourneyGraphic({
   journey: JourneyMeta;
   status: JourneyStatus;
 }): JSX.Element {
-  const isA = journey.id === "third-party-mcp";
-  const accent = isA ? "#2879D8" : "#B45A28";
-  const active = status !== "not-started";
-  const plates = isA
+  const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
+  const reducedMotion = useReducedMotion();
+  const isMcp = journey.id === "third-party-mcp";
+  const plates = isMcp
     ? [
         [
           "Your client",
@@ -304,7 +252,7 @@ function JourneyGraphic({
           "verified",
           "not installed",
         ],
-        ["Upstream", "catalog server", "reachable", "not picked"],
+        ["Upstream", "linear · vendor server", "27 tools", "not picked"],
       ]
     : [
         [
@@ -321,93 +269,74 @@ function JourneyGraphic({
           "unproven",
         ],
       ];
+  const active = status !== "not-started" && status !== "unreadable";
+
   return (
-    <div className="flex min-h-[400px] flex-col items-center justify-center px-6 pt-10 pb-8">
-      <style>{`@keyframes guidepulse{0%,45%{transform:scale(1)}50%{transform:scale(1.018)}58%,100%{transform:scale(1)}}@keyframes tickOn{0%,45%{opacity:.16}55%,74%{opacity:1}100%{opacity:.16}}@media(prefers-reduced-motion:reduce){.motion-safe\\:animate-\\[guidepulse_9s_linear_infinite\\],.motion-safe\\:animate-\\[tickOn_2\\.4s_linear_infinite\\]{animation:none}}`}</style>
+    <motion.span
+      animate={
+        reducedMotion || status !== "not-started"
+          ? undefined
+          : { opacity: [0.9, 1, 0.9] }
+      }
+      transition={{ duration: 9, ease: "linear", repeat: Infinity }}
+      className="flex min-h-[400px] flex-col items-center justify-center px-6 pt-10 pb-8"
+    >
       {plates.map(([zone, name, onStatus, offStatus], index) => (
-        <div key={zone} className="flex w-full flex-col items-center">
-          <div
+        <span key={zone} className="flex w-full flex-col items-center">
+          <span
             className={cn(
-              "relative flex w-[80%] flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
-              index === 1 &&
-                "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px] shadow-[inset_0_0_0_1px_#DBDBDB] motion-safe:animate-[guidepulse_9s_linear_infinite]",
+              "relative flex w-4/5 flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
+              index === 1 && "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px]",
             )}
           >
             {index === 1 && (
-              <span className="absolute inset-y-0 left-0 w-[5px] bg-[linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)] opacity-40" />
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 w-[5px] opacity-40"
+                style={{
+                  background:
+                    "linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)",
+                }}
+              />
             )}
-            <div className="flex items-center gap-3 pl-0">
-              <span className="relative flex min-w-0 flex-1 flex-col gap-1">
+            <span className="flex items-center gap-3">
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/42 uppercase">
                   {zone}
                 </span>
-                <span className="relative h-[18px] truncate text-[12.5px] leading-[1.2] transition-opacity duration-500">
-                  <span
-                    className={cn(
-                      "absolute inset-0 transition-opacity duration-500",
-                      active ? "opacity-100" : "opacity-0",
-                      index === 1 && "text-[18px]",
-                    )}
-                  >
-                    {name}
-                  </span>
-                  <span
-                    className={cn(
-                      "absolute inset-0 transition-opacity duration-500",
-                      active ? "opacity-0" : "opacity-100",
-                      index === 1 && "text-[18px]",
-                    )}
-                  >
-                    {name === "catalog server" ? "vendor server" : name}
-                  </span>
-                </span>
-              </span>
-              <span className="shrink-0 font-mono text-[9.5px] text-[#121212]/40">
                 <span
                   className={cn(
-                    "transition-opacity duration-500",
-                    active ? "opacity-100" : "opacity-0",
+                    "truncate text-[12.5px]",
+                    index === 1 && "text-[18px]",
                   )}
                 >
-                  {onStatus}
-                </span>
-                <span
-                  className={cn(
-                    "transition-opacity duration-500",
-                    active ? "opacity-0" : "opacity-100",
-                  )}
-                >
-                  {offStatus}
+                  {name}
                 </span>
               </span>
-            </div>
+              <span className="font-mono text-[9.5px] text-[#121212]/40">
+                {active ? onStatus : offStatus}
+              </span>
+            </span>
             {index === 1 && (
-              <div className="flex items-center gap-2 pl-2">
-                <span className="flex flex-1 gap-[3px]">
-                  {Array.from({ length: 5 }, (_, tick) => (
-                    <span
-                      key={tick}
-                      className={cn(
-                        "h-[5px] flex-1 bg-[#B45A28] opacity-20 motion-safe:animate-[tickOn_2.4s_linear_infinite]",
-                        active && "opacity-100",
-                      )}
-                      style={{
-                        animationDelay: `${-2.4 + tick * 0.2}s`,
-                        backgroundColor: accent,
-                      }}
-                    />
-                  ))}
-                </span>
-                <span className="font-mono text-[9px] tracking-[0.07em] text-[#121212]/45 uppercase">
-                  {isA ? "in tool logs" : "1 risk event"}
-                </span>
-              </div>
+              <span className="flex gap-[3px] pl-2">
+                {Array.from({ length: 12 }, (_, tick) => (
+                  <span
+                    key={tick}
+                    aria-hidden="true"
+                    className="h-[5px] flex-1"
+                    style={{
+                      backgroundColor: fixture.accent,
+                      opacity: active ? 1 : 0.16,
+                    }}
+                  />
+                ))}
+              </span>
             )}
-          </div>
+          </span>
           {index < 2 && (
-            <div className="relative h-[34px] w-3 border-x border-dashed border-[#C4C4C4]">
+            <span className="relative h-[34px] w-3 border-x border-dashed border-[#C4C4C4]">
               <span className="absolute left-5 top-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/35 uppercase">
-                {isA
+                {isMcp
                   ? index === 0
                     ? "requests"
                     : "governed hop"
@@ -415,11 +344,52 @@ function JourneyGraphic({
                     ? "every prompt"
                     : "denied here"}
               </span>
-            </div>
+            </span>
           )}
-        </div>
+        </span>
       ))}
-    </div>
+    </motion.span>
+  );
+}
+
+function JourneySpine({
+  journey,
+  status,
+  onSelect,
+}: {
+  journey: JourneyMeta;
+  status: JourneyStatus;
+  onSelect: () => void;
+}): JSX.Element {
+  const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
+  const meta =
+    status === "done"
+      ? "complete"
+      : status === "in-progress"
+        ? "1 / 5"
+        : fixture.meta;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-label={`Switch to ${journey.title}`}
+      className="flex h-full w-full flex-col items-center gap-3.5 py-5 hover:bg-card/60"
+    >
+      <span
+        aria-hidden="true"
+        className="size-2"
+        style={{ backgroundColor: fixture.accent }}
+      />
+      <span className="flex-1 [writing-mode:vertical-rl] font-mono text-[10.5px] tracking-[0.08em] text-[#121212]/50 uppercase">
+        Journey · {meta}
+      </span>
+      <span
+        aria-hidden="true"
+        className="font-mono text-[11px] text-[#121212]/35"
+      >
+        ↔
+      </span>
+    </button>
   );
 }
 
@@ -437,38 +407,39 @@ function ProjectGuideComplete({
       data-testid="project-guide-complete"
       initial={reducedMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: reducedMotion ? 0 : 0.4,
-        ease: [0.2, 0.7, 0.3, 1],
-      }}
-      className="bg-card border-border grid gap-4 border p-6.5"
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : { duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }
+      }
+      className="bg-card border-border grid w-full max-w-[960px] gap-4 border p-6"
     >
       <span className="text-eyebrow text-primary">
         {PROJECT_GUIDE_COMPLETE.eyebrow}
       </span>
-      <h2 className="text-foreground max-w-[24ch] font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
+      <h2 className="max-w-[24ch] font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
         {PROJECT_GUIDE_COMPLETE.heading}
       </h2>
-      <p className="text-muted-foreground max-w-[56ch] text-[13px] leading-[1.6]">
+      <p className="max-w-[56ch] text-[13px] leading-[1.6] text-muted-foreground">
         {PROJECT_GUIDE_COMPLETE.body}
       </p>
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onReturnToProjectHome}
-          className="bg-foreground text-background w-fit px-4 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+          className="bg-foreground px-4 py-2 font-mono text-[11px] tracking-[0.05em] text-background uppercase"
         >
           {PROJECT_GUIDE_COMPLETE.primaryAction}
         </button>
         <button
           type="button"
           onClick={onReview}
-          className="text-muted-foreground font-mono text-[11px] uppercase"
+          className="border border-[#DBDBDB] px-4 py-2 font-mono text-[11px] tracking-[0.05em] text-[#121212]/60 uppercase"
         >
           {PROJECT_GUIDE_COMPLETE.secondaryAction}
         </button>
       </div>
-      <span className="text-muted-foreground font-mono text-[10px] uppercase">
+      <span className="font-mono text-[10px] text-muted-foreground uppercase">
         {PROJECT_GUIDE_COMPLETE.note}
       </span>
     </motion.section>

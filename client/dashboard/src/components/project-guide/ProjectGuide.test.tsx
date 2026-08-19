@@ -12,17 +12,7 @@ const statusByJourney = vi.hoisted(
     }) as { current: Record<JourneyId, JourneyStatus> },
 );
 const progressPending = vi.hoisted(() => ({ current: false }));
-const journeyBodies = vi.hoisted(() => ({
-  thirdParty: vi.fn(),
-  secretBlock: vi.fn(),
-}));
-const bodyError = vi.hoisted(() => ({ current: false }));
 const setSearchParams = vi.hoisted(() => vi.fn());
-const queryClient = vi.hoisted(() => ({}));
-const invalidations = vi.hoisted(() => ({
-  activity: vi.fn(),
-  results: vi.fn(),
-}));
 
 vi.mock("./useProjectGuideProgress", () => ({
   useProjectGuideProgress: () => ({
@@ -31,118 +21,16 @@ vi.mock("./useProjectGuideProgress", () => ({
   }),
 }));
 
-vi.mock("@/contexts/Sdk", () => ({
-  useProjectSlugForRequests: () => "project-guide-test",
-}));
-
-vi.mock("./ThirdPartyMcpJourney", () => ({
-  ThirdPartyMcpJourney: ({
-    status,
-    onComplete,
-    onSwitchJourney,
-  }: {
-    status: JourneyStatus;
-    onComplete: () => void;
-    onSwitchJourney: () => void;
-  }) => {
-    journeyBodies.thirdParty();
-
-    if (bodyError.current) {
-      return (
-        <div role="alert">
-          Third-party journey unavailable <button type="button">Retry</button>
-        </div>
-      );
-    }
-
-    if (status === "done") {
-      return (
-        <div data-testid="third-party-journey">
-          <p>The path is governed.</p>
-          <a href="/logs">Open Tool Logs</a>
-          <button type="button" onClick={onSwitchJourney}>
-            Start the other journey
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div data-testid="third-party-journey">
-        <button type="button" onClick={onComplete}>
-          Complete third-party journey
-        </button>
-        <button type="button" onClick={onSwitchJourney}>
-          Switch to secret journey
-        </button>
-      </div>
-    );
-  },
-}));
-
-vi.mock("./SecretBlockJourney", () => ({
-  SecretBlockJourney: ({
-    onComplete,
-    onSwitchJourney,
-  }: {
-    onComplete: () => void;
-    onSwitchJourney: () => void;
-  }) => {
-    journeyBodies.secretBlock();
-
-    return (
-      <div data-testid="secret-block-journey">
-        <button type="button" onClick={onComplete}>
-          Complete secret-block journey
-        </button>
-        <button type="button" onClick={onSwitchJourney}>
-          Switch to third-party journey
-        </button>
-      </div>
-    );
-  },
-}));
-
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams("showGuide"), setSearchParams],
 }));
 
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => queryClient,
-}));
-
-vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
-  invalidateGetMcpServerActivity: invalidations.activity,
-  invalidateAllGetMcpServerActivity: vi.fn(),
-}));
-
-vi.mock("@gram/client/react-query/riskListResults.js", () => ({
-  invalidateRiskListResults: invalidations.results,
-  invalidateAllRiskListResults: vi.fn(),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    logs: {
-      Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/logs">{children}</a>
-      ),
-    },
-    riskEvents: {
-      Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/risk-events">{children}</a>
-      ),
-    },
-  }),
-}));
-
-import { ProjectGuide } from "./ProjectGuide.tsx";
+import { ProjectGuide } from "./ProjectGuide";
 
 afterEach(() => {
   cleanup();
-  progressPending.current = false;
-  bodyError.current = false;
   vi.clearAllMocks();
+  progressPending.current = false;
   statusByJourney.current = {
     "third-party-mcp": "not-started",
     "secret-block": "not-started",
@@ -150,265 +38,118 @@ afterEach(() => {
 });
 
 describe("ProjectGuide", () => {
-  it("offers both journeys, collapsed, with their status", () => {
+  it("renders the approved opening with both selectable journeys", () => {
     render(<ProjectGuide />);
+
     expect(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("heading", {
+        name: "Put your agent traffic under control",
+      }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: /Block a leaked credential mid-prompt/,
       }),
     ).toBeTruthy();
-    expect(screen.getAllByText("Not started").length).toBe(2);
-    expect(screen.queryByTestId("journey-body")).toBeNull();
-  });
-
-  it("shows derived status per card", () => {
-    statusByJourney.current = {
-      "third-party-mcp": "done",
-      "secret-block": "in-progress",
-    };
-    render(<ProjectGuide />);
-    expect(screen.getByText("Done")).toBeTruthy();
-    expect(screen.getByText("In progress")).toBeTruthy();
-  });
-
-  it("shows loading status instead of briefly reporting journeys as not started", () => {
-    progressPending.current = true;
-    render(<ProjectGuide />);
-
-    expect(screen.queryAllByText("Not started")).toHaveLength(0);
     expect(
-      screen.getAllByRole("status", { name: /Loading .* journey status/ }),
-    ).toHaveLength(2);
-  });
-
-  it("expands a card in place", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    expect(screen.getByTestId("journey-body")).toBeTruthy();
-    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
-  });
-
-  it("links each accordion heading and trigger to its labelled panel", () => {
-    render(<ProjectGuide />);
-    const trigger = screen.getByRole("button", {
-      name: /Govern a third-party MCP/,
-    });
-
-    expect(
-      screen.getByRole("heading", { name: /Govern a third-party MCP/ }),
     ).toBeTruthy();
-    const panelId = trigger.getAttribute("aria-controls");
-    expect(panelId).toBeTruthy();
-
-    fireEvent.click(trigger);
-
-    const panel = screen.getByRole("region", {
-      name: /Govern a third-party MCP/,
-    });
-    expect(panel.id).toBe(panelId);
-    expect(panel.getAttribute("aria-labelledby")).toBe(trigger.id);
+    expect(
+      screen.getByTestId("project-guide-secret-block-card").textContent,
+    ).toContain("Not started");
+    expect(
+      screen.getByTestId("project-guide-third-party-mcp-card").textContent,
+    ).toContain("Not started");
   });
 
-  it("keeps only one card open", () => {
+  it("keeps the other journey switchable when a selected path opens", () => {
     render(<ProjectGuide />);
+
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
+
+    expect(
+      screen.getByRole("heading", { name: "Govern a third-party MCP" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Switch to Block a leaked credential mid-prompt",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("nothing has run for this step yet");
+
     fireEvent.click(
       screen.getByRole("button", {
-        name: /Block a leaked credential mid-prompt/,
+        name: "Switch to Block a leaked credential mid-prompt",
       }),
     );
-    expect(screen.getAllByTestId("journey-body").length).toBe(1);
-    expect(screen.getByTestId("secret-block-journey")).toBeTruthy();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Block a leaked credential mid-prompt",
+      }),
+    ).toBeTruthy();
   });
 
-  it("collapses the open card when clicked again", () => {
-    render(<ProjectGuide />);
-    const card = screen.getByRole("button", {
-      name: /Govern a third-party MCP/,
-    });
-    fireEvent.click(card);
-    fireEvent.click(card);
-    expect(screen.queryByTestId("journey-body")).toBeNull();
-  });
-
-  it("resumes an in-progress journey on its second step", () => {
+  it("renders deterministic active output and event areas for an in-progress path", () => {
     statusByJourney.current = {
       "third-party-mcp": "in-progress",
       "secret-block": "not-started",
     };
     render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
-  });
-
-  it("mounts only the expanded journey body", () => {
-    render(<ProjectGuide />);
-
-    expect(journeyBodies.thirdParty).not.toHaveBeenCalled();
-    expect(journeyBodies.secretBlock).not.toHaveBeenCalled();
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
 
-    expect(journeyBodies.thirdParty).toHaveBeenCalledTimes(1);
-    expect(journeyBodies.secretBlock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Endpoint verified, client connected, no calls recorded.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("The call you watched")).toBeTruthy();
+    expect(screen.getByText("linear.tools/list")).toBeTruthy();
   });
 
-  it("expands one journey column and collapses its sibling to a switchable spine", () => {
-    render(<ProjectGuide />);
-    const thirdPartyCard = screen.getByTestId(
-      "project-guide-third-party-mcp-card",
-    );
-    const secretBlockCard = screen.getByTestId(
-      "project-guide-secret-block-card",
-    );
-
-    expect(thirdPartyCard.getAttribute("data-state")).toBe("closed");
-    expect(secretBlockCard.getAttribute("data-state")).toBe("closed");
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-
-    expect(thirdPartyCard.getAttribute("data-state")).toBe("open");
-    expect(secretBlockCard.getAttribute("data-state")).toBe("spine");
-    expect(secretBlockCard.className).toContain("md:w-[54px]");
-    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
-    expect(screen.queryByTestId("secret-block-journey")).toBeNull();
-  });
-
-  it("switches journeys from the body without leaving the guide", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Switch to secret journey" }),
-    );
-
-    expect(screen.getByTestId("secret-block-journey")).toBeTruthy();
-    expect(screen.queryByTestId("third-party-journey")).toBeNull();
-  });
-
-  it("returns to the collapsed journey chooser with the back control", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "← Back to start" }));
-
-    expect(screen.queryByTestId("journey-body")).toBeNull();
-  });
-
-  it("keeps a completed journey open until its derived progress updates", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Complete third-party journey" }),
-    );
-
-    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
-  });
-
-  it("refreshes the derived progress query after each persisted completion", () => {
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Complete third-party journey" }),
-    );
-
-    expect(invalidations.activity).toHaveBeenCalledWith(queryClient, [
-      { gramProject: "project-guide-test" },
-    ]);
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Switch to Block a leaked credential mid-prompt journey",
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Complete secret-block journey" }),
-    );
-
-    expect(invalidations.results).toHaveBeenCalledWith(queryClient, [
-      { gramProject: "project-guide-test" },
-    ]);
-  });
-
-  it("shows the approved one-journey completion treatment with an other-journey action", () => {
+  it("keeps unavailable progress out of an empty or completed display", () => {
     statusByJourney.current = {
-      "third-party-mcp": "done",
+      "third-party-mcp": "unreadable",
       "secret-block": "not-started",
     };
     render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
 
-    expect(screen.getByText("The path is governed.")).toBeTruthy();
+    expect(screen.getAllByText("Progress unavailable")).toHaveLength(2);
     expect(
-      screen.getByRole("link", { name: "Open Tool Logs" }).getAttribute("href"),
-    ).toBe("/logs");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start the other journey" }),
-    );
-    expect(screen.getByTestId("secret-block-journey")).toBeTruthy();
+      screen.getByTestId("project-guide-third-party-mcp-card").textContent,
+    ).not.toContain("Not started");
   });
 
-  it("shows a completion state only after both derived journey statuses are done", () => {
+  it("shows completion actions after both derived journey artifacts are done", () => {
     statusByJourney.current = {
       "third-party-mcp": "done",
       "secret-block": "done",
     };
     render(<ProjectGuide />);
 
-    expect(screen.getByTestId("project-guide-complete")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", {
+        name: "Both journeys are on the record.",
+      }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Review what you set up" }),
     ).toBeTruthy();
-    expect(
-      screen.getByText("This card is replaced on next visit"),
-    ).toBeTruthy();
-    expect(screen.queryByTestId("journey-body")).toBeNull();
-  });
-
-  it("returns to the completed journey records for review", () => {
-    statusByJourney.current = {
-      "third-party-mcp": "done",
-      "secret-block": "done",
-    };
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Review what you set up" }),
-    );
-
-    expect(screen.queryByTestId("project-guide-complete")).toBeNull();
-    expect(
-      screen.getByTestId("project-guide-third-party-mcp-card"),
-    ).toBeTruthy();
-  });
-
-  it("returns to normal project home through the existing query gate", () => {
-    statusByJourney.current = {
-      "third-party-mcp": "done",
-      "secret-block": "done",
-    };
-    render(<ProjectGuide />);
 
     fireEvent.click(screen.getByRole("button", { name: "Go to project home" }));
 
@@ -417,34 +158,25 @@ describe("ProjectGuide", () => {
     });
   });
 
-  it("keeps the guide visible when a body exposes a retry path", () => {
-    bodyError.current = true;
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Third-party journey unavailable",
-    );
-    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
-    expect(
-      screen.getByRole("button", {
-        name: /Block a leaked credential mid-prompt/,
-      }),
-    ).toBeTruthy();
-  });
-
-  it("shows no current step for a completed journey before the completion state", () => {
+  it("shows the approved completed-journey summary and keeps the other path available", () => {
     statusByJourney.current = {
       "third-party-mcp": "done",
       "secret-block": "not-started",
     };
     render(<ProjectGuide />);
+
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
 
-    expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(0);
+    expect(
+      screen.getByText(
+        "Your client now reaches linear through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open tool logs" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Start the other journey" }),
+    ).toBeTruthy();
   });
 });
