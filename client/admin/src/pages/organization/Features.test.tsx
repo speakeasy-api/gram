@@ -26,7 +26,7 @@ beforeEach(() => {
     hooks_browser_login_enabled: false,
     hooks_fail_open_enabled: true,
     platform_mcp_enabled: true,
-    remote_session_auto_refresh_enabled: false,
+    remote_session_auto_refresh_policy: "enforced",
     session_capture_enabled: true,
     skill_capture_metadata_only: false,
     skills_enabled: true,
@@ -46,7 +46,8 @@ describe("Features", () => {
     expect(await screen.findByText("Consent tool filtering")).toBeTruthy();
     expect(screen.getByText("Platform MCP")).toBeTruthy();
     expect(screen.getAllByText("Enabled")).toHaveLength(5);
-    expect(screen.getAllByText("Disabled")).toHaveLength(3);
+    expect(screen.getAllByText("Disabled")).toHaveLength(2);
+    expect(screen.getByText("Enforced")).toBeTruthy();
     expect(mocks.getOrganizationFeatures).toHaveBeenCalledWith(ORG.id);
   });
 

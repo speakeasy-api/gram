@@ -27,14 +27,29 @@ function Row({
   value,
 }: {
   label: string;
-  value: boolean;
+  value: boolean | string;
 }): JSX.Element {
   return (
     <div className="grid grid-cols-[20rem_1fr] items-baseline gap-3 py-1">
       <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-sm">{value ? "Enabled" : "Disabled"}</span>
+      <span className="text-sm">
+        {typeof value === "boolean" ? (value ? "Enabled" : "Disabled") : value}
+      </span>
     </div>
   );
+}
+
+function remoteSessionAutoRefreshPolicyLabel(
+  policy: AdminOrganizationFeatures["remote_session_auto_refresh_policy"],
+): string {
+  switch (policy) {
+    case "disabled":
+      return "Disabled";
+    case "user_controlled":
+      return "User controlled";
+    case "enforced":
+      return "Enforced";
+  }
 }
 
 export function FeaturesRoute(): JSX.Element | null {
@@ -84,8 +99,10 @@ function FeaturesView({
         <Row label="Hooks fail open" value={features.hooks_fail_open_enabled} />
         <Row label="Platform MCP" value={features.platform_mcp_enabled} />
         <Row
-          label="Remote session auto refresh"
-          value={features.remote_session_auto_refresh_enabled}
+          label="Remote session auto refresh policy"
+          value={remoteSessionAutoRefreshPolicyLabel(
+            features.remote_session_auto_refresh_policy,
+          )}
         />
         <Row
           label="Session capture"
