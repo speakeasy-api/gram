@@ -274,7 +274,7 @@ WHERE du.organization_id = @organization_id
 ORDER BY email, directory_group_id;
 
 -- name: ListActiveDirectoryUserAttributesByEmails :many
-SELECT
+SELECT DISTINCT
   LOWER(du.email) AS email,
   attribute.key::text AS attribute_key,
   attribute.value::text AS attribute_value
