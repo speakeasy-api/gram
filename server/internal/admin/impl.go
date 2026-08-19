@@ -61,7 +61,8 @@ type Service struct {
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
 
-	openRouter TrialKeyReviver
+	openRouter      TrialKeyReviver
+	productFeatures *productfeatures.Client
 
 	audit *audit.Logger
 
@@ -109,6 +110,7 @@ func NewService(
 	workosClient orgprovision.WorkOSOrganizationCreator,
 	openRouter TrialKeyReviver,
 	trialNotifier trialemails.Notifier,
+	productFeatures *productfeatures.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -127,16 +129,17 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		workos:         workosClient,
-		openRouter:     openRouter,
-		audit:          audit.NewLogger(),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:          logger,
+		db:              db,
+		oidc:            oidcClient,
+		sessions:        sessionStore,
+		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:  allowedOrigins,
+		workos:          workosClient,
+		openRouter:      openRouter,
+		productFeatures: productFeatures,
+		audit:           audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
@@ -1061,6 +1064,10 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
 	}
 
+	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
+	}
+
 	actor, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
 		OrganizationID: payload.ID,
@@ -1082,6 +1089,9 @@ func (s *Service) rearmTrialLocked(
 	}
 
 	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	}
 
 	// Speakeasy-only, and the only place the email meets the entry's subject.
 	logger.InfoContext(ctx, "re-armed enterprise trial",

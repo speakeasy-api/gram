@@ -433,6 +433,7 @@ func NewActivities(
 			openrouterProvisioner,
 			auditLogger,
 			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
+			productFeatures,
 		),
 		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same

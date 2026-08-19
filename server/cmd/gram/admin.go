@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -319,10 +320,11 @@ func newAdminCommand() *cli.Command {
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 			adminTrialKeyReviver := newAdminTrialKeyReviver(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier, productFeatures))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
