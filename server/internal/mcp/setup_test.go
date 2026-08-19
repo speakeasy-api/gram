@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeatures_repo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -103,9 +103,6 @@ type testInstance struct {
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. inbound CIMD) with SetFlag.
 	features *feature.InMemory
-	// consentToolFilteringEnabled controls the durable product-feature stub;
-	// it is deliberately separate from the PostHog test provider above.
-	consentToolFilteringEnabled *atomic.Bool
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting
@@ -204,6 +201,14 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err = productfeatures_repo.New(conn).EnableFeature(ctx, productfeatures_repo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureConsentToolFiltering),
+	})
+	require.NoError(t, err)
+	featClient.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureConsentToolFiltering, true)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
@@ -233,7 +238,6 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
-	_ = featClient
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
@@ -260,33 +264,25 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	consentToolFilteringEnabled := &atomic.Bool{}
-	platformFeatureChecker := func(_ context.Context, _ string, featureName string) bool {
-		if featureName == string(productfeatures.FeatureConsentToolFiltering) {
-			return consentToolFilteringEnabled.Load()
-		}
-		return false // Preserve the service's prior nil-checker behavior.
-	}
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, platformFeatureChecker, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		service:                     svc,
-		conn:                        conn,
-		sessionManager:              sessionManager,
-		serverURL:                   serverURL,
-		siteURL:                     siteURL,
-		logger:                      logger,
-		tracerProvider:              tracerProvider,
-		cacheAdapter:                cacheAdapter,
-		authnChallengeCache:         authnCache,
-		enc:                         enc,
-		authzEngine:                 authzEngine,
-		audit:                       auditLogger,
-		tunnelRoutes:                tunnelRoutes,
-		features:                    features,
-		consentToolFilteringEnabled: consentToolFilteringEnabled,
+		service:             svc,
+		conn:                conn,
+		sessionManager:      sessionManager,
+		serverURL:           serverURL,
+		siteURL:             siteURL,
+		logger:              logger,
+		tracerProvider:      tracerProvider,
+		cacheAdapter:        cacheAdapter,
+		authnChallengeCache: authnCache,
+		enc:                 enc,
+		authzEngine:         authzEngine,
+		audit:               auditLogger,
+		tunnelRoutes:        tunnelRoutes,
+		features:            features,
 	}
 }
 
