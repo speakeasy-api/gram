@@ -28,3 +28,20 @@ type BatchHandlerFunc[M any] func(context.Context, []M, []gcp.MessageMetadata) e
 func (f BatchHandlerFunc[M]) HandleBatch(ctx context.Context, msgs []M, metas []gcp.MessageMetadata) error {
 	return f(ctx, msgs, metas)
 }
+
+// BatchMessage is a decoded message whose Fail method stages a nack until its
+// batch handler returns.
+type BatchMessage[M any] = gcp.BatchMessage[M]
+
+// BatchResultHandler processes a batch while allowing individual messages to
+// stage failures. Returning nil nacks failed messages and acks the rest.
+// Returning an error nacks the whole batch.
+type BatchResultHandler[M any] interface {
+	HandleBatchWithResult(context.Context, []BatchMessage[M]) error
+}
+
+type BatchResultHandlerFunc[M any] func(context.Context, []BatchMessage[M]) error
+
+func (f BatchResultHandlerFunc[M]) HandleBatchWithResult(ctx context.Context, msgs []BatchMessage[M]) error {
+	return f(ctx, msgs)
+}
