@@ -159,7 +159,11 @@ export function shadowMCPInventoryStatusDescription(
   }
   if (server.access === "restricted") {
     // A targeted policy blocks the server for its audience only, so it is not
-    // blocked for the whole project.
+    // blocked for the whole project. Under allow_all the targeted block is the
+    // denied review's doing, so credit it like the blocked branch does.
+    if (server.approvalRequest?.status === "denied") {
+      return "Blocked for some users by review";
+    }
     return "Blocked for some users";
   }
   if (policyState === "unavailable") return "Policy status unavailable";

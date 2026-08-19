@@ -74686,6 +74686,11 @@ components:
       properties:
         access:
           type: string
+          enum:
+            - none
+            - allowed
+            - blocked
+            - restricted
         allowed_policy_ids:
           type: array
           items:
