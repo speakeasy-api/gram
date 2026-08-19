@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -96,6 +97,13 @@ func TestSessionSelectionInterceptor_ListFiltersToSelectedSubsetInUpstreamOrder(
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
 	require.Equal(t, []string{"alpha", "delta"}, toolNames(resp.Result.Tools))
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	var wire map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rpcResp.Result, &wire))
+	require.JSONEq(t, `"private"`, string(wire["cacheScope"]),
+		"a per-principal filtered list must never use the public cache default")
 }
 
 func TestSessionSelectionInterceptor_ListEmptySelectionFiltersEverything(t *testing.T) {

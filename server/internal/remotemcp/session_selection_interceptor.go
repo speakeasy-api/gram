@@ -151,7 +151,7 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 	// Commit the filtered result before witnessing: a failed commit must
 	// never leave call authorization behind for a page that was not
 	// accepted.
-	if err := list.SetTools(allowed); err != nil {
+	if err := list.SetPrivateTools(allowed); err != nil {
 		return fmt.Errorf("commit session-filtered tools/list result: %w", err)
 	}
 

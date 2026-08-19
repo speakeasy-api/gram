@@ -353,7 +353,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
+	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody }, nil)
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody }, nil)
 	if err != nil {
 		return err
 	}
@@ -629,9 +629,20 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 
+	validateUpstreamRequest := func(upstreamReq *http.Request) error {
+		if rejection := validateMirroredHeaders(upstreamReq, userReq); rejection != nil {
+			return rejection
+		}
+		return nil
+	}
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
+		var rejection *RejectError
+		if errors.As(err, &rejection) {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
+			return nil
+		}
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
@@ -840,7 +851,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 // the response so callers can hand it to interceptors as
 // [RemoteMessage.RemoteHTTPRequest]. See the field doc for why this is
 // preferable to relying on [http.Response.Request].
-func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Reader) (*http.Request, *http.Response, error) {
+func (p *Proxy) forwardRequest(
+	ctx context.Context,
+	r *http.Request,
+	body io.Reader,
+	validate func(*http.Request) error,
+) (*http.Request, *http.Response, error) {
 	forwardCtx, forwardCancel := context.WithCancel(ctx)
 	phaseTimer := time.AfterFunc(p.NonStreamingTimeout, forwardCancel)
 
@@ -855,6 +871,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		phaseTimer.Stop()
 		forwardCancel()
 		return nil, nil, err
+	}
+	if validate != nil {
+		if err := validate(upstreamReq); err != nil {
+			phaseTimer.Stop()
+			forwardCancel()
+			return upstreamReq, nil, err
+		}
 	}
 
 	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
@@ -914,8 +937,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	return upstreamReq, resp, nil
 }
 
-func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, body func() io.Reader) (*http.Request, *http.Response, error) {
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body())
+func (p *Proxy) forwardRequestWithRetry(
+	ctx context.Context,
+	r *http.Request,
+	body func() io.Reader,
+	validate func(*http.Request) error,
+) (*http.Request, *http.Response, error) {
+	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
 	if err != nil || p.UpstreamResponseRetryer == nil {
 		return upstreamReq, upstreamResp, err
 	}
@@ -936,7 +964,7 @@ func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, bo
 
 	p.RemoteURL = retry.RemoteURL
 	p.Headers = retry.Headers
-	return p.forwardRequest(ctx, r, body())
+	return p.forwardRequest(ctx, r, body(), validate)
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays

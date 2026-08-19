@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
@@ -14,7 +15,7 @@ import { toast } from "sonner";
 
 export function ConsentToolFilteringSetting(): JSX.Element | null {
   const queryClient = useQueryClient();
-  const { data: features } = useProductFeatures(undefined, undefined, {
+  const features = useProductFeatures(undefined, undefined, {
     throwOnError: false,
   });
   const mutation = useFeaturesSetMutation({
@@ -27,7 +28,30 @@ export function ConsentToolFilteringSetting(): JSX.Element | null {
     },
   });
 
-  if (!features) return null;
+  if (features.isLoading) return null;
+
+  if (features.error || !features.data) {
+    return (
+      <section
+        className="border-border bg-card border p-5"
+        role="alert"
+        aria-live="polite"
+      >
+        <Text className="text-destructive" small>
+          Couldn&apos;t load the tool filtering setting.
+        </Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mt-3"
+          disabled={features.isFetching}
+          onClick={() => void features.refetch()}
+        >
+          {features.isFetching ? "Retrying…" : "Retry"}
+        </Button>
+      </section>
+    );
+  }
 
   return (
     <section className="border-border bg-card border p-5">
@@ -51,7 +75,7 @@ export function ConsentToolFilteringSetting(): JSX.Element | null {
           reason="Only organization admins can change this setting."
         >
           <Switch
-            checked={features.consentToolFilteringEnabled}
+            checked={features.data.consentToolFilteringEnabled}
             onCheckedChange={(enabled) =>
               mutation.mutate({
                 request: {
