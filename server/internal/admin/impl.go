@@ -185,12 +185,18 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// See sessionInfo in session_handler.go for why this one route is hand
-	// written rather than generated from the Goa design.
+	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
+	// features_handler.go for why these routes are hand written rather than
+	// generated from the Goa design.
 	mux.Handle(
 		http.MethodGet,
 		"/admin/session.get",
 		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
 	)
 }
 
