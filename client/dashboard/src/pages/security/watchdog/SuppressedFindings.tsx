@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -48,7 +49,7 @@ export function SuppressedFindings(): JSX.Element | null {
   const [pageIndex, setPageIndex] = useState(0);
   const [openFinding, setOpenFinding] = useState<RiskResult | null>(null);
 
-  const { restore } = useDismissFinding();
+  const { restore, isOptimisticallyRestored } = useDismissFinding();
   const routes = useRoutes();
   const navigate = useNavigate();
   // Opening the session hands off to the same chat sheet the Risk Events log
@@ -79,9 +80,17 @@ export function SuppressedFindings(): JSX.Element | null {
     return byId;
   }, [exclusionsQuery.data]);
 
+  // True while the rows on screen belong to a different page than the one
+  // pageIndex and the range label now describe — keepPreviousData holds the old
+  // page up until the requested one lands.
+  const showingStalePage = listQuery.isPlaceholderData;
+
   const results = useMemo(
-    () => listQuery.data?.results ?? [],
-    [listQuery.data],
+    () =>
+      (listQuery.data?.results ?? []).filter(
+        (result) => !isOptimisticallyRestored(result.id),
+      ),
+    [listQuery.data, isOptimisticallyRestored],
   );
   // Rule suppressions carry no restore action, so they stay out of the
   // selection entirely — including out of select-all, which would otherwise
@@ -94,19 +103,31 @@ export function SuppressedFindings(): JSX.Element | null {
 
   const restoreIds = (ids: string[]): Promise<boolean> => {
     selection.clear();
-    // Restoring shifts every row after it, which invalidates the cursors held
-    // for the pages ahead. Snapping back to the first page is both correct and
-    // where the newest suppressions are.
+    // The rows themselves disappear via the optimistic filter above, which
+    // outlives the refetch; this only puts the pager back somewhere valid,
+    // since a restore shifts every page boundary after it.
     setCursors([undefined]);
     setPageIndex(0);
     return restore(ids);
   };
 
   const goToNextPage = () => {
-    if (!nextCursor) return;
+    // While the previous page is still on screen, nextCursor belongs to it —
+    // a second click would push that same cursor again and desync pageIndex
+    // from the cursor stack. The disabled Next button covers the usual case;
+    // this covers the click that lands in the same frame as the first.
+    if (!nextCursor || showingStalePage || listQuery.isFetching) return;
+    if (cursors[pageIndex + 1] === nextCursor) {
+      setPageIndex((prev) => prev + 1);
+      return;
+    }
     setCursors((prev) => [...prev.slice(0, pageIndex + 1), nextCursor]);
     setPageIndex((prev) => prev + 1);
   };
+
+  if (listQuery.isError) {
+    return <SuppressedError onRetry={() => void listQuery.refetch()} />;
+  }
 
   if (listQuery.data === undefined || total === 0) return null;
 
@@ -134,6 +155,7 @@ export function SuppressedFindings(): JSX.Element | null {
           <SuppressedToolbar
             selection={selection}
             hasSelectable={selectable.length > 0}
+            disabled={showingStalePage}
             onRestoreSelected={() =>
               void restoreIds([...selection.selectedIds])
             }
@@ -141,6 +163,7 @@ export function SuppressedFindings(): JSX.Element | null {
           <SuppressedRows
             results={results}
             isLoading={listQuery.isFetching && results.length === 0}
+            disabled={showingStalePage}
             exclusionsById={exclusionsById}
             selection={selection}
             onRestore={(id) => void restoreIds([id])}
@@ -151,8 +174,8 @@ export function SuppressedFindings(): JSX.Element | null {
             rangeStart={pageIndex * PAGE_SIZE + 1}
             rangeEnd={pageIndex * PAGE_SIZE + results.length}
             total={total}
-            canGoBack={pageIndex > 0}
-            canGoForward={nextCursor !== undefined}
+            canGoBack={pageIndex > 0 && !showingStalePage}
+            canGoForward={nextCursor !== undefined && !showingStalePage}
             onBack={() => setPageIndex((prev) => prev - 1)}
             onForward={goToNextPage}
           />
@@ -190,10 +213,12 @@ export function SuppressedFindings(): JSX.Element | null {
 function SuppressedToolbar({
   selection,
   hasSelectable,
+  disabled,
   onRestoreSelected,
 }: {
   selection: RowSelection<RiskResult>;
   hasSelectable: boolean;
+  disabled: boolean;
   onRestoreSelected: () => void;
 }): JSX.Element | null {
   if (!hasSelectable) return null;
@@ -202,6 +227,7 @@ function SuppressedToolbar({
       <span className="flex items-center gap-3 px-3">
         <Checkbox
           checked={selection.allState}
+          disabled={disabled}
           onCheckedChange={selection.toggleAll}
           aria-label="Select all restorable findings"
         />
@@ -213,7 +239,12 @@ function SuppressedToolbar({
       </span>
       {selection.selectedCount > 0 && (
         <span className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={onRestoreSelected}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={disabled}
+            onClick={onRestoreSelected}
+          >
             <Button.Text>Restore</Button.Text>
           </Button>
           <Button variant="secondary" size="sm" onClick={selection.clear}>
@@ -225,9 +256,29 @@ function SuppressedToolbar({
   );
 }
 
+/** The listing failed outright. Rendering nothing here would be indistinguishable
+ * from "nothing is suppressed", which is the one reading that must not be
+ * guessed at — so the section announces itself and offers a retry. */
+function SuppressedError({ onRetry }: { onRetry: () => void }): JSX.Element {
+  return (
+    <div className="border-border border-t pt-6">
+      <span className="text-eyebrow text-foreground">Suppressed</span>
+      <div className="border-border mt-3 flex flex-wrap items-center justify-between gap-3 border p-4">
+        <Text small muted>
+          Couldn't load suppressed findings.
+        </Text>
+        <Button variant="secondary" size="sm" onClick={onRetry}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SuppressedRows({
   results,
   isLoading,
+  disabled,
   exclusionsById,
   selection,
   onRestore,
@@ -236,6 +287,9 @@ function SuppressedRows({
 }: {
   results: RiskResult[];
   isLoading: boolean;
+  /** Rows belong to a page the pager has already moved past — show them, but
+   * don't let them be acted on until the requested page lands. */
+  disabled: boolean;
   exclusionsById: Map<string, RiskExclusion>;
   selection: RowSelection<RiskResult>;
   onRestore: (id: string) => void;
@@ -252,11 +306,18 @@ function SuppressedRows({
     );
   }
   return (
-    <div className="border-border divide-border divide-y border">
+    <div
+      aria-busy={disabled}
+      className={cn(
+        "border-border divide-border divide-y border transition-opacity",
+        disabled && "opacity-50",
+      )}
+    >
       {results.map((result) => (
         <SuppressedRow
           key={result.id}
           result={result}
+          disabled={disabled}
           exclusion={
             result.exclusionId
               ? exclusionsById.get(result.exclusionId)
@@ -274,6 +335,7 @@ function SuppressedRows({
 
 function SuppressedRow({
   result,
+  disabled,
   exclusion,
   selection,
   onRestore,
@@ -281,6 +343,7 @@ function SuppressedRow({
   onOpen,
 }: {
   result: RiskResult;
+  disabled: boolean;
   exclusion: RiskExclusion | undefined;
   selection: RowSelection<RiskResult>;
   onRestore: (id: string) => void;
@@ -289,6 +352,10 @@ function SuppressedRow({
 }): JSX.Element {
   const restorable = isRestorable(result);
   const detail = suppressionDetail(result, exclusion);
+  const open = () => {
+    if (disabled) return;
+    onOpen(result);
+  };
   return (
     // Clicking the row opens the detail drawer, but the checkbox and the
     // action button are sibling controls rather than descendants of the
@@ -297,18 +364,22 @@ function SuppressedRow({
     // The outer click handler covers the rest of the row — the cell padding
     // around those controls — and skips any click that landed on one of them.
     <div
-      className="bg-card hover:bg-muted/40 divide-border flex w-full cursor-pointer items-stretch divide-x transition-colors"
+      className={cn(
+        "bg-card divide-border flex w-full items-stretch divide-x transition-colors",
+        disabled ? "cursor-default" : "hover:bg-muted/40 cursor-pointer",
+      )}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button, a, [role='checkbox']")) {
           return;
         }
-        onOpen(result);
+        open();
       }}
     >
       <div className="flex w-12 shrink-0 items-center justify-center px-3">
         {restorable ? (
           <Checkbox
             checked={selection.isSelected(result.id)}
+            disabled={disabled}
             onCheckedChange={() => selection.toggle(result.id)}
             aria-label="Select suppressed finding"
           />
@@ -326,11 +397,11 @@ function SuppressedRow({
         role="button"
         tabIndex={0}
         aria-label={`View suppressed finding ${getRuleTitleFallback(result.ruleId)}`}
-        onClick={() => onOpen(result)}
+        onClick={open}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onOpen(result);
+            open();
           }
         }}
         className="divide-border flex min-w-0 flex-1 items-stretch divide-x text-left"
@@ -369,6 +440,7 @@ function SuppressedRow({
           <Button
             variant="tertiary"
             size="sm"
+            disabled={disabled}
             onClick={() => onRestore(result.id)}
           >
             <Button.Text>Restore</Button.Text>
@@ -376,7 +448,12 @@ function SuppressedRow({
         ) : (
           // A rule suppression is undone by editing the exclusion, not per
           // finding, so the row points at the Exclusion rules tab instead.
-          <Button variant="tertiary" size="sm" onClick={onViewRule}>
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={disabled}
+            onClick={onViewRule}
+          >
             <Button.Text>View rule</Button.Text>
           </Button>
         )}

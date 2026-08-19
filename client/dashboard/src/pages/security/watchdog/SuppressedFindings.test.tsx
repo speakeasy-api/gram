@@ -27,18 +27,33 @@ vi.mock("@/pages/chatLogs/useChatDetailSheet", () => ({
   }),
 }));
 
+/** Ids the hook is optimistically treating as already restored. */
+const optimisticallyRestored = new Set<string>();
+
 vi.mock("../useDismissFinding", () => ({
   useDismissFinding: () => ({
     restore,
     dismiss: vi.fn(),
     isOptimisticallyDismissed: () => false,
+    isOptimisticallyRestored: (id: string) => optimisticallyRestored.has(id),
   }),
 }));
 
+/** Drives the listing query's non-data state (loading/stale/error) per test. */
+const listState = {
+  isPlaceholderData: false,
+  isFetching: false,
+  isError: false,
+};
+const refetch = vi.fn();
+
 vi.mock("@gram/client/react-query/riskListDismissedResults.js", () => ({
   useRiskListDismissedResults: (request?: { cursor?: string }) => ({
-    data: PAGES[request?.cursor ?? ""],
-    isFetching: false,
+    data: listState.isError ? undefined : PAGES[request?.cursor ?? ""],
+    isFetching: listState.isFetching,
+    isPlaceholderData: listState.isPlaceholderData,
+    isError: listState.isError,
+    refetch,
   }),
 }));
 
@@ -119,33 +134,40 @@ const EXCLUSIONS: RiskExclusion[] = [
   },
 ];
 
-const PAGES: Record<
-  string,
-  | {
-      results: RiskResult[];
-      nextCursor?: string;
-      totalCount: number;
-    }
-  | undefined
-> = {
-  "": {
-    results: [
-      RULE_ROW,
-      ORPHAN_RULE_ROW,
-      MANUAL_ROW,
-      AUTOMATED_ROW,
-      ...FILLER_ROWS,
-    ],
-    nextCursor: "page-2",
-    totalCount: 14,
-  },
-  "page-2": {
-    results: FILLER_ROWS.slice(0, 4).map((row) =>
-      makeResult({ ...row, id: `${row.id}-page-2` }),
-    ),
-    totalCount: 14,
-  },
+type Page = {
+  results: RiskResult[];
+  nextCursor?: string;
+  totalCount: number;
 };
+
+const FIRST_PAGE: Page = {
+  results: [
+    RULE_ROW,
+    ORPHAN_RULE_ROW,
+    MANUAL_ROW,
+    AUTOMATED_ROW,
+    ...FILLER_ROWS,
+  ],
+  nextCursor: "page-2",
+  totalCount: 14,
+};
+
+const SECOND_PAGE: Page = {
+  results: FILLER_ROWS.slice(0, 4).map((row) =>
+    makeResult({ ...row, id: `${row.id}-page-2` }),
+  ),
+  totalCount: 14,
+};
+
+// Mutable so a test can stage a different response; afterEach puts the
+// defaults back, so a failing assertion can't leak its fixture into the tests
+// that follow.
+let PAGES: Record<string, Page | undefined> = {};
+
+function resetPages() {
+  PAGES = { "": FIRST_PAGE, "page-2": SECOND_PAGE };
+}
+resetPages();
 
 function renderSection() {
   // The section hands session viewing off to the shared chat sheet, which
@@ -179,10 +201,19 @@ function drawer() {
   return within(screen.getByRole("dialog"));
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetPages();
+});
+
 beforeEach(() => {
   restore.mockClear();
   openChat.mockClear();
+  refetch.mockClear();
+  optimisticallyRestored.clear();
+  listState.isPlaceholderData = false;
+  listState.isFetching = false;
+  listState.isError = false;
 });
 
 describe("SuppressedFindings", () => {
@@ -196,19 +227,11 @@ describe("SuppressedFindings", () => {
   });
 
   it("renders nothing when the project has no suppressed findings", () => {
+    // afterEach restores the default fixture, so this stays local to the test
+    // even if an assertion below throws.
     PAGES[""] = { results: [], totalCount: 0 };
+
     const { container } = renderSection();
-    PAGES[""] = {
-      results: [
-        RULE_ROW,
-        ORPHAN_RULE_ROW,
-        MANUAL_ROW,
-        AUTOMATED_ROW,
-        ...FILLER_ROWS,
-      ],
-      nextCursor: "page-2",
-      totalCount: 14,
-    };
 
     expect(container.textContent).toBe("");
   });
@@ -356,6 +379,74 @@ describe("SuppressedFindings", () => {
       })[0]!,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("hides a row the hook is optimistically treating as restored", () => {
+    // The suppressed listing is served from a mirror that lags the write, so
+    // a refetch can still carry the row that was just restored.
+    optimisticallyRestored.add("manual-row");
+    renderSection();
+    expand();
+
+    expect(
+      screen.queryByRole("button", {
+        name: `View suppressed finding ${getRuleTitleFallback("generic-api-key")}`,
+      }),
+    ).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Restore" })).toHaveLength(7);
+  });
+
+  it("locks the rows down while they belong to a page the pager has left", () => {
+    // keepPreviousData holds the old page on screen while the requested one
+    // loads, so acting on a row here would act on the wrong page's finding.
+    listState.isPlaceholderData = true;
+    renderSection();
+    expand();
+
+    expect(
+      screen
+        .getAllByRole("button", { name: "Restore" })[0]!
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByLabelText("Select suppressed finding", {
+          selector: "[role=checkbox]",
+        })[0]!
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
+    ).toBe(true);
+
+    openRow("generic-api-key");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers a retry instead of looking empty when the listing fails", () => {
+    listState.isError = true;
+    renderSection();
+
+    expect(screen.getByText("Couldn't load suppressed findings.")).toBeTruthy();
+    // The section must not silently vanish, which would read as "nothing is
+    // suppressed".
+    expect(screen.queryByText("Suppressed · 14")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("ignores Next while a page request is still in flight", () => {
+    // A fetch that isn't serving placeholder data leaves Next clickable, but
+    // the cursor on screen belongs to the request already outstanding —
+    // advancing again would push it onto the stack a second time.
+    listState.isFetching = true;
+    renderSection();
+    expand();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByText("1–10 of 14 suppressed")).toBeTruthy();
   });
 
   it("pages forward through the cursor and reports the range", () => {

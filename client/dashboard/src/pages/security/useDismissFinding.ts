@@ -64,9 +64,18 @@ export function useDismissFinding(): {
   dismiss: (results: RiskResult[], reason?: string) => void;
   restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
+  isOptimisticallyRestored: (id: string) => boolean;
 } {
   const queryClient = useQueryClient();
   const [optimistic, setOptimistic] = useState<Set<string>>(new Set());
+  // The mirror image of `optimistic`, and deliberately a separate set: an id
+  // in `optimistic` is hidden from the surfaces that list *live* findings,
+  // while an id here is hidden from the one surface that lists *suppressed*
+  // ones. Folding them together would make a restore hide the finding from the
+  // active listings it is on its way back into.
+  const [optimisticRestored, setOptimisticRestored] = useState<Set<string>>(
+    new Set(),
+  );
 
   const markMutation = useRiskMarkResultsFalsePositiveMutation();
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation();
@@ -151,6 +160,12 @@ export function useDismissFinding(): {
   const restore = useCallback(
     async (ids: string[]): Promise<boolean> => {
       if (ids.length === 0) return false;
+      // Hide the rows before the request goes out. The suppressed listing is
+      // served from the ClickHouse mirror, which lags the write, so the
+      // refetch this restore triggers can still come back carrying the rows
+      // that were just restored — without this they would reappear and stay
+      // until some later refetch happened to land after the mirror caught up.
+      setOptimisticRestored((prev) => new Set([...prev, ...ids]));
       const { succeededIds, failedIds } = await unsuppress(ids);
       if (succeededIds.length > 0) {
         invalidateLists();
@@ -159,6 +174,14 @@ export function useDismissFinding(): {
         );
       }
       if (failedIds.length > 0) {
+        // Still suppressed server-side, so the row belongs back on the list.
+        setOptimisticRestored((prev) => {
+          const next = new Set(prev);
+          failedIds.forEach((id) => {
+            next.delete(id);
+          });
+          return next;
+        });
         toast.error(
           `Failed to restore ${failedIds.length} ${failedIds.length === 1 ? "finding" : "findings"}.`,
         );
@@ -210,9 +233,15 @@ export function useDismissFinding(): {
     [optimistic],
   );
 
+  const isOptimisticallyRestored = useCallback(
+    (id: string) => optimisticRestored.has(id),
+    [optimisticRestored],
+  );
+
   return {
     dismiss,
     restore,
     isOptimisticallyDismissed,
+    isOptimisticallyRestored,
   };
 }
