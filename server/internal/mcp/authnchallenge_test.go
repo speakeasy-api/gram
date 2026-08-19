@@ -1377,7 +1377,7 @@ func consentApproveButtonTag(t *testing.T, page string) string {
 	return page[start : start+end]
 }
 
-func TestHandleConsentGet_ToolPickerEnabled(t *testing.T) {
+func TestHandleConsentGet_LegacyToolsetUsesAllToolsConsent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -1385,15 +1385,15 @@ func TestHandleConsentGet_ToolPickerEnabled(t *testing.T) {
 	stateID, _ := seedConsentChallenge(t, ctx, ti, toolset, client)
 
 	page := consentGetPage(t, ti, toolset.McpSlug.String, stateID)
-	require.Contains(t, page, "consent-tools-root")
-	require.Contains(t, consentApproveButtonTag(t, page), "disabled", "island owns enabling the approve button")
+	require.NotContains(t, page, "consent-tools-root")
+	require.NotContains(t, page, "Tool access")
+	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
 }
 
-// TestHandleConsentGet_CustomDomainLockdownHidesPlatformPicker keeps the
-// consent page usable without exposing live inventory outside an org's IP
-// allowlist. The transport remains locked down; only the unrestricted
-// pre-picker approval path renders on the platform origin.
-func TestHandleConsentGet_CustomDomainLockdownHidesPlatformPicker(t *testing.T) {
+// TestHandleConsentGet_CustomDomainLockdownBlocksLegacyInventory keeps the
+// unrestricted legacy consent page usable while the direct inventory
+// transport remains protected outside an organization's IP allowlist.
+func TestHandleConsentGet_CustomDomainLockdownBlocksLegacyInventory(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -1418,8 +1418,8 @@ func TestHandleConsentGet_CustomDomainLockdownHidesPlatformPicker(t *testing.T) 
 		DomainID:       domain.ID,
 	})
 	page = consentGetPageWithContext(t, customCtx, ti, toolset.McpSlug.String, stateID)
-	require.Contains(t, page, "consent-tools-root")
-	require.Contains(t, consentApproveButtonTag(t, page), "disabled")
+	require.NotContains(t, page, "consent-tools-root")
+	require.NotContains(t, consentApproveButtonTag(t, page), "disabled")
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Content-Type", "application/json")

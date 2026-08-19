@@ -403,13 +403,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// The picker island renders only while tool filtering is enabled for the
-	// org (an unavailable checker reads as off): enforcement of stored selections
-	// is always live, but authoring new ones stays dark until every runtime
-	// pod enforces them. Without the island the approve button must not
-	// depend on it for enabling — the template couples the two.
+	// The picker island renders only for modern MCP backends while tool
+	// filtering is enabled for the org. Legacy toolset-backed endpoints support
+	// unrestricted consent only, because their proxy tools cannot be filtered
+	// reliably. Without the island the approve button must not depend on it for
+	// enabling — the template couples the two.
 	showToolsIsland := false
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty && !endpoint.ToolsetID.Valid {
 		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
 	}
 	if showToolsIsland {
