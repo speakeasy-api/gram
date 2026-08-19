@@ -536,6 +536,25 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	// A blocking policy created after decisions were recorded must honor
+	// them: an approval's grant state is derived here, in the same
+	// transaction, so ordering never decides what a decision means. This
+	// runs after the explicit allow/block URL lists — a standing decision is
+	// the institutional record and wins a per-URL conflict with a list typed
+	// into this form; the admin re-decides to change it.
+	if s.approvalIntake != nil && enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
+			// An inexpressible blast radius is the caller's error, already in
+			// the boundary shape this handler returns; wrapping it would
+			// bury the explanation the admin needs.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, err //nolint:wrapcheck // shareable errors pass the boundary intact
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "honor standing approval decisions on policy create").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -1007,6 +1026,25 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
+		}
+	}
+
+	// An update can transition a policy into blocking (enable it, or change
+	// its action) — the moment it starts enforcing, the standing decisions
+	// apply to it exactly as they would to a newly created one. The replay
+	// is idempotent, so firing on any transition into the blocking state is
+	// safe even when stale grants survive a disable/enable cycle.
+	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
+	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
+	if s.approvalIntake != nil && nowBlocking && !wasBlocking {
+		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
+			// Same shareable pass-through as the create path: the radius
+			// rejection reaches the caller with its explanation intact.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, err //nolint:wrapcheck // shareable errors pass the boundary intact
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "honor standing approval decisions on policy update").LogError(ctx, s.logger)
 		}
 	}
 

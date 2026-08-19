@@ -7758,8 +7758,8 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
 	}
 	if body.Access != nil {
-		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked"}))
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked" || *body.Access == "restricted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked", "restricted"}))
 		}
 	}
 	if body.LatestRequest != nil {
@@ -7821,6 +7821,11 @@ func ValidateResolveShadowMCPInventoryRequestResponseBody(body *ResolveShadowMCP
 	}
 	if body.BlockedPolicyIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_policy_ids", "body"))
+	}
+	if body.Access != nil {
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked" || *body.Access == "restricted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked", "restricted"}))
+		}
 	}
 	if body.LatestRequest != nil {
 		if err2 := ValidateShadowMCPInventoryRequestSummaryResponseBody(body.LatestRequest); err2 != nil {
@@ -12766,8 +12771,8 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
 	}
 	if body.Access != nil {
-		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked"}))
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked" || *body.Access == "restricted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked", "restricted"}))
 		}
 	}
 	if body.LatestRequest != nil {

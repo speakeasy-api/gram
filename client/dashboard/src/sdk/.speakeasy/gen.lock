@@ -7854,7 +7854,7 @@ examples:
         application/json: {"decision": "allow", "project_id": "5f38bdf2-2935-4580-835b-fdb3d2efbe12", "server_url": "https://cautious-mentor.info/"}
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": [], "blocked_policy_ids": [], "request_count": 542291}
+          application/json: {"access": "none", "allowed_policy_ids": [], "blocked_policy_ids": [], "request_count": 542291}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

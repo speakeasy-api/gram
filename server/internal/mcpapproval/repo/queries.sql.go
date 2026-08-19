@@ -1209,6 +1209,63 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 	return items, nil
 }
 
+const listStandingServerDecisionsForProject = `-- name: ListStandingServerDecisionsForProject :many
+SELECT
+    r.target_key
+  , r.target_raw
+  , d.decision
+  , d.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT decision, granted_principal_urns
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+`
+
+type ListStandingServerDecisionsForProjectRow struct {
+	TargetKey            string
+	TargetRaw            string
+	Decision             string
+	GrantedPrincipalUrns []string
+}
+
+// The latest decision per server_url review in a project — what enforcement
+// derived its grants from. Read by the policy-creation backfill so a blocking
+// policy created after decisions were recorded honors them, instead of
+// blocking servers whose rows still read approved.
+func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStandingServerDecisionsForProjectRow
+	for rows.Next() {
+		var i ListStandingServerDecisionsForProjectRow
+		if err := rows.Scan(
+			&i.TargetKey,
+			&i.TargetRaw,
+			&i.Decision,
+			&i.GrantedPrincipalUrns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockApprovalRequestForResearch = `-- name: LockApprovalRequestForResearch :one
 SELECT id
 FROM mcp_approval_requests
@@ -1237,6 +1294,23 @@ func (q *Queries) LockApprovalRequestForResearch(ctx context.Context, arg LockAp
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockProjectEnforcementState = `-- name: LockProjectEnforcementState :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || $1::text, 0))
+`
+
+// Serializes the two writers of a project's enforcement grants: recording a
+// decision (which writes onto every blocking policy) and creating or
+// transitioning a blocking policy (which replays every standing decision).
+// Without a shared lock the two transactions can each miss the other's
+// uncommitted row and both commit, leaving a decision unenforced on the new
+// policy — the exact contradiction the backfill exists to remove. An
+// advisory transaction lock releases on commit or rollback, so neither
+// writer can forget to unlock.
+func (q *Queries) LockProjectEnforcementState(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockProjectEnforcementState, projectID)
+	return err
 }
 
 const markApprovalRequestEvidenceChanged = `-- name: MarkApprovalRequestEvidenceChanged :execrows
