@@ -15,6 +15,7 @@ export const CLOUD_ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";
 export const CLOUD_AGENT_BOOTSTRAP_PATH = "/usr/local/bin/speakeasy-bootstrap";
 
 const CLOUD_HELPER_PATH = "/usr/lib/speakeasy/speakeasy-helper";
+const CLAUDE_MANAGED_SETTINGS_PATH = "/etc/claude-code/managed-settings.json";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Same charset the OS-tile snippets require: a manifest version is inlined
@@ -193,31 +194,77 @@ export function buildCloudAgentStartCommand(): string {
   return CLOUD_AGENT_BOOTSTRAP_PATH;
 }
 
-/**
- * SessionStart snippet to merge into org Managed Settings or repo
- * `.claude/settings.json`. Starts the agent only — not observability policy.
- */
+function cloudAgentStartHookEntry() {
+  return {
+    matcher: "startup|resume",
+    hooks: [
+      {
+        type: "command",
+        command: buildCloudAgentStartCommand(),
+        timeout: 45,
+      },
+    ],
+  };
+}
+
+/** Canonical SessionStart shape installed by buildCloudAgentHookInstallScript. */
 export function buildCloudAgentStartHook(): string {
   return `${JSON.stringify(
     {
       hooks: {
-        SessionStart: [
-          {
-            matcher: "startup|resume",
-            hooks: [
-              {
-                type: "command",
-                command: buildCloudAgentStartCommand(),
-                timeout: 45,
-              },
-            ],
-          },
-        ],
+        SessionStart: [cloudAgentStartHookEntry()],
       },
     },
     null,
     2,
   )}\n`;
+}
+
+/**
+ * Setup-script fragment that installs the SessionStart hook into Claude's
+ * system-managed settings. The device agent's managed reconciler preserves
+ * admin-authored hooks while adding or updating its observability handlers.
+ */
+export function buildCloudAgentHookInstallScript(): string {
+  const hookEntry = JSON.stringify(cloudAgentStartHookEntry(), null, 2);
+
+  return `#!/usr/bin/env bash
+# Append this to the Anthropic environment Setup script after the agent install.
+set -euo pipefail
+
+python3 <<'PY'
+import json
+import os
+import tempfile
+from pathlib import Path
+
+path = Path("${CLAUDE_MANAGED_SETTINGS_PATH}")
+settings = json.loads(path.read_text()) if path.exists() else {}
+session_start = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
+hook = ${hookEntry}
+command = hook["hooks"][0]["command"]
+
+installed = any(
+    handler.get("command") == command
+    for entry in session_start
+    for handler in entry.get("hooks", [])
+)
+if not installed:
+    session_start.append(hook)
+
+path.parent.mkdir(parents=True, exist_ok=True)
+fd, temporary_path = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+try:
+    with os.fdopen(fd, "w") as file:
+        json.dump(settings, file, indent=2)
+        file.write("\\n")
+    os.chmod(temporary_path, 0o644)
+    os.replace(temporary_path, path)
+except BaseException:
+    os.unlink(temporary_path)
+    raise
+PY
+`;
 }
 
 /** Placeholder merge snippet; the env id is copied from Claude after create. */

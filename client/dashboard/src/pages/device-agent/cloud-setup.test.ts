@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCloudAgentBootstrapScript,
+  buildCloudAgentHookInstallScript,
   buildCloudAgentStartCommand,
   buildCloudAgentStartHook,
   buildCloudDefaultEnvironmentSnippet,
@@ -65,7 +66,11 @@ describe("buildCloudSetupScript", () => {
   const script = buildCloudSetupScript(input);
 
   it("renders syntactically valid Bash for setup and per-session startup", () => {
-    for (const candidate of [script, buildCloudAgentBootstrapScript()]) {
+    for (const candidate of [
+      script,
+      buildCloudAgentBootstrapScript(),
+      buildCloudAgentHookInstallScript(),
+    ]) {
       const result = spawnSync("bash", ["-n"], {
         input: candidate,
         encoding: "utf8",
@@ -73,6 +78,23 @@ describe("buildCloudSetupScript", () => {
       expect(result.stderr).toBe("");
       expect(result.status).toBe(0);
     }
+
+    const installer = buildCloudAgentHookInstallScript();
+    const python = installer.match(/python3 <<'PY'\n([\s\S]*?)\nPY/)?.[1];
+    expect(python).toBeDefined();
+    const pythonResult = spawnSync(
+      "python3",
+      [
+        "-c",
+        "import sys; compile(sys.stdin.read(), '<hook-installer>', 'exec')",
+      ],
+      {
+        input: python,
+        encoding: "utf8",
+      },
+    );
+    expect(pythonResult.stderr).toBe("");
+    expect(pythonResult.status).toBe(0);
   });
 
   it("pins linux_amd64 binaries and the helper .deb from the release bucket", () => {
@@ -154,6 +176,15 @@ describe("buildCloudAgentStartHook", () => {
     expect(parsed.hooks.SessionStart[0]?.hooks[0]?.command).toBe(command);
     expect(parsed.hooks.SessionStart[0]?.matcher).toBe("startup|resume");
     expect(parsed.hooks.SessionStart[0]?.hooks[0]?.timeout).toBe(45);
+  });
+
+  it("installs the canonical hook into managed settings idempotently", () => {
+    const installer = buildCloudAgentHookInstallScript();
+    expect(installer).toContain("/etc/claude-code/managed-settings.json");
+    expect(installer).toContain(CLOUD_AGENT_BOOTSTRAP_PATH);
+    expect(installer).toContain('handler.get("command") == command');
+    expect(installer).toContain("if not installed:");
+    expect(installer).not.toContain("agenthooks run");
   });
 
   it("does not paste Speakeasy observability commands into settings.json", () => {

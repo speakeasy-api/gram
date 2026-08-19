@@ -1081,7 +1081,7 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
         body: <RemoteSetupScriptStep />,
       },
       {
-        title: "Start the agent in every session",
+        title: "Install the per-session startup hook",
         body: <RemoteSessionStartStep />,
       },
       {

@@ -15,7 +15,7 @@ import React, { useId, useState } from "react";
 import { Link } from "react-router";
 
 import {
-  buildCloudAgentStartHook,
+  buildCloudAgentHookInstallScript,
   buildCloudDefaultEnvironmentSnippet,
   buildCloudSetupScript,
   CLOUD_ORG_TOKEN_SENTINEL,
@@ -167,6 +167,17 @@ function CloudSetupScript({ version }: { version: string }) {
 
   return (
     <div className="flex flex-col gap-5">
+      <Alert variant="info">
+        <AlertTitle>Remote sessions use managed enrollment</AlertTitle>
+        <AlertDescription>
+          The device agent supports personal enrollment, where a one-shot OAuth
+          login stores only the user&apos;s email, and managed enrollment, where
+          an admin provides both an identity and an agent-scoped{" "}
+          <code>org_token</code>. A headless shared VM cannot use interactive
+          OAuth, and policy sync requires the org token, so this setup uses
+          managed enrollment.
+        </AlertDescription>
+      </Alert>
       <Text small muted>
         Paste this into the environment&apos;s <strong>Setup script</strong>{" "}
         field. It installs the agent, its root helper, a per-session bootstrap,
@@ -330,9 +341,12 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         <strong className="text-foreground">
           Also include default list of common package managers
         </strong>{" "}
-        so GCS and package registries remain available, and add{" "}
-        <code>app.getgram.ai</code> on its own line. Without that host the agent
-        cannot fetch policy or send hook events.
+        so GCS and package registries remain available, and add this host on its
+        own line:
+      </Text>
+      <CodeBlock language="text">app.getgram.ai</CodeBlock>
+      <Text small muted>
+        Without this host the agent cannot fetch policy or send hook events.
       </Text>
     </div>
   );
@@ -342,21 +356,20 @@ export function RemoteSessionStartStep(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <Text small muted>
-        Anthropic caches files from the setup script but not running processes.
-        Add this to org{" "}
-        <InlineLink href="https://claude.ai/admin-settings/claude-code">
-          Managed Settings
-        </InlineLink>{" "}
-        or the repo&apos;s <code>.claude/settings.json</code> so every new or
-        resumed session invokes the bootstrap installed in the previous step.
+        Append this block to the same Anthropic{" "}
+        <strong className="text-foreground">Setup script</strong> from the
+        previous step. It installs a system-managed SessionStart hook into the
+        cached VM filesystem, so every new or resumed session invokes the
+        bootstrap automatically.
       </Text>
-      <CodeBlock language="json">{buildCloudAgentStartHook()}</CodeBlock>
+      <CodeBlock language="bash">
+        {buildCloudAgentHookInstallScript()}
+      </CodeBlock>
       <Text small muted>
-        The hook only invokes <code>/usr/local/bin/speakeasy-bootstrap</code>.
-        That script is cloud-gated, starts the daemon as Claude&apos;s user,
-        starts the root helper when available, and waits for the first policy
-        sync. The device agent then writes Claude&apos;s managed observability
-        hooks itself.
+        The installed hook only invokes{" "}
+        <code>/usr/local/bin/speakeasy-bootstrap</code>. The device agent
+        preserves this admin-authored hook while adding its own managed
+        observability hooks.
       </Text>
     </div>
   );
