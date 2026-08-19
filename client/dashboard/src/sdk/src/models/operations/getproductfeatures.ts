@@ -11,6 +11,10 @@ export type GetProductFeaturesSecurity = {
 
 export type GetProductFeaturesRequest = {
   /**
+   * Organization whose product features to read.
+   */
+  organizationId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -46,6 +50,7 @@ export function getProductFeaturesSecurityToJSON(
 
 /** @internal */
 export type GetProductFeaturesRequest$Outbound = {
+  organization_id?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -55,10 +60,12 @@ export const GetProductFeaturesRequest$outboundSchema: z.ZodMiniType<
   GetProductFeaturesRequest
 > = z.pipe(
   z.object({
+    organizationId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      organizationId: "organization_id",
       gramSession: "Gram-Session",
     });
   }),

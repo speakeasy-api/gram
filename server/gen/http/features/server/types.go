@@ -17,6 +17,8 @@ import (
 // SetProductFeatureRequestBody is the type of the "features" service
 // "setProductFeature" endpoint HTTP request body.
 type SetProductFeatureRequestBody struct {
+	// Organization whose product feature to update.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Name of the feature to update
 	FeatureName *string `form:"feature_name,omitempty" json:"feature_name,omitempty" xml:"feature_name,omitempty"`
 	// Whether the feature should be enabled
@@ -26,6 +28,8 @@ type SetProductFeatureRequestBody struct {
 // SetRemoteSessionAutoRefreshPolicyRequestBody is the type of the "features"
 // service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP request body.
 type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Organization policy for automatic remote-session refresh
 	Policy *string `form:"policy,omitempty" json:"policy,omitempty" xml:"policy,omitempty"`
 }
@@ -1115,8 +1119,9 @@ func NewSetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody(res *goa.Servi
 
 // NewGetProductFeaturesPayload builds a features service getProductFeatures
 // endpoint payload.
-func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeaturesPayload {
+func NewGetProductFeaturesPayload(organizationID *string, sessionToken *string) *features.GetProductFeaturesPayload {
 	v := &features.GetProductFeaturesPayload{}
+	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
 
 	return v
@@ -1126,8 +1131,9 @@ func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeat
 // endpoint payload.
 func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
-		FeatureName: *body.FeatureName,
-		Enabled:     *body.Enabled,
+		OrganizationID: body.OrganizationID,
+		FeatureName:    *body.FeatureName,
+		Enabled:        *body.Enabled,
 	}
 	v.SessionToken = sessionToken
 
@@ -1138,7 +1144,8 @@ func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToke
 // setRemoteSessionAutoRefreshPolicy endpoint payload.
 func NewSetRemoteSessionAutoRefreshPolicyPayload(body *SetRemoteSessionAutoRefreshPolicyRequestBody, sessionToken *string) *features.SetRemoteSessionAutoRefreshPolicyPayload {
 	v := &features.SetRemoteSessionAutoRefreshPolicyPayload{
-		Policy: *body.Policy,
+		OrganizationID: body.OrganizationID,
+		Policy:         *body.Policy,
 	}
 	v.SessionToken = sessionToken
 

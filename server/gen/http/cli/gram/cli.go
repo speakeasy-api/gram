@@ -1840,8 +1840,9 @@ func ParseEndpoint(
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
-		featuresGetProductFeaturesFlags            = flag.NewFlagSet("get-product-features", flag.ExitOnError)
-		featuresGetProductFeaturesSessionTokenFlag = featuresGetProductFeaturesFlags.String("session-token", "", "")
+		featuresGetProductFeaturesFlags              = flag.NewFlagSet("get-product-features", flag.ExitOnError)
+		featuresGetProductFeaturesOrganizationIDFlag = featuresGetProductFeaturesFlags.String("organization-id", "", "")
+		featuresGetProductFeaturesSessionTokenFlag   = featuresGetProductFeaturesFlags.String("session-token", "", "")
 
 		featuresSetProductFeatureFlags            = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
@@ -7671,7 +7672,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-product-features":
 				endpoint = c.GetProductFeatures()
-				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesSessionTokenFlag)
+				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesOrganizationIDFlag, *featuresGetProductFeaturesSessionTokenFlag)
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
@@ -16203,6 +16204,7 @@ func featuresUsage() {
 func featuresGetProductFeaturesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] features get-product-features", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16211,11 +16213,12 @@ func featuresGetProductFeaturesUsage() {
 	fmt.Fprintln(os.Stderr, `Get the current state of all product feature flags.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --organization-id \"abc123\" --session-token \"abc123\"")
 }
 
 func featuresSetProductFeatureUsage() {
@@ -16235,7 +16238,7 @@ func featuresSetProductFeatureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
@@ -16255,7 +16258,7 @@ func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"organization_id\": \"abc123\",\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
