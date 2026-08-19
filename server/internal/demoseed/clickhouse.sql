@@ -599,15 +599,36 @@ FROM (
 INSERT INTO shadow_mcp_inventory_urls
   (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at)
 VALUES
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.internal.acme.example/mcp',
-   'mcp.internal.acme.example', 'acme-internal-mcp',
-   now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://tools.vendor-x.example/sse',
-   'tools.vendor-x.example', 'vendor-x-tools',
-   now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://ci-agents.acme.example/mcp',
-   'ci-agents.acme.example', 'ci-agents',
-   now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 3 HOUR, now64(9));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://api.githubcopilot.com/mcp',
+   'api.githubcopilot.com', 'GitHub', now64(9) - INTERVAL 30 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.notion.com/mcp',
+   'mcp.notion.com', 'Notion', now64(9) - INTERVAL 29 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.linear.app/mcp',
+   'mcp.linear.app', 'Linear', now64(9) - INTERVAL 28 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.slack.com/mcp',
+   'mcp.slack.com', 'Slack', now64(9) - INTERVAL 26 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.sentry.dev/mcp',
+   'mcp.sentry.dev', 'Sentry', now64(9) - INTERVAL 25 DAY, now64(9) - INTERVAL 10 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.datadoghq.com/api/mcp',
+   'mcp.datadoghq.com', 'Datadog', now64(9) - INTERVAL 23 DAY, now64(9) - INTERVAL 12 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.cloudflare.com/mcp',
+   'mcp.cloudflare.com', 'Cloudflare', now64(9) - INTERVAL 22 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.stripe.com/mcp',
+   'mcp.stripe.com', 'Stripe', now64(9) - INTERVAL 20 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.figma.com/mcp',
+   'mcp.figma.com', 'Figma', now64(9) - INTERVAL 19 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://postgres.internal.example.com/mcp',
+   'postgres.internal.example.com', 'Postgres Explorer', now64(9) - INTERVAL 17 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://support-tools.example.com/mcp',
+   'support-tools.example.com', 'Customer Support', now64(9) - INTERVAL 16 DAY, now64(9) - INTERVAL 22 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://prod-admin.example.com/mcp',
+   'prod-admin.example.com', 'Production Admin', now64(9) - INTERVAL 14 DAY, now64(9) - INTERVAL 24 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://warehouse.example.com/mcp',
+   'warehouse.example.com', 'Data Warehouse', now64(9) - INTERVAL 13 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://incidents.example.com/mcp',
+   'incidents.example.com', 'Incident Commander', now64(9) - INTERVAL 11 DAY, now64(9) - INTERVAL 28 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://payroll.example.com/mcp',
+   'payroll.example.com', 'Payroll Assistant', now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 30 HOUR, now64(9));
 
 INSERT INTO telemetry_logs
   (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
@@ -622,10 +643,14 @@ SELECT
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.hook.event":"PostToolUse"',
-    ',"gram.tool.name":"', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx), '"',
+    ',"gram.tool.name":"', arrayElement(['search_issues', 'search_pages', 'list_issues', 'post_message', 'list_errors', 'query_metrics', 'list_zones', 'create_charge', 'get_file', 'run_query', 'lookup_ticket', 'restart_service', 'run_report', 'page_oncall', 'run_payroll'], sidx), '"',
     ',"gram.mcp.server_url":"', arrayElement(
-        ['https://mcp.internal.acme.example/mcp', 'https://tools.vendor-x.example/sse',
-         'https://ci-agents.acme.example/mcp'], sidx), '"',
+        ['https://api.githubcopilot.com/mcp', 'https://mcp.notion.com/mcp', 'https://mcp.linear.app/mcp',
+         'https://mcp.slack.com/mcp', 'https://mcp.sentry.dev/mcp', 'https://mcp.datadoghq.com/api/mcp',
+         'https://mcp.cloudflare.com/mcp', 'https://mcp.stripe.com/mcp', 'https://mcp.figma.com/mcp',
+         'https://postgres.internal.example.com/mcp', 'https://support-tools.example.com/mcp',
+         'https://prod-admin.example.com/mcp', 'https://warehouse.example.com/mcp',
+         'https://incidents.example.com/mcp', 'https://payroll.example.com/mcp'], sidx), '"',
     ',"gen_ai.tool.call.result":"ok"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', arrayElement(
@@ -635,17 +660,17 @@ SELECT
   ),
   '{"gram.deployment.id":"demo-seed"}',
   proj,
-  concat('hooks:', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx)),
+  concat('hooks:', arrayElement(['search_issues', 'search_pages', 'list_issues', 'post_message', 'list_errors', 'query_metrics', 'list_zones', 'create_charge', 'get_file', 'run_query', 'lookup_ticket', 'restart_service', 'run_report', 'page_oncall', 'run_payroll'], sidx)),
   'gram-hooks',
   ''
 FROM (
   SELECT
     number,
-    1 + toUInt32(cityHash64('sht', number) % 3) AS sidx,
+    1 + toUInt32(cityHash64('sht', number) % 15) AS sidx,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
     toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 3 + toInt64(number) * 9),
                                           toInt64(cityHash64('shj', number) % 300))) AS nano
-  FROM numbers(24)
+  FROM numbers(180)
 );
 
 -- Authz challenges (org home "Recent challenges" panel + /access/challenges).
