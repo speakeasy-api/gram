@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { BookTextIcon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { previewText, type DocsExcerpt } from "./search-docs-result";
+import { httpsURL, previewText, type DocsExcerpt } from "./search-docs-result";
 
 /**
  * Inline preview cards for the reviewed guides an answer was built from.
@@ -38,7 +38,12 @@ function DocsCard({ excerpt }: { excerpt: DocsExcerpt }): React.JSX.Element {
   // The guide's own published page is where a reader should land: it is the
   // same reviewed content, in a form they can open, link, and share. The
   // provider's canonical docs are the fallback for a guide with no page.
-  const href = excerpt.docs_url || excerpt.links?.[0];
+  //
+  // Both are validated before they reach an anchor. The corpus only ever emits
+  // https URLs, but a tool result is assembled by a model-authored compose
+  // script, so what arrives here is not guaranteed to be what the corpus sent;
+  // a javascript: or data: URL in that position would execute on click.
+  const href = httpsURL(excerpt.docs_url) ?? httpsURL(excerpt.links?.[0]);
   const site = href ? hostOf(href) : "Speakeasy AI Control Plane";
 
   return (

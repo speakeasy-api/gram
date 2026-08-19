@@ -78,6 +78,25 @@ func TestDocsIndexMatchesAliases(t *testing.T) {
 	require.Equal(t, SetupResourceURI("acme", "provider_setup"), excerpts[0].URI)
 }
 
+// The limit is a bound the caller sets, not a hint. Returning the cap for a
+// non-positive limit would make a caller asking for nothing receive five.
+func TestDocsIndexHonoursTheRequestedLimit(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	index := NewMemoryDocsIndex(docsCorpus(now), func() time.Time { return now })
+
+	for _, limit := range []int{0, -1} {
+		excerpts, err := index.Search(t.Context(), "acme beta credentials", limit)
+		require.NoError(t, err)
+		require.Emptyf(t, excerpts, "limit %d", limit)
+	}
+
+	excerpts, err := index.Search(t.Context(), "acme beta credentials", 1)
+	require.NoError(t, err)
+	require.Len(t, excerpts, 1)
+}
+
 // Every guide talks about OAuth clients and credentials, so a provider-named
 // question scores against all of them. A weak match must not ride along as a
 // citation — five sources for a one-provider question read as five answers.

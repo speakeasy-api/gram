@@ -3,6 +3,7 @@ import {
   excerptFromReadDoc,
   findDocsExcerpts,
   findReadDocs,
+  httpsURL,
   previewText,
 } from "./search-docs-result";
 
@@ -162,5 +163,43 @@ describe("excerptFromReadDoc", () => {
     // The header is the citation, not the answer — it must not become the
     // preview a reader skims.
     expect(built.excerpt).not.toContain("- Owner:");
+  });
+});
+
+// A tool result is assembled by a model-authored compose script, so a URL
+// arriving here is not guaranteed to be the https link the corpus emitted.
+describe("citation link safety", () => {
+  it("drops any link that is not an absolute https URL", () => {
+    expect(httpsURL("https://docs.github.com/en/apps")).toBe(
+      "https://docs.github.com/en/apps",
+    );
+    for (const hostile of [
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "http://docs.github.com",
+      "/docs/ai-control-plane",
+      "not a url",
+      "",
+      undefined,
+    ]) {
+      expect(httpsURL(hostile)).toBeUndefined();
+    }
+  });
+
+  it("only accepts absolute https links", () => {
+    const built = excerptFromReadDoc({
+      uri: "gram://platform-mcp/setup/github/provider_setup",
+      text: [
+        "# GitHub",
+        "",
+        "- Canonical sources:",
+        "  - https://docs.github.com/en/apps",
+        "",
+        "---",
+        "",
+        "Steps.",
+      ].join("\n"),
+    });
+    expect(built.links).toEqual(["https://docs.github.com/en/apps"]);
   });
 });

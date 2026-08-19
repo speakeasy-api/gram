@@ -191,6 +191,19 @@ func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescript
 // addResource registers one resource with the MCP server and records the
 // descriptor that lets an admitted non-MCP audience read the same content.
 func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
+	if !meta.servesAudience(AudienceExternal) {
+		r.resources = append(r.resources, ResourceDescriptor{
+			URI:         resource.URI,
+			Name:        resource.Name,
+			Title:       resource.Title,
+			Description: resource.Description,
+			MIMEType:    resource.MIMEType,
+			Meta:        meta,
+			read:        read,
+		})
+		return
+	}
+
 	r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		if request.Params.URI != resource.URI {
 			return nil, mcp.ResourceNotFoundError(request.Params.URI)
@@ -218,10 +231,17 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 	})
 }
 
-// addTool registers one tool with the MCP server and records the descriptor
-// that lets an admitted non-MCP audience call the same handler directly.
+// addTool records the descriptor that lets an admitted audience call this
+// handler, and registers the tool with the MCP server when the external
+// endpoint is one of those audiences.
+//
+// The MCP server IS the external surface, so registering unconditionally would
+// serve every tool there regardless of what it declared — an audience list
+// that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
-	mcp.AddTool(r.server, tool, handler)
+	if meta.servesAudience(AudienceExternal) {
+		mcp.AddTool(r.server, tool, handler)
+	}
 
 	resolved := resolveInputSchema[In](tool.Name)
 

@@ -97,9 +97,13 @@ func (i *MemoryDocsIndex) Search(_ context.Context, query string, limit int) ([]
 	if i == nil {
 		return nil, nil
 	}
-	if limit <= 0 || limit > maxDocsExcerpts {
-		limit = maxDocsExcerpts
+	// A caller asking for nothing gets nothing: honouring the bound matters
+	// more than guessing a default, and silently returning five for a limit of
+	// zero would make the parameter advisory.
+	if limit <= 0 {
+		return nil, nil
 	}
+	limit = min(limit, maxDocsExcerpts)
 	terms := tokenize(truncateRunes(query, maxDocsQueryBytes))
 	if len(terms) == 0 {
 		return nil, nil
@@ -140,7 +144,11 @@ func (i *MemoryDocsIndex) Search(_ context.Context, query string, limit int) ([]
 	// results close to the best one means a provider-specific question cites
 	// that provider rather than padding the answer with four others.
 	best := hits[0].score
-	cutoff := best * relevanceFloorPercent / 100
+	// Rounded up: integer division truncates, so a low-scoring best hit would
+	// otherwise admit matches well under the intended floor — with a best of 3,
+	// truncation puts the cutoff at 1, which is a third of the top score rather
+	// than 60% of it.
+	cutoff := (best*relevanceFloorPercent + 99) / 100
 
 	excerpts := make([]DocsExcerpt, 0, limit)
 	// One excerpt per resource: five passages from one guide answer less than
