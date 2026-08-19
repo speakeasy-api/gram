@@ -200,7 +200,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 		email = conv.NormalizeEmail(vouched)
 		if email == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "the Gram-User-Email header is required when authenticating with an org-scoped agent install key")
+			return nil, oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
 		}
 	} else if authCtx.Email != nil {
 		// Per-user key: the owner is the enrolled developer, bound to the token.
