@@ -1013,7 +1013,7 @@ func BuildUnmarkRiskResultsFalsePositivePayload(riskUnmarkRiskResultsFalsePositi
 
 // BuildListDismissedRiskResultsPayload builds the payload for the risk
 // listDismissedRiskResults endpoint from CLI flags.
-func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor string, riskListDismissedRiskResultsLimit string, riskListDismissedRiskResultsApikeyToken string, riskListDismissedRiskResultsSessionToken string, riskListDismissedRiskResultsProjectSlugInput string) (*risk.ListDismissedRiskResultsPayload, error) {
+func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor string, riskListDismissedRiskResultsLimit string, riskListDismissedRiskResultsReasons string, riskListDismissedRiskResultsApikeyToken string, riskListDismissedRiskResultsSessionToken string, riskListDismissedRiskResultsProjectSlugInput string) (*risk.ListDismissedRiskResultsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -1042,6 +1042,23 @@ func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor str
 			}
 		}
 	}
+	var reasons []string
+	{
+		if riskListDismissedRiskResultsReasons != "" {
+			err = json.Unmarshal([]byte(riskListDismissedRiskResultsReasons), &reasons)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for reasons, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"manual\"\n   ]'")
+			}
+			for _, e := range reasons {
+				if !(e == "rule" || e == "manual" || e == "automated") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("reasons[*]", e, []any{"rule", "manual", "automated"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var apikeyToken *string
 	{
 		if riskListDismissedRiskResultsApikeyToken != "" {
@@ -1063,6 +1080,7 @@ func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor str
 	v := &risk.ListDismissedRiskResultsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Reasons = reasons
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

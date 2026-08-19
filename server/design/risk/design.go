@@ -513,7 +513,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listDismissedRiskResults", func() {
-		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+		Description("List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -524,6 +524,9 @@ var _ = Service("risk", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("reasons", ArrayOf(String, func() {
+				Enum("rule", "manual", "automated")
+			}), "Only return results suppressed for these reasons. Omitted or empty means all reasons.")
 		})
 
 		Result(ListRiskResultsResult)
@@ -535,6 +538,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("cursor")
 			Param("limit")
+			Param("reasons")
 			Response(StatusOK)
 		})
 

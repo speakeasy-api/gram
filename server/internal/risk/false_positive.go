@@ -296,6 +296,7 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	params := chrepo.ListDismissedRiskFindingsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID.String(),
+		Reasons:        payload.Reasons,
 		CursorTime:     nil,
 		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// resolvePageSize bounds pageSize to [1, 200], so the conversion
@@ -336,12 +337,18 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 		// FalsePositiveAt is the deprecated mirror of SuppressedAt, kept
 		// populated while clients migrate to the suppressed_* fields.
 		result.FalsePositiveAt = &suppressedAt
-		// A legacy row the suppression backfill never reached carries no
-		// excluded_reason; it can only have come from a dismissal, so it maps
-		// to manual — keeping the API enum closed until the TTL retires them.
+		// Legacy pre-convergence rows carry no excluded_reason, so derive it
+		// the way chrepo's suppressedReasonExpr does (keep the two in
+		// lockstep): an exclusion id marks a rule suppression, anything else
+		// can only have come from a dismissal and maps to manual — keeping
+		// the API enum closed until the TTL retires such rows.
 		reason := row.SuppressedReason
 		if reason == "" {
-			reason = chrepo.ExcludedReasonManual
+			if row.ExclusionID != nil {
+				reason = chrepo.ExcludedReasonRule
+			} else {
+				reason = chrepo.ExcludedReasonManual
+			}
 		}
 		result.SuppressedReason = &reason
 		result.SuppressedDetail = conv.PtrEmpty(row.SuppressedDetail)
