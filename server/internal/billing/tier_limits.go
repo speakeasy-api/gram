@@ -31,7 +31,7 @@ func NewPaygTierLimits() *gen.TierLimits {
 		},
 		IncludedBullets: []string{
 			"Other inference billed at provider cost",
-			"Security inference billed at provider cost",
+			"Platform-initiated inference billed at provider cost",
 		},
 		AddOnBullets:          []string{},
 		TumPricePerMillionUsd: &price,

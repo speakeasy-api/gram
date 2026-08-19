@@ -33,7 +33,7 @@ func TestNewPaygTierLimits(t *testing.T) {
 	require.Equal(t, "0.00000035", billing.TUMUnitPriceUSD)
 	require.Equal(t, []string{
 		"Other inference billed at provider cost",
-		"Security inference billed at provider cost",
+		"Platform-initiated inference billed at provider cost",
 	}, want.IncludedBullets)
 	require.Empty(t, want.AddOnBullets)
 	require.Equal(t, []string{
