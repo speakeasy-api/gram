@@ -165,10 +165,14 @@ export function shadowMCPInventoryStatusDescription(
   }
   if (server.access === "restricted") {
     // A denied review outranks the targeted policy: the deny is a definitive
-    // block, so the row reads as blocked rather than "for some users". Absent a
-    // deny, the targeted policy blocks the server for its audience only.
+    // block, so the row reads as blocked rather than "for some users". Credit
+    // it the same disposition-aware way as the blocked branch — under allow_all
+    // the deny is the whole block, so it is not "by policy". Absent a deny, the
+    // targeted policy blocks the server for its audience only.
     if (server.approvalRequest?.status === "denied") {
-      return "Blocked by policy & review";
+      return disposition === "allow_all"
+        ? "Blocked by review"
+        : "Blocked by policy & review";
     }
     return "Blocked for some users";
   }

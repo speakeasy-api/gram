@@ -239,11 +239,20 @@ describe("shadowMCPInventoryStatus", () => {
     expect(shadowMCPInventoryStatus(deniedRestricted, "blocking")).toBe(
       "blocked",
     );
+    // Disposition-aware, like the blocked branch: under allow_all the deny is
+    // the whole block; under block_all the policy blocks too.
     expect(
       shadowMCPInventoryStatusDescription(
         deniedRestricted,
         "blocking",
         "allow_all",
+      ),
+    ).toBe("Blocked by review");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        deniedRestricted,
+        "blocking",
+        "block_all",
       ),
     ).toBe("Blocked by policy & review");
   });
