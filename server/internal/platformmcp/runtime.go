@@ -304,13 +304,3 @@ func (r *Runtime) AssistantTools() []Descriptor {
 	}
 	return r.registrar.For(AudienceAssistant)
 }
-
-// AssistantResources returns the reviewed resources admitted to a project's
-// managed assistant, so a citation the assistant emits resolves to content it
-// can actually read rather than to a URI only external clients can open.
-func (r *Runtime) AssistantResources() []ResourceDescriptor {
-	if r == nil {
-		return nil
-	}
-	return r.registrar.ResourcesFor(AudienceAssistant)
-}

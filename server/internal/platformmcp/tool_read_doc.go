@@ -19,6 +19,9 @@ type ReadGramDocToolOutput struct {
 	Text    string `json:"text,omitempty"`
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// TrustedLinks are where to send the reader when no guide can be served.
+	// Withholding content must not withhold the trail to a reviewed source.
+	TrustedLinks []string `json:"trusted_links,omitempty"`
 }
 
 // registerReadDocTool gives the assistant a way to follow a citation.
@@ -45,11 +48,20 @@ func registerReadDocTool(reg *Registrar) {
 		}
 		resource, ok := reg.ResourceFor(AudienceAssistant, input.URI)
 		if !ok {
-			return nil, docUnavailable(input.URI, "No reviewed guide is published at this URI. Do not reconstruct the guide: tell the user it is not covered and point them at the provider's own documentation."), nil
+			// No guide is named, so there are no per-guide links to offer — the
+			// documentation index is the one trustworthy place left to point.
+			return nil, docUnavailable(input.URI, "No reviewed guide is published at this URI. Do not reconstruct the guide: tell the user it is not covered and point them at the documentation index returned with this result.", []string{docsIndexURL}), nil
 		}
 		text, err := resource.Read(ctx)
 		if errors.Is(err, ErrSetupGuideUnavailable) {
-			return nil, docUnavailable(input.URI, "This guide is too far past its revalidation date to stand behind and has been withheld. Tell the user the reviewed guide is stale and point them at the provider's own documentation."), nil
+			// The withheld guide carries its own trusted links, so the model is
+			// handed the sources it is told to pass on rather than recalling them.
+			var withheld *SetupGuideUnavailableError
+			links := []string{docsIndexURL}
+			if errors.As(err, &withheld) {
+				links = withheld.TrustedLinks()
+			}
+			return nil, docUnavailable(input.URI, "This guide is too far past its revalidation date to stand behind and has been withheld. Tell the user the reviewed guide is stale and point them at the trusted links returned with this result.", links), nil
 		}
 		if err != nil {
 			return nil, ReadGramDocToolOutput{}, err
@@ -58,6 +70,6 @@ func registerReadDocTool(reg *Registrar) {
 	})
 }
 
-func docUnavailable(uri, message string) ReadGramDocToolOutput {
-	return ReadGramDocToolOutput{URI: uri, Code: setupGuideUnavailableCode, Message: message}
+func docUnavailable(uri, message string, trustedLinks []string) ReadGramDocToolOutput {
+	return ReadGramDocToolOutput{URI: uri, Code: setupGuideUnavailableCode, Message: message, TrustedLinks: trustedLinks}
 }

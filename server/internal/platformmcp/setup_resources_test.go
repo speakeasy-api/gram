@@ -31,7 +31,8 @@ func testSetupResource() SetupResource {
 		ObservedAt:   observed,
 		RevalidateBy: observed.AddDate(0, 0, 90),
 		Aliases:      nil,
-		Links:        []string{"https://example.test/docs"},
+		Links:        []string{"https://example.test/guide"},
+		DocsURL:      "https://example.test/docs",
 	}
 }
 
@@ -95,10 +96,17 @@ func TestSetupResourceReadWarnsThenWithholds(t *testing.T) {
 	text, err = descriptor.Read(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, text, "past its revalidation date")
-	require.Contains(t, text, "https://example.test/docs")
+	require.Contains(t, text, "https://example.test/guide")
 	require.Contains(t, text, resource.Text)
 
 	now = resource.RevalidateBy.AddDate(0, 0, setupResourceGraceDays+1)
 	_, err = descriptor.Read(t.Context())
 	require.ErrorIs(t, err, ErrSetupGuideUnavailable)
+
+	// Withholding the guide must not withhold the sources behind it: the links
+	// are what a caller is instructed to hand the reader instead.
+	var withheld *SetupGuideUnavailableError
+	require.ErrorAs(t, err, &withheld)
+	require.Equal(t, resource.URI, withheld.URI)
+	require.Equal(t, []string{"https://example.test/docs", "https://example.test/guide"}, withheld.TrustedLinks())
 }

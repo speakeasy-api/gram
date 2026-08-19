@@ -220,6 +220,7 @@ func TestSearchDocsReturnsGuideUnavailableRatherThanGuessing(t *testing.T) {
 	require.Empty(t, output.Excerpts)
 	require.Equal(t, setupGuideUnavailableCode, output.Code)
 	require.Contains(t, output.Message, "Do not invent setup steps")
+	require.Equal(t, []string{docsIndexURL}, output.TrustedLinks)
 }
 
 func readDoc(t *testing.T, reg *Registrar, uri string) ReadGramDocToolOutput {
@@ -271,9 +272,14 @@ func TestReadDocAnswersTheSameURIsSearchCites(t *testing.T) {
 	require.Equal(t, setupGuideUnavailableCode, withheld.Code)
 	require.Empty(t, withheld.Text)
 
+	// Withholding content must not withhold the trail: both refusals hand back
+	// somewhere trusted to send the reader.
+	require.Equal(t, []string{"https://example.test/acme"}, withheld.TrustedLinks)
+
 	unknown := readDoc(t, reg, SetupResourceURI("gamma", "provider_setup"))
 	require.Equal(t, setupGuideUnavailableCode, unknown.Code)
 	require.Empty(t, unknown.Text)
+	require.Equal(t, []string{docsIndexURL}, unknown.TrustedLinks)
 }
 
 func TestSearchDocsRefusesWhenRateLimited(t *testing.T) {

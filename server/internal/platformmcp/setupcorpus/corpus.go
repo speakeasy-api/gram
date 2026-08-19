@@ -11,6 +11,7 @@ package setupcorpus
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -121,10 +122,13 @@ func Build(opts Options) ([]platformmcp.SetupResource, error) {
 				body:    guide.RenderSpeakeasy(vars),
 			},
 		} {
-			if len(strings.TrimSpace(string(section.body))) == 0 {
+			// Stripped before the emptiness check: a section carrying only front
+			// matter has no guide content, and serving it would publish a
+			// resource that is nothing but its own citation header.
+			body := stripFrontMatter(string(section.body))
+			if strings.TrimSpace(body) == "" {
 				continue
 			}
-			body := stripFrontMatter(string(section.body))
 			resource := platformmcp.SetupResource{
 				URI:          platformmcp.SetupResourceURI(string(guide.Slug), section.intent),
 				Name:         fmt.Sprintf("setup-%s-%s", guide.Slug, strings.ReplaceAll(section.intent, "_", "-")),
@@ -192,6 +196,14 @@ func stripFrontMatter(body string) string {
 	return strings.TrimLeft(rest, "\n")
 }
 
+// followableHTTPS reports whether a provenance locator is somewhere a reader
+// can actually be sent. A prefix test alone would pass "https://" with no host,
+// or a string that only looks like a URL, and publish it as a citation.
+func followableHTTPS(locator string) bool {
+	parsed, err := url.Parse(locator)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+}
+
 // provenance returns the guide's oldest observation and its canonical links.
 //
 // The oldest observation is the honest one: a guide is only as current as the
@@ -221,7 +233,7 @@ func provenance(guide guides.Guide) (time.Time, []string, error) {
 		// Only external, official sources are offered as links a reader may
 		// follow. Repository-internal doctrine locators are provenance for the
 		// authors, not somewhere to send a user.
-		if len(links) == maxLinks || entry.Classification != "official" || !strings.HasPrefix(entry.Locator, "https://") || seen[entry.Locator] {
+		if len(links) == maxLinks || entry.Classification != "official" || seen[entry.Locator] || !followableHTTPS(entry.Locator) {
 			continue
 		}
 		seen[entry.Locator] = true

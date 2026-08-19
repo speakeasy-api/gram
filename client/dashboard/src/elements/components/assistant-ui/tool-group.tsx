@@ -135,7 +135,21 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
       (doc) => searched.get(doc.uri) ?? excerptFromReadDoc(doc),
     );
     excerptsRef.current = cited;
-    return cited.map((e) => `${e.uri}|${e.heading ?? ""}`).join(",");
+    // Keyed on everything the card renders, not just identity: a citation can
+    // be replaced by a richer one — a header-derived fallback superseded by the
+    // search excerpt that names it — without its URI or heading changing.
+    return cited
+      .map((e) =>
+        [
+          e.uri,
+          e.heading,
+          e.title,
+          e.source,
+          e.docs_url,
+          e.excerpt.length,
+        ].join("|"),
+      )
+      .join(",");
   });
   const excerpts = citationKey ? excerptsRef.current : [];
 

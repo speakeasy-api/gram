@@ -75,11 +75,12 @@ const platformMCPLocalFixtureReadinessLifetime = 15 * time.Minute
 // their respective transports; shared management reads are composed inside the
 // Platform MCP runtime.
 // AssistantSurface is what a project's managed assistant needs to reach the
-// Platform MCP catalogue: the tools and reviewed resources admitted to its
-// audience, and the authorizer every one of its calls is rechecked against.
+// Platform MCP catalogue: the tools admitted to its audience, and the
+// authorizer every one of its calls is rechecked against. Reviewed guides
+// reach it through read_gram_doc rather than a second resource channel — the
+// assistant's tool transport has no resources/* methods to serve.
 type AssistantSurface struct {
 	Tools      []platformmcp.Descriptor
-	Resources  []platformmcp.ResourceDescriptor
 	Authorizer platformmcp.Authorizer
 }
 
@@ -243,7 +244,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return AssistantSurface{Tools: runtime.AssistantTools(), Resources: runtime.AssistantResources(), Authorizer: authorizer}, nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -424,5 +425,5 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return AssistantSurface{Tools: runtime.AssistantTools(), Resources: runtime.AssistantResources(), Authorizer: authorizer}, nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }

@@ -22,6 +22,8 @@ type SearchGramDocsToolOutput struct {
 	// "the corpus has no answer" from "the corpus answered".
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// TrustedLinks are where to send the reader when nothing reviewed answers.
+	TrustedLinks []string `json:"trusted_links,omitempty"`
 }
 
 const searchGramDocsDescription = "Search the reviewed Speakeasy AICP setup and documentation corpus and return up to five cited excerpts. The corpus is a pinned, reviewed export: this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the gram:// resource URI of the full guide — read that resource for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
@@ -47,20 +49,25 @@ func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBud
 			}
 			return nil, SearchGramDocsToolOutput{}, err
 		}
-		excerpts, err := index.Search(ctx, input.Query, maxDocsExcerpts)
+		// Bounded once, at the boundary, so the search and the echoed query are
+		// the same value — an unbounded query would otherwise be reflected back
+		// in full while only its prefix was searched.
+		query := truncateRunes(input.Query, maxDocsQueryBytes)
+		excerpts, err := index.Search(ctx, query, maxDocsExcerpts)
 		if err != nil {
 			return nil, SearchGramDocsToolOutput{}, fmt.Errorf("search platform mcp docs corpus: %w", err)
 		}
 		if len(excerpts) == 0 {
 			return nil, SearchGramDocsToolOutput{
-				Query:    input.Query,
-				Excerpts: []DocsExcerpt{},
-				Code:     setupGuideUnavailableCode,
-				Message:  "No reviewed documentation answers this query. Do not invent setup steps: tell the user no reviewed guide covers this yet, and point them at the provider's own documentation.",
+				Query:        query,
+				Excerpts:     []DocsExcerpt{},
+				Code:         setupGuideUnavailableCode,
+				Message:      "No reviewed documentation answers this query. Do not invent setup steps: tell the user no reviewed guide covers this yet, and point them at the documentation index returned with this result.",
+				TrustedLinks: []string{docsIndexURL},
 			}, nil
 		}
 		return &mcp.CallToolResult{Content: docsExcerptContent(excerpts)}, SearchGramDocsToolOutput{
-			Query:    input.Query,
+			Query:    query,
 			Excerpts: excerpts,
 		}, nil
 	})

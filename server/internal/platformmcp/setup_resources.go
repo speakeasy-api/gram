@@ -17,6 +17,11 @@ import (
 // the reader a trusted source rather than inventing steps.
 var ErrSetupGuideUnavailable = errors.New("platform mcp setup guide unavailable")
 
+// docsIndexURL is where a reader is sent when no specific guide can be named —
+// a withheld guide has its own links, but an unknown URI or an unanswered query
+// has only the index.
+const docsIndexURL = "https://www.speakeasy.com/docs/ai-control-plane/guides"
+
 // setupGuideUnavailableCode is the wire code for withheld or missing content.
 // It matches the readiness state of the same name: both mean "no reviewed guide
 // stands behind this right now".
@@ -126,6 +131,41 @@ func (r SetupResource) staleWarning() string {
 	return b.String()
 }
 
+// SetupGuideUnavailableError is a withheld guide together with the sources a
+// reader should be sent to instead. The links are the whole point of the
+// refusal: a caller told to hand over trusted documentation needs something to
+// hand over.
+type SetupGuideUnavailableError struct {
+	URI     string
+	DocsURL string
+	Links   []string
+}
+
+func (e *SetupGuideUnavailableError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrSetupGuideUnavailable, e.URI)
+}
+
+func (e *SetupGuideUnavailableError) Unwrap() error { return ErrSetupGuideUnavailable }
+
+// TrustedLinks returns the guide's published page followed by its canonical
+// upstream sources, deduplicated, for a caller assembling a fallback answer.
+func (e *SetupGuideUnavailableError) TrustedLinks() []string {
+	links := make([]string, 0, len(e.Links)+1)
+	if e.DocsURL != "" {
+		links = append(links, e.DocsURL)
+	}
+	for _, link := range e.Links {
+		if link != e.DocsURL {
+			links = append(links, link)
+		}
+	}
+	return links
+}
+
+func (r SetupResource) unavailableError() error {
+	return &SetupGuideUnavailableError{URI: r.URI, DocsURL: r.DocsURL, Links: r.Links}
+}
+
 // registerSetupResources registers the reviewed corpus. now is injected so a
 // test can place the clock relative to a guide's revalidation date rather than
 // depending on when the test happens to run.
@@ -153,7 +193,10 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 		}, func(_ context.Context) (string, error) {
 			switch resource.staleness(now()) {
 			case setupWithheld:
-				return "", ErrSetupGuideUnavailable
+				// The reader loses the guide, not the sources behind it: the
+				// canonical links are exactly what a caller is told to hand over
+				// when content is withheld, so they travel with the refusal.
+				return "", resource.unavailableError()
 			case setupStale:
 				return resource.staleWarning() + resource.Text, nil
 			case setupFresh:

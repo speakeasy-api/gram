@@ -181,8 +181,16 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 		Name:        "local-fixture-provider-setup",
 		Title:       "Local fixture provider setup",
 		Description: "Reviewed local-only setup instructions for the synthetic Platform MCP fixture.",
-		Text:        "# Local fixture provider setup\n\n" + body,
-		Body:        body,
+		// The header matches the reviewed corpus so a local run exercises the
+		// same citation a real guide carries, rather than a shape that only
+		// exists in the fixture.
+		Text: "# Local fixture provider setup\n\n" +
+			"- Owner: Speakeasy AICP Platform MCP\n" +
+			"- Source: " + SetupGuideVersion + " (synthetic local fixture; never fetched at request time)\n" +
+			"- Observed: " + observedAt.Format(time.DateOnly) + "\n" +
+			"- Revalidate by: " + observedAt.AddDate(0, 0, 90).Format(time.DateOnly) + "\n" +
+			"\n---\n\n" + body,
+		Body: body,
 
 		Provider:     ProviderKey,
 		Intent:       SetupIntent,

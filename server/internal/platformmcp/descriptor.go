@@ -160,20 +160,6 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 	return admitted
 }
 
-// ResourcesFor returns the resource descriptors admitted to one audience.
-func (r *Registrar) ResourcesFor(audience Audience) []ResourceDescriptor {
-	if r == nil {
-		return nil
-	}
-	admitted := make([]ResourceDescriptor, 0, len(r.resources))
-	for _, resource := range r.resources {
-		if resource.Meta.servesAudience(audience) {
-			admitted = append(admitted, resource)
-		}
-	}
-	return admitted
-}
-
 // ResourceFor returns one admitted resource by URI. An audience that is not
 // admitted to a resource cannot tell it apart from one that does not exist.
 func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
@@ -191,34 +177,26 @@ func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescript
 // addResource registers one resource with the MCP server and records the
 // descriptor that lets an admitted non-MCP audience read the same content.
 func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
-	if !meta.servesAudience(AudienceExternal) {
-		r.resources = append(r.resources, ResourceDescriptor{
-			URI:         resource.URI,
-			Name:        resource.Name,
-			Title:       resource.Title,
-			Description: resource.Description,
-			MIMEType:    resource.MIMEType,
-			Meta:        meta,
-			read:        read,
+	// Registered with the MCP server only when the external endpoint is an
+	// admitted audience: the server IS that endpoint, so registering regardless
+	// would serve a resource the audience list says it withholds.
+	if meta.servesAudience(AudienceExternal) {
+		r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			if request.Params.URI != resource.URI {
+				return nil, mcp.ResourceNotFoundError(request.Params.URI)
+			}
+			text, err := read(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+				Contents: []*mcp.ResourceContents{{
+					URI:      resource.URI,
+					MIMEType: resource.MIMEType,
+					Text:     text,
+				}}}, nil
 		})
-		return
 	}
-
-	r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		if request.Params.URI != resource.URI {
-			return nil, mcp.ResourceNotFoundError(request.Params.URI)
-		}
-		text, err := read(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
-			Contents: []*mcp.ResourceContents{{
-				URI:      resource.URI,
-				MIMEType: resource.MIMEType,
-				Text:     text,
-			}}}, nil
-	})
 
 	r.resources = append(r.resources, ResourceDescriptor{
 		URI:         resource.URI,
