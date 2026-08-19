@@ -22,7 +22,7 @@ import { useSetPluginAssignmentsMutation } from "@gram/client/react-query/setPlu
 import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { principalIcon } from "./principals";
+import { audienceMapByUrn, principalIcon } from "./principals";
 
 const audienceTypeOptions: {
   value: PluginAudienceKind;
@@ -113,11 +113,7 @@ function AssignmentsEditor({
   const [audienceType, setAudienceType] =
     useState<PluginAudienceKind>("everyone");
 
-  const audienceByUrn = useMemo(
-    () =>
-      new Map(audiences.map((audience) => [audience.principalUrn, audience])),
-    [audiences],
-  );
+  const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
   const selectedForAudienceType = useMemo(
     () =>
       selected.filter((urn) => audienceByUrn.get(urn)?.kind === audienceType),
