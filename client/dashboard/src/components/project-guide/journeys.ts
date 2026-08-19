@@ -2,6 +2,10 @@ export type JourneyId = "third-party-mcp" | "secret-block";
 
 export type JourneyStatus = "not-started" | "in-progress" | "done";
 
+export function otherProjectGuideJourney(id: JourneyId): JourneyId {
+  return id === "third-party-mcp" ? "secret-block" : "third-party-mcp";
+}
+
 /** Catalog entries we surface first in the automatic project-guide chooser. */
 export const AUTOMATIC_CATALOG_SERVER_NAMES = [
   "Linear",
@@ -29,21 +33,21 @@ export type JourneyMeta = {
 
 export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
   {
-    id: "third-party-mcp",
-    index: "01",
-    title: "Govern third-party MCP usage",
-    win: "Your agent reaches a third-party MCP through Speakeasy, as a governed endpoint.",
-    steps: ["Pick a server", "Deploy it", "Connect and verify"],
-  },
-  {
     id: "secret-block",
-    index: "02",
-    title: "Catch a secret before it leaves",
-    win: "Watch a prompt carrying a secret get blocked.",
+    index: "01",
+    title: "Block a leaked credential mid-prompt",
+    win: "Watch a synthetic credential get blocked before it reaches the model.",
     steps: [
       "Turn on secret detection",
       "Install the observability plugin",
       "Trigger it",
     ],
+  },
+  {
+    id: "third-party-mcp",
+    index: "02",
+    title: "Govern a third-party MCP",
+    win: "Your agent reaches a third-party MCP through Speakeasy, as a governed endpoint.",
+    steps: ["Pick a server", "Deploy it", "Connect and verify"],
   },
 ];

@@ -1,45 +1,97 @@
 import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
+import { SecretBlockJourney } from "@/components/project-guide/SecretBlockJourney";
+import { ThirdPartyMcpJourney } from "@/components/project-guide/ThirdPartyMcpJourney";
 import {
   PROJECT_GUIDE_JOURNEYS,
   JOURNEY_STATUS_LABELS,
+  otherProjectGuideJourney,
   type JourneyId,
   type JourneyMeta,
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { invalidateAllGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
+import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { motion, useReducedMotion } from "motion/react";
+import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router";
 
 /**
  * The zero-data guide that takes project home's space when the gate opens it.
  * Two journeys, each ending in something the user watches happen. The cards are
  * an accordion: no overlay, no drawer, no navigation away.
- *
- * The step bodies are placeholders on this branch — the journeys land next.
  */
 export function ProjectGuide(): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const [expanded, setExpanded] = useState<JourneyId | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const shouldReduceMotion = useReducedMotion();
+  const isComplete =
+    statusByJourney["third-party-mcp"] === "done" &&
+    statusByJourney["secret-block"] === "done";
 
-  const toggle = (id: JourneyId) => {
+  const toggle = useCallback((id: JourneyId) => {
     setExpanded((current) => (current === id ? null : id));
-  };
+  }, []);
+  const switchJourney = useCallback((id: JourneyId) => {
+    setExpanded(id);
+  }, []);
+  const markJourneyComplete = useCallback(
+    (id: JourneyId) => {
+      if (id === "third-party-mcp") {
+        void invalidateAllGetMcpServerActivity(queryClient);
+      } else {
+        void invalidateAllRiskListResults(queryClient);
+      }
+      setExpanded(otherProjectGuideJourney(id));
+    },
+    [queryClient],
+  );
+  const returnToProjectHome = useCallback(() => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("showGuide");
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  if (isComplete) {
+    return (
+      <ProjectGuideComplete
+        reducedMotion={shouldReduceMotion}
+        onReturnToProjectHome={returnToProjectHome}
+      />
+    );
+  }
+
+  const selectedJourney = PROJECT_GUIDE_JOURNEYS.find(
+    (journey) => journey.id === expanded,
+  );
 
   return (
     <div className="w-full pt-2 pb-6">
-      <div className="pb-6">
+      <div className="flex items-start justify-between gap-4 pb-6">
         <div className="flex flex-col gap-2">
-          <span className="text-eyebrow">Get started</span>
+          <span className="text-eyebrow">Journey</span>
           <h2 className="text-foreground font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
-            Nothing here yet — two ways to start
+            {selectedJourney?.title ?? "Put your agent traffic under control"}
           </h2>
           <p className="text-muted-foreground max-w-[62ch] text-[13px] leading-[1.6]">
-            This project has no MCP servers, no policies, and no traffic. Either
-            path below ends in something you can watch happen, in about five
-            minutes.
+            Choose a journey to govern a third-party MCP or block a synthetic
+            credential before it reaches a model.
           </p>
         </div>
+        {selectedJourney && (
+          <button
+            type="button"
+            onClick={() => setExpanded(null)}
+            className="text-muted-foreground font-mono text-[10px] tracking-[0.05em] uppercase"
+          >
+            ← Back to start
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
@@ -51,6 +103,10 @@ export function ProjectGuide(): JSX.Element {
             statusPending={progressPending}
             expanded={expanded === journey.id}
             onToggle={() => toggle(journey.id)}
+            onComplete={() => markJourneyComplete(journey.id)}
+            onSwitchJourney={() =>
+              switchJourney(otherProjectGuideJourney(journey.id))
+            }
           />
         ))}
       </div>
@@ -64,14 +120,19 @@ function JourneyCard({
   statusPending,
   expanded,
   onToggle,
+  onComplete,
+  onSwitchJourney,
 }: {
   journey: JourneyMeta;
   status: JourneyStatus;
   statusPending: boolean;
   expanded: boolean;
   onToggle: () => void;
+  onComplete: () => void;
+  onSwitchJourney: () => void;
 }): JSX.Element {
   const currentStep = firstIncompleteStepIndex(status, journey.steps.length);
+  const reducedMotion = useReducedMotion();
   const triggerId = `project-guide-${journey.id}-trigger`;
   const panelId = `project-guide-${journey.id}-panel`;
 
@@ -112,11 +173,17 @@ function JourneyCard({
       </h3>
 
       {expanded && (
-        <div
+        <motion.div
           id={panelId}
           role="region"
           aria-labelledby={triggerId}
           data-testid="journey-body"
+          initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: reducedMotion ? 0 : 0.3,
+            ease: [0.2, 0.7, 0.3, 1],
+          }}
           className="border-border border-t px-6.5 py-5"
         >
           <ol className="flex flex-wrap items-center gap-4 pb-4">
@@ -143,11 +210,58 @@ function JourneyCard({
               </li>
             ))}
           </ol>
-          <p className="text-muted-foreground text-[13px] leading-[1.6]">
-            Step actions arrive with the journey itself.
-          </p>
-        </div>
+          {journey.id === "third-party-mcp" ? (
+            <ThirdPartyMcpJourney
+              status={status}
+              onComplete={onComplete}
+              onSwitchJourney={onSwitchJourney}
+            />
+          ) : (
+            <SecretBlockJourney
+              status={status}
+              onComplete={onComplete}
+              onSwitchJourney={onSwitchJourney}
+            />
+          )}
+        </motion.div>
       )}
     </section>
+  );
+}
+
+function ProjectGuideComplete({
+  reducedMotion,
+  onReturnToProjectHome,
+}: {
+  reducedMotion: boolean | null;
+  onReturnToProjectHome: () => void;
+}): JSX.Element {
+  return (
+    <motion.section
+      data-testid="project-guide-complete"
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: reducedMotion ? 0 : 0.4,
+        ease: [0.2, 0.7, 0.3, 1],
+      }}
+      className="bg-card border-border grid gap-4 border p-6.5"
+    >
+      <span className="text-eyebrow text-primary">Both journeys complete</span>
+      <h2 className="text-foreground max-w-[24ch] font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
+        Both journeys are on the record.
+      </h2>
+      <p className="text-muted-foreground max-w-[56ch] text-[13px] leading-[1.6]">
+        Traffic is governed and recorded, and prompts are inspected before
+        transport. Return to project home to see the live project data.
+      </p>
+      <button
+        type="button"
+        onClick={onReturnToProjectHome}
+        className="bg-foreground text-background w-fit px-4 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+      >
+        Go to project home
+      </button>
+    </motion.section>
   );
 }
