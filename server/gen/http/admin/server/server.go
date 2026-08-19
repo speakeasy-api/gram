@@ -35,7 +35,6 @@ type Server struct {
 	CreateOrganization       http.Handler
 	RearmTrial               http.Handler
 	GetOrganizationStats     http.Handler
-	GetOrganizationFeatures  http.Handler
 	GetInferenceKeys         http.Handler
 	GetPaygBillingSummary    http.Handler
 	GetStripeSubscription    http.Handler
@@ -86,7 +85,6 @@ func New(
 			{"CreateOrganization", "POST", "/admin/organization.create"},
 			{"RearmTrial", "POST", "/admin/trial.rearm"},
 			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
-			{"GetOrganizationFeatures", "GET", "/admin/organization.features"},
 			{"GetInferenceKeys", "GET", "/admin/organization.inferenceKeys"},
 			{"GetPaygBillingSummary", "GET", "/admin/organization.paygBillingSummary"},
 			{"GetStripeSubscription", "GET", "/admin/organization.stripeSubscription"},
@@ -109,7 +107,6 @@ func New(
 		CreateOrganization:       NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
 		RearmTrial:               NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationStats:     NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationFeatures:  NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
 		GetInferenceKeys:         NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
 		GetPaygBillingSummary:    NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscription:    NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
@@ -139,7 +136,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateOrganization = m(s.CreateOrganization)
 	s.RearmTrial = m(s.RearmTrial)
 	s.GetOrganizationStats = m(s.GetOrganizationStats)
-	s.GetOrganizationFeatures = m(s.GetOrganizationFeatures)
 	s.GetInferenceKeys = m(s.GetInferenceKeys)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
@@ -168,7 +164,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
 	MountRearmTrialHandler(mux, h.RearmTrial)
 	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
-	MountGetOrganizationFeaturesHandler(mux, h.GetOrganizationFeatures)
 	MountGetInferenceKeysHandler(mux, h.GetInferenceKeys)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
@@ -1008,60 +1003,6 @@ func NewGetOrganizationStatsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationStats")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetOrganizationFeaturesHandler configures the mux to serve the "admin"
-// service "getOrganizationFeatures" endpoint.
-func MountGetOrganizationFeaturesHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/admin/organization.features", f)
-}
-
-// NewGetOrganizationFeaturesHandler creates a HTTP handler which loads the
-// HTTP request and calls the "admin" service "getOrganizationFeatures"
-// endpoint.
-func NewGetOrganizationFeaturesHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetOrganizationFeaturesRequest(mux, decoder)
-		encodeResponse = EncodeGetOrganizationFeaturesResponse(encoder)
-		encodeError    = EncodeGetOrganizationFeaturesError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationFeatures")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

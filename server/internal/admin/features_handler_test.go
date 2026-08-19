@@ -46,11 +46,12 @@ func TestHandleGetOrganizationFeatures_ReturnsCuratedFlags(t *testing.T) {
 
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 	req := httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
 	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var result adminOrganizationFeatures
@@ -59,7 +60,7 @@ func TestHandleGetOrganizationFeatures_ReturnsCuratedFlags(t *testing.T) {
 	require.False(t, result.HooksBrowserLoginEnabled)
 	require.False(t, result.HooksFailOpenEnabled)
 	require.False(t, result.PlatformMcpEnabled)
-	require.False(t, result.RemoteSessionAutoRefreshEnabled)
+	require.Equal(t, "disabled", result.RemoteSessionAutoRefreshPolicy)
 	require.False(t, result.SessionCaptureEnabled)
 	require.False(t, result.SkillCaptureMetadataOnly)
 	require.True(t, result.SkillsEnabled)
@@ -85,17 +86,32 @@ func TestHandleGetOrganizationFeatures_ReturnsCuratedFlags(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
 	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
 	require.True(t, result.ConsentToolFilteringEnabled)
 	require.True(t, result.HooksBrowserLoginEnabled)
 	require.True(t, result.HooksFailOpenEnabled)
 	require.True(t, result.PlatformMcpEnabled)
-	require.True(t, result.RemoteSessionAutoRefreshEnabled)
+	require.Equal(t, "user_controlled", result.RemoteSessionAutoRefreshPolicy)
 	require.True(t, result.SessionCaptureEnabled)
 	require.True(t, result.SkillCaptureMetadataOnly)
 	require.True(t, result.SkillsEnabled)
+
+	_, err = queries.EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
+	})
+	require.NoError(t, err)
+	svc.productFeatures.UpdateFeatureCache(ctx, orgID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced, true)
+
+	req = httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	require.Equal(t, "enforced", result.RemoteSessionAutoRefreshPolicy)
 }
 
 func makeAdminFeatureSession(t *testing.T, ctx context.Context, svc *Service, email string) string {

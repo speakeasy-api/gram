@@ -87,11 +87,6 @@ func GetOrganizationStatsAdminPath() string {
 	return "/admin/organizations.stats"
 }
 
-// GetOrganizationFeaturesAdminPath returns the URL path to the admin service getOrganizationFeatures HTTP endpoint.
-func GetOrganizationFeaturesAdminPath() string {
-	return "/admin/organization.features"
-}
-
 // GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
 func GetInferenceKeysAdminPath() string {
 	return "/admin/organization.inferenceKeys"

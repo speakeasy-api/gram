@@ -37,11 +37,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newTestAdminService builds the minimum Service needed to exercise read-only
-// handlers like ListOrganizations. Auth, sessions, and OIDC fields are left nil
-// because the test invokes the handler directly without going through the HTTP
-// transport layer. The WorkOS field is left nil too: a handler that needs it
-// gets a service from newTestAdminServiceWithWorkOS instead.
+// newTestAdminService builds the minimum Service needed to exercise admin
+// handlers in tests. It wires the session store, login state cache, OIDC
+// client, and verifier so handlers can run through auth-aware HTTP paths. The
+// WorkOS field is left nil: a handler that needs it gets a service from
+// newTestAdminServiceWithWorkOS instead.
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 

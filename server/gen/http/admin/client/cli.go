@@ -573,26 +573,6 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 	return v, nil
 }
 
-// BuildGetOrganizationFeaturesPayload builds the payload for the admin
-// getOrganizationFeatures endpoint from CLI flags.
-func BuildGetOrganizationFeaturesPayload(adminGetOrganizationFeaturesOrganizationID string, adminGetOrganizationFeaturesAdminSessionToken string) (*admin.GetOrganizationFeaturesPayload, error) {
-	var organizationID string
-	{
-		organizationID = adminGetOrganizationFeaturesOrganizationID
-	}
-	var adminSessionToken *string
-	{
-		if adminGetOrganizationFeaturesAdminSessionToken != "" {
-			adminSessionToken = &adminGetOrganizationFeaturesAdminSessionToken
-		}
-	}
-	v := &admin.GetOrganizationFeaturesPayload{}
-	v.OrganizationID = organizationID
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
 // BuildGetInferenceKeysPayload builds the payload for the admin
 // getInferenceKeys endpoint from CLI flags.
 func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, adminGetInferenceKeysAdminSessionToken string) (*admin.GetInferenceKeysPayload, error) {

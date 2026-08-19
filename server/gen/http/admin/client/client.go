@@ -79,10 +79,6 @@ type Client struct {
 	// getOrganizationStats endpoint.
 	GetOrganizationStatsDoer goahttp.Doer
 
-	// GetOrganizationFeatures Doer is the HTTP client used to make requests to the
-	// getOrganizationFeatures endpoint.
-	GetOrganizationFeaturesDoer goahttp.Doer
-
 	// GetInferenceKeys Doer is the HTTP client used to make requests to the
 	// getInferenceKeys endpoint.
 	GetInferenceKeysDoer goahttp.Doer
@@ -139,7 +135,6 @@ func NewClient(
 		CreateOrganizationDoer:       doer,
 		RearmTrialDoer:               doer,
 		GetOrganizationStatsDoer:     doer,
-		GetOrganizationFeaturesDoer:  doer,
 		GetInferenceKeysDoer:         doer,
 		GetPaygBillingSummaryDoer:    doer,
 		GetStripeSubscriptionDoer:    doer,
@@ -532,30 +527,6 @@ func (c *Client) GetOrganizationStats() goa.Endpoint {
 		resp, err := c.GetOrganizationStatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationStats", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetOrganizationFeatures returns an endpoint that makes HTTP requests to the
-// admin service getOrganizationFeatures server.
-func (c *Client) GetOrganizationFeatures() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetOrganizationFeaturesRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationFeaturesResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationFeaturesRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetOrganizationFeaturesDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "getOrganizationFeatures", err)
 		}
 		return decodeResponse(resp)
 	}

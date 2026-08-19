@@ -67,9 +67,6 @@ type Service interface {
 	// narrows to the caller's list filters, so the strip does not move when an
 	// operator filters.
 	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
-	// Returns the curated organization-targeted product features used by the admin
-	// Features page.
-	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *AdminOrganizationFeatures, err error)
 	// Returns the configured state of every materialized platform-managed
 	// OpenRouter key for an organization.
 	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
@@ -104,7 +101,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getOrganizationFeatures", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [21]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -184,19 +181,6 @@ type AdminOrganization struct {
 	CreatedAt string
 	// The last update date of the organization.
 	UpdatedAt string
-}
-
-// AdminOrganizationFeatures is the result type of the admin service
-// getOrganizationFeatures method.
-type AdminOrganizationFeatures struct {
-	ConsentToolFilteringEnabled     bool
-	HooksBrowserLoginEnabled        bool
-	HooksFailOpenEnabled            bool
-	PlatformMcpEnabled              bool
-	RemoteSessionAutoRefreshEnabled bool
-	SessionCaptureEnabled           bool
-	SkillCaptureMetadataOnly        bool
-	SkillsEnabled                   bool
 }
 
 // Organization member surfaced to admin operators.
@@ -380,13 +364,6 @@ type ExtendTrialPayload struct {
 // GetInferenceKeysPayload is the payload type of the admin service
 // getInferenceKeys method.
 type GetInferenceKeysPayload struct {
-	AdminSessionToken *string
-	OrganizationID    string
-}
-
-// GetOrganizationFeaturesPayload is the payload type of the admin service
-// getOrganizationFeatures method.
-type GetOrganizationFeaturesPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }

@@ -181,29 +181,6 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
-var AdminOrganizationFeatures = Type("AdminOrganizationFeatures", func() {
-	Description("Curated organization-targeted product features surfaced in the admin app.")
-	Required(
-		"consent_tool_filtering_enabled",
-		"hooks_browser_login_enabled",
-		"hooks_fail_open_enabled",
-		"platform_mcp_enabled",
-		"remote_session_auto_refresh_enabled",
-		"session_capture_enabled",
-		"skill_capture_metadata_only",
-		"skills_enabled",
-	)
-
-	Attribute("consent_tool_filtering_enabled", Boolean)
-	Attribute("hooks_browser_login_enabled", Boolean)
-	Attribute("hooks_fail_open_enabled", Boolean)
-	Attribute("platform_mcp_enabled", Boolean)
-	Attribute("remote_session_auto_refresh_enabled", Boolean)
-	Attribute("session_capture_enabled", Boolean)
-	Attribute("skill_capture_metadata_only", Boolean)
-	Attribute("skills_enabled", Boolean)
-})
-
 var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
 	Attribute("period_start", String, func() { Format(FormatDateTime) })
 	Attribute("period_end", String, func() { Format(FormatDateTime) })
@@ -663,14 +640,6 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
-	})
-
-	Method("getOrganizationFeatures", func() {
-		Description("Returns the curated organization-targeted product features used by the admin Features page.")
-		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
-		Result(AdminOrganizationFeatures)
-		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
-		Meta("openapi:operationId", "adminGetOrganizationFeatures")
 	})
 
 	Method("getInferenceKeys", func() {
