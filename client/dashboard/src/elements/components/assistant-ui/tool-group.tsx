@@ -3,6 +3,7 @@ import { useMemo, type FC, type PropsWithChildren } from "react";
 import { useElements } from "@/elements/hooks/useElements";
 import { humanizeToolName } from "@/elements/lib/humanize";
 import {
+  isPartialToolCallAnnotation,
   isToolCallAnnotation,
   toolCallAnnotationTitle,
   trailingAnnotationLine,
@@ -56,7 +57,8 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
       // mid-flight) doesn't end the run.
       if (
         part?.type === "text" &&
-        (part.text.trim().length === 0 || isToolCallAnnotation(part.text))
+        (part.text.trim().length === 0 ||
+          isPartialToolCallAnnotation(part.text))
       ) {
         continue;
       }
