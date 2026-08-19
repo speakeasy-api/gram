@@ -1,6 +1,12 @@
 import { PROJECT_GUIDE_OVERVIEW_FROM } from "@/components/project-guide/allTimeOverviewQuery";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
 import type { JourneyStatus } from "@/components/project-guide/journeys";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import {
@@ -14,6 +20,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Client = "claude" | "cursor" | "codex";
+type PluginStage = "download" | "install";
 
 const CLIENTS: Record<Client, { label: string; directory: string }> = {
   claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
@@ -30,6 +37,11 @@ function filename(response: Response, client: Client): string {
       .get("Content-Disposition")
       ?.match(/filename="(.+)"/)?.[1] ?? `observability-${client}.zip`
   );
+}
+
+function pluginStageTitle(stage: PluginStage): string {
+  if (stage === "install") return "Add it to your agent";
+  return "Download the observability plugin";
 }
 
 function Section({
@@ -68,6 +80,68 @@ function Section({
   );
 }
 
+function ClientTabs({
+  client,
+  onClientChange,
+  children,
+}: {
+  client: Client;
+  onClientChange: (client: Client) => void;
+  children: (client: Client) => React.ReactNode;
+}): JSX.Element {
+  return (
+    <Tabs
+      value={client}
+      onValueChange={(value) => onClientChange(value as Client)}
+    >
+      <PageTabsList aria-label="Agent installation instructions">
+        {(Object.keys(CLIENTS) as Client[]).map((platform) => (
+          <PageTabsTrigger key={platform} value={platform}>
+            {CLIENTS[platform].label}
+          </PageTabsTrigger>
+        ))}
+      </PageTabsList>
+      {(Object.keys(CLIENTS) as Client[]).map((platform) => (
+        <TabsContent key={platform} value={platform}>
+          {children(platform)}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
+function WaitingForHookEvent(): JSX.Element {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <div role="status" className="border-border bg-muted/30 border">
+      <div className="border-border flex items-center gap-2 border-b px-3 py-2">
+        <motion.span
+          aria-hidden="true"
+          animate={reducedMotion ? undefined : { opacity: [0.35, 1, 0.35] }}
+          transition={{ duration: 1.1, repeat: Infinity }}
+          className="bg-foreground size-1.5"
+        />
+        <span className="font-mono text-[10px] tracking-[0.05em] uppercase">
+          Live hook telemetry
+        </span>
+        <span className="text-muted-foreground ml-auto font-mono text-[10px] uppercase">
+          Waiting
+        </span>
+      </div>
+      <div className="grid gap-1 px-3 py-3">
+        <p className="font-mono text-[11px]">
+          Waiting for the first hook event
+        </p>
+        <p className="text-muted-foreground text-[13px] leading-[1.6]">
+          Restart your agent after installing the ZIP. This updates only when a
+          hook event reaches this project.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function SecretBlockJourney({
   status,
   onComplete,
@@ -82,11 +156,11 @@ export function SecretBlockJourney({
   const { fetch: authFetch } = useFetcher();
   const completionNotified = useRef(false);
   const [client, setClient] = useState<Client>("claude");
+  const [pluginStage, setPluginStage] = useState<PluginStage>("download");
   const [isCreating, setIsCreating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [policyError, setPolicyError] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
-  const [downloadedClient, setDownloadedClient] = useState<Client>();
   const traceWindow = useMemo(
     () => ({ from: new Date(PROJECT_GUIDE_OVERVIEW_FROM), to: new Date() }),
     [],
@@ -164,7 +238,7 @@ export function SecretBlockJourney({
       link.download = filename(response, client);
       link.click();
       URL.revokeObjectURL(url);
-      setDownloadedClient(client);
+      setPluginStage("install");
     } catch {
       setDownloadError(true);
     } finally {
@@ -243,70 +317,69 @@ export function SecretBlockJourney({
     );
   }
 
-  const currentClient = CLIENTS[client];
+  const installationStage = pluginStage === "install";
   return (
     <Section
-      title="Install the observability plugin"
+      title={pluginStageTitle(pluginStage)}
       onSwitchJourney={onSwitchJourney}
     >
-      <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
-        Download the project plugin, then add it to the agent you use.
-      </p>
-      <div
-        role="tablist"
-        aria-label="Agent installation instructions"
-        className="border-border flex border-b"
-      >
-        {(Object.keys(CLIENTS) as Client[]).map((platform) => (
+      {installationStage ? (
+        <>
+          <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
+            Extract the ZIP in your agent, then restart it. A download does not
+            confirm installation.
+          </p>
+          <ClientTabs client={client} onClientChange={setClient}>
+            {(platform) => {
+              const currentClient = CLIENTS[platform];
+              return (
+                <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
+                  {`unzip observability-${platform}.zip -d ${currentClient.directory}`}
+                </pre>
+              );
+            }}
+          </ClientTabs>
+          <WaitingForHookEvent />
           <button
-            key={platform}
             type="button"
-            role="tab"
-            aria-selected={client === platform}
-            onClick={() => setClient(platform)}
-            className={
-              client === platform
-                ? "border-foreground border-b-2 px-3 py-2 font-mono text-[10.5px] uppercase"
-                : "text-muted-foreground px-3 py-2 font-mono text-[10.5px] uppercase"
-            }
+            onClick={() => setPluginStage("download")}
+            className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
           >
-            {CLIENTS[platform].label}
+            Download another ZIP
           </button>
-        ))}
-      </div>
-      <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
-        {`unzip observability-${client}.zip -d ${currentClient.directory}`}
-      </pre>
-      <p className="text-muted-foreground text-[13px] leading-[1.6]">
-        Extract the downloaded ZIP into {currentClient.directory} and restart{" "}
-        {currentClient.label}. A download does not confirm installation; Gram
-        waits for the first hook event.
-      </p>
-      {downloadError && (
-        <p className="text-destructive text-[13px] leading-[1.6]">
-          Failed to download observability plugin.
-        </p>
+        </>
+      ) : (
+        <>
+          <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
+            Download the project plugin, then add it to the agent you use.
+          </p>
+          <ClientTabs client={client} onClientChange={setClient}>
+            {(platform) => (
+              <div className="grid gap-3">
+                <p className="text-muted-foreground text-[13px] leading-[1.6]">
+                  Download a ZIP for {CLIENTS[platform].label}.
+                </p>
+                <button
+                  type="button"
+                  disabled={isDownloading}
+                  onClick={() => void downloadPlugin()}
+                  className="bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground w-fit px-3 py-2 font-mono text-[11px] uppercase"
+                >
+                  {isDownloading ? "Downloading ZIP" : "Download ZIP"}
+                </button>
+              </div>
+            )}
+          </ClientTabs>
+          {downloadError && (
+            <p className="text-destructive text-[13px] leading-[1.6]">
+              Failed to download observability plugin.
+            </p>
+          )}
+        </>
       )}
-      {downloadedClient === client && (
-        <p className="text-muted-foreground text-[13px] leading-[1.6]">
-          ZIP downloaded. Waiting for the first hook event.
-        </p>
-      )}
-      <button
-        type="button"
-        disabled={isDownloading}
-        onClick={() => void downloadPlugin()}
-        className="bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground w-fit px-3 py-2 font-mono text-[11px] uppercase"
-      >
-        {isDownloading ? "Downloading ZIP" : "Download ZIP"}
-      </button>
-      {tracesQuery.isError ? (
+      {tracesQuery.isError && (
         <p className="text-destructive text-[13px] leading-[1.6]">
           Could not check for hook events. Retry after installing the plugin.
-        </p>
-      ) : (
-        <p className="text-muted-foreground font-mono text-[11px]">
-          Waiting for the first hook event
         </p>
       )}
     </Section>

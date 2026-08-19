@@ -15,6 +15,8 @@ const queries = vi.hoisted(() => ({
 }));
 const mutation = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 const fetcher = vi.hoisted(() => ({ fetch: vi.fn() }));
+const downloads = vi.hoisted(() => vi.fn());
+const revokeObjectURL = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project-guide-test",
@@ -70,6 +72,8 @@ function blockingPolicy() {
 beforeEach(() => {
   mutation.mutateAsync.mockReset().mockResolvedValue(blockingPolicy());
   fetcher.fetch.mockReset().mockResolvedValue(new Response("zip"));
+  downloads.mockReset();
+  revokeObjectURL.mockReset();
   queries.policies.mockReset().mockReturnValue({
     data: { policies: [] },
     isError: false,
@@ -81,9 +85,15 @@ beforeEach(() => {
     isError: false,
     isPending: false,
   });
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+    function (this: HTMLAnchorElement) {
+      downloads(this.download);
+    },
+  );
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => {
+    revokeObjectURL(url);
+  });
 });
 
 afterEach(() => {
@@ -109,7 +119,9 @@ describe("SecretBlockJourney", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Install the observability plugin" }),
+      screen.getByRole("heading", {
+        name: "Download the observability plugin",
+      }),
     ).toBeTruthy();
     expect(mutation.mutateAsync).not.toHaveBeenCalled();
   });
@@ -176,7 +188,13 @@ describe("SecretBlockJourney", () => {
       refetch: vi.fn(),
     });
     fetcher.fetch
-      .mockResolvedValueOnce(new Response("zip"))
+      .mockResolvedValueOnce(
+        new Response("zip", {
+          headers: {
+            "Content-Disposition": 'attachment; filename="project-hooks.zip"',
+          },
+        }),
+      )
       .mockResolvedValueOnce(new Response("zip"))
       .mockResolvedValueOnce(new Response("nope", { status: 500 }));
     render(
@@ -187,20 +205,55 @@ describe("SecretBlockJourney", () => {
       />,
     );
 
-    for (const [tab, platform] of [
-      ["Claude Code", "claude"],
-      ["Cursor", "cursor"],
-      ["Codex", "codex"],
-    ] as const) {
-      fireEvent.click(screen.getByRole("tab", { name: tab }));
-      fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
-      await waitFor(() =>
-        expect(fetcher.fetch).toHaveBeenCalledWith(
-          `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
-          {},
-        ),
-      );
-    }
+    expect(
+      screen.getByRole("heading", {
+        name: "Download the observability plugin",
+      }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    await waitFor(() =>
+      expect(fetcher.fetch).toHaveBeenCalledWith(
+        "/rpc/plugins.downloadObservabilityPlugin?platform=claude",
+        {},
+      ),
+    );
+    expect(downloads).toHaveBeenCalledWith("project-hooks.zip");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test");
+    expect(
+      screen.getByRole("heading", { name: "Add it to your agent" }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download another ZIP" }),
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Cursor" }), {
+      button: 0,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "Cursor" }).getAttribute("data-state"),
+      ).toBe("active"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    await waitFor(() =>
+      expect(fetcher.fetch).toHaveBeenCalledWith(
+        "/rpc/plugins.downloadObservabilityPlugin?platform=cursor",
+        {},
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download another ZIP" }),
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Codex" }), {
+      button: 0,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "Codex" }).getAttribute("data-state"),
+      ).toBe("active"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
 
     await waitFor(() =>
       expect(
@@ -209,7 +262,7 @@ describe("SecretBlockJourney", () => {
     );
   });
 
-  it("explains installation without claiming a download proves it", () => {
+  it("uses Radix client tabs with a panel", () => {
     queries.policies.mockReturnValue({
       data: { policies: [blockingPolicy()] },
       isError: false,
@@ -224,7 +277,37 @@ describe("SecretBlockJourney", () => {
       />,
     );
 
-    expect(screen.getByText(/Extract the downloaded ZIP/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("tab", { name: "Claude Code" })
+        .getAttribute("data-state"),
+    ).toBe("active");
+    expect(screen.getByRole("tabpanel")).toBeTruthy();
+  });
+
+  it("explains installation without claiming a download proves it", async () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Add it to your agent" }),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByText(/Extract the ZIP in your agent/)).toBeTruthy();
     expect(screen.getByText(/Waiting for the first hook event/)).toBeTruthy();
     expect(screen.queryByText(/download confirms installation/i)).toBeNull();
   });
