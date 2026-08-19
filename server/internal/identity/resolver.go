@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -316,21 +317,32 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 	identity.ExternalUserIDs = dedupeNonEmpty(append(identity.ExternalUserIDs, identity.Emails...))
 
 	attached := false
+	var lookupErr error
 	if userID := identity.GramUserID(); userID != "" {
-		attached = r.attachUserProfile(ctx, orgID, userID, &identity)
-		if !attached {
+		attached, lookupErr = r.attachUserProfile(ctx, orgID, userID, &identity)
+		if !attached && lookupErr == nil {
 			// The id matched no org member. Keep the identifiers the usage is
 			// recorded under, but do not claim a directory user the caller
 			// would then key user-only sections off.
+			//
+			// Only on a definitive empty result: a failed lookup says nothing
+			// about whether the member exists, and dropping their ids would
+			// turn a transient database error into a real person rendering as
+			// unattributed.
 			identity.UserIDs = nil
 		}
 	}
 	if !attached {
 		identity.Kind = KindUnattributed
-		if email := identity.PrimaryEmail(); email != "" {
-			identity.DisplayName = email
+		// Redirecting the canonical URN is also withheld on a lookup failure,
+		// for the same reason: it would move a real member's page.
+		if email := identity.PrimaryEmail(); email != "" && lookupErr == nil {
 			identity.CanonicalURN = urn.NewEmailIdentity(email)
-		} else {
+		}
+		if identity.DisplayName == "" {
+			identity.DisplayName = identity.PrimaryEmail()
+		}
+		if identity.DisplayName == "" {
 			identity.DisplayName = subjectURN.ID
 		}
 	}
@@ -338,23 +350,23 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 	return identity, nil
 }
 
-// attachUserProfile fills in the directory-backed half of an identity and
-// reports whether a directory row was found. A missing profile downgrades
-// nothing: the identity keeps the identifiers its usage is recorded under so
-// the usage panels still render.
-func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, identity *Identity) bool {
+// attachUserProfile fills in the directory-backed half of an identity. It
+// reports whether a directory row was found, and separately whether the lookup
+// itself failed — the caller must not treat "the member does not exist" and
+// "we could not tell" the same way.
+func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, identity *Identity) (bool, error) {
 	rows, err := r.users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
 		Ids:            []string{userID},
 		OrganizationID: orgID,
 	})
 	if err != nil {
 		r.logger.WarnContext(ctx, "failed to load identity user profile", attr.SlogError(err), attr.SlogUserID(userID))
-		return false
+		return false, fmt.Errorf("load identity user profile: %w", err)
 	}
 	if len(rows) == 0 {
 		// The id resolved no org member: usage exists but the person is not
 		// (or no longer) in this directory.
-		return false
+		return false, nil
 	}
 
 	row := rows[0]
@@ -369,7 +381,7 @@ func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, 
 
 	identity.Directory = r.loadDirectory(ctx, orgID, userID)
 
-	return true
+	return true, nil
 }
 
 // loadDirectory reads the Directory Sync attributes and group memberships for
