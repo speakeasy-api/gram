@@ -55,7 +55,17 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: doc.TokenEndpointAuthMethodsSupported,
+
+		// Copied as-is, nil included, so absent stays distinguishable from
+		// advertised-empty for as long as the draft lives. The dashboard's
+		// discovery flow still captures omission as an empty array when it
+		// submits the create form — discovery ran, so "advertises nothing" is
+		// a captured fact — while hand-typed setups omit the field and store
+		// NULL ("never captured").
+		CodeChallengeMethodsSupported: doc.CodeChallengeMethodsSupported,
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
 		// Gram behavior flags, not discovered metadata. A draft never proposes
 		// them; the operator opts in on the create form.
 		Oidc:              false,
@@ -204,7 +214,16 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		GrantTypesSupported:               orEmptySlice(doc.GrantTypesSupported),
 		ResponseTypesSupported:            orEmptySlice(doc.ResponseTypesSupported),
 		TokenEndpointAuthMethodsSupported: orEmptySlice(doc.TokenEndpointAuthMethodsSupported),
+
+		// orEmptySlice is load-bearing here beyond its NOT NULL siblings: this
+		// column is nullable, and a refresh is the capture event, so a document
+		// omitting the field must persist the empty array ("captured; the
+		// upstream advertises nothing") — never NULL, which would revert the
+		// row to "never captured".
+		CodeChallengeMethodsSupported: orEmptySlice(doc.CodeChallengeMethodsSupported),
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no
 		// longer holds the same authorization over.

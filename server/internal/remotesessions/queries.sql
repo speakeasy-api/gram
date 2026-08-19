@@ -25,6 +25,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -49,6 +50,10 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    -- Nullable on purpose: a caller with neither a discovery document nor an
+    -- operator-supplied value passes NULL ("not captured"), which must stay
+    -- distinct from the empty array ("the issuer advertises no methods").
+    @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
     @oidc,
     @passthrough
@@ -75,6 +80,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -94,6 +100,7 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    @code_challenge_methods_supported,
     FALSE,
     FALSE,
     FALSE
@@ -111,6 +118,7 @@ SET
     grant_types_supported = EXCLUDED.grant_types_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
     client_id_metadata_document_supported = FALSE,
     oidc = FALSE,
     passthrough = FALSE,
@@ -309,6 +317,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -329,8 +338,12 @@ RETURNING *;
 -- restates the issuer's full discovered surface, so there is no "leave this
 -- one alone" case: an endpoint the issuer has stopped advertising arrives as
 -- an empty string and is cleared to NULL, and a *_supported array it has
--- stopped advertising arrives as an empty array (those columns are NOT NULL
--- with an empty-array default, so NULL is not a value they can hold).
+-- stopped advertising arrives as an empty array. For the capability arrays
+-- that are NOT NULL with an empty-array default, NULL is not a value they can
+-- hold anyway; for the nullable code_challenge_methods_supported the empty
+-- array is itself load-bearing ("captured; the upstream advertises nothing"),
+-- and a refresh must never write NULL there — NULL is reserved for rows
+-- discovery has not captured yet, and this query is the capture.
 --
 -- Scoping differs from the tier-specific updates by necessity, since one query
 -- serves project-owned, organization-level, and global rows. Rather than the
@@ -369,6 +382,7 @@ SET
     grant_types_supported = @grant_types_supported::text[],
     response_types_supported = @response_types_supported::text[],
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
+    code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -850,6 +864,7 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_client_user_session_issuers AS link
@@ -1346,6 +1361,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -1845,6 +1861,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),

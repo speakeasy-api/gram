@@ -83,6 +83,10 @@ export function SettingsTab({
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
+      // Preserved as null when never captured — no `?? []`, which would claim
+      // the issuer advertises no PKCE methods.
+      codeChallengeMethodsSupported:
+        issuer.codeChallengeMethodsSupported ?? null,
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
       revocationEndpoint: issuer.revocationEndpoint ?? "",

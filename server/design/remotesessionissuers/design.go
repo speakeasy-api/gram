@@ -602,6 +602,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("grant_types_supported", ArrayOf(String), "Grant types advertised by the issuer.")
 	Attribute("response_types_supported", ArrayOf(String), "Response types advertised by the issuer.")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Token endpoint auth methods advertised by the issuer.")
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises no methods\").")
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour. Default false.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer. Default false.")
 	Attribute("client_id_metadata_document_supported", Boolean, "When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.")
@@ -635,6 +636,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.")
 	Attribute("oidc", Boolean)
 	Attribute("passthrough", Boolean)
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
@@ -673,6 +675,12 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.", func() {
+		// Suppresses omitempty so the wire keeps null ("never captured")
+		// distinct from [] ("captured; advertises nothing"). Paired with a
+		// nullable:true patch in overlays/goa.yaml, like auth's trial field.
+		Meta("struct:tag:json", "code_challenge_methods_supported")
+	})
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
@@ -704,6 +712,12 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.", func() {
+		// Suppresses omitempty so a document advertising an empty list stays
+		// distinguishable from one omitting the field. Paired with a
+		// nullable:true patch in overlays/goa.yaml.
+		Meta("struct:tag:json", "code_challenge_methods_supported")
+	})
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.")

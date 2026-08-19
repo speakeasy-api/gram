@@ -21,6 +21,16 @@ actions:
   - target: $.components.schemas.BillingEmail.properties.email
     update:
       nullable: true
+  # code_challenge_methods_supported suppresses omitempty in the Go encoding
+  # (Meta struct:tag:json in the design) so null ("never captured") stays
+  # distinct from [] ("captured; the issuer advertises no methods") on the
+  # wire; these mark the same nullability for SDK generation.
+  - target: $.components.schemas.RemoteSessionIssuer.properties.code_challenge_methods_supported
+    update:
+      nullable: true
+  - target: $.components.schemas.RemoteSessionIssuerDraft.properties.code_challenge_methods_supported
+    update:
+      nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
   - target: $.components.schemas.InfoResponseBody
