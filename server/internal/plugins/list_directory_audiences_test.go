@@ -64,7 +64,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: directoryUserTwoWorkOSID,
 		Email:                 conv.ToPGText(" MEMBER@example.com "),
-		Attributes:            []byte(`{"department":"engineering"}`),
+		Attributes:            []byte(`{"department":"engineering","unused":null}`),
 		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
 		WorkosLastEventID:     conv.ToPGTextEmpty(""),

@@ -157,6 +157,7 @@ func TestGetPlugins_DeliversDirectoryAttributeAssignments(t *testing.T) {
 	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-1", email, []byte(`{"department":"Engineering"}`))
 	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-2", email, []byte(`{"manager.email":"lead@example.com"}`))
 	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-3", email, []byte(`{"department":"Engineering"}`))
+	seedDirectoryUserWithAttributes(t, ctx, ti.conn, ti.orgID, "user-directory-attributes-null", email, []byte(`{"department":null}`))
 	audiences, err := plugins.ResolveDirectoryAudiencePrincipalsByEmails(ctx, ti.conn, ti.orgID, []string{email})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
