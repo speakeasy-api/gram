@@ -37,16 +37,20 @@ func DecodeGetProductFeaturesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	return func(r *http.Request) (*features.GetProductFeaturesPayload, error) {
 		var payload *features.GetProductFeaturesPayload
 		var (
-			organizationID *string
+			organizationID string
 			sessionToken   *string
+			err            error
 		)
-		organizationIDRaw := r.URL.Query().Get("organization_id")
-		if organizationIDRaw != "" {
-			organizationID = &organizationIDRaw
+		organizationID = r.URL.Query().Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
 		}
 		payload = NewGetProductFeaturesPayload(organizationID, sessionToken)
 		if payload.SessionToken != nil {

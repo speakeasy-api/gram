@@ -229,7 +229,7 @@ func TestProductFeaturesService_EnableSkillsTargetsRequestedOrganization(t *test
 	deleteGrant(t, ctx, q, targetOrganizationID, admin, authz.ScopeSkillWrite, authz.WildcardResource)
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		OrganizationID: conv.PtrEmpty(targetOrganizationID),
+		OrganizationID: targetOrganizationID,
 		FeatureName:    string(productfeatures.FeatureSkills),
 		Enabled:        true,
 	}))

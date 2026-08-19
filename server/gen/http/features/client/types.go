@@ -16,7 +16,7 @@ import (
 // "setProductFeature" endpoint HTTP request body.
 type SetProductFeatureRequestBody struct {
 	// Organization whose product feature to update.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Name of the feature to update
 	FeatureName string `form:"feature_name" json:"feature_name" xml:"feature_name"`
 	// Whether the feature should be enabled
@@ -27,7 +27,7 @@ type SetProductFeatureRequestBody struct {
 // service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP request body.
 type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
 	// Organization whose automatic remote-session refresh policy to update.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Organization policy for automatic remote-session refresh
 	Policy string `form:"policy" json:"policy" xml:"policy"`
 }
