@@ -56,17 +56,24 @@ lint_cache_key=$(printf '%s\n%s\n' "$gcl_stamp" "$lint_config" | git hash-object
 # retargeting the symlink while linting is in progress.
 stable_worktree="${common_git_dir}/gcl-lint-worktree-${lint_cache_key}"
 lint_lock="${stable_worktree}.lock"
+lock_start=$(LC_ALL=C ps -p "$$" -o lstart=)
+lock_owner="$$:${lock_start}"
 
 acquire_lint_lock() {
-    local owner
-    while ! ln -s "$$" "$lint_lock" 2>/dev/null; do
+    local current_start owner owner_pid owner_start
+    while ! ln -s "$lock_owner" "$lint_lock" 2>/dev/null; do
         owner=$(readlink "$lint_lock" 2>/dev/null || true)
-        case "$owner" in
+        owner_pid=${owner%%:*}
+        owner_start=${owner#*:}
+        case "$owner_pid" in
             ''|*[!0-9]*) ;;
             *)
-                if kill -0 "$owner" 2>/dev/null; then
-                    sleep 1
-                    continue
+                if [ "$owner_start" != "$owner" ]; then
+                    current_start=$(LC_ALL=C ps -p "$owner_pid" -o lstart= 2>/dev/null || true)
+                    if [ -n "$current_start" ] && [ "$current_start" = "$owner_start" ]; then
+                        sleep 1
+                        continue
+                    fi
                 fi
                 ;;
         esac
@@ -77,7 +84,7 @@ acquire_lint_lock() {
 release_lint_lock() {
     local owner
     owner=$(readlink "$lint_lock" 2>/dev/null || true)
-    if [ "$owner" = "$$" ]; then
+    if [ "$owner" = "$lock_owner" ]; then
         rm -f "$stable_worktree" "$lint_lock"
     fi
 }
