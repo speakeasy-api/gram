@@ -1,14 +1,19 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { describe, expect, it } from "vitest";
 import {
+  catalogBackedMcpServers,
   deriveJourneyStatus,
   firstIncompleteStepIndex,
   hasBlockingSecretsPolicy,
   hasCatalogBackedServer,
   hasDefaultPluginServer,
+  hasMcpServerActivity,
 } from "./journeyStatus";
 
 function server(overrides: Partial<McpServer>): McpServer {
@@ -18,6 +23,46 @@ function server(overrides: Partial<McpServer>): McpServer {
     projectId: "project-id",
     ...overrides,
   } as McpServer;
+}
+
+function remote(overrides: Partial<RemoteMcpServer> = {}): RemoteMcpServer {
+  return {
+    createdAt: new Date("2026-08-01T00:00:00Z"),
+    id: "remote-id",
+    projectId: "project-id",
+    transportType: "streamable-http",
+    updatedAt: new Date("2026-08-01T00:00:00Z"),
+    url: "https://catalog.example/mcp",
+    ...overrides,
+  };
+}
+
+function catalogServer(url = "https://catalog.example/mcp/"): PulseMCPServer {
+  return {
+    description: "Catalog server",
+    isReadOnly: true,
+    meta: {},
+    registryId: "registry",
+    registrySpecifier: "example/catalog",
+    remotes: [{ transportType: "streamable-http", url }],
+    supportsDcr: true,
+    title: "Catalog server",
+    toolCount: 1,
+    version: "1.0.0",
+  };
+}
+
+function activity(
+  overrides: Partial<McpServerActivity> = {},
+): McpServerActivity {
+  return {
+    recentToolCalls: 1,
+    targetId: "catalog-server",
+    targetLabel: "Read item",
+    targetType: "hosted_mcp_server",
+    totalToolCalls: 1,
+    ...overrides,
+  };
 }
 
 function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
@@ -64,24 +109,84 @@ function pluginServer(mcpServerId: string): PluginServer {
 }
 
 describe("hasCatalogBackedServer", () => {
-  it("counts a server backed by a remote MCP server", () => {
+  it("counts only a remote MCP server whose URL comes from the catalog", () => {
     expect(
-      hasCatalogBackedServer([server({ remoteMcpServerId: "remote-id" })]),
+      hasCatalogBackedServer(
+        [server({ remoteMcpServerId: "remote-id" })],
+        [remote()],
+        [catalogServer()],
+      ),
     ).toBe(true);
+  });
+
+  it("rejects a custom remote MCP server even when its slug resembles a catalog entry", () => {
+    expect(
+      hasCatalogBackedServer(
+        [
+          server({
+            remoteMcpServerId: "custom-remote",
+            slug: "catalog-server",
+          }),
+        ],
+        [
+          remote({
+            id: "custom-remote",
+            url: "https://custom.example/mcp",
+          }),
+        ],
+        [catalogServer()],
+      ),
+    ).toBe(false);
   });
 
   it("ignores toolset-, tunnel-, and unproxied-backed servers", () => {
     expect(
-      hasCatalogBackedServer([
-        server({ toolsetId: "toolset-id" }),
-        server({ tunneledMcpServerId: "tunnel-id" }),
-        server({ unproxiedMcpServerId: "unproxied-id" }),
-      ]),
+      hasCatalogBackedServer(
+        [
+          server({ toolsetId: "toolset-id" }),
+          server({ tunneledMcpServerId: "tunnel-id" }),
+          server({ unproxiedMcpServerId: "unproxied-id" }),
+        ],
+        [remote()],
+        [catalogServer()],
+      ),
     ).toBe(false);
   });
 
   it("handles an unread list", () => {
-    expect(hasCatalogBackedServer(undefined)).toBe(false);
+    expect(
+      hasCatalogBackedServer(undefined, [remote()], [catalogServer()]),
+    ).toBe(false);
+    expect(
+      catalogBackedMcpServers(
+        [server({ remoteMcpServerId: "remote-id" })],
+        undefined,
+        [catalogServer()],
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("hasMcpServerActivity", () => {
+  const catalogMcpServer = server({
+    remoteMcpServerId: "remote-id",
+    slug: "catalog-server",
+  });
+
+  it("requires hosted MCP activity for the exact catalog server slug", () => {
+    expect(hasMcpServerActivity([activity()], catalogMcpServer)).toBe(true);
+    expect(
+      hasMcpServerActivity(
+        [activity({ targetType: "tunneled_mcp_server" })],
+        catalogMcpServer,
+      ),
+    ).toBe(false);
+    expect(
+      hasMcpServerActivity(
+        [activity({ targetId: "another-server" })],
+        catalogMcpServer,
+      ),
+    ).toBe(false);
   });
 });
 

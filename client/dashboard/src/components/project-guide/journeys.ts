@@ -37,6 +37,22 @@ export type JourneyMeta = {
   steps: string[];
 };
 
+export const SECRET_BLOCK_STEPS = [
+  "Create a secrets policy set to deny",
+  "Download the observability plugin",
+  "Add it to your agent",
+  "Send a prompt with a synthetic secret",
+  "Watch the block land",
+];
+
+export const THIRD_PARTY_MCP_STEPS = [
+  "Pick a server from the catalog",
+  "Confirm the governed endpoint",
+  "Connect your client",
+  "Ask the agent to list the tools",
+  "Watch the first governed call",
+];
+
 export const PROJECT_GUIDE_COMPLETE = {
   eyebrow: "Both journeys complete",
   heading: "Both journeys are on the record.",
@@ -58,11 +74,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
       body: "The synthetic credential was denied before it reached the model.",
       primaryAction: "Open Risk Events",
     },
-    steps: [
-      "Turn on secret detection",
-      "Install the observability plugin",
-      "Trigger it",
-    ],
+    steps: SECRET_BLOCK_STEPS,
   },
   {
     id: "third-party-mcp",
@@ -75,6 +87,6 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
       body: "Your client traffic is governed and recorded in Tool Logs.",
       primaryAction: "Open Tool Logs",
     },
-    steps: ["Pick a server", "Deploy it", "Connect and verify"],
+    steps: THIRD_PARTY_MCP_STEPS,
   },
 ];

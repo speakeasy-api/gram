@@ -1,4 +1,3 @@
-import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
 import { SecretBlockJourney } from "@/components/project-guide/SecretBlockJourney";
 import { ThirdPartyMcpJourney } from "@/components/project-guide/ThirdPartyMcpJourney";
 import {
@@ -13,7 +12,6 @@ import {
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
 import { invalidateGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { invalidateRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -141,9 +139,7 @@ function JourneyCard({
   onComplete: () => void;
   onSwitchJourney: () => void;
 }): JSX.Element {
-  const currentStep = firstIncompleteStepIndex(status, journey.steps.length);
   const reducedMotion = useReducedMotion();
-  const routes = useRoutes();
   const triggerId = `project-guide-${journey.id}-trigger`;
   const panelId = `project-guide-${journey.id}-panel`;
 
@@ -239,100 +235,22 @@ function JourneyCard({
           }}
           className="border-border border-t px-6.5 py-5"
         >
-          {status === "done" ? (
-            <JourneyCompleteSummary
-              journey={journey}
+          {journey.id === "third-party-mcp" ? (
+            <ThirdPartyMcpJourney
+              status={status}
+              onComplete={onComplete}
               onSwitchJourney={onSwitchJourney}
-              routes={routes}
             />
           ) : (
-            <>
-              <ol className="flex flex-wrap items-center gap-4 pb-4">
-                {journey.steps.map((step, index) => (
-                  <li key={step} className="flex items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "size-1.5 rounded-full",
-                        index === currentStep ? "bg-foreground" : "bg-border",
-                      )}
-                    />
-                    <span
-                      aria-current={index === currentStep ? "step" : undefined}
-                      className={cn(
-                        "font-mono text-[11px] tracking-[0.04em]",
-                        index === currentStep
-                          ? "text-foreground"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {step}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              {journey.id === "third-party-mcp" ? (
-                <ThirdPartyMcpJourney
-                  status={status}
-                  onComplete={onComplete}
-                  onSwitchJourney={onSwitchJourney}
-                />
-              ) : (
-                <SecretBlockJourney
-                  status={status}
-                  onComplete={onComplete}
-                  onSwitchJourney={onSwitchJourney}
-                />
-              )}
-            </>
+            <SecretBlockJourney
+              status={status}
+              onComplete={onComplete}
+              onSwitchJourney={onSwitchJourney}
+            />
           )}
         </motion.div>
       )}
     </motion.section>
-  );
-}
-
-function JourneyCompleteSummary({
-  journey,
-  onSwitchJourney,
-  routes,
-}: {
-  journey: JourneyMeta;
-  onSwitchJourney: () => void;
-  routes: ReturnType<typeof useRoutes>;
-}): JSX.Element {
-  const completion = journey.completion;
-
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-1">
-        <span className="text-primary font-mono text-[10px] tracking-[0.05em] uppercase">
-          {completion.eyebrow}
-        </span>
-        <h4 className="text-[24px] leading-[1.1]">{completion.heading}</h4>
-        <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
-          {completion.body}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-4">
-        {journey.id === "third-party-mcp" ? (
-          <routes.logs.Link className="font-mono text-[11px] uppercase">
-            {completion.primaryAction}
-          </routes.logs.Link>
-        ) : (
-          <routes.riskEvents.Link className="font-mono text-[11px] uppercase">
-            {completion.primaryAction}
-          </routes.riskEvents.Link>
-        )}
-        <button
-          type="button"
-          onClick={onSwitchJourney}
-          className="text-muted-foreground font-mono text-[11px] uppercase"
-        >
-          Start the other journey
-        </button>
-      </div>
-    </div>
   );
 }
 

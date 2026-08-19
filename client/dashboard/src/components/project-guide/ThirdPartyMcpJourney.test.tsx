@@ -13,6 +13,7 @@ import { MemoryRouter } from "react-router";
 
 const catalog = vi.hoisted(() => ({
   current: [] as PulseMCPServer[],
+  isError: false,
   refetch: vi.fn(),
 }));
 const workflowOptions = vi.hoisted(() => ({ current: undefined as unknown }));
@@ -36,7 +37,7 @@ vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: () => ({
     data: { servers: catalog.current },
     isPending: false,
-    isError: false,
+    isError: catalog.isError,
     refetch: catalog.refetch,
   }),
 }));
@@ -152,10 +153,23 @@ function setVerifiedServer() {
     isPending: false,
     refetch: vi.fn(),
   });
+  queries.plugins.mockReturnValue({
+    data: {
+      plugins: [
+        {
+          isDefault: true,
+          servers: [{ mcpServerId: "mcp-server" }],
+        },
+      ],
+    },
+    isPending: false,
+    refetch: vi.fn(),
+  });
 }
 
 beforeEach(() => {
   catalog.current = [];
+  catalog.isError = false;
   catalog.refetch.mockClear();
   workflowOptions.current = undefined;
   workflow.current = {
@@ -202,6 +216,32 @@ afterEach(() => {
 });
 
 describe("ThirdPartyMcpJourney", () => {
+  it("renders the approved five-step run with an activity panel", () => {
+    catalog.current = [server("Linear")];
+
+    render(
+      <ThirdPartyMcpJourney
+        status="not-started"
+        onComplete={noop}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    const steps = screen.getByRole("list", { name: "Journey A steps" });
+    expect(steps.querySelectorAll(":scope > li")).toHaveLength(5);
+    expect(screen.getByText("Pick a server from the catalog")).toBeTruthy();
+    expect(screen.getByText("Confirm the governed endpoint")).toBeTruthy();
+    expect(screen.getByText("Connect your client")).toBeTruthy();
+    expect(screen.getByText("Ask the agent to list the tools")).toBeTruthy();
+    expect(screen.getByText("Watch the first governed call")).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Start the journey" }),
+    ).toBeTruthy();
+  });
+
   it("shows only automatic Pulse servers with HTTP remotes in preferred order", () => {
     catalog.current = [
       server("Other"),
@@ -211,6 +251,7 @@ describe("ThirdPartyMcpJourney", () => {
       server("Vercel"),
       server("Linear"),
       server("SSE only", { remotes: ["sse"] }),
+      { ...server("Mutating"), isReadOnly: false },
       server("Granola"),
       {
         ...server("Not a Pulse entry"),
@@ -229,7 +270,11 @@ describe("ThirdPartyMcpJourney", () => {
     expect(
       screen
         .getAllByRole("button")
-        .filter((button) => button.textContent !== "Switch journey")
+        .filter(
+          (button) =>
+            button.textContent !== "Switch journey" &&
+            button.textContent !== "Start the journey",
+        )
         .map((button) => button.textContent),
     ).toEqual([
       "Linear1 tools",
@@ -245,6 +290,7 @@ describe("ThirdPartyMcpJourney", () => {
     expect(screen.getByRole("button", { name: /Other/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Manual/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /SSE only/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Mutating/ })).toBeNull();
   });
 
   it("skips selection for a resumed catalog-backed journey", () => {
@@ -257,7 +303,12 @@ describe("ThirdPartyMcpJourney", () => {
     );
 
     expect(screen.getByText("Deploy your server")).toBeTruthy();
-    expect(screen.queryByText("Pick a server from the catalog")).toBeNull();
+    expect(
+      screen
+        .getByText("Confirm the governed endpoint")
+        .closest("li")
+        ?.getAttribute("aria-current"),
+    ).toBe("step");
   });
 
   it("shows a retry state when no automatic catalog server is available", () => {
@@ -439,6 +490,9 @@ describe("ThirdPartyMcpJourney", () => {
       await waitFor(() => {
         const row = screen.getByText("Pending server").closest("li");
         expect(row?.getAttribute("style") ?? "").not.toContain("opacity: 0");
+        expect(
+          row?.closest("section")?.getAttribute("style") ?? "",
+        ).not.toContain("opacity: 0");
       });
     } finally {
       Object.defineProperty(window, "matchMedia", {
@@ -532,7 +586,7 @@ describe("ThirdPartyMcpJourney", () => {
     });
   });
 
-  it("resumes an existing catalog-backed server without starting another install", () => {
+  it("resumes an existing fully deployed catalog server without starting another install", () => {
     const startInstall = vi.fn();
     const catalogEntry = server("Linear");
     workflow.current = {
@@ -584,7 +638,7 @@ describe("ThirdPartyMcpJourney", () => {
       />,
     );
 
-    expect(screen.getByText("Installed as a remote MCP server")).toBeTruthy();
+    expect(screen.getByText("Verify your connection")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Install server" })).toBeNull();
     expect(startInstall).not.toHaveBeenCalled();
   });
@@ -662,8 +716,30 @@ describe("ThirdPartyMcpJourney", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Install server" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Could not load this project's deployment state.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Retry deployment state" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Install server" })).toBeNull();
     expect(screen.queryByText("Installed as a remote MCP server")).toBeNull();
+  });
+
+  it("resumes a fully deployed catalog server at verification after reload", () => {
+    setVerifiedServer();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={noop}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    expect(screen.getByText("Verify your connection")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Claude" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Install server" })).toBeNull();
   });
 
   it("renders client configs, a safe prompt, and the governed endpoint", async () => {
@@ -685,9 +761,10 @@ describe("ThirdPartyMcpJourney", () => {
         "/mcp/linear",
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "Cursor" }));
+    expect(screen.getByRole("tablist", { name: "MCP client" })).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Cursor" }));
     await waitFor(() => expect(screen.getByText(/"mcpServers"/)).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Codex" }));
     await waitFor(() => {
       expect(screen.getByText("mcp_servers").closest("pre")?.textContent).toBe(
         '[mcp_servers.linear]url = "/mcp/linear"',
@@ -712,22 +789,22 @@ describe("ThirdPartyMcpJourney", () => {
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads.",
-        ),
-      ).toBeTruthy(),
+      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
     );
+    expect(
+      screen.getByText(/call one tool explicitly described as read-only/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Do not use a tool that creates, updates, deletes, sends, or triggers anything/,
+      ),
+    ).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     fireEvent.click(
-      screen
-        .getByText(
-          "Using the Linear MCP server, list the read-only tools you can call and summarise what each one reads.",
-        )
-        .closest("pre")!,
+      screen.getByText(/First list the available tools/).closest("pre")!,
     );
     expect(
       (screen.getByRole("button", { name: "Sent it" }) as HTMLButtonElement)
@@ -914,6 +991,7 @@ describe("ThirdPartyMcpJourney", () => {
         screen.getByRole("button", { name: "I've connected it" }),
       ).toBeTruthy();
     });
+    await waitFor(() => expect(screen.getByText('"url"')).toBeTruthy());
     fireEvent.click(screen.getByText('"url"').closest("pre")!);
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
     await waitFor(() =>
@@ -938,6 +1016,122 @@ describe("ThirdPartyMcpJourney", () => {
     expect(
       screen.getByText("Listening for the first call on your endpoint"),
     ).toBeTruthy();
+  });
+
+  it("captures the server activity baseline only when listening starts", async () => {
+    setVerifiedServer();
+    const activity = { current: [] as Array<Record<string, unknown>> };
+    queries.activity.mockImplementation(() => ({
+      data: { activity: activity.current },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    }));
+    const onComplete = vi.fn();
+    const rendered = render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('"url"')).toBeTruthy());
+    fireEvent.click(screen.getByText('"url"').closest("pre")!);
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
+    );
+
+    activity.current = [
+      {
+        lastToolCallAt: new Date("2026-08-19T12:00:00Z"),
+        recentToolCalls: 1,
+        targetId: "linear",
+        targetLabel: "Intervening read",
+        targetType: "hosted_mcp_server",
+        totalToolCalls: 1,
+      },
+    ];
+    rendered.rerender(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
+      />,
+    );
+    fireEvent.click(
+      screen.getByText(/First list the available tools/).closest("pre")!,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Listening for the first call on your endpoint"),
+    ).toBeTruthy();
+
+    activity.current = [
+      {
+        lastToolCallAt: new Date("2026-08-19T12:00:01Z"),
+        recentToolCalls: 2,
+        targetId: "linear",
+        targetLabel: "Safe read",
+        targetType: "hosted_mcp_server",
+        totalToolCalls: 2,
+      },
+    ];
+    rendered.rerender(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  });
+
+  it("pauses and resumes only the live activity check", async () => {
+    setVerifiedServer();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={noop}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('"url"')).toBeTruthy());
+    fireEvent.click(screen.getByText('"url"').closest("pre")!);
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(screen.getByText(/First list the available tools/)).toBeTruthy(),
+    );
+    fireEvent.click(
+      screen.getByText(/First list the available tools/).closest("pre")!,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause live checks" }));
+
+    expect(
+      screen.getByRole("button", { name: "Resume live checks" }),
+    ).toBeTruthy();
+    expect(queries.activity.mock.calls.at(-1)?.[2]).toMatchObject({
+      enabled: false,
+    });
+    expect(workflow.current).toMatchObject({ phase: "configure" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume live checks" }));
+    expect(queries.activity.mock.calls.at(-1)?.[2]).toMatchObject({
+      enabled: true,
+    });
   });
 
   it("completes a new run only after a governed call arrives", async () => {

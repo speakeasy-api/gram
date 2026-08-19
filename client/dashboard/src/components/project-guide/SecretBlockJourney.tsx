@@ -1,5 +1,9 @@
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
-import type { JourneyStatus } from "@/components/project-guide/journeys";
+import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import {
+  SECRET_BLOCK_STEPS,
+  type JourneyStatus,
+} from "@/components/project-guide/journeys";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import { useRoutes } from "@/routes";
 import {
@@ -11,7 +15,7 @@ import {
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import {
-  invalidateAllRiskListPolicies,
+  invalidateRiskListPolicies,
   useRiskListPolicies,
 } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -20,7 +24,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Client = "claude" | "cursor" | "codex";
 type PluginStage = "download" | "install";
@@ -38,8 +42,13 @@ function filename(response: Response, client: Client): string {
   return (
     response.headers
       .get("Content-Disposition")
-      ?.match(/filename="(.+)"/)?.[1] ?? `observability-${client}.zip`
+      ?.match(/filename="(.+?)"/)?.[1] ?? `observability-${client}.zip`
   );
+}
+
+function shellFilename(value: string): string {
+  if (/^[A-Za-z0-9._-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function pluginStageTitle(stage: PluginStage): string {
@@ -50,36 +59,43 @@ function pluginStageTitle(stage: PluginStage): string {
 function Section({
   title,
   children,
+  currentStep,
+  status,
+  error,
+  complete,
+  paused,
+  onPause,
+  onResume,
   onSwitchJourney,
 }: {
   title: string;
   children: React.ReactNode;
+  currentStep: number;
+  status: JourneyStatus;
+  error?: boolean;
+  complete?: boolean;
+  paused?: boolean;
+  onPause?: () => void;
+  onResume?: () => void;
   onSwitchJourney: () => void;
 }): JSX.Element {
-  const reducedMotion = useReducedMotion();
-
   return (
-    <motion.section
-      initial={{ opacity: 0, y: reducedMotion ? 0 : 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: reducedMotion ? 0 : 0.34,
-        ease: [0.2, 0.7, 0.3, 1],
-      }}
-      className="border-border grid gap-4 border-l-2 border-l-destructive py-4 pl-4"
+    <JourneyRun
+      journeyId="secret-block"
+      steps={SECRET_BLOCK_STEPS}
+      currentStep={currentStep}
+      status={status}
+      title={title}
+      tone="destructive"
+      error={error}
+      complete={complete}
+      paused={paused}
+      onPause={onPause}
+      onResume={onResume}
+      onSwitchJourney={onSwitchJourney}
     >
-      <div className="flex items-center justify-between gap-4">
-        <h4 className="text-[19px] leading-[1.2]">{title}</h4>
-        <button
-          type="button"
-          onClick={onSwitchJourney}
-          className="text-muted-foreground font-mono text-[10px] tracking-[0.05em] uppercase"
-        >
-          Switch journey
-        </button>
-      </div>
       {children}
-    </motion.section>
+    </JourneyRun>
   );
 }
 
@@ -220,6 +236,7 @@ function DeniedRiskEventCard({ result }: { result: RiskResult }): JSX.Element {
 }
 
 export function SecretBlockJourney({
+  status,
   onComplete,
   onSwitchJourney,
 }: {
@@ -238,43 +255,53 @@ export function SecretBlockJourney({
   const [isDownloading, setIsDownloading] = useState(false);
   const [policyError, setPolicyError] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
+  const [checksPaused, setChecksPaused] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [downloadedFilenames, setDownloadedFilenames] = useState<
+    Partial<Record<Client, string>>
+  >({});
   const policiesQuery = useRiskListPolicies({ gramProject }, undefined, {
     throwOnError: false,
   });
   const hasPolicy =
     !policiesQuery.isError &&
     hasBlockingSecretsPolicy(policiesQuery.data?.policies);
-  const tracesQuery = useListHooksTraces(
-    {
+  const tracesRequest = useMemo(
+    () => ({
       gramProject,
       listHooksTracesPayload: {
         from: new Date(0),
         to: new Date(),
-        typesToInclude: ["mcp", "local", "skill"],
+        typesToInclude: ["mcp", "local", "skill"] as Array<
+          "mcp" | "local" | "skill"
+        >,
         limit: 10,
-        sort: "desc",
+        sort: "desc" as const,
       },
-    },
-    undefined,
-    {
-      enabled: hasPolicy,
-      refetchInterval: (query) => {
-        if (query.state.data?.traces.length) return false;
-        return hasPolicy ? 2_000 : false;
-      },
-      throwOnError: false,
-    },
+    }),
+    [gramProject],
   );
+  const tracesQuery = useListHooksTraces(tracesRequest, undefined, {
+    enabled: hasPolicy && !checksPaused,
+    refetchInterval: (query) => {
+      // The generated query key omits this payload. Keep the request object
+      // stable for its query function, and advance its next upper bound here.
+      tracesRequest.listHooksTracesPayload.to = new Date();
+      if (query.state.data?.traces.length) return false;
+      return hasPolicy && !checksPaused ? 2_000 : false;
+    },
+    throwOnError: false,
+  });
   const hasHookTrace =
     !tracesQuery.isError && Boolean(tracesQuery.data?.traces.length);
   const resultsQuery = useRiskListResults(
     { gramProject, category: "secrets", limit: 10 },
     undefined,
     {
-      enabled: hasHookTrace,
+      enabled: hasHookTrace && !checksPaused,
       refetchInterval: (query) => {
         if (query.state.data?.results.length) return false;
-        return hasHookTrace ? 2_000 : false;
+        return hasHookTrace && !checksPaused ? 2_000 : false;
       },
       throwOnError: false,
     },
@@ -314,7 +341,7 @@ export function SecretBlockJourney({
           },
         },
       });
-      await invalidateAllRiskListPolicies(queryClient);
+      await invalidateRiskListPolicies(queryClient, [{ gramProject }]);
     } catch {
       setPolicyError(true);
     } finally {
@@ -334,12 +361,17 @@ export function SecretBlockJourney({
         setDownloadError(true);
         return;
       }
+      const downloadedFilename = filename(response, client);
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = filename(response, client);
+      link.download = downloadedFilename;
       link.click();
       URL.revokeObjectURL(url);
+      setDownloadedFilenames((current) => ({
+        ...current,
+        [client]: downloadedFilename,
+      }));
       setPluginStage("install");
     } catch {
       setDownloadError(true);
@@ -350,7 +382,13 @@ export function SecretBlockJourney({
 
   if (latestRiskResult) {
     return (
-      <Section title="The prompt was denied" onSwitchJourney={onSwitchJourney}>
+      <Section
+        complete
+        currentStep={4}
+        status={status}
+        title="The prompt was denied"
+        onSwitchJourney={onSwitchJourney}
+      >
         <div className="grid gap-4">
           <div className="grid gap-2">
             <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
@@ -379,6 +417,9 @@ export function SecretBlockJourney({
     if (policiesQuery.isError) {
       return (
         <Section
+          currentStep={0}
+          error
+          status={status}
           title="Create a secrets policy"
           onSwitchJourney={onSwitchJourney}
         >
@@ -398,6 +439,9 @@ export function SecretBlockJourney({
 
     return (
       <Section
+        currentStep={0}
+        error={policyError}
+        status={status}
         title="Create a secrets policy"
         onSwitchJourney={onSwitchJourney}
       >
@@ -424,7 +468,16 @@ export function SecretBlockJourney({
 
   if (hasHookTrace) {
     return (
-      <Section title="Watch the block land" onSwitchJourney={onSwitchJourney}>
+      <Section
+        currentStep={promptCopied ? 4 : 3}
+        error={resultsQuery.isError}
+        paused={checksPaused}
+        status={status}
+        title="Watch the block land"
+        onPause={() => setChecksPaused(true)}
+        onResume={() => setChecksPaused(false)}
+        onSwitchJourney={onSwitchJourney}
+      >
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
           Plugin connected. Send the synthetic secret prompt.
         </p>
@@ -436,9 +489,10 @@ export function SecretBlockJourney({
         </pre>
         <button
           type="button"
-          onClick={() =>
-            void navigator.clipboard?.writeText(SYNTHETIC_SECRET_PROMPT)
-          }
+          onClick={() => {
+            setPromptCopied(true);
+            void navigator.clipboard?.writeText(SYNTHETIC_SECRET_PROMPT);
+          }}
           className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
         >
           Copy prompt
@@ -469,7 +523,13 @@ export function SecretBlockJourney({
   const installationStage = pluginStage === "install";
   return (
     <Section
+      currentStep={installationStage ? 2 : 1}
+      error={downloadError || tracesQuery.isError}
+      paused={checksPaused}
+      status={status}
       title={pluginStageTitle(pluginStage)}
+      onPause={installationStage ? () => setChecksPaused(true) : undefined}
+      onResume={installationStage ? () => setChecksPaused(false) : undefined}
       onSwitchJourney={onSwitchJourney}
     >
       {installationStage ? (
@@ -481,10 +541,19 @@ export function SecretBlockJourney({
           <ClientTabs client={client} onClientChange={setClient}>
             {(platform) => {
               const currentClient = CLIENTS[platform];
+              const downloadedFilename = downloadedFilenames[platform];
               return (
-                <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
-                  {`unzip observability-${platform}.zip -d ${currentClient.directory}`}
-                </pre>
+                <div className="grid gap-2">
+                  {downloadedFilename ? (
+                    <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border p-3 font-mono text-[11px] leading-[1.55]">
+                      {`unzip ${shellFilename(downloadedFilename)} -d ${currentClient.directory}`}
+                    </pre>
+                  ) : (
+                    <p className="text-muted-foreground text-[13px] leading-[1.6]">
+                      Download this client's ZIP before extracting it.
+                    </p>
+                  )}
+                </div>
               );
             }}
           </ClientTabs>
@@ -527,9 +596,21 @@ export function SecretBlockJourney({
         </>
       )}
       {tracesQuery.isError && (
-        <p className="text-destructive text-[13px] leading-[1.6]">
-          Could not check for hook events. Retry after installing the plugin.
-        </p>
+        <div className="grid gap-2">
+          <p className="text-destructive text-[13px] leading-[1.6]">
+            Could not check for hook events. Retry after installing the plugin.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              tracesRequest.listHooksTracesPayload.to = new Date();
+              void tracesQuery.refetch();
+            }}
+            className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
+          >
+            Retry hook events
+          </button>
+        </div>
       )}
     </Section>
   );

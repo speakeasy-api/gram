@@ -1,8 +1,8 @@
 import { useAllTimeProjectOverview } from "@/components/project-guide/allTimeOverviewQuery";
 import {
+  catalogBackedMcpServers,
   deriveJourneyStatus,
   hasBlockingSecretsPolicy,
-  hasCatalogBackedServer,
   hasDefaultPluginServer,
   hasMcpServerActivity,
   latestSecretsFinding,
@@ -12,9 +12,11 @@ import type {
   JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 
@@ -29,11 +31,20 @@ export function useProjectGuideProgress(): {
 } {
   const gramProject = useProjectSlugForRequests();
 
+  const catalogQuery = useListMCPCatalog(undefined, undefined, true);
+
   const {
     data: serversData,
     isError: serversError,
     isPending: serversPending,
   } = useMcpServers({ gramProject }, undefined, { throwOnError: false });
+  const {
+    data: remoteServersData,
+    isError: remoteServersError,
+    isPending: remoteServersPending,
+  } = useRemoteMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
   const {
     data: pluginsData,
     isError: pluginsError,
@@ -70,19 +81,29 @@ export function useProjectGuideProgress(): {
   );
 
   const servers = serversError ? undefined : serversData?.mcpServers;
+  const remoteServers = remoteServersError
+    ? undefined
+    : remoteServersData?.remoteMcpServers;
+  const catalogServers = catalogQuery.isError
+    ? undefined
+    : catalogQuery.data?.servers;
   const plugins = pluginsError ? undefined : pluginsData?.plugins;
   const activity = activityError ? undefined : activityData?.activity;
   const policies = policiesError ? undefined : policiesData?.policies;
   const findings = findingsError ? undefined : secretsFindings?.results;
+  const catalogMcpServers = catalogBackedMcpServers(
+    servers,
+    remoteServers,
+    catalogServers,
+  );
 
   const statusByJourney: Record<JourneyId, JourneyStatus> = {
     "third-party-mcp":
-      servers && plugins && activity
+      servers && remoteServers && catalogServers && plugins && activity
         ? deriveJourneyStatus({
-            startSignal: hasCatalogBackedServer(servers),
-            winSignal: servers.some(
+            startSignal: catalogMcpServers.length > 0,
+            winSignal: catalogMcpServers.some(
               (server) =>
-                Boolean(server.remoteMcpServerId) &&
                 hasDefaultPluginServer(plugins, server.id) &&
                 hasMcpServerActivity(activity, server),
             ),
@@ -101,6 +122,8 @@ export function useProjectGuideProgress(): {
     statusByJourney,
     isPending:
       serversPending ||
+      remoteServersPending ||
+      catalogQuery.isPending ||
       pluginsPending ||
       activityPending ||
       policiesPending ||

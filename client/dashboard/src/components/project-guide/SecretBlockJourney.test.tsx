@@ -18,6 +18,10 @@ const queries = vi.hoisted(() => ({
 const mutation = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 const fetcher = vi.hoisted(() => ({ fetch: vi.fn() }));
 const downloads = vi.hoisted(() => vi.fn());
+const invalidations = vi.hoisted(() => ({
+  allPolicies: vi.fn(),
+  projectPolicies: vi.fn(),
+}));
 const revokeObjectURL = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -27,6 +31,8 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/contexts/Fetcher", () => ({ useFetcher: () => fetcher }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: invalidations.allPolicies,
+  invalidateRiskListPolicies: invalidations.projectPolicies,
   useRiskListPolicies: queries.policies,
 }));
 
@@ -111,6 +117,8 @@ beforeEach(() => {
   mutation.mutateAsync.mockReset().mockResolvedValue(blockingPolicy());
   fetcher.fetch.mockReset().mockResolvedValue(new Response("zip"));
   downloads.mockReset();
+  invalidations.allPolicies.mockReset().mockResolvedValue(undefined);
+  invalidations.projectPolicies.mockReset().mockResolvedValue(undefined);
   revokeObjectURL.mockReset();
   queries.policies.mockReset().mockReturnValue({
     data: { policies: [] },
@@ -145,6 +153,34 @@ afterEach(() => {
 });
 
 describe("SecretBlockJourney", () => {
+  it("renders the approved five-step run with an activity panel", () => {
+    render(
+      <SecretBlockJourney
+        status="not-started"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    const steps = screen.getByRole("list", { name: "Journey B steps" });
+    expect(steps.querySelectorAll(":scope > li")).toHaveLength(5);
+    expect(
+      screen.getByText("Create a secrets policy set to deny"),
+    ).toBeTruthy();
+    expect(screen.getByText("Download the observability plugin")).toBeTruthy();
+    expect(screen.getByText("Add it to your agent")).toBeTruthy();
+    expect(
+      screen.getByText("Send a prompt with a synthetic secret"),
+    ).toBeTruthy();
+    expect(screen.getByText("Watch the block land")).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Journey B activity" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Start the journey" }),
+    ).toBeTruthy();
+  });
+
   it("skips creation when a matching blocking secrets policy already exists", () => {
     queries.policies.mockReturnValue({
       data: { policies: [blockingPolicy()] },
@@ -196,6 +232,13 @@ describe("SecretBlockJourney", () => {
         },
       }),
     );
+    await waitFor(() =>
+      expect(invalidations.projectPolicies).toHaveBeenCalledWith(
+        expect.any(QueryClient),
+        [{ gramProject: "project-guide-test" }],
+      ),
+    );
+    expect(invalidations.allPolicies).not.toHaveBeenCalled();
   });
 
   it("keeps policy creation retryable after an error", async () => {
@@ -265,6 +308,7 @@ describe("SecretBlockJourney", () => {
     expect(
       screen.getByRole("heading", { name: "Add it to your agent" }),
     ).toBeTruthy();
+    expect(screen.getByText(/unzip project-hooks\.zip/)).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Download another ZIP" }),
@@ -424,6 +468,43 @@ describe("SecretBlockJourney", () => {
         state: { data: { traces: [hookTrace()] } },
       }),
     ).toBe(false);
+  });
+
+  it("advances the hook-query upper bound before every refetch", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T12:00:00Z"));
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    try {
+      render(
+        <SecretBlockJourney
+          status="in-progress"
+          onComplete={() => {}}
+          onSwitchJourney={() => {}}
+        />,
+      );
+
+      const request = queries.traces.mock.calls[0]?.[0];
+      const traceOptions = queries.traces.mock.calls[0]?.[2];
+      expect(request.listHooksTracesPayload.to).toEqual(
+        new Date("2026-08-19T12:00:00Z"),
+      );
+
+      vi.setSystemTime(new Date("2026-08-19T12:00:05Z"));
+      expect(
+        traceOptions.refetchInterval({ state: { data: { traces: [] } } }),
+      ).toBe(2_000);
+      expect(request.listHooksTracesPayload.to).toEqual(
+        new Date("2026-08-19T12:00:05Z"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not treat a failed hook query as an installed plugin", () => {

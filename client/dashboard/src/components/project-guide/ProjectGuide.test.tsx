@@ -37,9 +37,11 @@ vi.mock("@/contexts/Sdk", () => ({
 
 vi.mock("./ThirdPartyMcpJourney", () => ({
   ThirdPartyMcpJourney: ({
+    status,
     onComplete,
     onSwitchJourney,
   }: {
+    status: JourneyStatus;
     onComplete: () => void;
     onSwitchJourney: () => void;
   }) => {
@@ -49,6 +51,18 @@ vi.mock("./ThirdPartyMcpJourney", () => ({
       return (
         <div role="alert">
           Third-party journey unavailable <button type="button">Retry</button>
+        </div>
+      );
+    }
+
+    if (status === "done") {
+      return (
+        <div data-testid="third-party-journey">
+          <p>The path is governed.</p>
+          <a href="/logs">Open Tool Logs</a>
+          <button type="button" onClick={onSwitchJourney}>
+            Start the other journey
+          </button>
         </div>
       );
     }

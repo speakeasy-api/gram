@@ -1,6 +1,17 @@
+import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import { catalogBackedMcpServers } from "@/components/project-guide/journeyStatus";
 import type { JourneyStatus } from "@/components/project-guide/journeys";
-import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
+import {
+  AUTOMATIC_CATALOG_SERVER_NAMES,
+  THIRD_PARTY_MCP_STEPS,
+} from "@/components/project-guide/journeys";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
@@ -9,10 +20,7 @@ import {
   isPulseMcpServer,
   requiresManualSetup,
 } from "@/pages/catalog/hooks/serverMetadata";
-import {
-  filterToHttpRemotes,
-  normalizeRemoteUrl,
-} from "@/pages/catalog/remotes";
+import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -104,10 +112,10 @@ export function ThirdPartyMcpJourney({
   const [client, setClient] = useState<Client>("claude");
   const [isPromptPhase, setIsPromptPhase] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [checksPaused, setChecksPaused] = useState(false);
   const [hasCopiedConfig, setHasCopiedConfig] = useState(false);
   const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false);
-  const [promptStartedAt, setPromptStartedAt] = useState<Date>();
-  const [activityBaseline, setActivityBaseline] = useState<Date>();
+  const [activityBaseline, setActivityBaseline] = useState<number>();
   const completionNotified = useRef(false);
   const shouldReduceMotion = useReducedMotion();
   const catalog = useListMCPCatalog(
@@ -123,6 +131,7 @@ export function ThirdPartyMcpJourney({
       ((catalog.data?.servers ?? []) as PulseMCPServer[])
         .filter(isPulseMcpServer)
         .filter((server) => !requiresManualSetup(server))
+        .filter((server) => server.isReadOnly === true)
         .map(filterToHttpRemotes)
         .filter((server) => (server.remotes?.length ?? 0) > 0)
         .sort(compareCatalogServers),
@@ -162,16 +171,6 @@ export function ThirdPartyMcpJourney({
   const catalogIdentityServers = selectedServer
     ? [filterToHttpRemotes(selectedServer)]
     : deployableServers;
-  const catalogRemoteUrls = new Set(
-    catalogIdentityServers.flatMap((server) =>
-      (server.remotes ?? []).map((remote) => normalizeRemoteUrl(remote.url)),
-    ),
-  );
-  const catalogRemoteMcpServerIds = new Set(
-    (remoteMcpServersData?.remoteMcpServers ?? [])
-      .filter((server) => catalogRemoteUrls.has(normalizeRemoteUrl(server.url)))
-      .map((server) => server.id),
-  );
   const projectQueryError =
     catalog.isError ||
     mcpServersError ||
@@ -180,11 +179,11 @@ export function ThirdPartyMcpJourney({
     remoteMcpServersError;
   const mcpServer = projectQueryError
     ? undefined
-    : mcpServersData?.mcpServers.find(
-        (server) =>
-          server.remoteMcpServerId !== undefined &&
-          catalogRemoteMcpServerIds.has(server.remoteMcpServerId),
-      );
+    : catalogBackedMcpServers(
+        mcpServersData?.mcpServers,
+        remoteMcpServersData?.remoteMcpServers,
+        catalogIdentityServers,
+      )[0];
   const defaultPluginComplete = Boolean(
     mcpServer &&
     pluginsData?.plugins.some(
@@ -195,6 +194,9 @@ export function ThirdPartyMcpJourney({
   );
   const endpoint = endpointsData?.mcpEndpoints.find(
     (candidate) => candidate.mcpServerId === mcpServer?.id,
+  );
+  const deploymentComplete = Boolean(
+    mcpServer && defaultPluginComplete && endpoint,
   );
   const endpointUrl = endpoint
     ? `${getServerURL()}/mcp/${endpoint.slug}`
@@ -210,28 +212,29 @@ export function ThirdPartyMcpJourney({
     { gramProject, getMcpServerActivityPayload: {} },
     undefined,
     {
-      enabled: Boolean(endpointUrl),
-      refetchInterval: endpointUrl
-        ? (query) => {
-            const activity = query.state.data?.activity.find(
-              (entry) =>
-                entry.targetType === "hosted_mcp_server" &&
-                entry.targetId === mcpServer?.slug &&
-                entry.totalToolCalls > 0,
-            );
-            if (activity && !isPromptPhase) return false;
-            if (
-              isPromptPhase &&
-              promptStartedAt &&
-              activity?.lastToolCallAt &&
-              activity.lastToolCallAt >= promptStartedAt &&
-              (!activityBaseline || activity.lastToolCallAt > activityBaseline)
-            ) {
-              return false;
+      enabled: Boolean(endpointUrl) && !checksPaused,
+      refetchInterval:
+        endpointUrl && !checksPaused
+          ? (query) => {
+              const activity = query.state.data?.activity.find(
+                (entry) =>
+                  entry.targetType === "hosted_mcp_server" &&
+                  entry.targetId === mcpServer?.slug &&
+                  entry.totalToolCalls > 0,
+              );
+              if (activity && !isPromptPhase) return false;
+              if (
+                isPromptPhase &&
+                isListening &&
+                activityBaseline !== undefined &&
+                activity &&
+                activity.totalToolCalls > activityBaseline
+              ) {
+                return false;
+              }
+              return 5_000;
             }
-            return 5_000;
-          }
-        : false,
+          : false,
       throwOnError: false,
     },
   );
@@ -245,10 +248,9 @@ export function ThirdPartyMcpJourney({
       );
   const activityAfterPrompt = Boolean(
     isListening &&
-    promptStartedAt &&
-    serverActivity?.lastToolCallAt &&
-    serverActivity.lastToolCallAt >= promptStartedAt &&
-    (!activityBaseline || serverActivity.lastToolCallAt > activityBaseline),
+    activityBaseline !== undefined &&
+    serverActivity &&
+    serverActivity.totalToolCalls > activityBaseline,
   );
   const activityCompletesJourney = Boolean(
     serverActivity && (!isPromptPhase || activityAfterPrompt),
@@ -261,6 +263,10 @@ export function ThirdPartyMcpJourney({
     completionNotified.current = true;
     onComplete();
   }, [activityCompletesJourney, onComplete]);
+
+  useEffect(() => {
+    if (deploymentComplete) setPhase("verification");
+  }, [deploymentComplete]);
 
   useEffect(() => {
     if (workflow.phase !== "complete" || !completedWorkflowStatuses) return;
@@ -284,12 +290,44 @@ export function ThirdPartyMcpJourney({
 
   if (!expanded) return null;
 
+  if (projectQueryError) {
+    const retryProjectState = () => {
+      void catalog.refetch();
+      void refetchMcpServers();
+      void refetchEndpoints();
+      void refetchPlugins();
+      void refetchRemoteMcpServers();
+    };
+
+    return (
+      <JourneyPanel
+        currentStep={phase === "selection" ? 0 : phase === "deployment" ? 1 : 2}
+        error
+        status={status}
+        title="Deployment state unavailable"
+        onSwitchJourney={onSwitchJourney}
+      >
+        <p role="alert" className="text-destructive text-[13px] leading-[1.6]">
+          Could not load this project's deployment state. No installation will
+          start until every project check succeeds.
+        </p>
+        <button
+          type="button"
+          onClick={retryProjectState}
+          className="border-border w-fit border px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+        >
+          Retry deployment state
+        </button>
+      </JourneyPanel>
+    );
+  }
+
   const chooseServer = (server: PulseMCPServer) => {
     setSelectedServer(server);
     setPhase("deployment");
   };
 
-  if (phase === "deployment") {
+  if (phase === "deployment" && !deploymentComplete) {
     const hasFailedInstall =
       workflow.phase === "installing" || workflow.phase === "complete"
         ? workflow.statuses.some((status) => status.status === "failed")
@@ -329,6 +367,9 @@ export function ThirdPartyMcpJourney({
 
     return (
       <JourneyPanel
+        currentStep={1}
+        error={hasFailedInstall}
+        status={status}
         title="Deploy your server"
         onSwitchJourney={onSwitchJourney}
       >
@@ -396,28 +437,40 @@ export function ThirdPartyMcpJourney({
     );
   }
 
-  if (phase === "verification") {
+  if (phase === "verification" || deploymentComplete) {
     const serverName = mcpServer?.name ?? "this server";
     const serverSlug = mcpServer?.slug;
     const config =
       endpointUrl && serverSlug
         ? clientConfig(client, serverSlug, endpointUrl)
         : undefined;
-    const prompt = `Using the ${serverName} MCP server, list the read-only tools you can call and summarise what each one reads.`;
+    const prompt = `Using the ${serverName} MCP server: First list the available tools. Then call one tool explicitly described as read-only, using the smallest valid input. Do not use a tool that creates, updates, deletes, sends, or triggers anything.`;
     const startPrompt = () => {
-      setActivityBaseline(serverActivity?.lastToolCallAt);
-      setPromptStartedAt(new Date());
       setIsPromptPhase(true);
+    };
+    const startListening = () => {
+      setActivityBaseline(serverActivity?.totalToolCalls ?? 0);
+      setChecksPaused(false);
+      setIsListening(true);
     };
 
     return (
       <JourneyPanel
+        complete={activityCompletesJourney}
+        currentStep={
+          activityCompletesJourney ? 4 : isListening ? 4 : isPromptPhase ? 3 : 2
+        }
+        error={activityError}
+        paused={checksPaused}
+        status={status}
         title="Verify your connection"
+        onPause={isListening ? () => setChecksPaused(true) : undefined}
+        onResume={isListening ? () => setChecksPaused(false) : undefined}
         onSwitchJourney={onSwitchJourney}
       >
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
           {serverName} has a governed endpoint. Connect your client, then send
-          one read-only tools/list request to watch the first call arrive.
+          the safe prompt to list tools and make one read-only tool call.
         </p>
         {endpointUrl && (
           <a
@@ -445,28 +498,31 @@ export function ThirdPartyMcpJourney({
           />
         ) : config && !isPromptPhase ? (
           <>
-            <div className="border-border flex gap-3 border-b">
-              {(["claude", "cursor", "codex"] as const).map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setClient(name)}
-                  className={`border-b-2 px-1 pb-2 font-mono text-[10px] tracking-[0.05em] uppercase ${
-                    client === name
-                      ? "border-foreground"
-                      : "border-transparent text-muted-foreground"
-                  }`}
-                >
-                  {clientLabel(name)}
-                </button>
-              ))}
-            </div>
-            <CodeSnippet
-              code={config.code}
-              language={config.language}
-              copyable
-              onSelectOrCopy={() => setHasCopiedConfig(true)}
-            />
+            <Tabs
+              value={client}
+              onValueChange={(value) => setClient(value as Client)}
+            >
+              <PageTabsList aria-label="MCP client">
+                {(["claude", "cursor", "codex"] as const).map((name) => (
+                  <PageTabsTrigger key={name} value={name}>
+                    {clientLabel(name)}
+                  </PageTabsTrigger>
+                ))}
+              </PageTabsList>
+              {(["claude", "cursor", "codex"] as const).map((name) => {
+                const tabConfig = clientConfig(name, serverSlug!, endpointUrl!);
+                return (
+                  <TabsContent key={name} value={name}>
+                    <CodeSnippet
+                      code={tabConfig.code}
+                      language={tabConfig.language}
+                      copyable
+                      onSelectOrCopy={() => setHasCopiedConfig(true)}
+                    />
+                  </TabsContent>
+                );
+              })}
+            </Tabs>
             <button
               type="button"
               onClick={startPrompt}
@@ -487,7 +543,7 @@ export function ThirdPartyMcpJourney({
             {!isListening && (
               <button
                 type="button"
-                onClick={() => setIsListening(true)}
+                onClick={startListening}
                 disabled={!hasCopiedPrompt}
                 className="border-foreground bg-foreground text-background disabled:border-border disabled:bg-muted disabled:text-muted-foreground px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
               >
@@ -559,7 +615,9 @@ export function ThirdPartyMcpJourney({
   ) {
     return (
       <JourneyPanel
-        title="Pick a server from the catalog"
+        currentStep={0}
+        status={status}
+        title="Choose a catalog server"
         onSwitchJourney={onSwitchJourney}
       >
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
@@ -580,7 +638,9 @@ export function ThirdPartyMcpJourney({
   const moreServers = deployableServers.slice(5);
   return (
     <JourneyPanel
-      title="Pick a server from the catalog"
+      currentStep={0}
+      status={status}
+      title="Choose a catalog server"
       onSwitchJourney={onSwitchJourney}
     >
       <p className="text-muted-foreground text-[13px] leading-[1.6]">
@@ -779,31 +839,43 @@ function deploymentStatusClass(
 function JourneyPanel({
   title,
   children,
+  currentStep,
+  status,
+  error,
+  complete,
+  paused,
+  onPause,
+  onResume,
   onSwitchJourney,
 }: {
   title: string;
   children: ReactNode;
+  currentStep: number;
+  status: JourneyStatus;
+  error?: boolean;
+  complete?: boolean;
+  paused?: boolean;
+  onPause?: () => void;
+  onResume?: () => void;
   onSwitchJourney: () => void;
 }): JSX.Element {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.34, ease: [0.2, 0.7, 0.3, 1] }}
-      className="border-border grid gap-4 border-l-2 border-l-information-default py-4 pl-4"
+    <JourneyRun
+      journeyId="third-party-mcp"
+      steps={THIRD_PARTY_MCP_STEPS}
+      currentStep={currentStep}
+      status={status}
+      title={title}
+      tone="information"
+      error={error}
+      complete={complete}
+      paused={paused}
+      onPause={onPause}
+      onResume={onResume}
+      onSwitchJourney={onSwitchJourney}
     >
-      <div className="flex items-center justify-between gap-4">
-        <h4 className="text-[19px] leading-[1.2]">{title}</h4>
-        <button
-          type="button"
-          onClick={onSwitchJourney}
-          className="text-muted-foreground font-mono text-[10px] tracking-[0.05em] uppercase"
-        >
-          Switch journey
-        </button>
-      </div>
       {children}
-    </motion.section>
+    </JourneyRun>
   );
 }
 

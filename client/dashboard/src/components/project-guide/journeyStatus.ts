@@ -1,9 +1,15 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+
+type CatalogServerIdentity = {
+  remotes?: Array<{ transportType: string; url: string }>;
+};
 
 /**
  * Journey A's own artifact: a server whose backend is a catalog remote MCP
@@ -11,14 +17,40 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
  */
 export function hasCatalogBackedServer(
   servers: McpServer[] | undefined,
+  remoteMcpServers: RemoteMcpServer[] | undefined,
+  catalogServers: CatalogServerIdentity[] | undefined,
 ): boolean {
-  return Boolean(catalogBackedMcpServer(servers));
+  return (
+    catalogBackedMcpServers(servers, remoteMcpServers, catalogServers).length >
+    0
+  );
 }
 
-export function catalogBackedMcpServer(
+export function catalogBackedMcpServers(
   servers: McpServer[] | undefined,
-): McpServer | undefined {
-  return servers?.find((server) => Boolean(server.remoteMcpServerId));
+  remoteMcpServers: RemoteMcpServer[] | undefined,
+  catalogServers: CatalogServerIdentity[] | undefined,
+): McpServer[] {
+  if (!servers || !remoteMcpServers || !catalogServers) return [];
+
+  const catalogUrls = new Set(
+    catalogServers.flatMap((server) =>
+      (server.remotes ?? [])
+        .filter((remote) => remote.transportType === "streamable-http")
+        .map((remote) => normalizeRemoteUrl(remote.url)),
+    ),
+  );
+  const catalogRemoteIds = new Set(
+    remoteMcpServers
+      .filter((remote) => catalogUrls.has(normalizeRemoteUrl(remote.url)))
+      .map((remote) => remote.id),
+  );
+
+  return servers.filter(
+    (server) =>
+      server.remoteMcpServerId !== undefined &&
+      catalogRemoteIds.has(server.remoteMcpServerId),
+  );
 }
 
 export function hasDefaultPluginServer(
@@ -42,7 +74,10 @@ export function hasMcpServerActivity(
   return Boolean(
     server?.slug &&
     activity?.some(
-      (entry) => entry.targetId === server.slug && entry.totalToolCalls > 0,
+      (entry) =>
+        entry.targetType === "hosted_mcp_server" &&
+        entry.targetId === server.slug &&
+        entry.totalToolCalls > 0,
     ),
   );
 }
