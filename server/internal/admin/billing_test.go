@@ -100,16 +100,13 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	seedOrg(t, ctx, db, orgFixture{id: "org_inference_filtered", name: "Inference Filtered", slug: "inference-filtered"})
-	svc.openRouterUsage = &fakeOpenRouterUsage{
-		creditsByKeyType: map[openrouter.KeyType]float64{
-			openrouter.KeyTypeChat:     7.25,
-			openrouter.KeyTypeInternal: 0,
-		},
-		limitsByKeyType: map[openrouter.KeyType]int{
-			openrouter.KeyTypeChat:     999,
-			openrouter.KeyTypeInternal: 0,
-		},
+	openRouterUsage := &fakeOpenRouterUsage{
+		creditsByKeyType: make(map[openrouter.KeyType]float64),
+		limitsByKeyType:  make(map[openrouter.KeyType]int),
 	}
+	openRouterUsage.creditsByKeyType[openrouter.KeyTypeChat] = 7.25
+	openRouterUsage.limitsByKeyType[openrouter.KeyTypeChat] = 999
+	svc.openRouterUsage = openRouterUsage
 	openRouterRepo := orrepo.New(db)
 	_, err := openRouterRepo.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: "org_inference_filtered", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat", MonthlyCredits: 100,
