@@ -4,6 +4,7 @@ import type { PluginAudience } from "@gram/client/models/components/pluginaudien
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   describePrincipal,
+  memberCountDescription,
   principalIcon,
   type PrincipalKind,
 } from "./principals";
@@ -26,23 +27,17 @@ function principalDescription(
     case "role": {
       const role = roleByUrn.get(urn);
       if (!role) return "Role";
-      return `${role.memberCount} ${role.memberCount === 1 ? "member" : "members"}`;
+      return memberCountDescription(role.memberCount) ?? "Role";
     }
     case "user":
       return memberByUrn.get(urn)?.email ?? "Organization member";
     case "directory_group": {
       const memberCount = audienceByUrn.get(urn)?.memberCount;
-      if (memberCount !== undefined) {
-        return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
-      }
-      return "Directory group";
+      return memberCountDescription(memberCount) ?? "Directory group";
     }
     case "directory_attribute": {
       const memberCount = audienceByUrn.get(urn)?.memberCount;
-      if (memberCount !== undefined) {
-        return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
-      }
-      return "Directory attribute";
+      return memberCountDescription(memberCount) ?? "Directory attribute";
     }
     case "unknown":
       return "";

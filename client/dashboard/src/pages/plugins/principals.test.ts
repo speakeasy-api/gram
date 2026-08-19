@@ -3,6 +3,7 @@ import type { PluginAudience } from "@gram/client/models/components/pluginaudien
 import type { Role } from "@gram/client/models/components/role.js";
 import { describe, expect, it } from "vitest";
 import {
+  audienceKindForPrincipal,
   audienceMapByUrn,
   describePrincipal,
   memberMapByUrn,
@@ -117,5 +118,16 @@ describe("describePrincipal", () => {
         audienceMapByUrn([directoryAudience]),
       ),
     ).toEqual({ kind: "directory_group", label: "Engineering" });
+  });
+
+  it("labels an unavailable directory audience and retains its kind", () => {
+    const unavailableUrn = "directory_group:deleted-group";
+    expect(describePrincipal(unavailableUrn, roleByUrn, memberByUrn)).toEqual({
+      kind: "directory_group",
+      label: `Unavailable directory group (${unavailableUrn})`,
+    });
+    expect(audienceKindForPrincipal(unavailableUrn, new Map())).toBe(
+      "directory_group",
+    );
   });
 });

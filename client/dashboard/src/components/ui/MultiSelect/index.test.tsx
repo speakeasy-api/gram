@@ -181,3 +181,26 @@ describe("MultiSelect option descriptions", () => {
     expect(labels.some((label) => label.includes("Manual"))).toBe(false);
   });
 });
+
+describe("MultiSelect disabled selected options", () => {
+  it("allows a selected disabled option to be removed", () => {
+    const onValueChange = vi.fn();
+    render(
+      <MultiSelect
+        options={[
+          { label: "Legacy assignment", value: "legacy", disabled: true },
+        ]}
+        defaultValue={["legacy"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Legacy assignment from selection",
+      }),
+    );
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+});

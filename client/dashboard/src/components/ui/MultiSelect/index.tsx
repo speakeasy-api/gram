@@ -762,6 +762,18 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       }
     };
 
+    // A disabled option cannot be newly selected from the menu, but an
+    // already-selected option must still be removable. This lets callers show
+    // legacy or unavailable values without making them permanent selections.
+    const removeOption = (optionValue: string) => {
+      if (disabled) return;
+      const newSelectedValues = selectedValues.filter(
+        (value) => value !== optionValue,
+      );
+      setSelectedValues(newSelectedValues);
+      onValueChange(newSelectedValues);
+    };
+
     const trimmedSearchValue = searchValue.trim();
     const canCreateFromSearch = React.useMemo(() => {
       if (!creatable || !trimmedSearchValue) return false;
@@ -1060,7 +1072,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                               tabIndex={0}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                toggleOption(value);
+                                removeOption(value);
                               }}
                               onKeyDown={(event) => {
                                 if (
@@ -1069,7 +1081,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 ) {
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  toggleOption(value);
+                                  removeOption(value);
                                 }
                               }}
                               aria-label={`Remove ${option.label} from selection`}

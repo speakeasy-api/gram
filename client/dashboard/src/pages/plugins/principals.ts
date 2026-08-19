@@ -68,6 +68,18 @@ export function describePrincipal(
   if (audience) {
     return { kind: audience.kind, label: audience.displayName };
   }
+  if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) {
+    return {
+      kind: "directory_group",
+      label: `Unavailable directory group (${urn})`,
+    };
+  }
+  if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) {
+    return {
+      kind: "directory_attribute",
+      label: `Unavailable directory attribute (${urn})`,
+    };
+  }
   if (urn.startsWith("role:")) {
     return { kind: "role", label: roleByUrn.get(urn)?.name ?? urn };
   }
@@ -120,6 +132,26 @@ export function audienceMapByUrn(
   return new Map(
     audiences.map((audience) => [audience.principalUrn, audience]),
   );
+}
+
+export function memberCountDescription(
+  memberCount: number | undefined,
+): string | undefined {
+  if (memberCount === undefined) return undefined;
+  return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+}
+
+export function audienceKindForPrincipal(
+  urn: string,
+  audienceByUrn: Map<string, PluginAudience>,
+): PluginAudience["kind"] | undefined {
+  const audience = audienceByUrn.get(urn);
+  if (audience) return audience.kind;
+  if (urn === WILDCARD_PRINCIPAL) return "everyone";
+  if (urn.startsWith(ROLE_PREFIX)) return "role";
+  if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) return "directory_group";
+  if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) return "directory_attribute";
+  return undefined;
 }
 
 const emailSchema = z.string().email();
