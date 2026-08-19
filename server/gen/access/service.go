@@ -46,6 +46,10 @@ type Service interface {
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
+	// List the Shadow MCP servers one person reached, with each server's access
+	// state. The inverse of listShadowMCPInventoryUsers, which expands a single
+	// server into its users.
+	ListShadowMCPInventoryServersForUser(context.Context, *ListShadowMCPInventoryServersForUserPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
@@ -84,7 +88,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -395,6 +399,17 @@ type ListShadowMCPInventoryResult struct {
 	Servers []*ShadowMCPInventoryServer
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+// ListShadowMCPInventoryServersForUserPayload is the payload type of the
+// access service listShadowMCPInventoryServersForUser method.
+type ListShadowMCPInventoryServersForUserPayload struct {
+	ProjectID string
+	// The identifiers to attribute usage to, matched against the reported email or
+	// user id. Pass every identifier the subject is known by.
+	UserKeys     []string
+	Limit        int
+	SessionToken *string
 }
 
 // ListShadowMCPInventoryUsersPayload is the payload type of the access service

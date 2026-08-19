@@ -99,7 +99,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -269,6 +269,12 @@ func ParseEndpoint(
 		accessListShadowMCPInventoryUsersLimitFlag        = accessListShadowMCPInventoryUsersFlags.String("limit", "50", "")
 		accessListShadowMCPInventoryUsersCursorFlag       = accessListShadowMCPInventoryUsersFlags.String("cursor", "", "")
 		accessListShadowMCPInventoryUsersSessionTokenFlag = accessListShadowMCPInventoryUsersFlags.String("session-token", "", "")
+
+		accessListShadowMCPInventoryServersForUserFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-servers-for-user", flag.ExitOnError)
+		accessListShadowMCPInventoryServersForUserProjectIDFlag    = accessListShadowMCPInventoryServersForUserFlags.String("project-id", "REQUIRED", "")
+		accessListShadowMCPInventoryServersForUserUserKeysFlag     = accessListShadowMCPInventoryServersForUserFlags.String("user-keys", "REQUIRED", "")
+		accessListShadowMCPInventoryServersForUserLimitFlag        = accessListShadowMCPInventoryServersForUserFlags.String("limit", "50", "")
+		accessListShadowMCPInventoryServersForUserSessionTokenFlag = accessListShadowMCPInventoryServersForUserFlags.String("session-token", "", "")
 
 		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
 		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
@@ -877,6 +883,8 @@ func ParseEndpoint(
 		deviceIntegrationsListManagedDevicesFlags              = flag.NewFlagSet("list-managed-devices", flag.ExitOnError)
 		deviceIntegrationsListManagedDevicesProviderFlag       = deviceIntegrationsListManagedDevicesFlags.String("provider", "", "")
 		deviceIntegrationsListManagedDevicesCoverageBucketFlag = deviceIntegrationsListManagedDevicesFlags.String("coverage-bucket", "", "")
+		deviceIntegrationsListManagedDevicesUserIdsFlag        = deviceIntegrationsListManagedDevicesFlags.String("user-ids", "", "")
+		deviceIntegrationsListManagedDevicesUserEmailsFlag     = deviceIntegrationsListManagedDevicesFlags.String("user-emails", "", "")
 		deviceIntegrationsListManagedDevicesCursorFlag         = deviceIntegrationsListManagedDevicesFlags.String("cursor", "", "")
 		deviceIntegrationsListManagedDevicesLimitFlag          = deviceIntegrationsListManagedDevicesFlags.String("limit", "50", "")
 		deviceIntegrationsListManagedDevicesApikeyTokenFlag    = deviceIntegrationsListManagedDevicesFlags.String("apikey-token", "", "")
@@ -2319,6 +2327,7 @@ func ParseEndpoint(
 		riskListRiskResultsCategoryFlag         = riskListRiskResultsFlags.String("category", "", "")
 		riskListRiskResultsRuleIDFlag           = riskListRiskResultsFlags.String("rule-id", "", "")
 		riskListRiskResultsUserIDFlag           = riskListRiskResultsFlags.String("user-id", "", "")
+		riskListRiskResultsExternalUserIdsFlag  = riskListRiskResultsFlags.String("external-user-ids", "", "")
 		riskListRiskResultsUniqueMatchFlag      = riskListRiskResultsFlags.String("unique-match", "", "")
 		riskListRiskResultsNonAssistantFlag     = riskListRiskResultsFlags.String("non-assistant", "", "")
 		riskListRiskResultsAssistantIDFlag      = riskListRiskResultsFlags.String("assistant-id", "", "")
@@ -3515,6 +3524,7 @@ func ParseEndpoint(
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
 	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
+	accessListShadowMCPInventoryServersForUserFlags.Usage = accessListShadowMCPInventoryServersForUserUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessRequestAccessFlags.Usage = accessRequestAccessUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
@@ -4463,6 +4473,9 @@ func ParseEndpoint(
 
 			case "list-shadow-mcp-inventory-users":
 				epf = accessListShadowMCPInventoryUsersFlags
+
+			case "list-shadow-mcp-inventory-servers-for-user":
+				epf = accessListShadowMCPInventoryServersForUserFlags
 
 			case "resolve-shadow-mcp-inventory-request":
 				epf = accessResolveShadowMCPInventoryRequestFlags
@@ -6539,6 +6552,9 @@ func ParseEndpoint(
 			case "list-shadow-mcp-inventory-users":
 				endpoint = c.ListShadowMCPInventoryUsers()
 				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
+			case "list-shadow-mcp-inventory-servers-for-user":
+				endpoint = c.ListShadowMCPInventoryServersForUser()
+				data, err = accessc.BuildListShadowMCPInventoryServersForUserPayload(*accessListShadowMCPInventoryServersForUserProjectIDFlag, *accessListShadowMCPInventoryServersForUserUserKeysFlag, *accessListShadowMCPInventoryServersForUserLimitFlag, *accessListShadowMCPInventoryServersForUserSessionTokenFlag)
 			case "resolve-shadow-mcp-inventory-request":
 				endpoint = c.ResolveShadowMCPInventoryRequest()
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
@@ -6925,7 +6941,7 @@ func ParseEndpoint(
 				data, err = deviceintegrationsc.BuildRetrySchedulePayload(*deviceIntegrationsRetryScheduleBodyFlag, *deviceIntegrationsRetryScheduleApikeyTokenFlag, *deviceIntegrationsRetryScheduleSessionTokenFlag)
 			case "list-managed-devices":
 				endpoint = c.ListManagedDevices()
-				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
+				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesUserIdsFlag, *deviceIntegrationsListManagedDevicesUserEmailsFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
 			case "get-coverage":
 				endpoint = c.GetCoverage()
 				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
@@ -7900,7 +7916,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-for-agent":
 				endpoint = c.ListRiskResultsForAgent()
 				data, err = riskc.BuildListRiskResultsForAgentPayload(*riskListRiskResultsForAgentPolicyIDFlag, *riskListRiskResultsForAgentChatIDFlag, *riskListRiskResultsForAgentCategoryFlag, *riskListRiskResultsForAgentRuleIDFlag, *riskListRiskResultsForAgentUserIDFlag, *riskListRiskResultsForAgentUniqueMatchFlag, *riskListRiskResultsForAgentNonAssistantFlag, *riskListRiskResultsForAgentAssistantIDFlag, *riskListRiskResultsForAgentFromFlag, *riskListRiskResultsForAgentToFlag, *riskListRiskResultsForAgentCursorFlag, *riskListRiskResultsForAgentLimitFlag, *riskListRiskResultsForAgentApikeyTokenFlag, *riskListRiskResultsForAgentSessionTokenFlag, *riskListRiskResultsForAgentProjectSlugInputFlag)
@@ -8635,6 +8651,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
@@ -8924,6 +8941,30 @@ func accessListShadowMCPInventoryUsersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListShadowMCPInventoryServersForUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory-servers-for-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -user-keys JSON")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-keys JSON: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-servers-for-user --project-id \"550e8400-e29b-41d4-a716-446655440000\" --user-keys '[\n      \"abc123\",\n      \"abc123\"\n   ]' --limit 2 --session-token \"abc123\"")
 }
 
 func accessResolveShadowMCPInventoryRequestUsage() {
@@ -11559,6 +11600,8 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-managed-devices", os.Args[0])
 	fmt.Fprint(os.Stderr, " -provider STRING")
 	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
+	fmt.Fprint(os.Stderr, " -user-ids JSON")
+	fmt.Fprint(os.Stderr, " -user-emails JSON")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -11572,6 +11615,8 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
 	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -user-emails JSON: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -11579,7 +11624,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func deviceIntegrationsGetCoverageUsage() {
@@ -18272,6 +18317,7 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -rule-id STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -external-user-ids JSON")
 	fmt.Fprint(os.Stderr, " -unique-match BOOL")
 	fmt.Fprint(os.Stderr, " -non-assistant BOOL")
 	fmt.Fprint(os.Stderr, " -assistant-id STRING")
@@ -18294,6 +18340,7 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -external-user-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -unique-match BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -non-assistant BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
@@ -18307,7 +18354,7 @@ func riskListRiskResultsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --external-user-ids '[\n      \"abc123\"\n   ]' --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsForAgentUsage() {
