@@ -25,9 +25,6 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/components/project-menu", () => ({
   ProjectAvatar: () => <span />,
 }));
-vi.mock("@/components/member-facepile", () => ({
-  MemberFacepile: () => <span />,
-}));
 vi.mock("@/components/ui/ContextMenu", () => ({
   ContextMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
   ContextMenuTrigger: ({ children }: { children: ReactNode }) => (
@@ -113,9 +110,6 @@ vi.mock("@gram/client/react-query/auditLogs.js", () => ({
 }));
 vi.mock("@gram/client/react-query/challengeBuckets.js", () => ({
   useChallengeBuckets: () => ({ data: { buckets: [] }, isLoading: false }),
-}));
-vi.mock("@gram/client/react-query/members.js", () => ({
-  useMembers: () => ({ data: { members: [] } }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({ data: { logsEnabled: false } }),

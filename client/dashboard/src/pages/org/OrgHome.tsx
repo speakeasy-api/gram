@@ -1,6 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
 import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
@@ -32,14 +31,12 @@ import {
 } from "@/pages/access/challengeHelpers";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
-import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -80,7 +77,6 @@ import { ActionIconTile } from "@/components/auditlogs/feed";
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;
 const CHALLENGE_PREVIEW_LIMIT = 3;
-const FACEPILE_LIMIT = 10;
 
 type OrgProject = ReturnType<typeof useOrganization>["projects"][number];
 
@@ -157,48 +153,19 @@ function OrgHomeInner() {
     queryClient,
   ]);
 
-  // Fetch org-wide audit log once. We use it to drive (a) the left rail
-  // preview, (b) each project's "most recent action", and (c) the facepile
-  // of active actors per project — all from one network call.
+  // Fetch org-wide audit log once. We use it to drive both the left rail
+  // preview and each project's "most recent action" from one network call.
   const { data: auditData } = useAuditLogs();
   const auditLogs = useMemo(() => auditData?.result.logs ?? [], [auditData]);
 
-  const { data: membersData } = useMembers();
-  const memberById = useMemo(() => {
-    const map = new Map<string, AccessMember>();
-    for (const m of membersData?.members ?? []) map.set(m.id, m);
-    return map;
-  }, [membersData]);
-
-  const { latestActionByProjectSlug, activeActorsByProjectSlug } =
-    useMemo(() => {
-      const latest = new Map<string, AuditLog>();
-      const actors = new Map<string, string[]>();
-      for (const log of auditLogs) {
-        if (!log.projectSlug) continue;
-        if (!latest.has(log.projectSlug)) latest.set(log.projectSlug, log);
-        if (log.actorType !== "user") continue;
-        const list = actors.get(log.projectSlug) ?? [];
-        // Preserve recency order; dedupe.
-        if (!list.includes(log.actorId)) {
-          list.push(log.actorId);
-          actors.set(log.projectSlug, list);
-        }
-      }
-      return {
-        latestActionByProjectSlug: latest,
-        activeActorsByProjectSlug: actors,
-      };
-    }, [auditLogs]);
-
-  // Fallback facepile when a project has no audit activity yet — show a
-  // stable, deterministic slice of org members so a fresh project still feels
-  // populated. Sorted by joinedAt so the choice is reproducible across loads.
-  const fallbackMembers = useMemo(() => {
-    return [...(membersData?.members ?? [])]
-      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())
-      .slice(0, FACEPILE_LIMIT);
-  }, [membersData]);
+  const latestActionByProjectSlug = useMemo(() => {
+    const latest = new Map<string, AuditLog>();
+    for (const log of auditLogs) {
+      if (!log.projectSlug) continue;
+      if (!latest.has(log.projectSlug)) latest.set(log.projectSlug, log);
+    }
+    return latest;
+  }, [auditLogs]);
 
   const filteredProjects = useMemo(
     () =>
@@ -247,23 +214,10 @@ function OrgHomeInner() {
     void navigate(`/${orgSlug}/projects/${result.project.slug}`);
   };
 
-  const getFacepileMembers = (projectSlug: string): AccessMember[] => {
-    const actorIds = activeActorsByProjectSlug.get(projectSlug) ?? [];
-    const resolved: AccessMember[] = [];
-    for (const id of actorIds) {
-      const m = memberById.get(id);
-      if (m) resolved.push(m);
-      if (resolved.length >= FACEPILE_LIMIT) break;
-    }
-    if (resolved.length > 0) return resolved;
-    return fallbackMembers;
-  };
-
   const renderProjectItem = (project: OrgProject) => {
     const props = {
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
-      facepile: getFacepileMembers(project.slug),
       isFavorite: isFavorite(project.id),
       onToggleFavorite: () => toggleFavorite(project.id),
     };
@@ -577,13 +531,11 @@ function ViewModeButton({
 function ProjectRow({
   project,
   latestLog,
-  facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
-  facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
 }) {
@@ -593,8 +545,8 @@ function ProjectRow({
   return (
     <TableRowContextMenu actions={actions}>
       {/* Below `md` the row stacks: identity and summary first, then the
-          facepile and actions on their own line — side by side there is not
-          enough width for the summary without it running under the faces. */}
+          actions on their own line — side by side there is not enough width
+          for the summary. */}
       <div
         className={cn(
           "group hover:bg-muted/40 relative flex flex-col gap-3 px-4 py-4 transition-colors md:flex-row md:items-center md:gap-4",
@@ -629,18 +581,7 @@ function ProjectRow({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 pl-13 md:justify-end md:pl-0">
-          <div
-            className="relative z-10 flex"
-            onClick={(e) => {
-              // Keep clicks on the facepile from triggering the row's Link overlay.
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <MemberFacepile members={facepile} maxFaces={5} />
-          </div>
-
+        <div className="flex items-center justify-end gap-3 pl-13 md:pl-0">
           <ProjectRowActions
             actions={actions}
             isFavorite={isFavorite}
@@ -664,13 +605,11 @@ function ProjectRow({
 function ProjectCard({
   project,
   latestLog,
-  facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
-  facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
 }) {
@@ -707,16 +646,7 @@ function ProjectCard({
           <RecentActionBlock log={latestLog} />
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <div
-            className="relative z-10 min-w-0"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <MemberFacepile members={facepile} maxFaces={3} />
-          </div>
+        <div className="flex items-center justify-end gap-2">
           <ProjectRowActions
             actions={actions}
             isFavorite={isFavorite}
