@@ -25,6 +25,7 @@ const workflow = vi.hoisted(() => ({
 const queries = vi.hoisted(() => ({
   endpoints: vi.fn(),
   plugins: vi.fn(),
+  remoteServers: vi.fn(),
   servers: vi.fn(),
 }));
 
@@ -54,6 +55,10 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 
 vi.mock("@gram/client/react-query/plugins.js", () => ({
   usePlugins: queries.plugins,
+}));
+
+vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
+  useRemoteMcpServers: queries.remoteServers,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -102,6 +107,7 @@ beforeEach(() => {
   queries.servers.mockReset();
   queries.endpoints.mockReset();
   queries.plugins.mockReset();
+  queries.remoteServers.mockReset();
   queries.servers.mockReturnValue({
     data: { mcpServers: [] },
     isPending: false,
@@ -114,6 +120,11 @@ beforeEach(() => {
   });
   queries.plugins.mockReturnValue({
     data: { plugins: [] },
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  queries.remoteServers.mockReturnValue({
+    data: { remoteMcpServers: [] },
     isPending: false,
     refetch: vi.fn(),
   });
@@ -248,6 +259,33 @@ describe("ThirdPartyMcpJourney", () => {
     expect(startInstall).toHaveBeenCalledOnce();
   });
 
+  it("advances to verification after a successful workflow completes", async () => {
+    workflow.current = {
+      phase: "complete",
+      reset: vi.fn(),
+      statuses: [
+        {
+          key: "completed",
+          mcpServerId: "server-1",
+          name: "Linear",
+          status: "completed",
+        },
+      ],
+    };
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={vi.fn()}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Verify your connection")).toBeTruthy();
+    });
+  });
+
   it("renders every installation status inline", () => {
     workflow.current = {
       phase: "installing",
@@ -272,6 +310,50 @@ describe("ThirdPartyMcpJourney", () => {
     expect(screen.getByText("Creating remote MCP server")).toBeTruthy();
     expect(screen.getByText("Installed as a remote MCP server")).toBeTruthy();
     expect(screen.getByText("Install failed")).toBeTruthy();
+    expect(screen.getByText("Pending server")).toBeTruthy();
+    expect(screen.getByText("Creating server")).toBeTruthy();
+  });
+
+  it("renders deployment rows without animation when reduced motion is preferred", async () => {
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        addEventListener: vi.fn(),
+        addListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        matches: true,
+        media: "(prefers-reduced-motion: reduce)",
+        onchange: null,
+        removeEventListener: vi.fn(),
+        removeListener: vi.fn(),
+      }),
+    });
+    workflow.current = {
+      phase: "installing",
+      reset: vi.fn(),
+      statuses: [{ key: "pending", name: "Pending server", status: "pending" }],
+    };
+
+    try {
+      render(
+        <ThirdPartyMcpJourney
+          status="in-progress"
+          onComplete={vi.fn()}
+          onSwitchJourney={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        const row = screen.getByText("Pending server").closest("li");
+        expect(row?.getAttribute("style") ?? "").not.toContain("opacity: 0");
+      });
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    }
   });
 
   it("offers retry after a failed install without advancing", () => {
@@ -360,12 +442,23 @@ describe("ThirdPartyMcpJourney", () => {
 
   it("resumes an existing catalog-backed server without starting another install", () => {
     const startInstall = vi.fn();
+    const catalogEntry = server("Linear");
     workflow.current = {
       canInstall: true,
       phase: "configure",
       reset: vi.fn(),
       startInstall,
     };
+    catalog.current = [catalogEntry];
+    queries.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          { id: "remote-1", url: catalogEntry.remotes?.[0]?.url },
+        ],
+      },
+      isPending: false,
+      refetch: vi.fn(),
+    });
     queries.servers.mockReturnValue({
       data: {
         mcpServers: [{ id: "server-1", remoteMcpServerId: "remote-1" }],
@@ -404,6 +497,83 @@ describe("ThirdPartyMcpJourney", () => {
     expect(startInstall).not.toHaveBeenCalled();
   });
 
+  it("does not resume an unrelated remote MCP server", () => {
+    catalog.current = [server("Linear")];
+    queries.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          { id: "remote-1", url: "https://unrelated.example/mcp" },
+        ],
+      },
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.servers.mockReturnValue({
+      data: {
+        mcpServers: [{ id: "server-1", remoteMcpServerId: "remote-1" }],
+      },
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={vi.fn()}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Install server" })).toBeTruthy();
+    expect(screen.queryByText("Installed as a remote MCP server")).toBeNull();
+  });
+
+  it("does not resume from cached data when a project query is errored", () => {
+    const catalogEntry = server("Linear");
+    catalog.current = [catalogEntry];
+    queries.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          { id: "remote-1", url: catalogEntry.remotes?.[0]?.url },
+        ],
+      },
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.servers.mockReturnValue({
+      data: {
+        mcpServers: [{ id: "server-1", remoteMcpServerId: "remote-1" }],
+      },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.plugins.mockReturnValue({
+      data: {
+        plugins: [
+          {
+            isDefault: true,
+            servers: [{ mcpServerId: "server-1" }],
+          },
+        ],
+      },
+      isError: true,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={vi.fn()}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Install server" })).toBeTruthy();
+    expect(screen.queryByText("Installed as a remote MCP server")).toBeNull();
+  });
+
   it("scopes deployment workflow and queries to the request project", () => {
     render(
       <ThirdPartyMcpJourney
@@ -416,7 +586,12 @@ describe("ThirdPartyMcpJourney", () => {
     expect(workflowOptions.current).toMatchObject({
       projectSlug: "project-guide-test",
     });
-    for (const query of [queries.servers, queries.endpoints, queries.plugins]) {
+    for (const query of [
+      queries.servers,
+      queries.endpoints,
+      queries.plugins,
+      queries.remoteServers,
+    ]) {
       expect(query).toHaveBeenCalledWith(
         { gramProject: "project-guide-test" },
         undefined,

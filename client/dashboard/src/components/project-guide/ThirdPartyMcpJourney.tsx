@@ -7,13 +7,17 @@ import {
   isPulseMcpServer,
   requiresManualSetup,
 } from "@/pages/catalog/hooks/serverMetadata";
-import { filterToHttpRemotes } from "@/pages/catalog/remotes";
+import {
+  filterToHttpRemotes,
+  normalizeRemoteUrl,
+} from "@/pages/catalog/remotes";
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { getServerURL } from "@/lib/utils";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
-import { motion } from "motion/react";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 type JourneyPhase = "selection" | "deployment" | "verification";
@@ -59,7 +63,7 @@ export function ThirdPartyMcpJourney({
   const catalog = useListMCPCatalog(
     undefined,
     undefined,
-    expanded && phase === "selection",
+    expanded && (phase === "selection" || phase === "deployment"),
   );
   const deployableServers = useMemo(
     () =>
@@ -71,29 +75,59 @@ export function ThirdPartyMcpJourney({
         .sort(compareCatalogServers),
     [catalog.data?.servers],
   );
-  const { data: mcpServersData, refetch: refetchMcpServers } = useMcpServers(
-    { gramProject },
-    undefined,
-    { throwOnError: false },
-  );
-  const { data: endpointsData, refetch: refetchEndpoints } = useMcpEndpoints(
-    { gramProject },
-    undefined,
-    { throwOnError: false },
-  );
-  const { data: pluginsData, refetch: refetchPlugins } = usePlugins(
-    { gramProject },
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: mcpServersData,
+    isError: mcpServersError,
+    refetch: refetchMcpServers,
+  } = useMcpServers({ gramProject }, undefined, { throwOnError: false });
+  const {
+    data: endpointsData,
+    isError: endpointsError,
+    refetch: refetchEndpoints,
+  } = useMcpEndpoints({ gramProject }, undefined, { throwOnError: false });
+  const {
+    data: pluginsData,
+    isError: pluginsError,
+    refetch: refetchPlugins,
+  } = usePlugins({ gramProject }, undefined, { throwOnError: false });
+  const {
+    data: remoteMcpServersData,
+    isError: remoteMcpServersError,
+    refetch: refetchRemoteMcpServers,
+  } = useRemoteMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
   const workflow = useRemoteMcpInstallWorkflow({
     servers: selectedServer ? [filterToHttpRemotes(selectedServer)] : [],
     projectSlug: gramProject,
     autoSelectRemotes: true,
   });
-  const mcpServer = mcpServersData?.mcpServers.find((server) =>
-    Boolean(server.remoteMcpServerId),
+  const catalogIdentityServers = selectedServer
+    ? [filterToHttpRemotes(selectedServer)]
+    : deployableServers;
+  const catalogRemoteUrls = new Set(
+    catalogIdentityServers.flatMap((server) =>
+      (server.remotes ?? []).map((remote) => normalizeRemoteUrl(remote.url)),
+    ),
   );
+  const catalogRemoteMcpServerIds = new Set(
+    (remoteMcpServersData?.remoteMcpServers ?? [])
+      .filter((server) => catalogRemoteUrls.has(normalizeRemoteUrl(server.url)))
+      .map((server) => server.id),
+  );
+  const projectQueryError =
+    catalog.isError ||
+    mcpServersError ||
+    endpointsError ||
+    pluginsError ||
+    remoteMcpServersError;
+  const mcpServer = projectQueryError
+    ? undefined
+    : mcpServersData?.mcpServers.find(
+        (server) =>
+          server.remoteMcpServerId !== undefined &&
+          catalogRemoteMcpServerIds.has(server.remoteMcpServerId),
+      );
   const defaultPluginComplete = Boolean(
     mcpServer &&
     pluginsData?.plugins.some(
@@ -117,7 +151,17 @@ export function ThirdPartyMcpJourney({
     void refetchMcpServers();
     void refetchEndpoints();
     void refetchPlugins();
-  }, [workflow.phase, refetchEndpoints, refetchMcpServers, refetchPlugins]);
+    void refetchRemoteMcpServers();
+    if (!workflow.statuses.some((status) => status.status === "failed")) {
+      setPhase("verification");
+    }
+  }, [
+    workflow.phase,
+    refetchEndpoints,
+    refetchMcpServers,
+    refetchPlugins,
+    refetchRemoteMcpServers,
+  ]);
 
   if (!expanded) return null;
 
@@ -136,21 +180,27 @@ export function ThirdPartyMcpJourney({
     const resumedStatuses = mcpServer
       ? [
           {
+            key: "remote-server",
             label: "Installed as a remote MCP server",
+            name: mcpServer.name ?? "Catalog server",
             status: "completed" as const,
           },
           {
+            key: "default-plugin",
             label: defaultPluginComplete
               ? "Attached to the Default plugin"
               : "Waiting for the Default plugin",
+            name: "Default plugin",
             status: defaultPluginComplete
               ? ("completed" as const)
               : ("pending" as const),
           },
           {
+            key: "endpoint",
             label: endpointUrl
               ? "Created a governed endpoint"
               : "Creating a governed endpoint",
+            name: "Governed endpoint",
             status: endpointUrl
               ? ("completed" as const)
               : ("creating" as const),
@@ -174,8 +224,22 @@ export function ThirdPartyMcpJourney({
           <>
             <DeploymentStatuses
               statuses={[
-                { label: "Read the server's tool list", status: "completed" },
-                { label: "Install it into this project", status: "pending" },
+                {
+                  key: "catalog-read",
+                  label: "Read the server's tool list",
+                  name: selectedServer
+                    ? catalogServerName(selectedServer)
+                    : "Catalog server",
+                  status: "completed",
+                },
+                {
+                  key: "catalog-install",
+                  label: "Install it into this project",
+                  name: selectedServer
+                    ? catalogServerName(selectedServer)
+                    : "Catalog server",
+                  status: "pending",
+                },
               ]}
             />
             <button
@@ -192,7 +256,9 @@ export function ThirdPartyMcpJourney({
             <DeploymentStatuses
               statuses={workflow.statuses.map((status) => ({
                 error: status.error,
+                key: status.key,
                 label: installStatusLabel(status.status),
+                name: status.name,
                 status: status.status,
               }))}
             />
@@ -324,29 +390,40 @@ function DeploymentStatuses({
 }: {
   statuses: Array<{
     error?: string;
+    key: string;
     label: string;
+    name?: string;
     status: "pending" | "creating" | "completed" | "failed";
   }>;
 }): JSX.Element {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <ol className="grid gap-2">
       {statuses.map((item, index) => (
         <motion.li
-          key={`${item.label}-${item.status}`}
-          initial={{ opacity: 0, y: 4 }}
+          key={item.key}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{
-            delay: index * 0.04,
-            duration: 0.2,
-            ease: [0.2, 0.7, 0.3, 1],
-          }}
+          transition={
+            shouldReduceMotion
+              ? { duration: 0 }
+              : {
+                  delay: index * 0.04,
+                  duration: 0.2,
+                  ease: [0.2, 0.7, 0.3, 1],
+                }
+          }
           className="border-border flex items-center gap-2 border px-3 py-2"
         >
           <span
             aria-hidden="true"
             className={`size-1.5 ${deploymentStatusClass(item.status)}`}
           />
-          <span className="text-[12px]">{item.label}</span>
+          {item.name && <span className="text-[12px]">{item.name}</span>}
+          <span className="text-muted-foreground text-[11px]">
+            {item.label}
+          </span>
           {item.error && (
             <span className="text-destructive ml-auto text-[11px]">
               {item.error}
@@ -363,7 +440,7 @@ function deploymentStatusClass(
 ): string {
   switch (status) {
     case "completed":
-      return "bg-[#5A8250]";
+      return "bg-success-default";
     case "failed":
       return "bg-destructive";
     case "pending":
@@ -386,7 +463,7 @@ function JourneyPanel({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.34, ease: [0.2, 0.7, 0.3, 1] }}
-      className="border-border grid gap-4 border-l-2 border-l-[#2879D8] py-4 pl-4"
+      className="border-border grid gap-4 border-l-2 border-l-information-default py-4 pl-4"
     >
       <div className="flex items-center justify-between gap-4">
         <h4 className="text-[19px] leading-[1.2]">{title}</h4>
