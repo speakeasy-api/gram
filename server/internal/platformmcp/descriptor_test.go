@@ -102,6 +102,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"find_mcp",
 		"get_mcp",
 		"register_catalog_mcp",
+		"register_remote_mcp",
 		"search_mcp_catalog",
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",

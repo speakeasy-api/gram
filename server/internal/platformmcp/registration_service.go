@@ -16,6 +16,7 @@ var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration u
 
 type CatalogRegistrationGateChecker interface {
 	Enabled(ctx context.Context, organizationID, projectSlug string) (bool, error)
+	EnabledOrganization(ctx context.Context, organizationID string) (bool, error)
 }
 
 type RegistrationPersistence interface {
@@ -74,6 +75,7 @@ type RegistrationService struct {
 	readiness                  *ReadinessService
 	dashboardURL               *url.URL
 	identityProviderAttachment CatalogIdentityProviderAttachment
+	directRemoteInspector      DirectRemoteInspector
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 }
@@ -122,6 +124,15 @@ func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *Regist
 func (s *RegistrationService) WithIdentityProviderAttachment(attachment CatalogIdentityProviderAttachment) *RegistrationService {
 	if s != nil {
 		s.identityProviderAttachment = attachment
+	}
+	return s
+}
+
+// WithDirectRemoteInspector enables direct user-supplied remote MCP admission.
+// The inspector is server-composed because it owns Guardian-backed egress.
+func (s *RegistrationService) WithDirectRemoteInspector(inspector DirectRemoteInspector) *RegistrationService {
+	if s != nil {
+		s.directRemoteInspector = inspector
 	}
 	return s
 }
@@ -188,6 +199,13 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	}
 	if persisted.ProviderKey != catalog.ProviderKey || persisted.CatalogRef != catalog.CatalogRef {
 		return "", ErrCatalogRejected
+	}
+	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
+}
+
+func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
+	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
+		return "", ErrRegistrationUnavailable
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, registrationID)
 	if err != nil {
@@ -333,6 +351,100 @@ func (s *RegistrationService) IssueSetupHandoffForRegistration(ctx context.Conte
 		ProviderKey:    candidate.ProviderKey,
 		CatalogRef:     candidate.CatalogRef,
 	})
+}
+
+type RegisterRemoteMCPInput struct {
+	ProjectSlug    string
+	RemoteURL      string
+	DisplayName    string
+	IdempotencyKey string
+}
+
+type RegisterRemoteMCPResult struct {
+	Project           ResolvedProject
+	RemoteURL         string
+	Receipt           OperationReceipt
+	Registration      string
+	NextAction        string
+	DashboardSetupURL string
+}
+
+// RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
+// result from an earlier MCP call is deliberately not trusted as admission
+// evidence, and no caller can supply credentials or headers.
+func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal Principal, input RegisterRemoteMCPInput) (RegisterRemoteMCPResult, error) {
+	if s == nil || s.gate == nil || s.store == nil || s.directRemoteInspector == nil || !s.budgets.Registration.valid() || input.ProjectSlug == "" || input.RemoteURL == "" || input.IdempotencyKey == "" {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.Registration.Allow(ctx, principal); err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("check direct remote registration gate: %w", err)
+	}
+	if !enabled {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	inspection, err := s.directRemoteInspector.Inspect(ctx, input.RemoteURL)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	if inspection.CanonicalURL == "" || inspection.Transport != "streamable-http" || inspection.Trust != "user_supplied_unreviewed" {
+		return RegisterRemoteMCPResult{}, ErrDirectRemoteRejected
+	}
+	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote registration project: %w", err)
+	}
+	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	displayName := strings.TrimSpace(input.DisplayName)
+	if displayName == "" {
+		displayName = inspection.CanonicalURL
+	}
+	request := CatalogRegistrationRequest{
+		ProjectSlug:      project.Slug,
+		SourceKind:       directRemoteSourceKind,
+		CatalogProvider:  directRemoteProviderKey,
+		CatalogReference: inspection.CanonicalURL,
+		IdempotencyKey:   input.IdempotencyKey,
+		InputHash:        catalogRegistrationInputHash(project.Slug, directRemoteSourceKind, directRemoteProviderKey, inspection.CanonicalURL),
+	}
+	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("begin direct remote registration receipt: %w", err)
+	}
+	if !receipt.Replayed || receipt.Status == receiptStatusPending {
+		receipt, err = s.store.ConvergeRegistration(ctx, principal, project, request, receipt)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("converge direct remote registration: %w", err)
+		}
+	}
+	if receipt.ResultCode == receiptResultActiveCap {
+		return RegisterRemoteMCPResult{}, ErrRegistrationCap
+	}
+	if !receipt.RegistrationID.Valid {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	if receipt.Status == receiptStatusPending {
+		receipt, err = s.store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{remoteURL: inspection.CanonicalURL, displayName: displayName})
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("complete direct remote registration: %w", err)
+		}
+	}
+	setupURL := ""
+	nextAction := "ready"
+	if inspection.RequiresDashboardSetup {
+		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
+		}
+		nextAction = "secure_dashboard_setup_required"
+	}
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
+	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {

@@ -156,17 +156,29 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
 	}
 	registerReadDocTool(reg)
-	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
+	if registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
-	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
-		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
 	} else {
-		registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
+		if catalog == nil {
+			registerUnavailableCatalogTools(reg)
+		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
+			registerUnavailableCatalogTools(reg)
+		} else {
+			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+		}
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(reg)
+		registerUnavailableRemoteRegistrationTool(reg)
 	} else {
 		registerCatalogRegistrationTool(reg, registrations)
+		if registrations.directRemoteInspector == nil {
+			registerUnavailableRemoteRegistrationTool(reg)
+		} else {
+			registerRemoteRegistrationTool(reg, registrations)
+		}
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)
@@ -216,7 +228,6 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 		description string
 	}{
 		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
@@ -227,12 +238,29 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 	}
 }
 
+func registerUnavailableCandidateInspectionTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "inspect_mcp_candidate",
+		Title:       "Inspect MCP Candidate",
+		Description: "Inspect one reviewed catalog MCP candidate or user-supplied HTTPS MCP URL. Candidate inspection is not available in the current rollout.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
+}
+
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
 		Description: "Register an approved catalog MCP in a project. Registration is not available in the current preview.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+}
+
+func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "register_remote_mcp",
+		Title:       "Register Remote MCP",
+		Description: "Register a user-supplied HTTPS MCP in a project. Direct remote registration is not available in the current preview.",
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
 }
 
 func registerUnavailableSetupHandoffTool(reg *Registrar) {
@@ -291,6 +319,10 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}
 	case errors.Is(err, ErrCatalogUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "catalog_unavailable", Message: "The reviewed MCP Catalogue is temporarily unavailable. Retry the catalogue search after a short delay; other Platform MCP tools may remain available."}
+	case errors.Is(err, ErrDirectRemoteRejected):
+		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", Message: "The remote MCP URL is unsafe, unsupported, or did not complete the required Streamable HTTP inspection. Use an HTTPS URL without credentials, query parameters, or fragments."}
+	case errors.Is(err, ErrDirectRemoteUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", Message: "The remote MCP could not be inspected safely right now. Retry after a short delay."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "This Platform MCP operation is temporarily unavailable."}
 	case errors.Is(err, ErrRegistrationCap):
