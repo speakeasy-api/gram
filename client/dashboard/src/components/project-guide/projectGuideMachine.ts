@@ -321,21 +321,45 @@ export type ProjectGuideCheckpoint = {
   label: string;
 };
 
-export type ProjectGuideOperationSignal =
-  | { type: "start"; path: JourneyId; step: number }
-  | { type: "pause"; path: JourneyId; step: number }
-  | { type: "resume"; path: JourneyId; step: number }
+export type ProjectGuideOperationScope = {
+  path: JourneyId;
+  step: number;
+  attempt: number;
+  runId: number;
+};
+
+export type ProjectGuideOperationReport =
   | {
-      type: "retry";
-      path: JourneyId;
-      step: number;
-      attempt: number;
+      type: "progress";
+      scope: ProjectGuideOperationScope;
+      message: string;
+      progress?: number;
     }
-  | { type: "checkpoint"; path: JourneyId; step: number }
+  | {
+      type: "success";
+      scope: ProjectGuideOperationScope;
+      result: string;
+    }
+  | {
+      type: "error";
+      scope: ProjectGuideOperationScope;
+      message: string;
+    }
+  | {
+      type: "event";
+      scope: ProjectGuideOperationScope;
+      event: ProjectGuideEventCard;
+    };
+
+export type ProjectGuideOperationSignal =
+  | { type: "start"; scope: ProjectGuideOperationScope }
+  | { type: "pause"; scope: ProjectGuideOperationScope }
+  | { type: "resume"; scope: ProjectGuideOperationScope }
+  | { type: "retry"; scope: ProjectGuideOperationScope }
+  | { type: "checkpoint"; scope: ProjectGuideOperationScope }
   | {
       type: "abort";
-      path: JourneyId;
-      step: number;
+      scope: ProjectGuideOperationScope;
       reason: "switch" | "back" | "exit" | "rewind" | "reset";
     };
 
@@ -347,10 +371,7 @@ export type ProjectGuideEvent =
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "USER_CHECKPOINT_COMPLETE"; result: string }
-  | { type: "OPERATION_PROGRESS"; message: string; progress?: number }
-  | { type: "OPERATION_SUCCESS"; result: string }
-  | { type: "OPERATION_ERROR"; message: string }
-  | { type: "EVENT_RECEIVED"; event: ProjectGuideEventCard }
+  | { type: "ADAPTER_REPORT"; report: ProjectGuideOperationReport }
   | { type: "LISTEN_TICK"; elapsedSeconds: number }
   | { type: "RETRY" }
   | { type: "REWIND"; step: number }
@@ -367,6 +388,7 @@ export type ProjectGuideMachineContext = {
   error: string | null;
   observedEvent: ProjectGuideEventCard | null;
   attempt: number;
+  runId: number;
   pausedFrom: "running" | "waiting";
   errorFrom: "running" | "waiting";
   nextOutputId: number;
@@ -409,6 +431,7 @@ function initialCoordinatorContext(
     error: null,
     observedEvent: null,
     attempt: 0,
+    runId: 0,
     pausedFrom: "running",
     errorFrom: "running",
     nextOutputId: 0,
@@ -484,14 +507,43 @@ function completedThrough(step: number, stepCount: number): number[] {
 function emitCurrentSignal(
   context: ProjectGuideMachineContext,
   type: "start" | "pause" | "resume" | "checkpoint",
-  offset = 0,
 ): void {
-  if (!context.activePath) return;
+  const scope = currentOperationScope(context);
+  if (!scope) return;
   context.onSignal?.({
     type,
-    path: context.activePath,
-    step: getProjectGuideCurrentStep(context) + offset,
+    scope,
   });
+}
+
+function currentOperationScope(
+  context: ProjectGuideMachineContext,
+): ProjectGuideOperationScope | null {
+  if (!context.activePath) return null;
+  return {
+    path: context.activePath,
+    step: getProjectGuideCurrentStep(context),
+    attempt: context.attempt,
+    runId: context.runId,
+  };
+}
+
+function isCurrentReport(
+  context: ProjectGuideMachineContext,
+  event: ProjectGuideEvent,
+  type: ProjectGuideOperationReport["type"],
+): boolean {
+  if (event.type !== "ADAPTER_REPORT" || event.report.type !== type) {
+    return false;
+  }
+  const scope = currentOperationScope(context);
+  return Boolean(
+    scope &&
+    event.report.scope.path === scope.path &&
+    event.report.scope.step === scope.step &&
+    event.report.scope.attempt === scope.attempt &&
+    event.report.scope.runId === scope.runId,
+  );
 }
 
 export const projectGuideMachine = setup({
@@ -515,6 +567,28 @@ export const projectGuideMachine = setup({
       ),
     nextOperation: ({ context }) => stepMode(context, 1) === "operation",
     nextCheckpoint: ({ context }) => stepMode(context, 1) === "checkpoint",
+    currentProgressReport: ({ context, event }) =>
+      isCurrentReport(context, event, "progress"),
+    currentSuccessReport: ({ context, event }) =>
+      isCurrentReport(context, event, "success"),
+    currentErrorReport: ({ context, event }) =>
+      isCurrentReport(context, event, "error"),
+    currentEventReport: ({ context, event }) =>
+      isCurrentReport(context, event, "event"),
+    currentSuccessOnFinalStep: ({ context, event }) =>
+      isCurrentReport(context, event, "success") &&
+      (currentPathIsComplete(context) ||
+        Boolean(
+          context.activePath &&
+          getProjectGuideCurrentStep(context) ===
+            pathStepCount(context.activePath) - 1,
+        )),
+    currentSuccessBeforeOperation: ({ context, event }) =>
+      isCurrentReport(context, event, "success") &&
+      stepMode(context, 1) === "operation",
+    currentSuccessBeforeCheckpoint: ({ context, event }) =>
+      isCurrentReport(context, event, "success") &&
+      stepMode(context, 1) === "checkpoint",
     pausedWhileWaiting: ({ context }) => context.pausedFrom === "waiting",
     erroredWhileWaiting: ({ context }) => context.errorFrom === "waiting",
     listenTimedOut: ({ context, event }) =>
@@ -548,25 +622,34 @@ export const projectGuideMachine = setup({
         attempt: 0,
       };
     }),
-    recordStart: assign(({ context }) => ({
-      ...appendOutput(context, [
-        { kind: "start", message: `Started · ${stepLabel(context)}` },
-      ]),
-      checkpoint:
-        stepMode(context) === "checkpoint"
-          ? {
-              step: getProjectGuideCurrentStep(context),
-              label: stepLabel(context),
-            }
-          : null,
-      error: null,
-      operationProgress: 0,
-    })),
-    recordProgress: assign(({ context, event }) => {
-      if (event.type !== "OPERATION_PROGRESS") return {};
-      const progress = event.progress;
+    recordStart: assign(({ context }) => {
+      const mode = stepMode(context);
       return {
-        ...appendOutput(context, [{ kind: "note", message: event.message }]),
+        ...appendOutput(context, [
+          { kind: "start", message: `Started · ${stepLabel(context)}` },
+        ]),
+        checkpoint:
+          mode === "checkpoint"
+            ? {
+                step: getProjectGuideCurrentStep(context),
+                label: stepLabel(context),
+              }
+            : null,
+        error: null,
+        operationProgress: 0,
+        attempt: 0,
+        runId: mode === "checkpoint" ? context.runId : context.runId + 1,
+      };
+    }),
+    recordProgress: assign(({ context, event }) => {
+      if (event.type !== "ADAPTER_REPORT" || event.report.type !== "progress") {
+        return {};
+      }
+      const progress = event.report.progress;
+      return {
+        ...appendOutput(context, [
+          { kind: "note", message: event.report.message },
+        ]),
         operationProgress:
           progress === undefined
             ? context.operationProgress
@@ -574,17 +657,22 @@ export const projectGuideMachine = setup({
       };
     }),
     recordSuccessAndAdvance: assign(({ context, event }) => {
-      if (
-        event.type !== "OPERATION_SUCCESS" &&
-        event.type !== "USER_CHECKPOINT_COMPLETE"
-      ) {
+      let result: string;
+      if (event.type === "ADAPTER_REPORT" && event.report.type === "success") {
+        result = event.report.result;
+      } else if (event.type === "USER_CHECKPOINT_COMPLETE") {
+        result = event.result;
+      } else {
         return {};
       }
       if (!context.activePath) return {};
       const nextStep = getProjectGuideCurrentStep(context) + 1;
       const nextLabel = JOURNEY_BY_ID[context.activePath].steps[nextStep];
       const entries: Array<Omit<ProjectGuideOutputEntry, "id">> = [
-        { kind: "result", message: event.result },
+        {
+          kind: "result",
+          message: result,
+        },
       ];
       if (nextLabel)
         entries.push({ kind: "next", message: `Next · ${nextLabel}` });
@@ -604,10 +692,22 @@ export const projectGuideMachine = setup({
         elapsedListeningSeconds: 0,
         operationProgress: null,
         error: null,
+        attempt: 0,
+        runId:
+          STEP_MODES[nextStep] === "operation" ||
+          STEP_MODES[nextStep] === "listen"
+            ? context.runId + 1
+            : context.runId,
       };
     }),
     recordEventAndComplete: assign(({ context, event }) => {
-      if (event.type !== "EVENT_RECEIVED" || !context.activePath) return {};
+      if (
+        event.type !== "ADAPTER_REPORT" ||
+        event.report.type !== "event" ||
+        !context.activePath
+      ) {
+        return {};
+      }
       return {
         completedByPath: {
           ...context.completedByPath,
@@ -619,22 +719,24 @@ export const projectGuideMachine = setup({
         ...appendOutput(context, [
           {
             kind: "result",
-            message: `Event received · ${event.event.title}`,
+            message: `Event received · ${event.report.event.title}`,
           },
         ]),
-        observedEvent: event.event,
+        observedEvent: event.report.event,
         checkpoint: null,
         operationProgress: null,
         error: null,
       };
     }),
     recordError: assign(({ context, event }) => {
-      if (event.type !== "OPERATION_ERROR") return {};
+      if (event.type !== "ADAPTER_REPORT" || event.report.type !== "error") {
+        return {};
+      }
       return {
         ...appendOutput(context, [
-          { kind: "note", message: `Error · ${event.message}` },
+          { kind: "note", message: `Error · ${event.report.message}` },
         ]),
-        error: event.message,
+        error: event.report.message,
       };
     }),
     recordTimeout: assign(({ context, event }) => {
@@ -702,28 +804,28 @@ export const projectGuideMachine = setup({
       error: null,
       observedEvent: null,
     }),
-    reset: assign(({ context }) =>
-      initialCoordinatorContext({
+    reset: assign(({ context }) => ({
+      ...initialCoordinatorContext({
         listenTimeoutSeconds: context.listenTimeoutSeconds,
         onSignal: context.onSignal,
       }),
-    ),
+      runId: context.runId,
+    })),
     signalStart: ({ context }) => emitCurrentSignal(context, "start"),
-    signalNextStart: ({ context }) => emitCurrentSignal(context, "start", 1),
     signalPause: ({ context }) => emitCurrentSignal(context, "pause"),
     signalResume: ({ context }) => emitCurrentSignal(context, "resume"),
     signalCheckpoint: ({ context }) => emitCurrentSignal(context, "checkpoint"),
     signalRetry: ({ context }) => {
-      if (!context.activePath) return;
+      const scope = currentOperationScope(context);
+      if (!scope) return;
       context.onSignal?.({
         type: "retry",
-        path: context.activePath,
-        step: getProjectGuideCurrentStep(context),
-        attempt: context.attempt + 1,
+        scope,
       });
     },
     signalAbort: ({ context, event }) => {
-      if (!context.activePath) return;
+      const scope = currentOperationScope(context);
+      if (!scope) return;
       const reason =
         event.type === "SWITCH"
           ? "switch"
@@ -736,8 +838,7 @@ export const projectGuideMachine = setup({
                 : "reset";
       context.onSignal?.({
         type: "abort",
-        path: context.activePath,
-        step: getProjectGuideCurrentStep(context),
+        scope,
         reason,
       });
     },
@@ -810,32 +911,37 @@ export const projectGuideMachine = setup({
     },
     running: {
       on: {
-        OPERATION_PROGRESS: { actions: "recordProgress" },
-        OPERATION_SUCCESS: [
+        ADAPTER_REPORT: [
           {
-            guard: "finalStep",
+            guard: "currentProgressReport",
+            actions: "recordProgress",
+          },
+          {
+            guard: "currentErrorReport",
+            target: "error",
+            actions: ["rememberRunningError", "recordError"],
+          },
+          {
+            guard: "currentSuccessOnFinalStep",
             target: "complete",
             actions: "recordSuccessAndAdvance",
           },
           {
-            guard: "nextOperation",
+            guard: "currentSuccessBeforeOperation",
             target: "running",
-            actions: ["signalNextStart", "recordSuccessAndAdvance"],
+            actions: ["recordSuccessAndAdvance", "signalStart"],
           },
           {
-            guard: "nextCheckpoint",
+            guard: "currentSuccessBeforeCheckpoint",
             target: "checkpoint",
             actions: "recordSuccessAndAdvance",
           },
           {
+            guard: "currentSuccessReport",
             target: "waiting",
-            actions: ["signalNextStart", "recordSuccessAndAdvance"],
+            actions: ["recordSuccessAndAdvance", "signalStart"],
           },
         ],
-        OPERATION_ERROR: {
-          target: "error",
-          actions: ["rememberRunningError", "recordError"],
-        },
         PAUSE: {
           target: "paused",
           actions: ["rememberRunningPause", "signalPause"],
@@ -855,8 +961,8 @@ export const projectGuideMachine = setup({
             target: "running",
             actions: [
               "signalCheckpoint",
-              "signalNextStart",
               "recordSuccessAndAdvance",
+              "signalStart",
             ],
           },
           {
@@ -868,8 +974,8 @@ export const projectGuideMachine = setup({
             target: "waiting",
             actions: [
               "signalCheckpoint",
-              "signalNextStart",
               "recordSuccessAndAdvance",
+              "signalStart",
             ],
           },
         ],
@@ -885,14 +991,22 @@ export const projectGuideMachine = setup({
           },
           { actions: "recordElapsed" },
         ],
-        EVENT_RECEIVED: {
-          target: "complete",
-          actions: "recordEventAndComplete",
-        },
-        OPERATION_ERROR: {
-          target: "error",
-          actions: ["rememberWaitingError", "recordError"],
-        },
+        ADAPTER_REPORT: [
+          {
+            guard: "currentEventReport",
+            target: "complete",
+            actions: "recordEventAndComplete",
+          },
+          {
+            guard: "currentErrorReport",
+            target: "error",
+            actions: ["rememberWaitingError", "recordError"],
+          },
+          {
+            guard: "currentProgressReport",
+            actions: "recordProgress",
+          },
+        ],
         PAUSE: {
           target: "paused",
           actions: ["rememberWaitingPause", "signalPause"],
@@ -917,11 +1031,11 @@ export const projectGuideMachine = setup({
           {
             guard: "erroredWhileWaiting",
             target: "waiting",
-            actions: ["signalRetry", "retry"],
+            actions: ["retry", "signalRetry"],
           },
           {
             target: "running",
-            actions: ["signalRetry", "retry"],
+            actions: ["retry", "signalRetry"],
           },
         ],
       },

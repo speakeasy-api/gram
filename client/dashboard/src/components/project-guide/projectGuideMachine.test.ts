@@ -5,6 +5,8 @@ import {
   getProjectGuideCurrentStep,
   projectGuideMachine,
   type ProjectGuideEventCard,
+  type ProjectGuideOperationReport,
+  type ProjectGuideOperationScope,
   type ProjectGuideOperationSignal,
 } from "./projectGuideMachine";
 
@@ -26,19 +28,44 @@ function openMcp(service: ReturnType<typeof coordinator>["service"]): void {
   service.send({ type: "OPEN", path: "third-party-mcp", resumeStep: 0 });
 }
 
+function latestScope(
+  signals: ProjectGuideOperationSignal[],
+): ProjectGuideOperationScope {
+  const signal = signals.at(-1);
+  if (!signal) throw new Error("expected operation signal");
+  return signal.scope;
+}
+
+function report(
+  service: ReturnType<typeof coordinator>["service"],
+  report: ProjectGuideOperationReport,
+): void {
+  service.send({ type: "ADAPTER_REPORT", report });
+}
+
 function reachCheckpoint(
   service: ReturnType<typeof coordinator>["service"],
+  signals: ProjectGuideOperationSignal[],
 ): void {
   openMcp(service);
   service.send({ type: "START" });
-  service.send({ type: "OPERATION_SUCCESS", result: "Server installed" });
-  service.send({ type: "OPERATION_SUCCESS", result: "Endpoint verified" });
+  report(service, {
+    type: "success",
+    scope: latestScope(signals),
+    result: "Server installed",
+  });
+  report(service, {
+    type: "success",
+    scope: latestScope(signals),
+    result: "Endpoint verified",
+  });
 }
 
 function reachWaiting(
   service: ReturnType<typeof coordinator>["service"],
+  signals: ProjectGuideOperationSignal[],
 ): void {
-  reachCheckpoint(service);
+  reachCheckpoint(service, signals);
   service.send({
     type: "USER_CHECKPOINT_COMPLETE",
     result: "Client connected",
@@ -70,7 +97,10 @@ describe("project guide coordinator contract", () => {
 
     expect(service.getSnapshot().value).toBe("running");
     expect(signals).toEqual([
-      { type: "start", path: "third-party-mcp", step: 0 },
+      {
+        type: "start",
+        scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
+      },
     ]);
     expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
       kind: "start",
@@ -79,13 +109,14 @@ describe("project guide coordinator contract", () => {
   });
 
   it("records automated progress and caps visible output history", () => {
-    const { service } = coordinator();
+    const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
 
     for (let index = 0; index < PROJECT_GUIDE_OUTPUT_LIMIT + 4; index++) {
-      service.send({
-        type: "OPERATION_PROGRESS",
+      report(service, {
+        type: "progress",
+        scope: latestScope(signals),
         message: `progress ${index}`,
         progress: index / 100,
       });
@@ -104,7 +135,7 @@ describe("project guide coordinator contract", () => {
 
   it("advances automated work into an explicit user checkpoint", () => {
     const { service, signals } = coordinator();
-    reachCheckpoint(service);
+    reachCheckpoint(service, signals);
 
     expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(2);
@@ -114,8 +145,7 @@ describe("project guide coordinator contract", () => {
     });
     expect(signals).toContainEqual({
       type: "start",
-      path: "third-party-mcp",
-      step: 1,
+      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 2 },
     });
 
     service.send({
@@ -139,8 +169,7 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().value).toBe("paused");
     expect(signals.at(-1)).toEqual({
       type: "pause",
-      path: "third-party-mcp",
-      step: 0,
+      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
     });
 
     service.send({ type: "RESUME" });
@@ -148,8 +177,7 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().value).toBe("running");
     expect(signals.at(-1)).toEqual({
       type: "resume",
-      path: "third-party-mcp",
-      step: 0,
+      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
     });
   });
 
@@ -157,7 +185,11 @@ describe("project guide coordinator contract", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
-    service.send({ type: "OPERATION_SUCCESS", result: "Server installed" });
+    report(service, {
+      type: "success",
+      scope: latestScope(signals),
+      result: "Server installed",
+    });
 
     const { context } = service.getSnapshot();
     expect(service.getSnapshot().value).toBe("running");
@@ -169,8 +201,7 @@ describe("project guide coordinator contract", () => {
     ]);
     expect(signals.at(-1)).toEqual({
       type: "start",
-      path: "third-party-mcp",
-      step: 1,
+      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 2 },
     });
   });
 
@@ -178,7 +209,11 @@ describe("project guide coordinator contract", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
-    service.send({ type: "OPERATION_ERROR", message: "Catalog unavailable" });
+    report(service, {
+      type: "error",
+      scope: latestScope(signals),
+      message: "Catalog unavailable",
+    });
 
     expect(service.getSnapshot().value).toBe("error");
     expect(service.getSnapshot().context.error).toBe("Catalog unavailable");
@@ -189,15 +224,13 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().context.attempt).toBe(1);
     expect(signals.at(-1)).toEqual({
       type: "retry",
-      path: "third-party-mcp",
-      step: 0,
-      attempt: 1,
+      scope: { path: "third-party-mcp", step: 0, attempt: 1, runId: 1 },
     });
   });
 
   it("tracks listening elapsed time and fails recoverably at the timeout", () => {
-    const { service } = coordinator(60);
-    reachWaiting(service);
+    const { service, signals } = coordinator(60);
+    reachWaiting(service, signals);
 
     expect(service.getSnapshot().value).toBe("waiting");
     service.send({ type: "LISTEN_TICK", elapsedSeconds: 12 });
@@ -211,7 +244,7 @@ describe("project guide coordinator contract", () => {
 
   it("rewinds progress and aborts work at the prior step", () => {
     const { service, signals } = coordinator();
-    reachCheckpoint(service);
+    reachCheckpoint(service, signals);
     service.send({ type: "REWIND", step: 1 });
 
     expect(service.getSnapshot().value).toBe("ready");
@@ -221,8 +254,7 @@ describe("project guide coordinator contract", () => {
     ).toEqual([0]);
     expect(signals.at(-1)).toEqual({
       type: "abort",
-      path: "third-party-mcp",
-      step: 2,
+      scope: { path: "third-party-mcp", step: 2, attempt: 0, runId: 2 },
       reason: "rewind",
     });
   });
@@ -238,7 +270,7 @@ describe("project guide coordinator contract", () => {
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
     expect(signals.at(-1)).toMatchObject({
       type: "abort",
-      path: "third-party-mcp",
+      scope: { path: "third-party-mcp" },
       reason: "switch",
     });
 
@@ -251,7 +283,7 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().value).toBe("exited");
     expect(signals.at(-1)).toMatchObject({
       type: "abort",
-      path: "secret-block",
+      scope: { path: "secret-block" },
       reason: "exit",
     });
 
@@ -264,10 +296,14 @@ describe("project guide coordinator contract", () => {
   });
 
   it("completes only after a newly received event is recorded", () => {
-    const { service } = coordinator();
-    reachWaiting(service);
+    const { service, signals } = coordinator();
+    reachWaiting(service, signals);
 
-    service.send({ type: "EVENT_RECEIVED", event: observedEvent });
+    report(service, {
+      type: "event",
+      scope: latestScope(signals),
+      event: observedEvent,
+    });
 
     const { context } = service.getSnapshot();
     expect(service.getSnapshot().value).toBe("complete");
@@ -277,5 +313,83 @@ describe("project guide coordinator contract", () => {
       kind: "result",
       message: "Event received · tools/list",
     });
+  });
+
+  it("rejects a late success from a switched journey", () => {
+    const { service, signals } = coordinator();
+    openMcp(service);
+    service.send({ type: "START" });
+    const staleStart = signals.at(-1);
+    expect(staleStart?.type).toBe("start");
+
+    service.send({ type: "SWITCH", path: "secret-block", resumeStep: 0 });
+    service.send({ type: "START" });
+    const currentStart = signals.at(-1);
+    expect(currentStart?.type).toBe("start");
+
+    if (staleStart?.type !== "start" || currentStart?.type !== "start") {
+      throw new Error("expected start signals");
+    }
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "success",
+        scope: staleStart.scope,
+        result: "Late MCP success",
+      },
+    });
+
+    expect(service.getSnapshot().context.activePath).toBe("secret-block");
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(0);
+
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "success",
+        scope: currentStart.scope,
+        result: "Current secret success",
+      },
+    });
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
+  });
+
+  it("rejects a duplicate success from the attempt before retry", () => {
+    const { service, signals } = coordinator();
+    openMcp(service);
+    service.send({ type: "START" });
+    const firstAttempt = signals.at(-1);
+    if (firstAttempt?.type !== "start") throw new Error("expected start");
+
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "error",
+        scope: firstAttempt.scope,
+        message: "Temporary failure",
+      },
+    });
+    service.send({ type: "RETRY" });
+    const retry = signals.at(-1);
+    if (retry?.type !== "retry") throw new Error("expected retry");
+
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "success",
+        scope: firstAttempt.scope,
+        result: "Stale success",
+      },
+    });
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(0);
+
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "success",
+        scope: retry.scope,
+        result: "Retry success",
+      },
+    });
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
   });
 });

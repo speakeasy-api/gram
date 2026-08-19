@@ -13,7 +13,8 @@ import {
   type JourneyStatus,
 } from "./journeys";
 import type {
-  ProjectGuideEvent,
+  ProjectGuideOperationReport,
+  ProjectGuideOperationScope,
   ProjectGuideOperationSignal,
 } from "./projectGuideMachine";
 
@@ -161,7 +162,10 @@ describe("ProjectGuide", () => {
       "running",
     );
     expect(signals).toEqual([
-      { type: "start", path: "third-party-mcp", step: 0 },
+      {
+        type: "start",
+        scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
+      },
     ]);
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
@@ -169,21 +173,25 @@ describe("ProjectGuide", () => {
   });
 
   it("renders checkpoint, waiting, and observed-event completion from adapter reports", () => {
-    let report: (event: ProjectGuideEvent) => void = () => undefined;
+    let report: (report: ProjectGuideOperationReport) => void = () => undefined;
+    let activeScope: ProjectGuideOperationScope | null = null;
     render(
       <ProjectGuide
         onOperationSignal={(signal, sendReport) => {
           report = sendReport;
+          activeScope = signal.scope;
           if (signal.type !== "start") return;
-          if (signal.step === 0) {
+          if (signal.scope.step === 0) {
             sendReport({
-              type: "OPERATION_SUCCESS",
+              type: "success",
+              scope: signal.scope,
               result: "Server installed",
             });
           }
-          if (signal.step === 1) {
+          if (signal.scope.step === 1) {
             sendReport({
-              type: "OPERATION_SUCCESS",
+              type: "success",
+              scope: signal.scope,
               result: "Endpoint verified",
             });
           }
@@ -210,10 +218,13 @@ describe("ProjectGuide", () => {
       "waiting",
     );
     expect(screen.getByRole("status").textContent).toContain("Listening");
+    if (!activeScope) throw new Error("expected waiting operation scope");
+    const waitingScope = activeScope;
 
     act(() => {
       report({
-        type: "EVENT_RECEIVED",
+        type: "event",
+        scope: waitingScope,
         event: {
           kind: "Governed call",
           tone: "allow",
@@ -240,7 +251,8 @@ describe("ProjectGuide", () => {
           if (signal.type === "start" && failStart) {
             failStart = false;
             report({
-              type: "OPERATION_ERROR",
+              type: "error",
+              scope: signal.scope,
               message: "Catalog unavailable",
             });
           }
@@ -261,7 +273,10 @@ describe("ProjectGuide", () => {
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
     );
-    expect(signals.at(-1)).toMatchObject({ type: "retry", step: 0 });
+    expect(signals.at(-1)).toMatchObject({
+      type: "retry",
+      scope: { step: 0, attempt: 1 },
+    });
   });
 
   it("renders supplied current content, output, event, and action callbacks", () => {
@@ -305,6 +320,70 @@ describe("ProjectGuide", () => {
 
     expect(onPrimaryAction).toHaveBeenCalledOnce();
     expect(onSecondaryAction).toHaveBeenCalledOnce();
+  });
+
+  it("keeps activity history bounded and scrolls to the latest output", () => {
+    const journey = PROJECT_GUIDE_JOURNEYS[1]!;
+    const { rerender } = render(
+      <ProjectGuideRun
+        journey={journey}
+        status="in-progress"
+        regionId="scroll-run"
+        displayState="running"
+        completedSteps={[]}
+        currentStep={0}
+        output={<span>First output</span>}
+        primaryAction={{ label: "Pause" }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+    const activity = screen.getByRole("log", { name: "Journey A activity" });
+    Object.defineProperty(activity, "scrollHeight", {
+      configurable: true,
+      value: 400,
+    });
+    activity.scrollTop = 0;
+
+    rerender(
+      <ProjectGuideRun
+        journey={journey}
+        status="in-progress"
+        regionId="scroll-run"
+        displayState="running"
+        completedSteps={[]}
+        currentStep={0}
+        output={<span>Latest output</span>}
+        primaryAction={{ label: "Pause" }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    expect(activity.className).toContain("max-h-");
+    expect(activity.scrollTop).toBe(400);
+  });
+
+  it("keeps elapsed listening ticks out of the polite live status", () => {
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="in-progress"
+        regionId="waiting-run"
+        displayState="waiting"
+        completedSteps={[0, 1, 2, 3]}
+        currentStep={4}
+        output={<span>Listening started</span>}
+        primaryAction={{ label: "Pause listening" }}
+        listeningElapsedSeconds={12}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toBe(
+      "Listening for an event",
+    );
+    expect(screen.getByText("12s elapsed").getAttribute("aria-hidden")).toBe(
+      "true",
+    );
   });
 
   it("resumes artifact progress without inventing output or an observed event", () => {

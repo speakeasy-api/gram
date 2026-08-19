@@ -24,6 +24,7 @@ import {
   projectGuideMachine,
   type ProjectGuideDisplayState,
   type ProjectGuideEvent,
+  type ProjectGuideOperationReport,
   type ProjectGuideOperationSignal,
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
@@ -42,13 +43,15 @@ export function ProjectGuide({
 }: {
   onOperationSignal?: (
     signal: ProjectGuideOperationSignal,
-    report: (event: ProjectGuideEvent) => void,
+    report: (report: ProjectGuideOperationReport) => void,
   ) => void;
 } = {}): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const operationSignalRef = useRef(onOperationSignal);
-  const reportRef = useRef<(event: ProjectGuideEvent) => void>(() => undefined);
+  const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
+    () => undefined,
+  );
   operationSignalRef.current = onOperationSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
     input: {
@@ -56,7 +59,7 @@ export function ProjectGuide({
         operationSignalRef.current?.(signal, reportRef.current),
     },
   });
-  reportRef.current = send;
+  reportRef.current = (report) => send({ type: "ADAPTER_REPORT", report });
   const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
     useState(false);
   const [searchParams, setSearchParams] = useSearchParams();

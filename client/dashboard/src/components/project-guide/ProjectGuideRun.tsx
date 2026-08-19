@@ -9,7 +9,7 @@ import type {
 } from "@/components/project-guide/projectGuideMachine";
 import { cn } from "@/lib/utils";
 import { motion, useReducedMotion } from "motion/react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export type ProjectGuideRunAction = {
   label: string;
@@ -125,6 +125,12 @@ export function ProjectGuideRun({
       onClick: onSwitchJourney,
     };
   }
+
+  const activityLogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const activityLog = activityLogRef.current;
+    if (activityLog) activityLog.scrollTop = activityLog.scrollHeight;
+  }, [resolvedOutput]);
 
   if (isComplete) {
     return (
@@ -248,10 +254,11 @@ export function ProjectGuideRun({
             </div>
             <span className="h-px bg-[#EBEBEB]" />
             <div
+              ref={activityLogRef}
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
+              className="flex h-[180px] max-h-[180px] min-h-[120px] flex-none flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
             >
               <span className="font-mono text-[9px] tracking-[0.09em] text-[#121212]/45 uppercase">
                 Activity
@@ -261,12 +268,13 @@ export function ProjectGuideRun({
               </div>
             </div>
             {displayState === "waiting" && (
-              <span
-                role="status"
-                className="font-mono text-[10px] text-[#121212]/50"
-              >
-                Listening · {Math.floor(listeningElapsedSeconds)}s elapsed
-              </span>
+              <div className="flex gap-1 font-mono text-[10px] text-[#121212]/50">
+                <span role="status">Listening for an event</span>
+                <span aria-hidden="true">·</span>
+                <span aria-hidden="true">
+                  {Math.floor(listeningElapsedSeconds)}s elapsed
+                </span>
+              </div>
             )}
             {resolvedEventCard}
             <button
