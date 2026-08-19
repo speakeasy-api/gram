@@ -904,7 +904,7 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 			Attribute("user_ids", ArrayOf(String), "The user identifiers to list challenges for. Pass every identifier a subject is known by: the id recorded on a challenge is whichever one the agent reported at the time.")
 			Attribute("status", String, "Optional status to filter by.", func() {
-				Enum("challenged", "acknowledged", "declined")
+				Enum(riskPolicyChallengeStatuses...)
 			})
 			Attribute("limit", Int, "Maximum number of challenges to return.", func() {
 				Minimum(1)
@@ -2018,6 +2018,11 @@ var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResul
 	Required("requests")
 })
 
+// riskPolicyChallengeStatuses is the challenge lifecycle vocabulary. The
+// filter and the result type both read it so a new state cannot be added to
+// one and missed on the other.
+var riskPolicyChallengeStatuses = []any{"challenged", "acknowledged", "declined"}
+
 var RiskPolicyChallenge = Type("RiskPolicyChallenge", func() {
 	Description("One warn/challenge lifecycle record: a warn-action policy matched, and the user was asked to acknowledge before proceeding.")
 
@@ -2031,7 +2036,7 @@ var RiskPolicyChallenge = Type("RiskPolicyChallenge", func() {
 	Attribute("user_id", String, "The user identifier the challenge was recorded against.")
 	Attribute("tool_name", String, "The tool the challenge applies to. Absent for a non-tool challenge.")
 	Attribute("status", String, "Where the challenge got to.", func() {
-		Enum("challenged", "acknowledged", "declined")
+		Enum(riskPolicyChallengeStatuses...)
 	})
 	Attribute("entity", String, "Log-safe description of what was flagged. Never the matched value itself.")
 	Attribute("rule_id", String, "The rule that matched.")

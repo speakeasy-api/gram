@@ -374,15 +374,27 @@ func NewListMemberGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		p := req.(*ListMemberGrantsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
 		}
 		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -56,11 +56,20 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
 	}
+	// Blank entries would leave a non-empty array that matches no row, so a
+	// filter of only whitespace must read as no filter at all.
+	requesterUserIDs := make([]string, 0, len(payload.RequesterUserIds))
+	for _, id := range payload.RequesterUserIds {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			requesterUserIDs = append(requesterUserIDs, trimmed)
+		}
+	}
+
 	rows, err := s.repo.ListRiskPolicyBypassRequests(ctx, repo.ListRiskPolicyBypassRequestsParams{
 		ProjectID:        *authCtx.ProjectID,
 		RiskPolicyID:     policyID,
 		Status:           conv.PtrToPGText(payload.Status),
-		RequesterUserIds: payload.RequesterUserIds,
+		RequesterUserIds: requesterUserIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policy bypass requests").LogError(ctx, s.logger)

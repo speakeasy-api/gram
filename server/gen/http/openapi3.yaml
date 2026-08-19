@@ -2230,6 +2230,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listMemberGrants access
             tags:

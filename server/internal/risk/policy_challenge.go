@@ -391,7 +391,7 @@ func riskPolicyChallengeView(row repo.RiskPolicyChallenge) *gen.RiskPolicyChalle
 		Status:         row.Status,
 		Entity:         conv.FromPGText[string](row.Entity),
 		RuleID:         conv.FromPGText[string](row.RuleID),
-		ChallengedAt:   row.ChallengedAt.Time.Format(time.RFC3339),
+		ChallengedAt:   conv.FromPGTimestamptz(row.ChallengedAt),
 		AcknowledgedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.AcknowledgedAt)),
 		ExpiresAt:      conv.PtrEmpty(conv.FromPGTimestamptz(row.ExpiresAt)),
 	}

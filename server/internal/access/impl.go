@@ -445,12 +445,13 @@ func (s *Service) ListMemberGrants(ctx context.Context, payload *gen.ListMemberG
 		attr.AccessMemberID(payload.UserID),
 	)
 
+	// An id belonging to nobody is not an error here: principal resolution
+	// still produces the org-wide subject set, so the answer is the grants
+	// that would apply to anyone.
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, authz.ErrPrincipalInvalid):
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid member principal").LogError(ctx, logger)
-	case errors.Is(err, authz.ErrPrincipalNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve member principals").LogError(ctx, logger)
 	}

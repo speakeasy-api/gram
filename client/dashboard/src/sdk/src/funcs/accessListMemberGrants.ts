@@ -125,6 +125,13 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
+    [
+      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
         value: security?.sessionHeaderGramSession,

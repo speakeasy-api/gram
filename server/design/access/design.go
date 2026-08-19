@@ -228,6 +228,10 @@ var _ = Service("access", func() {
 
 	Method("listMemberGrants", func() {
 		Description("List another member's effective grants, including the ones inherited from their roles.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
 
 		Payload(func() {
 			Extend(ListMemberGrantsForm)
