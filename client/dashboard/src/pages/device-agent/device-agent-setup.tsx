@@ -25,7 +25,6 @@ import { Link } from "react-router";
 import {
   RemoteNetworkAccessStep,
   RemoteOrganizationDefaultStep,
-  RemoteSessionStartStep,
   RemoteSetupScriptStep,
 } from "./device-agent-cloud-setup";
 
@@ -1079,10 +1078,6 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
       {
         title: "Install and configure the agent",
         body: <RemoteSetupScriptStep />,
-      },
-      {
-        title: "Install the per-session startup hook",
-        body: <RemoteSessionStartStep />,
       },
       {
         title: "Make it the organization default",

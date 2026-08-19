@@ -1,270 +1,55 @@
-// Builders for the Claude Code on the web (Anthropic-hosted VM) device-agent
-// path. Kept pure so the install contract is unit-tested: the setup script
-// lays down binaries, managed.json, and the per-session bootstrap; SessionStart
-// only invokes that bootstrap. We never emit Claude observability hooks here.
-
 export const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 
 export const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 
-/** Sentinel spliced into the setup script until an org_token is minted. */
+/** Sentinel spliced into the startup script until an org_token is minted. */
 export const CLOUD_ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";
 
-/** Stable path provisioned by the setup script and invoked by SessionStart. */
-export const CLOUD_AGENT_BOOTSTRAP_PATH = "/usr/local/bin/speakeasy-bootstrap";
-
-const CLOUD_HELPER_PATH = "/usr/lib/speakeasy/speakeasy-helper";
-const CLAUDE_MANAGED_SETTINGS_PATH = "/etc/claude-code/managed-settings.json";
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// Same charset the OS-tile snippets require: a manifest version is inlined
-// into a root shell script, so reject anything that isn't strict semver
-// (optionally with a prerelease suffix).
 export const PINNED_AGENT_VERSION =
   /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
 
-export type CloudSetupScriptInput = {
+export const RELEASE_SHA256 = /^[0-9a-f]{64}$/;
+
+export type CloudSetupCommandInput = {
   version: string;
-  orgSlug: string;
-  orgName: string;
-  orgToken: string;
-  /** Identity used by agent.getPlugins and remote-session reporting. */
+  sha256: string;
   email: string;
+  orgToken: string;
 };
 
-export function buildCloudManagedConfig(
-  input: Omit<CloudSetupScriptInput, "version">,
-): Record<string, unknown> {
+export function buildCloudSetupCommand(input: CloudSetupCommandInput): string {
   const email = input.email.trim();
-  if (!EMAIL_PATTERN.test(email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error("a valid remote session identity email is required");
   }
-
-  const config: Record<string, unknown> = {
-    v: 1,
-    email,
-  };
-  config.org_token = input.orgToken;
-  config.org_slug = input.orgSlug;
-  config.org_name = input.orgName;
-  config.auto_update = "disabled";
-  config.hide_ui = true;
-  return config;
-}
-
-function assertPinnedAgentVersion(version: string): string {
-  if (!PINNED_AGENT_VERSION.test(version)) {
-    throw new Error(
-      `refusing to interpolate agent version into a root shell script: ${version}`,
-    );
+  if (!PINNED_AGENT_VERSION.test(input.version)) {
+    throw new Error("a valid pinned device agent version is required");
   }
-  return version;
-}
+  if (!RELEASE_SHA256.test(input.sha256)) {
+    throw new Error("a valid device agent CLI checksum is required");
+  }
 
-/**
- * Idempotent, cloud-only bootstrap installed into the cached filesystem.
- * It mirrors the device-agent ephemeral-VM contract: the helper runs as root,
- * the daemon runs as the same user as Claude, and startup waits for the first
- * policy sync without making a transient agent failure block Claude entirely.
- */
-export function buildCloudAgentBootstrapScript(): string {
-  return `#!/usr/bin/env bash
-# Start Speakeasy enforcement for an Anthropic-hosted Claude Code session.
-set -uo pipefail
-
-if [ "\${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
-  exit 0
-fi
-
-LOG_DIR="\${SPEAKEASY_LOG_DIR:-\${TMPDIR:-/tmp}}"
-WAIT_SECS="\${SPEAKEASY_WAIT_SECS:-30}"
-HELPER="${CLOUD_HELPER_PATH}"
-DAEMON="/usr/local/bin/speakeasyd"
-CLI="/usr/local/bin/speakeasy"
-
-log() { printf 'speakeasy-bootstrap: %s\\n' "$*" >&2; }
-
-EXPECT_ROOT=0
-if [ -S /run/com.speakeasy.helper.sock ] && pgrep -f '(^|/)speakeasy-helper($| )' >/dev/null 2>&1; then
-  EXPECT_ROOT=1
-else
-  if [ ! -x "$HELPER" ]; then
-    log "helper not found at $HELPER; managed enforcement will fall back to the user layer"
-  elif [ "$(id -u)" = "0" ]; then
-    "$HELPER" >>"$LOG_DIR/speakeasy-helper.log" 2>&1 &
-    EXPECT_ROOT=1
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    sudo -n "$HELPER" >>"$LOG_DIR/speakeasy-helper.log" 2>&1 &
-    EXPECT_ROOT=1
-  else
-    log "cannot start the root helper; managed enforcement will fall back to the user layer"
-  fi
-fi
-
-if ! pgrep -u "$(id -u)" -x speakeasyd >/dev/null 2>&1; then
-  "$DAEMON" >>"$LOG_DIR/speakeasyd.log" 2>&1 &
-fi
-
-deadline=$((SECONDS + WAIT_SECS))
-last_sync_nudge=-5
-while [ "$SECONDS" -lt "$deadline" ]; do
-  if status=$("$CLI" status 2>/dev/null) && printf '%s' "$status" | grep -q '^synced:'; then
-    if [ "$EXPECT_ROOT" = "1" ] && printf '%s' "$status" | grep -q 'pending:'; then
-      if [ -S /run/com.speakeasy.helper.sock ] && [ $((SECONDS - last_sync_nudge)) -ge 5 ]; then
-        last_sync_nudge=$SECONDS
-        "$CLI" sync >/dev/null 2>&1 || true
-      fi
-      sleep 0.5
-      continue
-    fi
-    log "policy synced"
-    exit 0
-  fi
-  sleep 0.5
-done
-
-log "policy did not sync within \${WAIT_SECS}s; check $LOG_DIR/speakeasyd.log"
-"$CLI" status 2>&1 || true
-exit 0
-`;
-}
-
-/**
- * Anthropic environment setup script (runs as root, cache miss only).
- * Installs linux_amd64 binaries + the helper .deb, writes managed.json, and
- * installs the bootstrap that SessionStart invokes. It does not start the
- * agent and does not write Claude settings.
- */
-export function buildCloudSetupScript(input: CloudSetupScriptInput): string {
-  const version = assertPinnedAgentVersion(input.version);
-  const managedJson = JSON.stringify(buildCloudManagedConfig(input), null, 2);
-  const bootstrapScript = buildCloudAgentBootstrapScript();
-  const base = `${RELEASES_BASE}/v${version}`;
-  const daemon = `speakeasyd_${version}_linux_amd64`;
-  const cli = `speakeasy_${version}_linux_amd64`;
-  const helperPkg = `speakeasy-helper_${version}_linux_amd64.deb`;
+  const cliURL = `${RELEASES_BASE}/v${input.version}/speakeasy_${input.version}_linux_amd64`;
 
   return `#!/usr/bin/env bash
-# Speakeasy device agent — Anthropic-hosted Claude Code environment.
-# Runs as root on a cache miss only. Does not start the agent: Anthropic
-# snapshots the filesystem and skips this script on later sessions, so
-# SessionStart is what brings the daemon up.
 set -euo pipefail
 
-VERSION="${version}"
-BASE="${base}"
+CLI="$(mktemp)"
+trap 'rm -f "$CLI"' EXIT
 
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-cd "$TMP"
-curl -fsSL -o checksums.txt "$BASE/checksums.txt"
-fetch_and_verify() {
-  curl -fSL -o "$1" "$BASE/$1"
-  grep " $1$" checksums.txt | sha256sum -c -
-}
+curl -fsSL -o "$CLI" ${shellQuote(cliURL)}
+printf '%s  %s\\n' ${shellQuote(input.sha256)} "$CLI" | sha256sum -c -
+chmod 0755 "$CLI"
 
-install -d -m 0755 /usr/local/bin
-fetch_and_verify "${daemon}"
-install -m 0755 "${daemon}" /usr/local/bin/speakeasyd
-fetch_and_verify "${cli}"
-install -m 0755 "${cli}" /usr/local/bin/speakeasy
-fetch_and_verify "${helperPkg}"
-DEBIAN_FRONTEND=noninteractive apt-get install -y "./${helperPkg}"
-
-cat >${CLOUD_AGENT_BOOTSTRAP_PATH} <<'SPEAKEASY_BOOTSTRAP'
-${bootstrapScript}SPEAKEASY_BOOTSTRAP
-chmod 0755 ${CLOUD_AGENT_BOOTSTRAP_PATH}
-
-install -d -m 0755 /etc/speakeasy
-cat >/etc/speakeasy/managed.json <<'SPEAKEASY_MANAGED_JSON'
-${managedJson}
-SPEAKEASY_MANAGED_JSON
-# The daemon runs as Claude's session user and must be able to read this file.
-chmod 0644 /etc/speakeasy/managed.json
+SPEAKEASY_EMAIL=${shellQuote(email)} \\
+SPEAKEASY_ORG_TOKEN=${shellQuote(input.orgToken)} \\
+"$CLI" setup --anthropic-cloud
 `;
 }
 
-/**
- * SessionStart invokes the bootstrap installed by the environment setup
- * script. Process management stays in that script instead of being embedded
- * as a multiline JSON command.
- */
-export function buildCloudAgentStartCommand(): string {
-  return CLOUD_AGENT_BOOTSTRAP_PATH;
-}
-
-function cloudAgentStartHookEntry() {
-  return {
-    matcher: "startup|resume",
-    hooks: [
-      {
-        type: "command",
-        command: buildCloudAgentStartCommand(),
-        timeout: 45,
-      },
-    ],
-  };
-}
-
-/** Canonical SessionStart shape installed by buildCloudAgentHookInstallScript. */
-export function buildCloudAgentStartHook(): string {
-  return `${JSON.stringify(
-    {
-      hooks: {
-        SessionStart: [cloudAgentStartHookEntry()],
-      },
-    },
-    null,
-    2,
-  )}\n`;
-}
-
-/**
- * Setup-script fragment that installs the SessionStart hook into Claude's
- * system-managed settings. The device agent's managed reconciler preserves
- * admin-authored hooks while adding or updating its observability handlers.
- */
-export function buildCloudAgentHookInstallScript(): string {
-  const hookEntry = JSON.stringify(cloudAgentStartHookEntry(), null, 2);
-
-  return `#!/usr/bin/env bash
-# Append this to the Anthropic environment Setup script after the agent install.
-set -euo pipefail
-
-python3 <<'PY'
-import json
-import os
-import tempfile
-from pathlib import Path
-
-path = Path("${CLAUDE_MANAGED_SETTINGS_PATH}")
-settings = json.loads(path.read_text()) if path.exists() else {}
-session_start = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
-hook = ${hookEntry}
-command = hook["hooks"][0]["command"]
-
-installed = any(
-    handler.get("command") == command
-    for entry in session_start
-    for handler in entry.get("hooks", [])
-)
-if not installed:
-    session_start.append(hook)
-
-path.parent.mkdir(parents=True, exist_ok=True)
-fd, temporary_path = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-try:
-    with os.fdopen(fd, "w") as file:
-        json.dump(settings, file, indent=2)
-        file.write("\\n")
-    os.chmod(temporary_path, 0o644)
-    os.replace(temporary_path, path)
-except BaseException:
-    os.unlink(temporary_path)
-    raise
-PY
-`;
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 /** Placeholder merge snippet; the env id is copied from Claude after create. */

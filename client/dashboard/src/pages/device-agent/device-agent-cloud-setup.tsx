@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
@@ -15,22 +14,32 @@ import React, { useId, useState } from "react";
 import { Link } from "react-router";
 
 import {
-  buildCloudAgentHookInstallScript,
   buildCloudDefaultEnvironmentSnippet,
-  buildCloudSetupScript,
+  buildCloudSetupCommand,
   CLOUD_ORG_TOKEN_SENTINEL,
   MANIFEST_URL,
   PINNED_AGENT_VERSION,
+  RELEASE_SHA256,
 } from "./cloud-setup";
 
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ReleasesManifest = {
-  latest: Record<string, { version: string }>;
+  latest: Record<
+    string,
+    {
+      version: string;
+      artifacts: {
+        goos: string;
+        goarch: string;
+        sha256: string;
+      }[];
+    }
+  >;
 };
 
-function usePinnedAgentVersion() {
+function usePinnedAgentCLI() {
   const query = useQuery<ReleasesManifest>({
     queryKey: ["device-agent-releases"],
     queryFn: async () => {
@@ -43,9 +52,23 @@ function usePinnedAgentVersion() {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
-  const raw = query.data?.latest?.speakeasyd?.version;
-  const version = raw && PINNED_AGENT_VERSION.test(raw) ? raw : null;
-  return { version, isError: query.isError, isLoading: query.isPending };
+  const release = query.data?.latest?.speakeasy;
+  const version =
+    release?.version && PINNED_AGENT_VERSION.test(release.version)
+      ? release.version
+      : null;
+  const artifact = release?.artifacts.find(
+    (candidate) => candidate.goos === "linux" && candidate.goarch === "amd64",
+  );
+  const sha256 =
+    artifact?.sha256 && RELEASE_SHA256.test(artifact.sha256)
+      ? artifact.sha256
+      : null;
+  return {
+    release: version && sha256 ? { version, sha256 } : null,
+    isError: query.isError,
+    isLoading: query.isPending,
+  };
 }
 
 function InlineLink({
@@ -105,18 +128,22 @@ function GenerateInlineButton({
   );
 }
 
-function CloudSetupScript({ version }: { version: string }) {
-  const { name: orgName, slug: orgSlug } = useOrganization();
+function CloudSetupScript({
+  version,
+  sha256,
+}: {
+  version: string;
+  sha256: string;
+}) {
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const identityEmailId = useId();
   const [identityEmail, setIdentityEmail] = useState("");
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   const buildScript = (orgToken: string) =>
-    buildCloudSetupScript({
+    buildCloudSetupCommand({
       version,
-      orgSlug: orgSlug || "acme-corp",
-      orgName: orgName || "Acme Corporation",
+      sha256,
       orgToken,
       email: identityEmail.trim(),
     });
@@ -170,18 +197,17 @@ function CloudSetupScript({ version }: { version: string }) {
       <Alert variant="info">
         <AlertTitle>Remote sessions use managed enrollment</AlertTitle>
         <AlertDescription>
-          The device agent supports personal enrollment, where a one-shot OAuth
-          login stores only the user&apos;s email, and managed enrollment, where
-          an admin provides both an identity and an agent-scoped{" "}
-          <code>org_token</code>. A headless shared VM cannot use interactive
-          OAuth, and policy sync requires the org token, so this setup uses
-          managed enrollment.
+          Interactive machines can enroll through a browser sign-in. A headless
+          shared VM cannot, so this flow uses managed enrollment: an admin
+          provides the shared reporting identity and an agent-scoped{" "}
+          <code>org_token</code>.
         </AlertDescription>
       </Alert>
       <Text small muted>
         Paste this into the environment&apos;s <strong>Setup script</strong>{" "}
-        field. It installs the agent, its root helper, a per-session bootstrap,
-        and <code>managed.json</code>. It runs as root on a cache miss only.
+        field. It only downloads and verifies the device-agent CLI, then lets{" "}
+        <code>speakeasy setup --anthropic-cloud</code> configure the machine and
+        install the SessionStart hook.
       </Text>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={identityEmailId}>Shared session identity</Label>
@@ -210,10 +236,9 @@ function CloudSetupScript({ version }: { version: string }) {
           {hasExistingAgentKey ? "Rotate token" : "Generate token"}
         </strong>{" "}
         to mint the <code>org_token</code>. Pin this version; auto-update is
-        disabled because the VM lives minutes. Do not put the token in
-        Anthropic&apos;s Environment variables field: anyone who can use the
-        environment can read either surface, and the agent expects the token in{" "}
-        <code>managed.json</code>.
+        disabled because the VM lives minutes. Anyone who can use the
+        environment can read the token from the setup script or the resulting
+        agent configuration.
       </Text>
 
       {generatedToken && (
@@ -292,10 +317,12 @@ function CloudSetupScript({ version }: { version: string }) {
 }
 
 export function RemoteSetupScriptStep(): React.JSX.Element {
-  const { version, isError, isLoading } = usePinnedAgentVersion();
+  const { release, isError, isLoading } = usePinnedAgentCLI();
 
-  if (version) {
-    return <CloudSetupScript version={version} />;
+  if (release) {
+    return (
+      <CloudSetupScript version={release.version} sha256={release.sha256} />
+    );
   }
 
   if (isLoading) {
@@ -331,9 +358,7 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         <InlineLink href="https://claude.ai/admin-settings">
           Claude admin settings
         </InlineLink>{" "}
-        for Claude Code on the web. Self-hosted <code>ccpool_…</code>{" "}
-        environments use their runner image instead and are not covered by this
-        walkthrough.
+        for Claude Code on the web.
       </Text>
       <Text small muted>
         Trusted network access does not include Gram. Set{" "}
@@ -347,29 +372,6 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
       <CodeBlock language="text">app.getgram.ai</CodeBlock>
       <Text small muted>
         Without this host the agent cannot fetch policy or send hook events.
-      </Text>
-    </div>
-  );
-}
-
-export function RemoteSessionStartStep(): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-4">
-      <Text small muted>
-        Append this block to the same Anthropic{" "}
-        <strong className="text-foreground">Setup script</strong> from the
-        previous step. It installs a system-managed SessionStart hook into the
-        cached VM filesystem, so every new or resumed session invokes the
-        bootstrap automatically.
-      </Text>
-      <CodeBlock language="bash">
-        {buildCloudAgentHookInstallScript()}
-      </CodeBlock>
-      <Text small muted>
-        The installed hook only invokes{" "}
-        <code>/usr/local/bin/speakeasy-bootstrap</code>. The device agent
-        preserves this admin-authored hook while adding its own managed
-        observability hooks.
       </Text>
     </div>
   );
