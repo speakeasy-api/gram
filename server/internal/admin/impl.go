@@ -129,15 +129,15 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		workos:         workosClient,
-		openRouter:     openRouter,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:          logger,
+		db:              db,
+		oidc:            oidcClient,
+		sessions:        sessionStore,
+		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:  allowedOrigins,
+		workos:          workosClient,
+		openRouter:      openRouter,
 		productFeatures: productFeatures,
 		audit:           audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
