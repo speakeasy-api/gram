@@ -43,6 +43,7 @@ trackedFiles:
   src/funcs/accessListRoles.ts: {}
   src/funcs/accessListScopes.ts: {}
   src/funcs/accessListShadowMCPInventory.ts: {}
+  src/funcs/accessListShadowMCPInventoryServersForUser.ts: {}
   src/funcs/accessListShadowMCPInventoryUsers.ts: {}
   src/funcs/accessRequestAccess.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
@@ -1795,6 +1796,7 @@ trackedFiles:
   src/models/operations/listservernameoverrides.ts: {}
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
+  src/models/operations/listshadowmcpinventoryserversforuser.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskillfeedback.ts: {}
@@ -2668,6 +2670,8 @@ trackedFiles:
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}
   src/react-query/shadowMCPInventoryServer.ts: {}
+  src/react-query/shadowMCPInventoryServersForUser.core.ts: {}
+  src/react-query/shadowMCPInventoryServersForUser.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
   src/react-query/shareSkill.ts: {}
@@ -6949,6 +6953,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listShadowMCPInventoryServersForUser:
+    speakeasy-default-list-shadow-MCP-inventory-servers-for-user:
+      parameters:
+        query:
+          project_id: "abac0214-8b3d-4584-88cb-96f1482ed635"
+          user_keys: ["<value 1>"]
+          limit: 50
+      responses:
+        "200":
+          application/json: {"servers": [{"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>"], "canonical_server_url": "https://remorseful-kiss.com", "first_seen": "2024-03-19T10:37:25.149Z", "last_seen": "2026-07-31T23:50:12.894Z", "observed_use_count": 201940, "request_count": 731421, "server_slug": "<value>", "top_users": [], "url_host": "<value>", "user_count": 777170}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listShadowMCPInventoryUsers:
     speakeasy-default-list-shadow-MCP-inventory-users:
       parameters:

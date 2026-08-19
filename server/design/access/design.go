@@ -373,6 +373,40 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
+	Method("listShadowMCPInventoryServersForUser", func() {
+		Description("List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.")
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("project_id", "user_keys")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPInventoryResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listShadowMCPInventoryServersForUser")
+			Param("project_id")
+			Param("user_keys")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServersForUser"}`)
+	})
+
 	Method("resolveShadowMCPInventoryRequest", func() {
 		Description("Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.")
 		Security(security.Session)

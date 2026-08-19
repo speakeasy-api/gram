@@ -467,7 +467,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsExternalUserIds string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -505,6 +505,15 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	{
 		if riskListRiskResultsUserID != "" {
 			userID = &riskListRiskResultsUserID
+		}
+	}
+	var externalUserIds []string
+	{
+		if riskListRiskResultsExternalUserIds != "" {
+			err = json.Unmarshal([]byte(riskListRiskResultsExternalUserIds), &externalUserIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for externalUserIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
 		}
 	}
 	var uniqueMatch *bool
@@ -610,6 +619,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
+	v.ExternalUserIds = externalUserIds
 	v.UniqueMatch = uniqueMatch
 	v.NonAssistant = nonAssistant
 	v.AssistantID = assistantID

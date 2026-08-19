@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListRiskResultsResult,
-  ListRiskResultsResult$inboundSchema,
-} from "../models/components/listriskresultsresult.js";
+  ListShadowMCPInventoryResult,
+  ListShadowMCPInventoryResult$inboundSchema,
+} from "../models/components/listshadowmcpinventoryresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListRiskResultsRequest,
-  ListRiskResultsRequest$outboundSchema,
-  ListRiskResultsSecurity,
-} from "../models/operations/listriskresults.js";
+  ListShadowMCPInventoryServersForUserRequest,
+  ListShadowMCPInventoryServersForUserRequest$outboundSchema,
+  ListShadowMCPInventoryServersForUserSecurity,
+} from "../models/operations/listshadowmcpinventoryserversforuser.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRiskResults risk
+ * listShadowMCPInventoryServersForUser access
  *
  * @remarks
- * List risk analysis results for the current project.
+ * List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.
  */
-export function riskResultsList(
+export function accessListShadowMCPInventoryServersForUser(
   client: GramCore,
-  request?: ListRiskResultsRequest | undefined,
-  security?: ListRiskResultsSecurity | undefined,
+  request: ListShadowMCPInventoryServersForUserRequest,
+  security?: ListShadowMCPInventoryServersForUserSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListRiskResultsResult,
+    ListShadowMCPInventoryResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function riskResultsList(
 
 async function $do(
   client: GramCore,
-  request?: ListRiskResultsRequest | undefined,
-  security?: ListRiskResultsSecurity | undefined,
+  request: ListShadowMCPInventoryServersForUserRequest,
+  security?: ListShadowMCPInventoryServersForUserSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListRiskResultsResult,
+      ListShadowMCPInventoryResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,7 +96,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(ListRiskResultsRequest$outboundSchema), value),
+      z.parse(
+        ListShadowMCPInventoryServersForUserRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -105,35 +108,17 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.listResults")();
+  const path = pathToFunc("/rpc/access.listShadowMCPInventoryServersForUser")();
 
   const query = encodeFormQuery({
-    "assistant_id": payload?.assistant_id,
-    "category": payload?.category,
-    "chat_id": payload?.chat_id,
-    "cursor": payload?.cursor,
-    "external_user_ids": payload?.external_user_ids,
-    "from": payload?.from,
-    "limit": payload?.limit,
-    "non_assistant": payload?.non_assistant,
-    "policy_id": payload?.policy_id,
-    "rule_id": payload?.rule_id,
-    "to": payload?.to,
-    "unique_match": payload?.unique_match,
-    "user_id": payload?.user_id,
+    "limit": payload.limit,
+    "project_id": payload.project_id,
+    "user_keys": payload.user_keys,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -142,26 +127,9 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option1?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-    ],
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option2?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -169,7 +137,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listRiskResults",
+    operationID: "listShadowMCPInventoryServersForUser",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -214,7 +182,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListRiskResultsResult,
+    ListShadowMCPInventoryResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -225,7 +193,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListRiskResultsResult$inboundSchema),
+    M.json(200, ListShadowMCPInventoryResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

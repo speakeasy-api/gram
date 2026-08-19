@@ -514,9 +514,18 @@ type ShadowMCPInventoryURLRow struct {
 }
 
 type ListShadowMCPInventoryUsageParams struct {
+	// OrganizationID scopes the canonical identity fold applied to UserKeys.
+	// Only needed when UserKeys is set.
+	OrganizationID      string
 	GramProjectID       string
 	CanonicalServerURLs []string
-	Limit               int
+	// UserKeys restricts the usage to calls made by these identifiers, matched
+	// against either the reported email or the user id. Leave empty for the
+	// whole project. With CanonicalServerURLs empty as well, this answers the
+	// inverse question the inventory table cannot: which shadow MCP servers
+	// one person reached.
+	UserKeys []string
+	Limit    int
 }
 
 type ShadowMCPInventoryUsageRow struct {
@@ -1178,7 +1187,7 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.CanonicalServerURLs, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.OrganizationID, arg.GramProjectID, arg.CanonicalServerURLs, arg.UserKeys, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1287,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		}
 	}
 
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, "", arg.GramProjectID, []string{arg.CanonicalServerURL}, nil, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1339,7 +1348,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID string, projectID string, canonicalServerURLs []string, userKeys []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -1354,6 +1363,31 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		GroupBy("trace_id").
 		Having("server_url != ''").
 		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")
+
+	if len(userKeys) > 0 {
+		lowered := make([]string, 0, len(userKeys))
+		for _, key := range userKeys {
+			if trimmed := strings.ToLower(strings.TrimSpace(key)); trimmed != "" {
+				lowered = append(lowered, trimmed)
+			}
+		}
+		if len(lowered) > 0 {
+			// Either identifier, because user_key itself is the email when
+			// there is one and the user id otherwise, and a caller holds both.
+			orgLit := canonicalIdentityOrgLiteral(orgID)
+			match := squirrel.Or{squirrel.Expr("lowerUTF8(trace_summaries.user_id) IN (?)", lowered)}
+			// The email leg only exists when the fold can be applied. Matching
+			// user_email raw would split one person across their work and
+			// personal addresses, which is the whole reason identity_map
+			// exists, so an org id that cannot be inlined drops the email leg
+			// rather than matching without the fold.
+			if orgLit != "" {
+				match = append(match, canonicalEmailPredicate(orgLit, "trace_summaries.user_email", lowered))
+			}
+			sb = sb.Where(match)
+			sb = withCanonicalFoldSettings(sb, orgLit)
+		}
+	}
 
 	if len(canonicalServerURLs) > 0 {
 		predicates := make(squirrel.Or, 0, len(canonicalServerURLs))

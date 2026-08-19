@@ -733,6 +733,8 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 		CursorID:       cursor,
 		Bucket:         conv.PtrToPGTextEmpty(payload.CoverageBucket),
+		UserIds:        payload.UserIds,
+		UserEmails:     payload.UserEmails,
 		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
 	})
 	if err != nil {

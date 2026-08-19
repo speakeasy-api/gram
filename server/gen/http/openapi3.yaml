@@ -2512,6 +2512,113 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventory
             x-speakeasy-react-hook:
                 name: ShadowMCPInventory
+    /rpc/access.listShadowMCPInventoryServersForUser:
+        get:
+            description: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.
+            operationId: listShadowMCPInventoryServersForUser
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.
+                  in: query
+                  name: user_keys
+                  required: true
+                  schema:
+                    description: The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListShadowMCPInventoryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listShadowMCPInventoryServersForUser access
+            tags:
+                - access
+            x-speakeasy-name-override: listShadowMCPInventoryServersForUser
+            x-speakeasy-react-hook:
+                name: ShadowMCPInventoryServersForUser
     /rpc/access.listShadowMCPInventoryUsers:
         get:
             description: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.
@@ -14452,6 +14559,24 @@ paths:
                         - unresolved_email
                         - missing
                     type: string
+                - allowEmptyValue: true
+                  description: Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+                  in: query
+                  name: user_ids
+                  schema:
+                    description: Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Only devices whose MDM-reported assigned email is one of these, matched case-insensitively.
+                  in: query
+                  name: user_emails
+                  schema:
+                    description: Only devices whose MDM-reported assigned email is one of these, matched case-insensitively.
+                    items:
+                        type: string
+                    type: array
                 - allowEmptyValue: true
                   description: Pagination cursor from a previous page.
                   in: query
@@ -39942,6 +40067,15 @@ paths:
                   schema:
                     description: Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
                     type: string
+                - allowEmptyValue: true
+                  description: Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.
+                  in: query
+                  name: external_user_ids
+                  schema:
+                    description: Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.
+                    items:
+                        type: string
+                    type: array
                 - allowEmptyValue: true
                   description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                   in: query

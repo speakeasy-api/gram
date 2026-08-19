@@ -1332,7 +1332,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		if toTime.Valid {
 			to = &toTime.Time
 		}
-		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to)
+		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 	}
 
 	var totalCount int64
@@ -1347,7 +1347,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if err != nil {
 		totalCount = 0
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1383,14 +1383,17 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ChatID:           payload.ChatID,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
-		UserID:           payload.UserID,
-		UniqueMatch:      payload.UniqueMatch,
-		NonAssistant:     payload.NonAssistant,
-		AssistantID:      payload.AssistantID,
-		From:             payload.From,
-		To:               payload.To,
-		Cursor:           payload.Cursor,
-		Limit:            payload.Limit,
+		// The agent surface lists its own project's findings; it has no
+		// identity to narrow to.
+		ExternalUserIds: nil,
+		UserID:          payload.UserID,
+		UniqueMatch:     payload.UniqueMatch,
+		NonAssistant:    payload.NonAssistant,
+		AssistantID:     payload.AssistantID,
+		From:            payload.From,
+		To:              payload.To,
+		Cursor:          payload.Cursor,
+		Limit:           payload.Limit,
 	})
 	if err != nil {
 		return nil, err
@@ -1867,7 +1870,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, uniqueMatch bool, nonAssistant bool, assistantID uuid.NullUUID, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, externalUserIDs []string, uniqueMatch bool, nonAssistant bool, assistantID uuid.NullUUID, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
@@ -1877,6 +1880,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		Category:               category,
 		RuleID:                 ruleID,
 		UserID:                 userID,
+		ExternalUserIds:        externalUserIDs,
 		UniqueMatch:            uniqueMatch,
 		NonAssistant:           nonAssistant,
 		AssistantID:            assistantID,
