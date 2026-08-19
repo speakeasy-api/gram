@@ -249,6 +249,8 @@ export function ThirdPartyMcpJourney({
   const activityCompletesJourney = Boolean(
     serverActivity && (!isPromptPhase || activityAfterPrompt),
   );
+  const completedWorkflowStatuses =
+    workflow.phase === "complete" ? workflow.statuses : undefined;
 
   useEffect(() => {
     if (!activityCompletesJourney || completionNotified.current) return;
@@ -257,16 +259,19 @@ export function ThirdPartyMcpJourney({
   }, [activityCompletesJourney, onComplete]);
 
   useEffect(() => {
-    if (workflow.phase !== "complete") return;
+    if (workflow.phase !== "complete" || !completedWorkflowStatuses) return;
     void refetchMcpServers();
     void refetchEndpoints();
     void refetchPlugins();
     void refetchRemoteMcpServers();
-    if (!workflow.statuses.some((status) => status.status === "failed")) {
+    if (
+      !completedWorkflowStatuses.some((status) => status.status === "failed")
+    ) {
       setPhase("verification");
     }
   }, [
     workflow.phase,
+    completedWorkflowStatuses,
     refetchEndpoints,
     refetchMcpServers,
     refetchPlugins,

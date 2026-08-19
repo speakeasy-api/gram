@@ -80,9 +80,11 @@ vi.mock("@/routes", () => ({
 
 import { ThirdPartyMcpJourney } from "./ThirdPartyMcpJourney";
 
+function noop(): void {}
+
 function TestProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ConfigProvider theme="light" setTheme={vi.fn()}>
+    <ConfigProvider theme="light" setTheme={noop}>
       <MemoryRouter>{children}</MemoryRouter>
     </ConfigProvider>
   );
@@ -219,8 +221,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="not-started"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -249,8 +251,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -262,8 +264,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="not-started"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -283,8 +285,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="not-started"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -311,8 +313,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="not-started"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -341,8 +343,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -366,8 +368,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -404,8 +406,8 @@ describe("ThirdPartyMcpJourney", () => {
       render(
         <ThirdPartyMcpJourney
           status="in-progress"
-          onComplete={vi.fn()}
-          onSwitchJourney={vi.fn()}
+          onComplete={noop}
+          onSwitchJourney={noop}
         />,
       );
 
@@ -439,8 +441,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -493,8 +495,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -552,8 +554,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -584,8 +586,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -630,8 +632,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -645,8 +647,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="done"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -749,8 +751,10 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -785,8 +789,10 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="done"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -830,8 +836,10 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -869,8 +877,10 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -930,8 +940,10 @@ describe("ThirdPartyMcpJourney", () => {
     const rendered = render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -962,8 +974,10 @@ describe("ThirdPartyMcpJourney", () => {
     rendered.rerender(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -984,8 +998,10 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="done"
-        onComplete={onComplete}
-        onSwitchJourney={vi.fn()}
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={noop}
       />,
     );
 
@@ -1003,8 +1019,8 @@ describe("ThirdPartyMcpJourney", () => {
     render(
       <ThirdPartyMcpJourney
         status="in-progress"
-        onComplete={vi.fn()}
-        onSwitchJourney={vi.fn()}
+        onComplete={noop}
+        onSwitchJourney={noop}
       />,
     );
 
