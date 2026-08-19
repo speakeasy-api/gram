@@ -81,7 +81,7 @@ export function OrgOverrideSection(): JSX.Element {
   return (
     <AdminSection
       title="Organization override"
-      description="Start temporary support access in another organization."
+      description="Start one hour of support access in another organization."
     >
       <form
         className="flex items-center gap-2 px-4 py-3"

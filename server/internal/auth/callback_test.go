@@ -149,7 +149,7 @@ func TestService_Callback(t *testing.T) {
 		stored, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
 		require.NoError(t, err)
 		require.Equal(t, "override-org-456", stored.SupportOrganizationID)
-		require.WithinDuration(t, time.Now().Add(15*24*time.Hour), stored.SupportExpiresAt, 5*time.Second)
+		require.WithinDuration(t, time.Now().Add(time.Hour), stored.SupportExpiresAt, 5*time.Second)
 
 		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
