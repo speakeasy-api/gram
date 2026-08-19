@@ -331,10 +331,23 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		result := chListRowToResult(row.RiskFindingListRow, titles, blocks)
-		// The dashboard renders the dismissal timestamp from this field. It
-		// carries the effective suppression time — excluded_at, or the legacy
-		// false_positive_at for a row the suppression backfill did not reach.
-		result.FalsePositiveAt = new(row.SuppressedAt.UTC().Format(time.RFC3339))
+		suppressedAt := row.SuppressedAt.UTC().Format(time.RFC3339)
+		result.SuppressedAt = &suppressedAt
+		// FalsePositiveAt is the deprecated mirror of SuppressedAt, kept
+		// populated while clients migrate to the suppressed_* fields.
+		result.FalsePositiveAt = &suppressedAt
+		// A legacy row the suppression backfill never reached carries no
+		// excluded_reason; it can only have come from a dismissal, so it maps
+		// to manual — keeping the API enum closed until the TTL retires them.
+		reason := row.SuppressedReason
+		if reason == "" {
+			reason = chrepo.ExcludedReasonManual
+		}
+		result.SuppressedReason = &reason
+		result.SuppressedDetail = conv.PtrEmpty(row.SuppressedDetail)
+		if row.ExclusionID != nil {
+			result.ExclusionID = conv.PtrEmpty(row.ExclusionID.String())
+		}
 		results = append(results, result)
 		if i == pageSize {
 			// Cursor from the LAST RETURNED row (not this extra row): the

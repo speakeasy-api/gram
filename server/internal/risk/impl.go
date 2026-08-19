@@ -4197,10 +4197,14 @@ func foundRowToResult(
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-		// FalsePositiveAt is populated later by callers (ListDismissedRiskResults)
-		// that have a dismissal timestamp to attach; every other caller leaves it
-		// unset since listRiskResults never returns a dismissed result.
-		FalsePositiveAt: nil,
+		// The PG listings behind this mapper only return open findings, so the
+		// suppression fields (and the deprecated FalsePositiveAt mirror) stay
+		// unset; the suppressed listing populates them from its own rows.
+		FalsePositiveAt:  nil,
+		SuppressedAt:     nil,
+		SuppressedReason: nil,
+		SuppressedDetail: nil,
+		ExclusionID:      nil,
 	}
 }
 

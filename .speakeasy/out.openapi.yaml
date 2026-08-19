@@ -73084,9 +73084,13 @@ components:
           type: integer
           description: End byte position within the message content.
           format: int64
+        exclusion_id:
+          type: string
+          description: The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.
+          format: uuid
         false_positive_at:
           type: string
-          description: When this result was manually marked as a false positive. Null when not dismissed.
+          description: 'Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.'
           format: date-time
         id:
           type: string
@@ -73121,6 +73125,20 @@ components:
           type: integer
           description: Start byte position within the message content.
           format: int64
+        suppressed_at:
+          type: string
+          description: When this result was suppressed (hidden from open-finding listings). Null when not suppressed.
+          format: date-time
+        suppressed_detail:
+          type: string
+          description: 'Free-form suppression context: the user-supplied dismissal reason for manual suppressions, the catalog reason for automated ones. Null when absent.'
+        suppressed_reason:
+          type: string
+          description: 'Why the result is suppressed: ''rule'' (an exclusion rule, see exclusion_id), ''manual'' (dismissed by a user), or ''automated'' (the automated false-positive sweep). Null when not suppressed.'
+          enum:
+            - rule
+            - manual
+            - automated
         tags:
           type: array
           items:

@@ -258,10 +258,14 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		Tags:              tags,
 		Spans:             nil,
 		MatchRedacted:     conv.PtrEmpty(row.MatchRedacted),
-		// The ClickHouse listing filters false_positive_at IS NULL, so a
-		// served row is never dismissed; only ListDismissedRiskResults
-		// populates this, which it does after calling this mapper.
-		FalsePositiveAt: nil,
+		// The ClickHouse listing only serves open findings, so a served row is
+		// never suppressed; only ListDismissedRiskResults populates the
+		// suppression fields, which it does after calling this mapper.
+		FalsePositiveAt:  nil,
+		SuppressedAt:     nil,
+		SuppressedReason: nil,
+		SuppressedDetail: nil,
+		ExclusionID:      nil,
 		// Message event time, not scan time: the Postgres listing exposes
 		// message_created_at as CreatedAt, and the sort order and cursor both
 		// key on it.
