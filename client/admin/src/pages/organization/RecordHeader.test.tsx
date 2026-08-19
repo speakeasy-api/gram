@@ -2,7 +2,7 @@ import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { badgeTone } from "@/lib/badgeTone";
-import type { TrialState } from "@/lib/gramAdminApi";
+import { organizationDashboardUrl, type TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { fmtDateShort } from "@/lib/utils";
 import { anOrganization } from "@/test/fixtures";
@@ -10,26 +10,11 @@ import { renderWithApp } from "@/test/harness";
 
 import { RecordHeader } from "./RecordHeader";
 
-const mocks = vi.hoisted(() => ({
-  impersonationUrl: vi.fn<(slug: string) => string | undefined>(),
-}));
-
-// The one dependency a test has to move. `__GRAM_APP_URL__` is substituted at
-// build time, so the not-configured case cannot be reached any other way.
-vi.mock("@/lib/impersonation", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/impersonation")>();
-  return { ...actual, impersonationUrl: mocks.impersonationUrl };
-});
-
-const APP_LINK = "https://app.example.test/rpc/auth.login?redirect=%2Ftest-org";
-
 beforeEach(() => {
   // UTC and this zone fall on different dates, so a created date read in the
   // reader's zone renders a day early and fails below. CI runs in UTC, where
   // that fault cannot appear at all.
   vi.stubEnv("TZ", "America/Los_Angeles");
-  mocks.impersonationUrl.mockReset();
-  mocks.impersonationUrl.mockReturnValue(APP_LINK);
 });
 
 afterEach(() => {
@@ -38,63 +23,37 @@ afterEach(() => {
 });
 
 describe("RecordHeader", () => {
-  it("omits Open in Gram when impersonationUrl returns undefined", async () => {
-    // Undefined whenever __GRAM_APP_URL__ is unset at build time. Rendering the
-    // anchor anyway gives the operator a link that takes focus and goes
-    // nowhere, which is worse than no link.
-    mocks.impersonationUrl.mockReturnValue(undefined);
-
-    await renderWithApp(<RecordHeader org={anOrganization()} />);
-
-    // By its words, not only by its role. An anchor rendered with no `href` is
-    // the shape this mistake takes, and such an anchor has no link role at all:
-    // an absence asserted by role alone passes while the dead control is on
-    // screen.
-    expect(screen.queryByText("Open in Gram")).toBeNull();
-    expect(screen.queryByRole("link", { name: /Open in Gram/ })).toBeNull();
-  });
-
-  it("shows Open in Gram when an app URL is configured", async () => {
-    await renderWithApp(<RecordHeader org={anOrganization()} />);
-
-    const link = screen.getByRole("link", { name: /Open in Gram/ });
-    expect(link.getAttribute("href")).toBe(APP_LINK);
-  });
-
-  it("leaves the record open behind Open in Gram, and names no referrer", async () => {
-    await renderWithApp(<RecordHeader org={anOrganization()} />);
-
-    const link = screen.getByRole("link", { name: /Open in Gram/ });
-    // The operator is reading a record and following a link out of it. Taking
-    // the tab loses the record they are working through.
-    expect(link.getAttribute("target")).toBe("_blank");
-    // The admin address carries the organization the operator is looking at.
-    // `noopener` is implied for `_blank`; suppressing the referrer is not.
-    expect(link.getAttribute("rel")).toContain("noreferrer");
-  });
-
-  it("says Open in Gram leaves the app, in the nav's words", async () => {
-    await renderWithApp(<RecordHeader org={anOrganization()} />);
-
-    const link = screen.getByRole("link", { name: /Open in Gram/ });
-    // Written out, not read off the constant. The same words are asserted
-    // against the nav's Features row, which is the only thing holding two links
-    // that say the same fact to one wording.
-    expect(link.textContent).toBe("Open in Gram (opens in the Gram dashboard)");
-    // Appended, not substituted. An `aria-label` would take "Open in Gram" away
-    // from a screen reader and leave the aside standing in for the label.
-    expect(link.querySelector(".sr-only")?.textContent).toBe(
-      " (opens in the Gram dashboard)",
-    );
-  });
-
-  it("impersonates through the record's slug, not its id", async () => {
-    // The server reads the first path segment of `redirect` back as the
-    // organization, so an id there lands the operator nowhere.
+  it("shows the Open in Dashboard secondary action", async () => {
     const org = anOrganization();
     await renderWithApp(<RecordHeader org={org} />);
 
-    expect(mocks.impersonationUrl).toHaveBeenCalledWith(org.slug);
+    const button = screen.getByRole("button", { name: /Open in Dashboard/ });
+    const form = button.closest("form");
+    expect(form?.getAttribute("method")).toBe("post");
+    expect(form?.getAttribute("action")).toBe(organizationDashboardUrl(org.id));
+  });
+
+  it("leaves the admin record open in its original tab", async () => {
+    await renderWithApp(<RecordHeader org={anOrganization()} />);
+
+    const form = screen
+      .getByRole("button", { name: /Open in Dashboard/ })
+      .closest("form");
+    expect(form?.getAttribute("target")).toBe("_blank");
+    expect(form?.getAttribute("rel")).toContain("noopener");
+    expect(form?.getAttribute("rel")).toContain("noreferrer");
+  });
+
+  it("identifies the new dashboard tab for assistive technology", async () => {
+    await renderWithApp(<RecordHeader org={anOrganization()} />);
+
+    const button = screen.getByRole("button", { name: /Open in Dashboard/ });
+    expect(button.textContent).toBe(
+      "Open in Dashboard (opens in the Gram dashboard)",
+    );
+    expect(button.querySelector(".sr-only")?.textContent).toBe(
+      " (opens in the Gram dashboard)",
+    );
   });
 
   it("shows the account type and created date on the meta line", async () => {

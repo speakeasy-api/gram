@@ -174,6 +174,11 @@ export function getSession(): Promise<AdminSessionInfo> {
   return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
 }
 
+export function organizationDashboardUrl(organizationId: string): string {
+  const query = new URLSearchParams({ organization_id: organizationId });
+  return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
