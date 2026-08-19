@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   excerptFromReadDoc,
   findDocsExcerpts,
+  displayHost,
   findReadDocs,
   httpsURL,
   previewText,
@@ -169,6 +170,15 @@ describe("excerptFromReadDoc", () => {
 // A tool result is assembled by a model-authored compose script, so a URL
 // arriving here is not guaranteed to be the https link the corpus emitted.
 describe("citation link safety", () => {
+  it("names the source by bare host", () => {
+    expect(displayHost("https://www.speakeasy.com/docs/x")).toBe(
+      "speakeasy.com",
+    );
+    expect(displayHost("https://docs.github.com/en/apps")).toBe(
+      "docs.github.com",
+    );
+  });
+
   it("drops any link that is not an absolute https URL", () => {
     expect(httpsURL("https://docs.github.com/en/apps")).toBe(
       "https://docs.github.com/en/apps",

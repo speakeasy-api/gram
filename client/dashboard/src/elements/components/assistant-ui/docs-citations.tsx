@@ -1,7 +1,12 @@
 import type * as React from "react";
 import { BookTextIcon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { httpsURL, previewText, type DocsExcerpt } from "./search-docs-result";
+import {
+  displayHost,
+  httpsURL,
+  previewText,
+  type DocsExcerpt,
+} from "./search-docs-result";
 
 /**
  * Inline preview cards for the reviewed guides an answer was built from.
@@ -44,7 +49,7 @@ function DocsCard({ excerpt }: { excerpt: DocsExcerpt }): React.JSX.Element {
   // script, so what arrives here is not guaranteed to be what the corpus sent;
   // a javascript: or data: URL in that position would execute on click.
   const href = httpsURL(excerpt.docs_url) ?? httpsURL(excerpt.links?.[0]);
-  const site = href ? hostOf(href) : "Speakeasy AI Control Plane";
+  const site = href ? displayHost(href) : "Speakeasy AI Control Plane";
 
   return (
     <article
@@ -98,14 +103,4 @@ function DocsCard({ excerpt }: { excerpt: DocsExcerpt }): React.JSX.Element {
       </div>
     </article>
   );
-}
-
-/** Canonical links are shown by host: the full URL is long, and what a reader
- * needs in order to judge a source is whose documentation it is. */
-function hostOf(link: string): string {
-  try {
-    return new URL(link).host;
-  } catch {
-    return link;
-  }
 }
