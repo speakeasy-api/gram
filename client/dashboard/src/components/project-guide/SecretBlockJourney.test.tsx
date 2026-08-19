@@ -8,9 +8,11 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { MemoryRouter } from "react-router";
 
 const queries = vi.hoisted(() => ({
   policies: vi.fn(),
+  results: vi.fn(),
   traces: vi.fn(),
 }));
 const mutation = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
@@ -36,6 +38,21 @@ vi.mock("@gram/client/react-query/listHooksTraces.js", () => ({
   useListHooksTraces: queries.traces,
 }));
 
+vi.mock("@gram/client/react-query/riskListResults.js", () => ({
+  useRiskListResults: queries.results,
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    riskEvents: {
+      href: () => "/organization/projects/project/risk-events",
+      Link: ({ children }: { children: React.ReactNode }) => (
+        <a href="/organization/projects/project/risk-events">{children}</a>
+      ),
+    },
+  }),
+}));
+
 import { SecretBlockJourney } from "./SecretBlockJourney";
 
 function render(ui: React.ReactNode) {
@@ -43,7 +60,7 @@ function render(ui: React.ReactNode) {
     wrapper: ({ children }) => (
       <QueryClientProvider client={new QueryClient()}>
         <ConfigProvider theme="light" setTheme={() => {}}>
-          {children}
+          <MemoryRouter>{children}</MemoryRouter>
         </ConfigProvider>
       </QueryClientProvider>
     ),
@@ -69,6 +86,27 @@ function blockingPolicy() {
   };
 }
 
+function hookTrace() {
+  return {
+    gramUrn: "urn:gram:trace:test",
+    logCount: 1,
+    startTimeUnixNano: "1",
+    traceId: "00000000000000000000000000000000",
+  };
+}
+
+function secretResult(overrides = {}) {
+  return {
+    createdAt: new Date("2026-08-19T12:00:00Z"),
+    id: "result-test",
+    policyId: "policy-test",
+    policyVersion: 1,
+    ruleId: "journey_test_rule",
+    source: "gitleaks",
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   mutation.mutateAsync.mockReset().mockResolvedValue(blockingPolicy());
   fetcher.fetch.mockReset().mockResolvedValue(new Response("zip"));
@@ -82,6 +120,11 @@ beforeEach(() => {
   });
   queries.traces.mockReset().mockReturnValue({
     data: { traces: [] },
+    isError: false,
+    isPending: false,
+  });
+  queries.results.mockReset().mockReturnValue({
+    data: { results: [], totalCount: 0 },
     isError: false,
     isPending: false,
   });
@@ -321,14 +364,7 @@ describe("SecretBlockJourney", () => {
     });
     queries.traces.mockReturnValue({
       data: {
-        traces: [
-          {
-            gramUrn: "urn:gram:trace:test",
-            logCount: 1,
-            startTimeUnixNano: "1",
-            traceId: "00000000000000000000000000000000",
-          },
-        ],
+        traces: [hookTrace()],
       },
       isError: false,
       isPending: false,
@@ -345,5 +381,215 @@ describe("SecretBlockJourney", () => {
       screen.getByText("Plugin connected. Send the synthetic secret prompt."),
     ).toBeTruthy();
     expect(screen.getByText(/AKIAIOSFODNN7EXAMPLE/)).toBeTruthy();
+  });
+
+  it("queries hook traces for this project with the bounded installation window", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+
+    render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(queries.traces).toHaveBeenCalledWith(
+      {
+        gramProject: "project-guide-test",
+        listHooksTracesPayload: {
+          from: new Date(0),
+          to: expect.any(Date),
+          typesToInclude: ["mcp", "local", "skill"],
+          limit: 10,
+          sort: "desc",
+        },
+      },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
+    const traceOptions = queries.traces.mock.calls[0]?.[2];
+    expect(
+      traceOptions.refetchInterval({
+        state: { data: { traces: [hookTrace()] } },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat a failed hook query as an installed plugin", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: true,
+      isPending: false,
+    });
+
+    render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Download the observability plugin",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Plugin connected/)).toBeNull();
+  });
+
+  it("names the selected client beside the safe synthetic-secret prompt", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const view = render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Cursor" }), {
+      button: 0,
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+
+    view.rerender(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/Copy this into Cursor/)).toBeTruthy();
+    expect(screen.getByText(/AKIAIOSFODNN7EXAMPLE/)).toBeTruthy();
+  });
+
+  it("renders the newest blocked risk result without its raw match", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+    queries.results.mockReturnValue({
+      data: {
+        results: [
+          secretResult({ createdAt: new Date("2026-08-19T11:00:00Z") }),
+          secretResult({
+            createdAt: new Date("2026-08-19T12:00:00Z"),
+            description: "The request was blocked before the model answered.",
+            match: "must-not-render",
+          }),
+        ],
+        totalCount: 2,
+      },
+      isError: false,
+      isPending: false,
+    });
+
+    render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Journey Test Rule")).toBeTruthy();
+    expect(
+      screen.getByText("The request was blocked before the model answered."),
+    ).toBeTruthy();
+    expect(screen.getByText("Blocked by secrets policy")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open Risk Events" })
+        .getAttribute("href"),
+    ).toBe("/organization/projects/project/risk-events");
+    expect(screen.queryByText("must-not-render")).toBeNull();
+    expect(queries.results).toHaveBeenCalledWith(
+      { gramProject: "project-guide-test", category: "secrets", limit: 10 },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
+    const resultOptions = queries.results.mock.calls[0]?.[2];
+    expect(
+      resultOptions.refetchInterval({
+        state: { data: { results: [secretResult()] } },
+      }),
+    ).toBe(false);
+  });
+
+  it("credits a persisted risk result and does not complete without one", async () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+    const onComplete = vi.fn();
+    const view = render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+
+    queries.results.mockReturnValue({
+      data: { results: [secretResult()], totalCount: 1 },
+      isError: false,
+      isPending: false,
+    });
+    view.rerender(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
   });
 });

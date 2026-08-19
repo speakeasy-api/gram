@@ -1,6 +1,7 @@
-import { PROJECT_GUIDE_OVERVIEW_FROM } from "@/components/project-guide/allTimeOverviewQuery";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
 import type { JourneyStatus } from "@/components/project-guide/journeys";
+import { getRuleTitleFallback } from "@/pages/security/risk-utils";
+import { useRoutes } from "@/routes";
 import {
   PageTabsList,
   PageTabsTrigger,
@@ -15,9 +16,10 @@ import {
 } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import { useListHooksTraces } from "@gram/client/react-query/listHooksTraces.js";
+import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Client = "claude" | "cursor" | "codex";
 type PluginStage = "download" | "install";
@@ -154,6 +156,7 @@ export function SecretBlockJourney({
   const gramProject = useProjectSlugForRequests();
   const queryClient = useQueryClient();
   const { fetch: authFetch } = useFetcher();
+  const routes = useRoutes();
   const completionNotified = useRef(false);
   const [client, setClient] = useState<Client>("claude");
   const [pluginStage, setPluginStage] = useState<PluginStage>("download");
@@ -161,10 +164,6 @@ export function SecretBlockJourney({
   const [isDownloading, setIsDownloading] = useState(false);
   const [policyError, setPolicyError] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
-  const traceWindow = useMemo(
-    () => ({ from: new Date(PROJECT_GUIDE_OVERVIEW_FROM), to: new Date() }),
-    [],
-  );
   const policiesQuery = useRiskListPolicies({ gramProject }, undefined, {
     throwOnError: false,
   });
@@ -174,24 +173,55 @@ export function SecretBlockJourney({
   const tracesQuery = useListHooksTraces(
     {
       gramProject,
-      listHooksTracesPayload: { ...traceWindow, limit: 1 },
+      listHooksTracesPayload: {
+        from: new Date(0),
+        to: new Date(),
+        typesToInclude: ["mcp", "local", "skill"],
+        limit: 10,
+        sort: "desc",
+      },
     },
     undefined,
     {
       enabled: hasPolicy,
-      refetchInterval: hasPolicy ? 2_000 : false,
+      refetchInterval: (query) => {
+        if (query.state.data?.traces.length) return false;
+        return hasPolicy ? 2_000 : false;
+      },
       throwOnError: false,
     },
   );
   const hasHookTrace =
     !tracesQuery.isError && Boolean(tracesQuery.data?.traces.length);
+  const resultsQuery = useRiskListResults(
+    { gramProject, category: "secrets", limit: 10 },
+    undefined,
+    {
+      enabled: hasHookTrace,
+      refetchInterval: (query) => {
+        if (query.state.data?.results.length) return false;
+        return hasHookTrace ? 2_000 : false;
+      },
+      throwOnError: false,
+    },
+  );
+  const riskResults = resultsQuery.data?.results;
+  let latestRiskResult;
+  if (hasHookTrace && !resultsQuery.isError && riskResults?.length) {
+    latestRiskResult = riskResults.reduce((latest, result) =>
+      result.createdAt > latest.createdAt ? result : latest,
+    );
+  }
+  const hasRiskResult = Boolean(latestRiskResult);
   const createPolicy = useRiskCreatePolicyMutation();
 
   useEffect(() => {
-    if (status !== "done" || completionNotified.current) return;
+    if ((status !== "done" && !hasRiskResult) || completionNotified.current) {
+      return;
+    }
     completionNotified.current = true;
     onComplete();
-  }, [onComplete, status]);
+  }, [hasRiskResult, onComplete, status]);
 
   const publishPolicy = async () => {
     if (policiesQuery.isError || policiesQuery.isPending || hasPolicy) return;
@@ -245,6 +275,31 @@ export function SecretBlockJourney({
       setIsDownloading(false);
     }
   };
+
+  if (latestRiskResult) {
+    return (
+      <Section title="The prompt was denied" onSwitchJourney={onSwitchJourney}>
+        <div className="border-border grid gap-3 border-l-2 border-l-destructive bg-muted/30 p-3">
+          <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
+            Blocked by secrets policy
+          </span>
+          <div className="grid gap-1">
+            <p className="font-mono text-[11px]">
+              {getRuleTitleFallback(latestRiskResult.ruleId)}
+            </p>
+            {latestRiskResult.description && (
+              <p className="text-muted-foreground text-[13px] leading-[1.6]">
+                {latestRiskResult.description}
+              </p>
+            )}
+          </div>
+          <routes.riskEvents.Link className="w-fit font-mono text-[11px] uppercase">
+            Open Risk Events
+          </routes.riskEvents.Link>
+        </div>
+      </Section>
+    );
+  }
 
   if (status === "done") {
     return (
@@ -310,9 +365,24 @@ export function SecretBlockJourney({
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
           Plugin connected. Send the synthetic secret prompt.
         </p>
+        <p className="font-mono text-[10px] tracking-[0.05em] uppercase text-muted-foreground">
+          Copy this into {CLIENTS[client].label}
+        </p>
         <pre className="border-border bg-muted/30 max-w-[52ch] overflow-x-auto border-l-2 border-l-destructive p-3 font-mono text-[11px] leading-[1.55] whitespace-pre-wrap">
           {SYNTHETIC_SECRET_PROMPT}
         </pre>
+        <button
+          type="button"
+          onClick={() =>
+            void navigator.clipboard?.writeText(SYNTHETIC_SECRET_PROMPT)
+          }
+          className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
+        >
+          Copy prompt
+        </button>
+        <p className="font-mono text-[10px] tracking-[0.05em] uppercase text-muted-foreground">
+          Expected result: blocked
+        </p>
       </Section>
     );
   }
