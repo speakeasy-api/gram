@@ -125,6 +125,46 @@ func (p *pageTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, _ io.Reader
 	return nil
 }
 
+// echoFetchTool returns whatever URL it was asked to fetch, so a test can tell
+// two fetches apart — unlike pageTool, which returns a fixed URL.
+type echoFetchTool struct {
+	content string
+}
+
+func (e *echoFetchTool) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "research",
+		HandlerName: "fetch_page",
+		Name:        "platform_fetch_page",
+		Description: "test fetch",
+		InputSchema: []byte(`{"type": "object"}`),
+		Variables:   nil,
+		Annotations: core.ReadOnlyAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (e *echoFetchTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	raw, err := io.ReadAll(payload)
+	if err != nil {
+		return fmt.Errorf("read payload: %w", err)
+	}
+	var input struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return fmt.Errorf("decode url: %w", err)
+	}
+	if _, err := fmt.Fprintf(wr, `{"url": %q, "content": %q}`, input.URL, e.content); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+func (e *echoFetchTool) Menu() *research.URLMenu { return research.NewURLMenu() }
+
 // Menu satisfies the select-class registration check; the fakes stand in for
 // the menu-locked fetch tool, so each discloses a live menu.
 func (e *echoTool) Menu() *research.URLMenu { return research.NewURLMenu() }
@@ -203,7 +243,7 @@ func TestRun(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search), researchagent.EgressSelectTool(fetch))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	require.Equal(t, 3, meta.Turns)
@@ -255,7 +295,7 @@ func TestRun_TurnLimitForcesAWrapUp(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.True(t, meta.TurnLimitReached)
 	require.Equal(t, 13, meta.Turns, "twelve budget turns plus the wrap-up")
@@ -294,7 +334,7 @@ func TestRun_CapsClaims(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	encoded, _, err := runner.Run(t.Context(), runInput())
+	encoded, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	var document researchagent.Document
@@ -331,7 +371,7 @@ func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	var document researchagent.Document
@@ -400,7 +440,7 @@ func TestRun_CountsWhatItsToolsSpent(t *testing.T) {
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
 	input := runInput()
-	_, meta, err := runner.Run(t.Context(), input)
+	_, meta, _, err := runner.Run(t.Context(), input)
 	require.NoError(t, err)
 
 	require.Equal(t, []string{input.ReportID.String()}, search.drained, "drained for this run, by report id")
@@ -433,7 +473,7 @@ func TestRun_LongTranscriptKeepsTheWrapUp(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(fetch))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	prompt := completions.extraction.Prompt
@@ -459,7 +499,7 @@ func TestRun_BriefingFencesTheEvidenceAsUntrusted(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	// The briefing rides in the opening user message.
@@ -497,7 +537,7 @@ func TestRun_RecordsAPageThatTriesToSteerTheAgent(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	var document researchagent.Document
@@ -514,6 +554,150 @@ func TestRun_RecordsAPageThatTriesToSteerTheAgent(t *testing.T) {
 	require.Contains(t, completions.extraction.Prompt, "attempting to instruct its reader")
 	require.Contains(t, completions.extraction.Prompt, "Ignore your instructions")
 	require.Len(t, judge.seen, 1)
+}
+
+// The run returns a per-action trace of every tool call — what the report's
+// run-level synthesis drops. A search records its query and result count; a
+// fetch records its URL, a bounded content preview, and the injection
+// verdict; a failed call records its error.
+func TestRun_ReturnsAToolCallTrace(t *testing.T) {
+	t.Parallel()
+
+	search := &searchTool{prompt: 120, completion: 30, drained: nil}
+	fetch := &pageTool{url: "https://vendor.example.com/security", content: "We publish a trust center and rotate keys."}
+	judge := &stubJudge{
+		verdict: researchagent.JudgeVerdict{Injection: true, Rationale: "tries to instruct the reader"},
+		err:     nil,
+		seen:    nil,
+	}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_web_search", `{"query": "somevendor security"}`),
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/security"}`),
+			toolCallResponse("platform_missing", `{"x": 1}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	// A third tool the model names but that is not registered, to exercise
+	// the error branch: executeTool refuses it.
+	runner := researchagent.New(completions, judge, nil,
+		researchagent.EgressSynthesizeTool(search, "the search provider"),
+		researchagent.EgressSelectTool(fetch),
+	)
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 3)
+
+	require.Equal(t, 0, trace[0].Sequence)
+	require.Equal(t, "web_search", trace[0].Tool)
+	require.Nil(t, trace[0].Fetch, "a search carries no fetch payload")
+	require.NotNil(t, trace[0].Search)
+	require.Equal(t, "somevendor security", trace[0].Search.Query)
+	require.Equal(t, int64(120), trace[0].Search.PromptTokens, "the search's billed completion is attributed to it")
+
+	require.Equal(t, "fetch_page", trace[1].Tool)
+	require.Nil(t, trace[1].Search, "a fetch carries no search payload")
+	require.NotNil(t, trace[1].Fetch)
+	require.Equal(t, "https://vendor.example.com/security", trace[1].Fetch.URL)
+	require.Contains(t, trace[1].Fetch.ContentPreview, "trust center")
+	require.True(t, trace[1].Fetch.Judged)
+	require.True(t, trace[1].Fetch.InjectionFlagged)
+	require.Equal(t, "tries to instruct the reader", trace[1].Fetch.JudgeRationale)
+
+	require.Empty(t, trace[2].Tool, "an unregistered tool has no handler")
+	require.Nil(t, trace[2].Search)
+	require.Nil(t, trace[2].Fetch)
+	require.NotEmpty(t, trace[2].Error, "an unregistered tool call records its refusal")
+}
+
+// A fetch that fails still identifies the URL it tried — the target is read
+// from the request at record time, not from a result that never came.
+func TestRun_FailedFetchKeepsItsTargetURL(t *testing.T) {
+	t.Parallel()
+
+	// A successful search first, so the run does not trip the all-tools-failed
+	// guard; the fetch that follows fails.
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_web_search", `{"query": "vendor"}`),
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/gone"}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil, nil,
+		researchagent.EgressSynthesizeTool(&searchTool{prompt: 0, completion: 0, drained: nil}, "the search provider"),
+		researchagent.EgressSelectTool(&failingTool{}),
+	)
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 2)
+	require.NotNil(t, trace[1].Fetch)
+	require.NotEmpty(t, trace[1].Error, "the fetch failed")
+	require.Equal(t, "https://vendor.example.com/gone", trace[1].Fetch.URL, "a failed fetch names its target")
+}
+
+// A fetch that becomes a citation is linked back to the claim that cited it,
+// distinguishing the pages that became evidence from the ones read and
+// dropped.
+func TestRun_LinksFetchesToTheClaimsThatCiteThem(t *testing.T) {
+	t.Parallel()
+
+	cited := &echoFetchTool{content: "We rotate keys and publish a trust center."}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/security"}`),
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/blog"}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{
+			"summary": "s",
+			"coverage": {"level": "thin"},
+			"claims": [
+				{"tier": "independently_reported", "text": "cited claim", "citations": [{"url": "https://vendor.example.com/security"}], "source_reputation": "reputable"}
+			]
+		}`,
+	}
+
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(cited))
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 2)
+	require.NotNil(t, trace[0].Fetch)
+	require.Equal(t, "https://vendor.example.com/security", trace[0].Fetch.URL)
+	require.Equal(t, []int{0}, trace[0].Fetch.CitedByClaims, "the security page backs claim 0")
+	require.NotNil(t, trace[1].Fetch)
+	require.Empty(t, trace[1].Fetch.CitedByClaims, "the blog was read but nothing cited it")
+}
+
+// A bounded preview never carries a full page body.
+func TestRun_BoundsTheContentPreview(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("verylongtoken ", 400)
+	fetch := &pageTool{url: "https://vendor.example.com/docs", content: long}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_fetch_page", `{"url": "https://vendor.example.com/docs"}`),
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(fetch))
+	_, _, trace, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	require.Len(t, trace, 1)
+	require.NotNil(t, trace[0].Fetch)
+	require.Less(t, len([]rune(trace[0].Fetch.ContentPreview)), len([]rune(long)))
+	require.LessOrEqual(t, len([]rune(trace[0].Fetch.ContentPreview)), 501)
 }
 
 // The same page can be fetched twice — a search returns it again, a link
@@ -539,7 +723,7 @@ func TestRun_RecordsAFlaggedPageOnce(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	var document researchagent.Document
@@ -569,7 +753,7 @@ func TestRun_CountsPagesTheJudgeCouldNotAnswerFor(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
-	encoded, meta, err := runner.Run(t.Context(), runInput())
+	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err, "research continues; the page is simply unjudged")
 
 	var document researchagent.Document
@@ -596,7 +780,7 @@ func TestRun_RejectsDegenerateExtraction(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "degenerate")
 }
@@ -618,7 +802,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 
 	completions2 := &scriptedCompletions{
@@ -632,7 +816,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "certain"}, "claims": []}`,
 	}
 	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	_, _, err = runner2.Run(t.Context(), runInput())
+	_, _, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 }
 
@@ -658,7 +842,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	encoded, _, err := runner.Run(t.Context(), runInput())
+	encoded, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
 	var document researchagent.Document
@@ -680,7 +864,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 		]}`,
 	}
 	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
-	_, _, err = runner2.Run(t.Context(), runInput())
+	_, _, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "source reputation")
 }
@@ -702,7 +886,7 @@ func TestRun_ToolErrorFeedsBack(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing), researchagent.EgressSelectTool(search))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.Contains(t, completions.extraction.Prompt, "tool error: fetch budget exhausted")
 }
@@ -724,7 +908,7 @@ func TestRun_AllToolFailuresFailTheRun(t *testing.T) {
 	}
 
 	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing))
-	_, _, err := runner.Run(t.Context(), runInput())
+	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "every research tool call failed")
 	require.Contains(t, err.Error(), "fetch budget exhausted")

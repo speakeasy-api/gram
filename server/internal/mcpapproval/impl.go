@@ -1006,6 +1006,7 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 			ID:        report.ID,
 			ProjectID: projectID,
 			Error:     conv.ToPGText("the research run could not be started"),
+			ToolCalls: nil,
 		}); failErr != nil {
 			s.logger.ErrorContext(failCtx, "record research start failure", attr.SlogError(failErr))
 		}

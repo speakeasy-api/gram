@@ -251,6 +251,10 @@ type StartResearchResponseBody struct {
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 	// When the run was requested.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The run's per-action trace — every search and page fetch, in order. The
+	// report above is a synthesis that drops most of what was read; this is what
+	// the agent actually did.
+	ToolCalls []*ResearchToolCallResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 }
 
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
@@ -1900,6 +1904,65 @@ type ResearchReportResponseBody struct {
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 	// When the run was requested.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The run's per-action trace — every search and page fetch, in order. The
+	// report above is a synthesis that drops most of what was read; this is what
+	// the agent actually did.
+	ToolCalls []*ResearchToolCallResponseBody `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+}
+
+// ResearchToolCallResponseBody is used to define fields on response body types.
+type ResearchToolCallResponseBody struct {
+	// Position in the run, from zero.
+	Sequence *int `form:"sequence,omitempty" json:"sequence,omitempty" xml:"sequence,omitempty"`
+	// The tool that ran: web_search or fetch_page. The discriminator for which
+	// payload below is present.
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// The tool's failure text, when the call did not succeed.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// The web-search payload, present when tool is web_search.
+	Search *ResearchWebSearchCallResponseBody `form:"search,omitempty" json:"search,omitempty" xml:"search,omitempty"`
+	// The page-fetch payload, present when tool is fetch_page.
+	Fetch *ResearchPageFetchCallResponseBody `form:"fetch,omitempty" json:"fetch,omitempty" xml:"fetch,omitempty"`
+}
+
+// ResearchWebSearchCallResponseBody is used to define fields on response body
+// types.
+type ResearchWebSearchCallResponseBody struct {
+	// What the agent searched for.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// How many citations the search returned.
+	ResultCount *int `form:"result_count,omitempty" json:"result_count,omitempty" xml:"result_count,omitempty"`
+	// Prompt tokens this search spent.
+	PromptTokens *int `form:"prompt_tokens,omitempty" json:"prompt_tokens,omitempty" xml:"prompt_tokens,omitempty"`
+	// Completion tokens this search spent.
+	CompletionTokens *int `form:"completion_tokens,omitempty" json:"completion_tokens,omitempty" xml:"completion_tokens,omitempty"`
+}
+
+// ResearchPageFetchCallResponseBody is used to define fields on response body
+// types.
+type ResearchPageFetchCallResponseBody struct {
+	// The page the agent fetched.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Where the fetch landed after redirects, when it differed.
+	FinalURL *string `form:"final_url,omitempty" json:"final_url,omitempty" xml:"final_url,omitempty"`
+	// The fetched page's content type.
+	ContentType *string `form:"content_type,omitempty" json:"content_type,omitempty" xml:"content_type,omitempty"`
+	// The fetched page's extracted-text size.
+	ContentBytes *int `form:"content_bytes,omitempty" json:"content_bytes,omitempty" xml:"content_bytes,omitempty"`
+	// Whether the fetch hit its caps and the preview is of a prefix.
+	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
+	// Whether the injection judge reached a verdict on this page.
+	Judged *bool `form:"judged,omitempty" json:"judged,omitempty" xml:"judged,omitempty"`
+	// Whether the judge found the page tried to instruct its reader.
+	InjectionFlagged *bool `form:"injection_flagged,omitempty" json:"injection_flagged,omitempty" xml:"injection_flagged,omitempty"`
+	// The judge's reasoning, when it flagged the page.
+	JudgeRationale *string `form:"judge_rationale,omitempty" json:"judge_rationale,omitempty" xml:"judge_rationale,omitempty"`
+	// A bounded preview of the extracted page text. Untrusted web content.
+	ContentPreview *string `form:"content_preview,omitempty" json:"content_preview,omitempty" xml:"content_preview,omitempty"`
+	// Indices of the report claims that cited this page — the link from a fetch to
+	// the evidence it became. Empty when the page was read but nothing in the
+	// final report rests on it.
+	CitedByClaims []int `form:"cited_by_claims,omitempty" json:"cited_by_claims,omitempty" xml:"cited_by_claims,omitempty"`
 }
 
 // NewEnsureServerReviewRequestBody builds the HTTP request body from the
@@ -3021,6 +3084,16 @@ func NewStartResearchResearchReportOK(body *StartResearchResponseBody) *mcpappro
 		Error:         body.Error,
 		CreatedAt:     *body.CreatedAt,
 	}
+	if body.ToolCalls != nil {
+		v.ToolCalls = make([]*mcpapproval.ResearchToolCall, len(body.ToolCalls))
+		for i, val := range body.ToolCalls {
+			if val == nil {
+				v.ToolCalls[i] = nil
+				continue
+			}
+			v.ToolCalls[i] = unmarshalResearchToolCallResponseBodyToMcpapprovalResearchToolCall(val)
+		}
+	}
 
 	return v
 }
@@ -3606,6 +3679,13 @@ func ValidateStartResearchResponseBody(body *StartResearchResponseBody) (err err
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.ToolCalls {
+		if e != nil {
+			if err2 := ValidateResearchToolCallResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -5708,6 +5788,25 @@ func ValidateResearchReportResponseBody(body *ResearchReportResponseBody) (err e
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.ToolCalls {
+		if e != nil {
+			if err2 := ValidateResearchToolCallResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResearchToolCallResponseBody runs the validations defined on
+// ResearchToolCallResponseBody
+func ValidateResearchToolCallResponseBody(body *ResearchToolCallResponseBody) (err error) {
+	if body.Sequence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sequence", "body"))
+	}
+	if body.Tool == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool", "body"))
 	}
 	return
 }
