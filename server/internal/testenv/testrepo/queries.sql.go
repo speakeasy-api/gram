@@ -1477,6 +1477,28 @@ func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugF
 	return err
 }
 
+const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = $1
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetUserSessionIssuerCIMDAdmissionModeParams struct {
+	ClientIDMetadataAdmissionMode pgtype.Text
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+}
+
+// Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+// update. The production UpdateUserSessionIssuer query COALESCEs every param,
+// where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+// keeping that contract out of per-package test helpers is the point of this
+// narrow query.
+func (q *Queries) SetUserSessionIssuerCIMDAdmissionMode(ctx context.Context, arg SetUserSessionIssuerCIMDAdmissionModeParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerCIMDAdmissionMode, arg.ClientIDMetadataAdmissionMode, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1
