@@ -32,6 +32,14 @@ if [ ${#args[@]} -eq 0 ]; then
   args=("-tags=inv.debug" "./...")
 fi
 
+# A rerun invokes 'go test' again for the failed package alone, which overwrites
+# cover.out with a profile covering only that package. Rather than report
+# coverage that is quietly missing everything else, refuse the combination.
+if [ "$cover" = true ] && [ -n "$rerun_fails" ]; then
+  echo "--cover and --rerun-fails cannot be combined: a rerun overwrites the coverage profile." >&2
+  exit 1
+fi
+
 # --shard=<index>/<total> runs a deterministic subset of the packages that have
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed.
@@ -107,6 +115,8 @@ if [ -n "$rerun_fails" ]; then
     # invisible: the run is green and nothing says a test had to be re-run.
     --rerun-fails-report=rerun-report.txt
   )
+  # gotestsum builds the 'go test' command itself for every attempt, so the
+  # packages move to --packages and only the flags stay behind.
   args=("${flags[@]}")
 fi
 
