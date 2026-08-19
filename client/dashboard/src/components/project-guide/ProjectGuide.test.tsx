@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectGuideRun } from "./ProjectGuideRun";
 import {
@@ -6,6 +12,10 @@ import {
   type JourneyId,
   type JourneyStatus,
 } from "./journeys";
+import type {
+  ProjectGuideEvent,
+  ProjectGuideOperationSignal,
+} from "./projectGuideMachine";
 
 const statusByJourney = vi.hoisted(
   () =>
@@ -116,7 +126,7 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("nothing has run for this step yet");
+    ).toContain("Ready · Pick a server from the catalog");
 
     fireEvent.click(switchControl);
 
@@ -132,6 +142,128 @@ describe("ProjectGuide", () => {
     ).toBe("project-guide-secret-block-content");
   });
 
+  it("dispatches START and the matching operation signal from the primary button", () => {
+    const signals: ProjectGuideOperationSignal[] = [];
+    render(
+      <ProjectGuide
+        onOperationSignal={(signal) => {
+          signals.push(signal);
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "running",
+    );
+    expect(signals).toEqual([
+      { type: "start", path: "third-party-mcp", step: 0 },
+    ]);
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Started · Pick a server from the catalog");
+  });
+
+  it("renders checkpoint, waiting, and observed-event completion from adapter reports", () => {
+    let report: (event: ProjectGuideEvent) => void = () => undefined;
+    render(
+      <ProjectGuide
+        onOperationSignal={(signal, sendReport) => {
+          report = sendReport;
+          if (signal.type !== "start") return;
+          if (signal.step === 0) {
+            sendReport({
+              type: "OPERATION_SUCCESS",
+              result: "Server installed",
+            });
+          }
+          if (signal.step === 1) {
+            sendReport({
+              type: "OPERATION_SUCCESS",
+              result: "Endpoint verified",
+            });
+          }
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "checkpoint",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've completed this step" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've completed this step" }),
+    );
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "waiting",
+    );
+    expect(screen.getByRole("status").textContent).toContain("Listening");
+
+    act(() => {
+      report({
+        type: "EVENT_RECEIVED",
+        event: {
+          kind: "Governed call",
+          tone: "allow",
+          title: "linear.tools/list",
+          rows: [{ key: "access", value: "allowed" }],
+          note: "Recorded before forwarding.",
+        },
+      });
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "The path is governed." }),
+    ).toBeTruthy();
+    expect(screen.getByText("linear.tools/list")).toBeTruthy();
+  });
+
+  it("renders an adapter error and retries through the same operation port", () => {
+    const signals: ProjectGuideOperationSignal[] = [];
+    let failStart = true;
+    render(
+      <ProjectGuide
+        onOperationSignal={(signal, report) => {
+          signals.push(signal);
+          if (signal.type === "start" && failStart) {
+            failStart = false;
+            report({
+              type: "OPERATION_ERROR",
+              message: "Catalog unavailable",
+            });
+          }
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Catalog unavailable",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "running",
+    );
+    expect(signals.at(-1)).toMatchObject({ type: "retry", step: 0 });
+  });
+
   it("renders supplied current content, output, event, and action callbacks", () => {
     const onPrimaryAction = vi.fn();
     const onSecondaryAction = vi.fn();
@@ -145,10 +277,17 @@ describe("ProjectGuide", () => {
         currentContent={<p>Coordinator-provided checkpoint</p>}
         output={<span>Coordinator output line</span>}
         eventCard={<section>Coordinator event card</section>}
-        primaryAction={{ label: "Continue run", onClick: onPrimaryAction }}
+        primaryAction={{
+          label: "Continue run",
+          onClick: () => {
+            onPrimaryAction();
+          },
+        }}
         secondaryAction={{
           label: "Cancel run",
-          onClick: onSecondaryAction,
+          onClick: () => {
+            onSecondaryAction();
+          },
         }}
         onSwitchJourney={() => undefined}
       />,
@@ -168,7 +307,7 @@ describe("ProjectGuide", () => {
     expect(onSecondaryAction).toHaveBeenCalledOnce();
   });
 
-  it("renders deterministic active output and event areas for an in-progress path", () => {
+  it("resumes artifact progress without inventing output or an observed event", () => {
     statusByJourney.current = {
       "third-party-mcp": "in-progress",
       "secret-block": "not-started",
@@ -183,12 +322,14 @@ describe("ProjectGuide", () => {
       screen.getByRole("log", { name: "Journey A activity" }),
     ).toBeTruthy();
     expect(
-      screen.getByText(
+      screen.getByText("Ready · Confirm the governed endpoint"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
         "Endpoint verified, client connected, no calls recorded.",
       ),
-    ).toBeTruthy();
-    expect(screen.getByText("The call you watched")).toBeTruthy();
-    expect(screen.getByText("linear.tools/list")).toBeTruthy();
+    ).toBeNull();
+    expect(screen.queryByText("The call you watched")).toBeNull();
   });
 
   it("keeps unavailable progress out of an empty or completed display", () => {

@@ -1,9 +1,12 @@
 import {
   PROJECT_GUIDE_FIXTURES,
-  type JourneyId,
   type JourneyMeta,
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
+import type {
+  ProjectGuideDisplayState,
+  ProjectGuideEventCard,
+} from "@/components/project-guide/projectGuideMachine";
 import { cn } from "@/lib/utils";
 import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
@@ -18,32 +21,72 @@ export type ProjectGuideRunProps = {
   journey: JourneyMeta;
   status: JourneyStatus;
   regionId: string;
+  displayState?: ProjectGuideDisplayState;
+  completedSteps?: number[];
   currentStep?: number;
   currentContent?: ReactNode;
   output?: ReactNode;
   eventCard?: ReactNode;
   primaryAction?: ProjectGuideRunAction;
   secondaryAction?: ProjectGuideRunAction;
+  listeningElapsedSeconds?: number;
+  onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
 };
+
+function stepStateLabel(displayState: ProjectGuideDisplayState): string {
+  switch (displayState) {
+    case "running":
+      return "running";
+    case "waiting":
+      return "listening";
+    case "paused":
+      return "paused";
+    case "error":
+      return "action needed";
+    case "checkpoint":
+    case "complete":
+    case "exited":
+    case "opening":
+    case "ready":
+      return "waiting";
+  }
+}
 
 export function ProjectGuideRun({
   journey,
   status,
   regionId,
+  displayState: suppliedDisplayState,
+  completedSteps: suppliedCompletedSteps,
   currentStep: suppliedCurrentStep,
   currentContent,
   output,
   eventCard,
   primaryAction,
   secondaryAction,
+  listeningElapsedSeconds = 0,
+  onRewind,
   onSwitchJourney,
 }: ProjectGuideRunProps): JSX.Element {
   const reducedMotion = useReducedMotion();
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
-  const isComplete = status === "done";
-  const isRunning = status === "in-progress";
-  const currentStep = suppliedCurrentStep ?? (isRunning ? 1 : 0);
+  const displayState =
+    suppliedDisplayState ??
+    (status === "done"
+      ? "complete"
+      : status === "in-progress"
+        ? "running"
+        : "ready");
+  const isComplete = displayState === "complete";
+  const isRunning = displayState !== "ready";
+  const currentStep = Math.min(
+    suppliedCurrentStep ?? (status === "in-progress" ? 1 : 0),
+    journey.steps.length - 1,
+  );
+  const completedSteps =
+    suppliedCompletedSteps ??
+    Array.from({ length: currentStep }, (_, index) => index);
   let resolvedCurrentContent = currentContent;
   let resolvedOutput = output;
   let resolvedEventCard = eventCard;
@@ -63,7 +106,12 @@ export function ProjectGuideRun({
       : "nothing has run for this step yet";
   }
   if (resolvedEventCard === undefined && (isRunning || isComplete)) {
-    resolvedEventCard = <EventCard journeyId={journey.id} />;
+    resolvedEventCard = (
+      <ProjectGuideObservedEvent
+        event={fixture.event}
+        label={fixture.event.label}
+      />
+    );
   }
   if (resolvedPrimaryAction === undefined) {
     let label = "Start the journey";
@@ -107,6 +155,7 @@ export function ProjectGuideRun({
             : { duration: 0.3, ease: [0.2, 0.7, 0.3, 1] }
         }
         data-testid="project-guide-run"
+        data-display-state={displayState}
       >
         <div className="flex items-center gap-3 border-b border-[#EBEBEB] bg-[#FAFAF9] px-[22px] py-[13px]">
           <span
@@ -124,7 +173,7 @@ export function ProjectGuideRun({
             className="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase"
             style={{ color: fixture.accent }}
           >
-            {isRunning ? "1 of 5 done" : "0 of 5 done"}
+            {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
         <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_352px]">
@@ -133,7 +182,7 @@ export function ProjectGuideRun({
             className="min-w-0 px-[22px] pt-2 pb-5"
           >
             {journey.steps.map((step, index) => {
-              const complete = isRunning && index === 0;
+              const complete = completedSteps.includes(index);
               const current = index === currentStep;
               return (
                 <li
@@ -161,15 +210,24 @@ export function ProjectGuideRun({
                     >
                       {step}
                     </span>
-                    <span className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase">
-                      {complete
-                        ? "done"
-                        : current
-                          ? isRunning
-                            ? "running"
-                            : "waiting"
-                          : ""}
-                    </span>
+                    {complete && onRewind ? (
+                      <button
+                        type="button"
+                        onClick={() => onRewind(index)}
+                        aria-label={`Rewind to ${step}`}
+                        className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase"
+                      >
+                        redo
+                      </button>
+                    ) : (
+                      <span className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase">
+                        {complete
+                          ? "done"
+                          : current
+                            ? stepStateLabel(displayState)
+                            : ""}
+                      </span>
+                    )}
                   </div>
                   {current && resolvedCurrentContent}
                 </li>
@@ -193,7 +251,7 @@ export function ProjectGuideRun({
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="flex min-h-[120px] flex-1 flex-col gap-2 bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
+              className="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
             >
               <span className="font-mono text-[9px] tracking-[0.09em] text-[#121212]/45 uppercase">
                 Activity
@@ -202,6 +260,14 @@ export function ProjectGuideRun({
                 {resolvedOutput}
               </div>
             </div>
+            {displayState === "waiting" && (
+              <span
+                role="status"
+                className="font-mono text-[10px] text-[#121212]/50"
+              >
+                Listening · {Math.floor(listeningElapsedSeconds)}s elapsed
+              </span>
+            )}
             {resolvedEventCard}
             <button
               type="button"
@@ -228,25 +294,30 @@ export function ProjectGuideRun({
   );
 }
 
-function EventCard({ journeyId }: { journeyId: JourneyId }): JSX.Element {
-  const fixture = PROJECT_GUIDE_FIXTURES[journeyId];
-  const tone = fixture.event.tone === "deny" ? "#C83228" : "#5A8250";
+export function ProjectGuideObservedEvent({
+  event,
+  label,
+}: {
+  event: ProjectGuideEventCard;
+  label: string;
+}): JSX.Element {
+  const tone = event.tone === "deny" ? "#C83228" : "#5A8250";
   return (
     <section
       className="grid gap-1.5 border-l-2 p-2.5"
       style={{ borderLeftColor: tone }}
     >
       <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/45 uppercase">
-        {fixture.event.label}
+        {label}
       </span>
       <span
         className="font-mono text-[9px] tracking-[0.09em] uppercase"
         style={{ color: tone }}
       >
-        {fixture.event.kind}
+        {event.kind}
       </span>
-      <span className="font-mono text-[11.5px]">{fixture.event.title}</span>
-      {fixture.event.rows.map((row) => (
+      <span className="font-mono text-[11.5px]">{event.title}</span>
+      {event.rows.map((row) => (
         <span key={row.key} className="flex gap-2 font-mono text-[10.5px]">
           <span className="w-16 shrink-0 text-[9.5px] tracking-[0.07em] text-[#121212]/42 uppercase">
             {row.key}
@@ -255,7 +326,7 @@ function EventCard({ journeyId }: { journeyId: JourneyId }): JSX.Element {
         </span>
       ))}
       <span className="border-t border-[#E6E5E3] pt-1.5 text-[11.5px] leading-[1.5] text-[#121212]/55">
-        {fixture.event.note}
+        {event.note}
       </span>
     </section>
   );

@@ -2,7 +2,11 @@ import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
 } from "@/components/brand-mesh";
-import { ProjectGuideRun } from "@/components/project-guide/ProjectGuideRun";
+import {
+  ProjectGuideObservedEvent,
+  ProjectGuideRun,
+  type ProjectGuideRunAction,
+} from "@/components/project-guide/ProjectGuideRun";
 import {
   JOURNEY_STATUS_LABELS,
   PROJECT_GUIDE_COMPLETE,
@@ -14,23 +18,51 @@ import {
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
+import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
+import {
+  getProjectGuideCurrentStep,
+  projectGuideMachine,
+  type ProjectGuideDisplayState,
+  type ProjectGuideEvent,
+  type ProjectGuideOperationSignal,
+  type ProjectGuideOutputEntry,
+} from "@/components/project-guide/projectGuideMachine";
 import { cn } from "@/lib/utils";
+import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 
 /**
  * Fixture-backed project-home guide. Real journey operations are deliberately
  * not connected here; the existing progress result only selects display state.
  */
-export function ProjectGuide(): JSX.Element {
+export function ProjectGuide({
+  onOperationSignal,
+}: {
+  onOperationSignal?: (
+    signal: ProjectGuideOperationSignal,
+    report: (event: ProjectGuideEvent) => void,
+  ) => void;
+} = {}): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
-  const [selected, setSelected] = useState<JourneyId | null>(null);
+  const operationSignalRef = useRef(onOperationSignal);
+  const reportRef = useRef<(event: ProjectGuideEvent) => void>(() => undefined);
+  operationSignalRef.current = onOperationSignal;
+  const [snapshot, send] = useMachine(projectGuideMachine, {
+    input: {
+      onSignal: (signal) =>
+        operationSignalRef.current?.(signal, reportRef.current),
+    },
+  });
+  reportRef.current = send;
   const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
     useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const reducedMotion = useReducedMotion();
+  const selected = snapshot.context.activePath;
+  const displayState = snapshot.value as ProjectGuideDisplayState;
   const selectedJourney = PROJECT_GUIDE_JOURNEYS.find(
     (journey) => journey.id === selected,
   );
@@ -46,6 +78,70 @@ export function ProjectGuide(): JSX.Element {
     nextSearchParams.delete("showGuide");
     setSearchParams(nextSearchParams, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (displayState !== "waiting") return;
+    const startedAt =
+      Date.now() - snapshot.context.elapsedListeningSeconds * 1000;
+    const interval = window.setInterval(() => {
+      send({
+        type: "LISTEN_TICK",
+        elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [displayState, send, snapshot.context.elapsedListeningSeconds]);
+
+  useEffect(() => {
+    if (displayState === "exited") returnToProjectHome();
+  }, [displayState, returnToProjectHome]);
+
+  const openJourney = (journey: JourneyMeta): void => {
+    send({
+      type: "OPEN",
+      path: journey.id,
+      resumeStep: firstIncompleteStepIndex(
+        statusByJourney[journey.id],
+        journey.steps.length,
+      ),
+    });
+  };
+
+  const switchJourney = (journey: JourneyMeta): void => {
+    send({
+      type: "SWITCH",
+      path: journey.id,
+      resumeStep: firstIncompleteStepIndex(
+        statusByJourney[journey.id],
+        journey.steps.length,
+      ),
+    });
+  };
+
+  const currentStep = getProjectGuideCurrentStep(snapshot.context);
+  const completedSteps = selected
+    ? snapshot.context.completedByPath[selected]
+    : [];
+  const primaryAction = selectedJourney
+    ? primaryActionFor(displayState, selectedJourney, currentStep, send)
+    : undefined;
+  const secondaryAction = selectedJourney
+    ? displayState === "complete"
+      ? {
+          label: "Start the other journey",
+          onClick: () => {
+            const otherId = otherProjectGuideJourney(selectedJourney.id);
+            const otherJourney = PROJECT_GUIDE_JOURNEYS.find(
+              (journey) => journey.id === otherId,
+            );
+            if (otherJourney) switchJourney(otherJourney);
+          },
+        }
+      : {
+          label: "Exit guide",
+          onClick: () => send({ type: "EXIT" }),
+        }
+    : undefined;
 
   if (isComplete && !reviewingCompletedJourneys) {
     return (
@@ -67,15 +163,24 @@ export function ProjectGuide(): JSX.Element {
             {selectedJourney?.title ?? "Put your agent traffic under control"}
           </h2>
           {selected && (
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              aria-controls={selectedContentId}
-              aria-expanded="true"
-              className="ml-auto font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
-            >
-              ← Back to start
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => send({ type: "BACK" })}
+                aria-controls={selectedContentId}
+                aria-expanded="true"
+                className="font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
+              >
+                ← Back to start
+              </button>
+              <button
+                type="button"
+                onClick={() => send({ type: "EXIT" })}
+                className="font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
+              >
+                Exit guide
+              </button>
+            </div>
           )}
         </header>
         <div className="flex min-h-[400px] flex-col md:flex-row">
@@ -108,16 +213,48 @@ export function ProjectGuide(): JSX.Element {
                     journey={journey}
                     status={status}
                     controlsId={projectGuideContentId(journey.id)}
-                    onSelect={() => setSelected(journey.id)}
+                    onSelect={() => switchJourney(journey)}
                   />
                 ) : isSelected ? (
                   <ProjectGuideRun
                     journey={journey}
                     status={status}
                     regionId={projectGuideContentId(journey.id)}
-                    onSwitchJourney={() =>
-                      setSelected(otherProjectGuideJourney(journey.id))
+                    displayState={displayState}
+                    completedSteps={completedSteps}
+                    currentStep={currentStep}
+                    currentContent={
+                      <ProjectGuideStepContent
+                        journey={journey}
+                        step={currentStep}
+                        checkpoint={snapshot.context.checkpoint?.label}
+                        error={snapshot.context.error}
+                      />
                     }
+                    output={
+                      <ProjectGuideOutput entries={snapshot.context.output} />
+                    }
+                    eventCard={
+                      snapshot.context.observedEvent ? (
+                        <ProjectGuideObservedEvent
+                          event={snapshot.context.observedEvent}
+                          label={PROJECT_GUIDE_FIXTURES[journey.id].event.label}
+                        />
+                      ) : null
+                    }
+                    primaryAction={primaryAction}
+                    secondaryAction={secondaryAction}
+                    listeningElapsedSeconds={
+                      snapshot.context.elapsedListeningSeconds
+                    }
+                    onRewind={(step) => send({ type: "REWIND", step })}
+                    onSwitchJourney={() => {
+                      const otherId = otherProjectGuideJourney(journey.id);
+                      const otherJourney = PROJECT_GUIDE_JOURNEYS.find(
+                        (candidate) => candidate.id === otherId,
+                      );
+                      if (otherJourney) switchJourney(otherJourney);
+                    }}
                   />
                 ) : (
                   <JourneyChoice
@@ -125,7 +262,7 @@ export function ProjectGuide(): JSX.Element {
                     status={status}
                     statusPending={progressPending}
                     controlsId={projectGuideContentId(journey.id)}
-                    onSelect={() => setSelected(journey.id)}
+                    onSelect={() => openJourney(journey)}
                   />
                 )}
               </motion.section>
@@ -134,6 +271,99 @@ export function ProjectGuide(): JSX.Element {
         </div>
       </section>
     </GuideCanvas>
+  );
+}
+
+function primaryActionFor(
+  displayState: ProjectGuideDisplayState,
+  journey: JourneyMeta,
+  currentStep: number,
+  send: (event: ProjectGuideEvent) => void,
+): ProjectGuideRunAction {
+  switch (displayState) {
+    case "ready":
+      return {
+        label: currentStep === 0 ? "Start the journey" : "Continue the journey",
+        onClick: () => send({ type: "START" }),
+      };
+    case "running":
+      return { label: "Pause", onClick: () => send({ type: "PAUSE" }) };
+    case "checkpoint":
+      return {
+        label: "I've completed this step",
+        onClick: () =>
+          send({
+            type: "USER_CHECKPOINT_COMPLETE",
+            result: `Completed · ${journey.steps[currentStep] ?? "checkpoint"}`,
+          }),
+      };
+    case "waiting":
+      return {
+        label: "Pause listening",
+        onClick: () => send({ type: "PAUSE" }),
+      };
+    case "paused":
+      return { label: "Resume", onClick: () => send({ type: "RESUME" }) };
+    case "error":
+      return { label: "Retry", onClick: () => send({ type: "RETRY" }) };
+    case "complete":
+      return { label: journey.completion.primaryAction, disabled: true };
+    case "opening":
+    case "exited":
+      return { label: "Start the journey", disabled: true };
+  }
+}
+
+function ProjectGuideStepContent({
+  journey,
+  step,
+  checkpoint,
+  error,
+}: {
+  journey: JourneyMeta;
+  step: number;
+  checkpoint?: string;
+  error: string | null;
+}): JSX.Element {
+  return (
+    <div className="grid gap-2 pt-3">
+      <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
+        {journey.stepBlurbs[step]}
+      </p>
+      {checkpoint && (
+        <p className="font-mono text-[10px] text-[#121212]/50">
+          Your turn · {checkpoint}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-destructive text-[12px]">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ProjectGuideOutput({
+  entries,
+}: {
+  entries: ProjectGuideOutputEntry[];
+}): JSX.Element {
+  if (entries.length === 0) {
+    return <span>Nothing has run for this step yet</span>;
+  }
+
+  return (
+    <ol className="grid gap-1.5">
+      {entries.map((entry) => (
+        <li key={entry.id} className="grid grid-cols-[44px_1fr] gap-2">
+          <span className="text-[9px] tracking-[0.06em] text-[#121212]/35 uppercase">
+            {entry.kind}
+          </span>
+          <span>{entry.message}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

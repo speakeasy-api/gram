@@ -1,6 +1,6 @@
 import {
-  projectGuideMachine,
-  type ProjectGuideEvent,
+  legacyProjectGuideMachine,
+  type LegacyProjectGuideEvent,
   type ProjectGuideEventCard,
   type ProjectGuideStepKind,
 } from "@/components/project-guide/projectGuideMachine";
@@ -31,8 +31,8 @@ const STEP_STATUS = {
 } as const;
 
 type ProjectGuideRunContextValue = {
-  snapshot: SnapshotFrom<typeof projectGuideMachine>;
-  send: (event: ProjectGuideEvent) => void;
+  snapshot: SnapshotFrom<typeof legacyProjectGuideMachine>;
+  send: (event: LegacyProjectGuideEvent) => void;
 };
 
 const ProjectGuideRunContext =
@@ -58,7 +58,7 @@ export function ProjectGuideRunProvider({
     journeyId === "third-party-mcp"
       ? ["pick", "phase", "tabs", "prompt", "listen"]
       : ["phase", "phase", "tabs", "prompt", "listen"];
-  const [snapshot, send] = useMachine(projectGuideMachine, {
+  const [snapshot, send] = useMachine(legacyProjectGuideMachine, {
     input: {
       initialStep: Math.min(Math.max(currentStep, 0), 4),
       completed: Array.from({ length: Math.max(currentStep, 0) }, (_, i) => i),
@@ -114,7 +114,7 @@ export function JourneyRun({
     { length: Math.min(Math.max(currentStep, 0), steps.length) },
     (_, i) => i,
   );
-  const [snapshot, send] = useMachine(projectGuideMachine, {
+  const [snapshot, send] = useMachine(legacyProjectGuideMachine, {
     input: {
       initialStep: Math.min(Math.max(currentStep, 0), steps.length - 1),
       completed,
@@ -163,7 +163,7 @@ export function JourneyRun({
     return () => clearInterval(timer);
   }, [isListening, activeSend]);
 
-  const action = (event: ProjectGuideEvent) => activeSend(event);
+  const action = (event: LegacyProjectGuideEvent) => activeSend(event);
   const eventCard = activeSnapshot.context.event;
 
   return (
