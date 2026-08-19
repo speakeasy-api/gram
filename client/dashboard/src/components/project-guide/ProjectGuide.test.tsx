@@ -2,10 +2,12 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as baseRender,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { ProjectGuideRun } from "./ProjectGuideRun";
 import {
   PROJECT_GUIDE_JOURNEYS,
@@ -29,6 +31,9 @@ const statusByJourney = vi.hoisted(
 );
 const progressPending = vi.hoisted(() => ({ current: false }));
 const setSearchParams = vi.hoisted(() => vi.fn());
+const mcpOperations = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
 
 vi.mock("./useProjectGuideProgress", () => ({
   useProjectGuideProgress: () => ({
@@ -37,21 +42,120 @@ vi.mock("./useProjectGuideProgress", () => ({
   }),
 }));
 
+vi.mock("./useMcpGuideOperations", () => ({
+  MCP_GUIDE_CLIENTS: ["claude", "cursor", "codex"],
+  useMcpGuideOperations: () => mcpOperations.current,
+}));
+
 vi.mock("react-router", () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: {
+    children: React.ReactNode;
+    to: string;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useSearchParams: () => [new URLSearchParams("showGuide"), setSearchParams],
 }));
 
 import { ProjectGuide } from "./ProjectGuide";
 
+function render(ui: React.ReactNode) {
+  return baseRender(ui, {
+    wrapper: ({ children }) => (
+      <ConfigProvider theme="light" setTheme={() => undefined}>
+        {children}
+      </ConfigProvider>
+    ),
+  });
+}
+
+const catalogServer = {
+  description: "Read-only test server",
+  registryId: "registry",
+  registrySpecifier: "example/read-only",
+  version: "1.0.0",
+  title: "Linear",
+  meta: {},
+  toolCount: 2,
+  isReadOnly: true,
+  supportsDcr: true,
+  remotes: [
+    {
+      transportType: "streamable-http",
+      url: "https://upstream.example/mcp",
+    },
+  ],
+};
+
+function resetMcpOperations(): void {
+  mcpOperations.current = {
+    activityBaselineReady: true,
+    activityError: false,
+    catalogError: false,
+    catalogPending: false,
+    catalogServers: [catalogServer],
+    client: "claude",
+    configCopied: true,
+    deploymentReady: true,
+    endpointUrl: "https://api.example/mcp/linear-endpoint",
+    handleSignal: vi.fn(),
+    installStatuses: [],
+    markConfigCopied: vi.fn(),
+    markPromptCopied: vi.fn(),
+    mcpServer: {
+      id: "mcp-server-id",
+      slug: "linear-governed",
+      name: "Linear",
+      remoteMcpServerId: "remote-id",
+    },
+    mcpServerHref: "/projects/request-project/mcp/linear-governed",
+    projectStateError: false,
+    projectStatePending: false,
+    prompt:
+      "Using the Linear MCP server, first list the available tools. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
+    promptCopied: true,
+    retryActivity: vi.fn(),
+    retryCatalog: vi.fn(),
+    selectServer: vi.fn(),
+    selectedServer: catalogServer,
+    setClient: vi.fn(),
+    snippets: {
+      claude: {
+        code: '{"mcpServers":{"linear-governed":{"url":"https://api.example/mcp/linear-endpoint"}}}',
+        language: "json",
+      },
+      cursor: {
+        code: '{"mcpServers":{"linear-governed":{"url":"https://api.example/mcp/linear-endpoint"}}}',
+        language: "json",
+      },
+      codex: {
+        code: '[mcp_servers.linear-governed]\nurl = "https://api.example/mcp/linear-endpoint"',
+        language: "toml",
+      },
+    },
+    toolLogsHref: "/projects/request-project/logs",
+  };
+}
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   progressPending.current = false;
   statusByJourney.current = {
     "third-party-mcp": "not-started",
     "secret-block": "not-started",
   };
+  resetMcpOperations();
 });
+
+resetMcpOperations();
 
 describe("ProjectGuide", () => {
   it("renders the approved opening with both selectable journeys", () => {
@@ -156,7 +260,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Install selected server" }),
+    );
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
@@ -202,17 +308,15 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Install selected server" }),
+    );
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "I've completed this step" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "I've completed this step" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "waiting",
@@ -263,7 +367,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Install selected server" }),
+    );
 
     expect(screen.getByRole("alert").textContent).toContain(
       "Catalog unavailable",
@@ -463,9 +569,156 @@ describe("ProjectGuide", () => {
         "Your client now reaches linear through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
       ),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open tool logs" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open tool logs" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Start the other journey" }),
     ).toBeTruthy();
+  });
+
+  it("renders the real MCP selection, connection, prompt, observed call, and links", async () => {
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear installed as a governed MCP server",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 1) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear is ready on its governed endpoint",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "event",
+            scope: signal.scope,
+            event: {
+              kind: "Governed call",
+              tone: "allow",
+              title: "Linear",
+              rows: [
+                { key: "server", value: "Linear" },
+                { key: "calls", value: "1 recorded" },
+              ],
+              note: "The new call is recorded in Tool Logs.",
+            },
+          });
+        }
+      },
+    );
+    mcpOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Linear.*2 tools/ }));
+    expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
+      catalogServer,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Install selected server" }),
+    );
+
+    expect(screen.getByRole("tab", { name: "Claude" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", {
+        name: "https://api.example/mcp/linear-endpoint",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "View Linear MCP server" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText((_, element) => {
+          if (element?.tagName !== "PRE") return false;
+          return Boolean(
+            element.textContent?.includes("first list the available tools") &&
+            element.textContent.includes(
+              "Do not create, update, or delete anything",
+            ),
+          );
+        }),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    expect(
+      screen.getByRole("heading", { name: "The path is governed." }),
+    ).toBeTruthy();
+    expect(screen.getByText("1 recorded")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Open tool logs" }).getAttribute("href"),
+    ).toBe("/projects/request-project/logs");
+    expect(
+      screen.getByRole("button", { name: "Start the other journey" }),
+    ).toBeTruthy();
+  });
+
+  it("times out without a new governed call and retries the same listening step", () => {
+    vi.useFakeTimers();
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result:
+              signal.scope.step === 0 ? "Server installed" : "Endpoint ready",
+          });
+        }
+      },
+    );
+    mcpOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Install selected server" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "No event seen in 60s. Check the client, then listen again.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(handleSignal).toHaveBeenLastCalledWith(
+      {
+        type: "retry",
+        scope: {
+          path: "third-party-mcp",
+          step: 4,
+          attempt: 1,
+          runId: 3,
+        },
+      },
+      expect.any(Function),
+    );
+    expect(screen.getByRole("status").textContent).toBe(
+      "Listening for an event",
+    );
   });
 });

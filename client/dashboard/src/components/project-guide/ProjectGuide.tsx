@@ -18,6 +18,11 @@ import {
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
+import {
+  MCP_GUIDE_CLIENTS,
+  type McpGuideClient,
+  useMcpGuideOperations,
+} from "@/components/project-guide/useMcpGuideOperations";
 import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
 import {
   getProjectGuideCurrentStep,
@@ -29,10 +34,19 @@ import {
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { cn } from "@/lib/utils";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+
+type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 
 /**
  * Fixture-backed project-home guide. Real journey operations are deliberately
@@ -48,18 +62,28 @@ export function ProjectGuide({
 } = {}): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
+  const mcpOperations = useMcpGuideOperations();
   const operationSignalRef = useRef(onOperationSignal);
+  const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
     () => undefined,
   );
   operationSignalRef.current = onOperationSignal;
+  mcpOperationSignalRef.current = mcpOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
     input: {
-      onSignal: (signal) =>
-        operationSignalRef.current?.(signal, reportRef.current),
+      onSignal: (signal) => {
+        mcpOperationSignalRef.current(signal, reportRef.current);
+        operationSignalRef.current?.(signal, reportRef.current);
+      },
     },
   });
-  reportRef.current = (report) => send({ type: "ADAPTER_REPORT", report });
+  const reportOperation = useCallback(
+    (report: ProjectGuideOperationReport) =>
+      send({ type: "ADAPTER_REPORT", report }),
+    [send],
+  );
+  reportRef.current = reportOperation;
   const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
     useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -126,7 +150,13 @@ export function ProjectGuide({
     ? snapshot.context.completedByPath[selected]
     : [];
   const primaryAction = selectedJourney
-    ? primaryActionFor(displayState, selectedJourney, currentStep, send)
+    ? primaryActionFor(
+        displayState,
+        selectedJourney,
+        currentStep,
+        send,
+        mcpOperations,
+      )
     : undefined;
   const secondaryAction = selectedJourney
     ? displayState === "complete"
@@ -232,6 +262,7 @@ export function ProjectGuide({
                         step={currentStep}
                         checkpoint={snapshot.context.checkpoint?.label}
                         error={snapshot.context.error}
+                        mcpOperations={mcpOperations}
                       />
                     }
                     output={
@@ -282,9 +313,17 @@ function primaryActionFor(
   journey: JourneyMeta,
   currentStep: number,
   send: (event: ProjectGuideEvent) => void,
+  mcpOperations: McpGuideOperations,
 ): ProjectGuideRunAction {
   switch (displayState) {
     case "ready":
+      if (journey.id === "third-party-mcp" && currentStep === 0) {
+        return {
+          label: "Install selected server",
+          disabled: !mcpOperations.selectedServer,
+          onClick: () => send({ type: "START" }),
+        };
+      }
       return {
         label: currentStep === 0 ? "Start the journey" : "Continue the journey",
         onClick: () => send({ type: "START" }),
@@ -292,6 +331,32 @@ function primaryActionFor(
     case "running":
       return { label: "Pause", onClick: () => send({ type: "PAUSE" }) };
     case "checkpoint":
+      if (journey.id === "third-party-mcp" && currentStep === 2) {
+        return {
+          label: "I've connected it",
+          disabled: !mcpOperations.snippets || !mcpOperations.configCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Client connected to the governed endpoint",
+            }),
+        };
+      }
+      if (journey.id === "third-party-mcp" && currentStep === 3) {
+        return {
+          label: "Sent it",
+          disabled:
+            !mcpOperations.prompt ||
+            !mcpOperations.promptCopied ||
+            !mcpOperations.activityBaselineReady ||
+            mcpOperations.activityError,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Prompt sent from the configured client",
+            }),
+        };
+      }
       return {
         label: "I've completed this step",
         onClick: () =>
@@ -310,6 +375,12 @@ function primaryActionFor(
     case "error":
       return { label: "Retry", onClick: () => send({ type: "RETRY" }) };
     case "complete":
+      if (journey.id === "third-party-mcp") {
+        return {
+          label: journey.completion.primaryAction,
+          href: mcpOperations.toolLogsHref,
+        };
+      }
       return { label: journey.completion.primaryAction, disabled: true };
     case "opening":
     case "exited":
@@ -322,12 +393,26 @@ function ProjectGuideStepContent({
   step,
   checkpoint,
   error,
+  mcpOperations,
 }: {
   journey: JourneyMeta;
   step: number;
   checkpoint?: string;
   error: string | null;
+  mcpOperations: McpGuideOperations;
 }): JSX.Element {
+  if (journey.id === "third-party-mcp") {
+    return (
+      <ProjectGuideMcpStepContent
+        journey={journey}
+        step={step}
+        checkpoint={checkpoint}
+        error={error}
+        operations={mcpOperations}
+      />
+    );
+  }
+
   return (
     <div className="grid gap-2 pt-3">
       <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
@@ -342,6 +427,296 @@ function ProjectGuideStepContent({
         <p role="alert" className="text-destructive text-[12px]">
           {error}
         </p>
+      )}
+    </div>
+  );
+}
+
+function ProjectGuideMcpStepContent({
+  journey,
+  step,
+  checkpoint,
+  error,
+  operations,
+}: {
+  journey: JourneyMeta;
+  step: number;
+  checkpoint?: string;
+  error: string | null;
+  operations: McpGuideOperations;
+}): JSX.Element {
+  return (
+    <div className="grid gap-3 pt-3">
+      <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
+        {journey.stepBlurbs[step]}
+      </p>
+      <McpStepBody step={step} operations={operations} />
+      {checkpoint && (
+        <p className="font-mono text-[10px] text-[#121212]/50">
+          Your turn · {checkpoint}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-destructive text-[12px]">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function McpStepBody({
+  step,
+  operations,
+}: {
+  step: number;
+  operations: McpGuideOperations;
+}): JSX.Element | null {
+  switch (step) {
+    case 0:
+      return <McpCatalogSelection operations={operations} />;
+    case 1:
+      return <McpDeploymentReadiness operations={operations} />;
+    case 2:
+      return <McpClientConnection operations={operations} />;
+    case 3:
+      return <McpSafePrompt operations={operations} />;
+    case 4:
+      return (
+        <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
+          <span>Waiting for a call newer than the prompt baseline.</span>
+          <Link
+            to={operations.toolLogsHref}
+            className="text-information-default w-fit underline underline-offset-2"
+          >
+            Open Tool Logs
+          </Link>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function McpCatalogSelection({
+  operations,
+}: {
+  operations: McpGuideOperations;
+}): JSX.Element {
+  if (operations.catalogPending) {
+    return (
+      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+        Loading automatic servers
+      </span>
+    );
+  }
+  if (operations.catalogError || !operations.catalogServers) {
+    return (
+      <div className="grid gap-2">
+        <p role="alert" className="text-destructive text-[12px]">
+          Could not load the automatic catalog servers.
+        </p>
+        <button
+          type="button"
+          onClick={operations.retryCatalog}
+          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+        >
+          Retry catalog
+        </button>
+      </div>
+    );
+  }
+  if (operations.catalogServers.length === 0) {
+    return (
+      <div className="grid gap-2">
+        <p className="text-[12px] text-[#121212]/55">
+          No automatic read-only hosted servers are available right now.
+        </p>
+        <button
+          type="button"
+          onClick={operations.retryCatalog}
+          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+        >
+          Retry catalog
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {operations.catalogServers.map((server) => {
+        const name = server.title ?? server.registrySpecifier;
+        const selected = operations.selectedServer === server;
+        return (
+          <button
+            key={server.registrySpecifier}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => operations.selectServer(server)}
+            className={cn(
+              "border-border flex items-center gap-2 border px-3 py-2 text-left",
+              selected && "border-foreground",
+            )}
+          >
+            <span aria-hidden="true" className="bg-foreground size-1.5" />
+            <span className="text-[12px]">{name}</span>
+            <span className="ml-auto font-mono text-[10px] text-[#121212]/50">
+              {server.toolCount} tools
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function McpDeploymentReadiness({
+  operations,
+}: {
+  operations: McpGuideOperations;
+}): JSX.Element {
+  if (operations.projectStateError) {
+    return (
+      <p role="alert" className="text-destructive text-[12px]">
+        Could not read the server, Default plugin, or governed endpoint.
+      </p>
+    );
+  }
+  if (operations.projectStatePending) {
+    return (
+      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+        Checking project readiness
+      </span>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
+      {operations.installStatuses.map((status) => (
+        <span key={status.key}>
+          {status.name} · {status.status}
+          {status.error ? ` · ${status.error}` : ""}
+        </span>
+      ))}
+      {operations.deploymentReady && (
+        <span className="text-success-default">
+          Default plugin and governed endpoint ready
+        </span>
+      )}
+    </div>
+  );
+}
+
+function mcpClientLabel(client: McpGuideClient): string {
+  switch (client) {
+    case "claude":
+      return "Claude";
+    case "cursor":
+      return "Cursor";
+    case "codex":
+      return "Codex";
+  }
+}
+
+function McpClientConnection({
+  operations,
+}: {
+  operations: McpGuideOperations;
+}): JSX.Element {
+  if (!operations.endpointUrl || !operations.snippets) {
+    return (
+      <p role="alert" className="text-destructive text-[12px]">
+        The governed endpoint is not ready yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-3 font-mono text-[10px]">
+        <a
+          href={operations.endpointUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-information-default underline underline-offset-2"
+        >
+          {operations.endpointUrl}
+        </a>
+        {operations.mcpServerHref && (
+          <Link
+            to={operations.mcpServerHref}
+            className="text-information-default underline underline-offset-2"
+          >
+            View {operations.mcpServer?.name ?? "governed"} MCP server
+          </Link>
+        )}
+      </div>
+      <Tabs
+        value={operations.client}
+        onValueChange={(value) => operations.setClient(value as McpGuideClient)}
+      >
+        <PageTabsList aria-label="MCP client">
+          {MCP_GUIDE_CLIENTS.map((client) => (
+            <PageTabsTrigger key={client} value={client}>
+              {mcpClientLabel(client)}
+            </PageTabsTrigger>
+          ))}
+        </PageTabsList>
+        {MCP_GUIDE_CLIENTS.map((client) => (
+          <TabsContent key={client} value={client}>
+            <CodeSnippet
+              code={operations.snippets![client].code}
+              language={operations.snippets![client].language}
+              copyable
+              onSelectOrCopy={operations.markConfigCopied}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+function McpSafePrompt({
+  operations,
+}: {
+  operations: McpGuideOperations;
+}): JSX.Element {
+  if (!operations.prompt) {
+    return (
+      <p role="alert" className="text-destructive text-[12px]">
+        The safe prompt is unavailable until the server is ready.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      <CodeSnippet
+        code={operations.prompt}
+        language="text"
+        copyable
+        onSelectOrCopy={operations.markPromptCopied}
+      />
+      {operations.activityError && (
+        <div className="grid gap-2">
+          <p role="alert" className="text-destructive text-[12px]">
+            Could not capture the current activity baseline.
+          </p>
+          <button
+            type="button"
+            onClick={operations.retryActivity}
+            className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+          >
+            Retry activity check
+          </button>
+        </div>
+      )}
+      {!operations.activityError && !operations.activityBaselineReady && (
+        <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+          Checking current activity
+        </span>
       )}
     </div>
   );

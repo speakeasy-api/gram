@@ -10,11 +10,13 @@ import type {
 import { cn } from "@/lib/utils";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, type ReactNode } from "react";
+import { Link } from "react-router";
 
 export type ProjectGuideRunAction = {
   label: string;
   onClick?: () => void;
   disabled?: boolean;
+  href?: string;
 };
 
 export type ProjectGuideRunProps = {
@@ -374,14 +376,7 @@ function CompletionSummary({
       </p>
       {eventCard}
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={primaryAction.onClick}
-          disabled={primaryAction.disabled}
-          className="bg-[#121212] px-[18px] py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase"
-        >
-          {primaryAction.label}
-        </button>
+        <CompletionPrimaryAction action={primaryAction} />
         {secondaryAction && (
           <button
             type="button"
@@ -394,5 +389,31 @@ function CompletionSummary({
         )}
       </div>
     </section>
+  );
+}
+
+function CompletionPrimaryAction({
+  action,
+}: {
+  action: ProjectGuideRunAction;
+}): JSX.Element {
+  const className =
+    "bg-[#121212] px-[18px] py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase";
+  if (action.href) {
+    return (
+      <Link to={action.href} className={className}>
+        {action.label}
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={action.onClick}
+      disabled={action.disabled}
+      className={className}
+    >
+      {action.label}
+    </button>
   );
 }
