@@ -931,6 +931,60 @@ func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
 	return true, nil
 }
 
+type ListShadowMCPInventoryURLsByCanonicalURLsParams struct {
+	GramProjectID       string
+	CanonicalServerURLs []string
+}
+
+// ListShadowMCPInventoryURLsByCanonicalURLs loads the stored inventory
+// metadata for a known set of URLs. Callers that derive their URL set from
+// telemetry need this to pick up what only the inventory table holds — an
+// admin's server_name_override, and the true first/last seen — rather than
+// reporting what one person's traces happened to show.
+func (q *Queries) ListShadowMCPInventoryURLsByCanonicalURLs(ctx context.Context, arg ListShadowMCPInventoryURLsByCanonicalURLsParams) ([]ShadowMCPInventoryURLRow, error) {
+	if len(arg.CanonicalServerURLs) == 0 {
+		return []ShadowMCPInventoryURLRow{}, nil
+	}
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"canonical_server_url": arg.CanonicalServerURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory canonical url lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory canonical url lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]ShadowMCPInventoryURLRow, 0, len(arg.CanonicalServerURLs))
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory canonical url lookup row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory canonical url lookup rows: %w", err)
+	}
+
+	return result, nil
+}
+
 func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg ListShadowMCPInventoryURLsBySlugHashParams) ([]ShadowMCPInventoryURLRow, error) {
 	const slugHashExpression = "substring(lower(hex(SHA256(canonical_server_url))), 1, 8)"
 

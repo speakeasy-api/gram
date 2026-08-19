@@ -1184,6 +1184,8 @@ paths:
             description: The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.
             items:
               type: string
+            maxItems: 200
+            minItems: 1
             type: array
         - allowEmptyValue: true
           in: query

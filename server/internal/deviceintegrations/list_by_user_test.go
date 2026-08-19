@@ -102,3 +102,34 @@ func TestListManagedDevicesUserFilterEmptyIsUnnarrowed(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 }
+
+// A filter carrying only blanks — an empty query-string value, say — has to
+// read as no filter. Left unfiltered it would otherwise match no device at
+// all, which looks like "this person has no devices".
+func TestListManagedDevicesUserFilterBlanksAreNoFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	configID := created.Config.ID
+
+	seedDevice(t, ctx, conn, configID, orgID, "d-1", "one@example.test", nil, false)
+
+	require.Empty(t, nonBlank([]string{"", "   "}))
+	require.Equal(t, []string{"kept"}, nonBlank([]string{"", " kept ", "  "}))
+
+	cutoff := conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow))
+	rows, err := store.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
+		DeviceLevel:    false,
+		ActiveCutoff:   cutoff,
+		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(nil),
+		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Bucket:         conv.PtrToPGTextEmpty(nil),
+		UserIds:        nonBlank([]string{"", "  "}),
+		UserEmails:     nonBlank([]string{""}),
+		PageLimit:      10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a blank-only filter must not narrow the listing")
+}

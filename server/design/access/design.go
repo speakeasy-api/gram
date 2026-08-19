@@ -381,7 +381,10 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, func() {
 				Format(FormatUUID)
 			})
-			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.")
+			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.", func() {
+				MinLength(1)
+				MaxLength(200)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)

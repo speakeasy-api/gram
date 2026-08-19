@@ -542,7 +542,16 @@ func BuildListShadowMCPInventoryServersForUserPayload(accessListShadowMCPInvento
 	{
 		err = json.Unmarshal([]byte(accessListShadowMCPInventoryServersForUserUserKeys), &userKeys)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var limit int

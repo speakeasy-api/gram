@@ -2856,6 +2856,12 @@ func DecodeListShadowMCPInventoryServersForUserRequest(mux goahttp.Muxer, decode
 		if userKeys == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("user_keys", "query string"))
 		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
 		{
 			limitRaw := qp.Get("limit")
 			if limitRaw == "" {

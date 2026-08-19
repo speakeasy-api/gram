@@ -501,7 +501,11 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 
 	chRepo := telemetryrepo.New(s.chConn)
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		OrganizationID:      ac.ActiveOrganizationID,
+		// Gated, not the raw org id: the fold is behind a rollout flag, and
+		// this endpoint must fall under the same switch as every other folded
+		// read. With the fold off the email leg drops and matching falls back
+		// to the user id, which returns less rather than something wrong.
+		OrganizationID:      s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 		GramProjectID:       projectID.String(),
 		CanonicalServerURLs: nil,
 		UserKeys:            userKeys,
@@ -534,6 +538,22 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 		canonicalURLs = append(canonicalURLs, usage.CanonicalServerURL)
 	}
 
+	// The stored inventory row is what carries an admin's rename and the
+	// project-wide first/last seen. Deriving the server set from one person's
+	// telemetry must not cost either, or the same server would read
+	// differently here than on the inventory page.
+	inventoryRows, err := chRepo.ListShadowMCPInventoryURLsByCanonicalURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsByCanonicalURLsParams{
+		GramProjectID:       projectID.String(),
+		CanonicalServerURLs: canonicalURLs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory metadata for user").LogError(ctx, s.logger)
+	}
+	inventoryByURL := make(map[string]telemetryrepo.ShadowMCPInventoryURLRow, len(inventoryRows))
+	for _, row := range inventoryRows {
+		inventoryByURL[row.CanonicalServerURL] = row
+	}
+
 	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, canonicalURLs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
@@ -541,25 +561,29 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 
 	servers := make([]*gen.ShadowMCPInventoryServer, 0, len(usageRows))
 	for _, usage := range usageRows {
-		row := telemetryrepo.ShadowMCPInventoryURLRow{
-			CanonicalServerURL: usage.CanonicalServerURL,
-			URLHost:            "",
-			ServerName:         usage.ServerName,
-			ServerNameOverride: "",
-			FirstSeen:          time.Time{},
-			LastSeen:           time.Time{},
-			LastCalledUnixNano: 0,
-			UpdatedAt:          time.Time{},
+		// Start from the stored row so the rename and the project-wide seen
+		// range survive; fall back to what telemetry reported for servers the
+		// inventory has not recorded yet.
+		row, stored := inventoryByURL[usage.CanonicalServerURL]
+		row.CanonicalServerURL = usage.CanonicalServerURL
+		if row.ServerName == "" {
+			row.ServerName = usage.ServerName
 		}
-		if usage.FirstCalled != nil {
-			row.FirstSeen = *usage.FirstCalled
+		if !stored {
+			if usage.FirstCalled != nil {
+				row.FirstSeen = *usage.FirstCalled
+			}
+			if usage.LastCalled != nil {
+				row.LastSeen = *usage.LastCalled
+			}
 		}
 		if usage.LastCalled != nil {
-			row.LastSeen = *usage.LastCalled
 			row.LastCalledUnixNano = usage.LastCalled.UTC().UnixNano()
 		}
-		if invURL, ok := shadowmcp.CanonicalizeInventoryURL(usage.CanonicalServerURL); ok {
-			row.URLHost = invURL.URLHost
+		if row.URLHost == "" {
+			if invURL, ok := shadowmcp.CanonicalizeInventoryURL(usage.CanonicalServerURL); ok {
+				row.URLHost = invURL.URLHost
+			}
 		}
 		servers = append(servers, buildShadowMCPInventoryServer(row, usage, policyState.forURL(usage.CanonicalServerURL), shadowMCPTargetKindServerURL))
 	}
