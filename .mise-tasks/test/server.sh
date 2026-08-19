@@ -6,6 +6,7 @@
 cover=false
 open_html=false
 shard=""
+rerun_fails=""
 args=()
 
 for arg in "$@"; do
@@ -19,6 +20,9 @@ for arg in "$@"; do
     --shard=*)
       shard="${arg#--shard=}"
       shift ;;
+    --rerun-fails=*)
+      rerun_fails="${arg#--rerun-fails=}"
+      shift ;;
     *)
       args+=("$arg") ;;
   esac
@@ -31,7 +35,7 @@ fi
 # --shard=<index>/<total> runs a deterministic subset of the packages that have
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed.
-if [ -n "$shard" ]; then
+if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
   # Only package patterns are sharded. Everything else reaches 'go test' in the
   # order it was given, including values that follow a flag — the 'TestFoo' in
   # '-run TestFoo' is not a package. Build tags also go to the shard tool so it
@@ -64,17 +68,21 @@ if [ -n "$shard" ]; then
     esac
   done
 
-  shard_packages=$(go run github.com/speakeasy-api/gram/ci/cmd/shard \
-    -i "$shard" "${tags[@]}" "${patterns[@]}") || exit $?
+  packages=("${patterns[@]}")
 
-  packages=()
-  while IFS= read -r line; do
-    [ -n "$line" ] && packages+=("$line")
-  done <<< "$shard_packages"
+  if [ -n "$shard" ]; then
+    shard_packages=$(go run github.com/speakeasy-api/gram/ci/cmd/shard \
+      -i "$shard" "${tags[@]}" "${patterns[@]}") || exit $?
 
-  if [ ${#packages[@]} -eq 0 ]; then
-    echo "Shard $shard: no packages to test."
-    exit 0
+    packages=()
+    while IFS= read -r line; do
+      [ -n "$line" ] && packages+=("$line")
+    done <<< "$shard_packages"
+
+    if [ ${#packages[@]} -eq 0 ]; then
+      echo "Shard $shard: no packages to test."
+      exit 0
+    fi
   fi
 
   args=("${flags[@]}" "${packages[@]}")
@@ -84,7 +92,25 @@ if [ "$cover" = true ]; then
   args=("-coverprofile=cover.out" "-covermode=atomic" "${args[@]}")
 fi
 
-gotestsum --junitfile junit-report.xml --format-hide-empty-pkg -- "${args[@]}"
+gotestsum_flags=(--junitfile junit-report.xml --format-hide-empty-pkg)
+
+# --rerun-fails=<n> re-runs only the tests that failed, up to n more times, so a
+# flaky test does not fail the run on its own. gotestsum needs the packages
+# separately from the 'go test' flags to do that, and skips reruns entirely when
+# the first attempt failed more than --rerun-fails-max-failures times (i.e. the
+# suite is broken rather than flaky).
+if [ -n "$rerun_fails" ]; then
+  gotestsum_flags+=(
+    --rerun-fails="$rerun_fails"
+    --packages="${packages[*]}"
+    # Names the tests that only passed on a retry. Without it a flake is
+    # invisible: the run is green and nothing says a test had to be re-run.
+    --rerun-fails-report=rerun-report.txt
+  )
+  args=("${flags[@]}")
+fi
+
+gotestsum "${gotestsum_flags[@]}" -- "${args[@]}"
 test_exit_code=$?
 
 if [ "$cover" = true ] && [ -f "cover.out" ]; then

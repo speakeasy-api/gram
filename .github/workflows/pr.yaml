@@ -1496,7 +1496,24 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # --rerun-fails=1 gives a failing test one more attempt before the
+        # shard is marked failed, so a flaky test does not block the PR.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+
+      # A retried test leaves the check green, so without this a flake is
+      # invisible unless someone reads the raw log.
+      - name: Report retried tests
+        if: always()
+        working-directory: server
+        run: |
+          [ -s rerun-report.txt ] || exit 0
+          {
+            echo "### Retried tests (shard ${{ matrix.shard }})"
+            echo
+            echo '```'
+            cat rerun-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays

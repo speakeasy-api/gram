@@ -12,6 +12,7 @@ flags.local.csv
 node_modules
 bin
 junit-report.xml
+rerun-report.txt
 report.md
 .mise-tasks/local
 .assets
