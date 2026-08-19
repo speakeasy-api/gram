@@ -4,6 +4,7 @@ import {
   AlertTitle,
   ErrorAlert,
 } from "@/components/ui/Alert";
+import { useOrganization } from "@/contexts/Auth";
 import { ArrowLeft, ChevronRight, CircleCheck } from "lucide-react";
 import {
   Sheet,
@@ -13,11 +14,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import {
-  invalidatePlatformMCPOnboarding,
-  usePlatformMCPOnboarding,
-} from "@gram/client/react-query/platformMCPOnboarding.js";
+import { invalidatePlatformMCPOnboarding } from "@gram/client/react-query/platformMCPOnboarding.js";
 import { useEffect, useRef, useState } from "react";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { Badge } from "@/components/ui/Badge";
@@ -43,6 +42,7 @@ import { useDismissPlatformMCPOnboardingMutation } from "@gram/client/react-quer
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useFetcher } from "@/contexts/Fetcher";
 import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
+import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/client/react-query/recordPlatformMCPAgentConfigurationCopied.js";
 import { useRecordPlatformMCPInstallIntentMutation } from "@gram/client/react-query/recordPlatformMCPInstallIntent.js";
@@ -149,6 +149,48 @@ export function PlatformMCPOnboardingContent({
   initialSourceSurface?: SourceSurfaceValue;
   autoOpen?: boolean;
 } = {}): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <PlatformMCPOnboardingContentInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+      currentProjectSlug={currentProjectSlug}
+      embeddedInProjectSetup={embeddedInProjectSetup}
+      onSetupComplete={onSetupComplete}
+      sheetOnly={sheetOnly}
+      setupOpen={setupOpen}
+      onSetupOpenChange={onSetupOpenChange}
+      initialSourceSurface={initialSourceSurface}
+      autoOpen={autoOpen}
+    />
+  );
+}
+
+function PlatformMCPOnboardingContentInner({
+  organizationId,
+  isCurrentOrganization,
+  currentProjectSlug,
+  embeddedInProjectSetup = false,
+  onSetupComplete,
+  sheetOnly = false,
+  setupOpen = false,
+  onSetupOpenChange,
+  initialSourceSurface,
+  autoOpen = false,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+  currentProjectSlug?: string;
+  embeddedInProjectSetup?: boolean;
+  onSetupComplete?: () => void;
+  sheetOnly?: boolean;
+  setupOpen?: boolean;
+  onSetupOpenChange?: (open: boolean) => void;
+  initialSourceSurface?: SourceSurfaceValue;
+  autoOpen?: boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const { fetch: authedFetch } = useFetcher();
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -166,17 +208,13 @@ export function PlatformMCPOnboardingContent({
     initialSourceSurface ?? SourceSurface.PlatformMcpSettings,
   );
   const [searchParams, setSearchParams] = useSearchParams();
-  const onboarding = usePlatformMCPOnboarding(
-    { gramSession: "" },
-    { sessionHeaderGramSession: "" },
-    {
-      throwOnError: false,
-      staleTime: 10_000,
-      enabled: !sheetOnly || setupOpen,
-      refetchInterval: setupOpen || !sheetOnly ? 5_000 : false,
-      refetchIntervalInBackground: false,
-    },
-  );
+  const onboarding = useOrganizationPlatformMCPOnboarding(organizationId, {
+    throwOnError: false,
+    staleTime: 10_000,
+    enabled: !sheetOnly || setupOpen,
+    refetchInterval: setupOpen || !sheetOnly ? 5_000 : false,
+    refetchIntervalInBackground: false,
+  });
 
   useEffect(() => {
     if (!sheetOnly) return;
@@ -238,6 +276,7 @@ export function PlatformMCPOnboardingContent({
   });
   const setOrganizationAccess = useFeaturesSetMutation({
     onSuccess: async () => {
+      if (!isCurrentOrganization()) return;
       setAccessError(null);
       setDisableConfirmationOpen(false);
       await Promise.all([
@@ -246,6 +285,7 @@ export function PlatformMCPOnboardingContent({
       ]);
     },
     onError: () => {
+      if (!isCurrentOrganization()) return;
       setAccessError(
         "Could not update organization-wide Platform MCP access. Try again.",
       );
@@ -257,6 +297,7 @@ export function PlatformMCPOnboardingContent({
     setOrganizationAccess.mutate({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.PlatformMcp,
           enabled,
         },

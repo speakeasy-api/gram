@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router";
+import { useOrganization } from "@/contexts/Auth";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
@@ -89,11 +90,12 @@ export function ProjectDashboard(): JSX.Element {
     [customRange, customRangeLabel, dateRange],
   );
 
+  const organization = useOrganization();
   const {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useProductFeatures();
+  } = useProductFeatures({ organizationId: organization.id });
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query

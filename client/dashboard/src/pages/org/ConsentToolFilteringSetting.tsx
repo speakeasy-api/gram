@@ -2,6 +2,8 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { handleAPIError } from "@/lib/errors";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -14,16 +16,37 @@ import { ListFilter } from "lucide-react";
 import { toast } from "sonner";
 
 export function ConsentToolFilteringSetting(): JSX.Element | null {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <ConsentToolFilteringSettingInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
+  );
+}
+
+function ConsentToolFilteringSettingInner({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element | null {
   const queryClient = useQueryClient();
-  const features = useProductFeatures(undefined, undefined, {
+  const features = useProductFeatures({ organizationId }, undefined, {
     throwOnError: false,
   });
   const mutation = useFeaturesSetMutation({
     onSuccess: async () => {
+      if (!isCurrentOrganization()) return;
       await invalidateAllProductFeatures(queryClient);
+      if (!isCurrentOrganization()) return;
       toast.success("Tool filtering setting updated");
     },
     onError: (error) => {
+      if (!isCurrentOrganization()) return;
       handleAPIError(error, "Failed to update tool filtering setting");
     },
   });
@@ -80,6 +103,7 @@ export function ConsentToolFilteringSetting(): JSX.Element | null {
               mutation.mutate({
                 request: {
                   setProductFeatureRequestBody: {
+                    organizationId,
                     featureName: FeatureName.ConsentToolFiltering,
                     enabled,
                   },

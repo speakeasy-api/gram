@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useOrganization } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -59,8 +60,9 @@ export function ExternalServicesPage(): JSX.Element {
 // passes. A gated-but-authorized org sees only the framed refusal, with no
 // header or toolbar.
 function ExternalServicesGate(): JSX.Element {
+  const organization = useOrganization();
   const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    undefined,
+    { organizationId: organization.id },
     undefined,
     { staleTime: 30_000, throwOnError: false },
   );

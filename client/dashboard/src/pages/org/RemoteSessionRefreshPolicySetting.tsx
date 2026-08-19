@@ -2,6 +2,7 @@ import {
   BrandMeshLayers,
   BRAND_MESH_SURFACE_CLASS,
 } from "@/components/brand-mesh";
+import { useOrganization } from "@/contexts/Auth";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -17,6 +18,7 @@ import { useSetRemoteSessionAutoRefreshPolicyMutation } from "@gram/client/react
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 const POLICY_OPTIONS = [
   {
@@ -49,16 +51,37 @@ function selectedPolicy(
 }
 
 export function RemoteSessionRefreshPolicySetting(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <RemoteSessionRefreshPolicySettingInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
+  );
+}
+
+function RemoteSessionRefreshPolicySettingInner({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
-  const features = useProductFeatures(undefined, undefined, {
+  const features = useProductFeatures({ organizationId }, undefined, {
     throwOnError: false,
   });
   const mutation = useSetRemoteSessionAutoRefreshPolicyMutation({
     onSuccess: async () => {
+      if (!isCurrentOrganization()) return;
       await invalidateAllProductFeatures(queryClient);
+      if (!isCurrentOrganization()) return;
       toast.success("Automatic session refresh policy updated");
     },
     onError: (error) => {
+      if (!isCurrentOrganization()) return;
       handleAPIError(
         error,
         "Failed to update automatic session refresh policy",
@@ -154,6 +177,7 @@ export function RemoteSessionRefreshPolicySetting(): JSX.Element {
                       mutation.mutate({
                         request: {
                           setRemoteSessionAutoRefreshPolicyRequestBody: {
+                            organizationId,
                             policy: option.value,
                           },
                         },

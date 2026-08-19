@@ -26,8 +26,12 @@ import { useState } from "react";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function PlatformAdminFeatures(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+
   return (
     <Page>
       <Page.Header>
@@ -45,7 +49,11 @@ export default function PlatformAdminFeatures(): JSX.Element {
           <Page.Section.Body>
             <PlatformAdminGate>
               <div className="space-y-8">
-                <ProductFeaturesSection />
+                <ProductFeaturesSection
+                  key={organization.id}
+                  organizationId={organization.id}
+                  isCurrentOrganization={isCurrentOrganization}
+                />
                 <ChatAnalysisSection />
                 <DeveloperSection />
               </div>
@@ -121,9 +129,21 @@ const PRODUCT_FEATURES: {
   },
 ];
 
-function ProductFeaturesSection(): JSX.Element {
+function ProductFeaturesSection({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
-  const { data: features, isLoading, error } = useProductFeatures();
+  const {
+    data: features,
+    isLoading,
+    error,
+  } = useProductFeatures({
+    organizationId,
+  });
   const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
   const visibleFeatures = PRODUCT_FEATURES.filter(
     (feature) =>
@@ -138,6 +158,7 @@ function ProductFeaturesSection(): JSX.Element {
     variables,
   } = useFeaturesSetMutation({
     onSuccess: () => {
+      if (!isCurrentOrganization()) return;
       void invalidateAllProductFeatures(queryClient);
     },
   });
@@ -186,6 +207,7 @@ function ProductFeaturesSection(): JSX.Element {
                     mutate({
                       request: {
                         setProductFeatureRequestBody: {
+                          organizationId,
                           featureName: feature.featureName,
                           enabled: next,
                         },

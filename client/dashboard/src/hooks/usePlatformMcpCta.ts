@@ -3,8 +3,8 @@ import { useOrganization, useUser } from "@/contexts/Auth";
 
 import type { RecordDashboardCtaEventRequestBody } from "@gram/client/models/components/recorddashboardctaeventrequestbody.js";
 import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useOrgRoutes } from "@/routes";
-import { usePlatformMCPOnboarding } from "@gram/client/react-query/platformMCPOnboarding.js";
 import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus.js";
 import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -86,11 +86,11 @@ export function usePlatformMcpCta({
   const { enabled: dashboardEnabled, isLoading: dashboardLoading } =
     usePlatformMcpDashboardVisibility();
   const canQuery = dashboardEnabled && hasScope("org:admin");
-  const onboarding = usePlatformMCPOnboarding(
-    { gramSession: "" },
-    { sessionHeaderGramSession: "" },
-    { throwOnError: false, staleTime: 10_000, enabled: canQuery },
-  );
+  const onboarding = useOrganizationPlatformMCPOnboarding(organization.id, {
+    throwOnError: false,
+    staleTime: 10_000,
+    enabled: canQuery,
+  });
   const packageStatus = usePlatformMCPPackageStatus(undefined, undefined, {
     throwOnError: false,
     staleTime: 10_000,
