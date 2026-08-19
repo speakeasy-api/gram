@@ -4401,9 +4401,11 @@ type AdminOrganizationResponseBody struct {
 
 // AdminInferenceKeyResponse is used to define fields on response body types.
 type AdminInferenceKeyResponse struct {
-	KeyType        *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
-	MonthlyCredits *int64  `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-	Disabled       *bool   `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// Credits spent this month in USD.
+	CreditsUsed    *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
+	MonthlyCredits *int64   `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+	Disabled       *bool    `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
 }
 
 // NewUpdateOrganizationRequestBody builds the HTTP request body from the
@@ -13847,6 +13849,9 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 func ValidateAdminInferenceKeyResponse(body *AdminInferenceKeyResponse) (err error) {
 	if body.KeyType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.CreditsUsed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credits_used", "body"))
 	}
 	if body.MonthlyCredits == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))

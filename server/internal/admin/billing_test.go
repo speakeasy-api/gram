@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -11,9 +12,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
+
+type fakeOpenRouterUsage struct {
+	creditsByKeyType map[openrouter.KeyType]float64
+	limitsByKeyType  map[openrouter.KeyType]int
+	err              error
+}
+
+func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyType openrouter.KeyType) (float64, int, error) {
+	if f.err != nil {
+		return 0, 0, f.err
+	}
+	return f.creditsByKeyType[keyType], f.limitsByKeyType[keyType], nil
+}
 
 type fakeBillingOperations struct {
 	organizationID string
@@ -46,6 +61,10 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	seedOrg(t, ctx, db, orgFixture{id: "org_inference", name: "Inference", slug: "inference"})
+	svc.openRouterUsage = &fakeOpenRouterUsage{
+		creditsByKeyType: map[openrouter.KeyType]float64{openrouter.KeyTypeChat: 42.75, openrouter.KeyTypeInternal: 12.5},
+		limitsByKeyType:  map[openrouter.KeyType]int{openrouter.KeyTypeChat: 999, openrouter.KeyTypeInternal: 999},
+	}
 	openRouterRepo := orrepo.New(db)
 	_, err := openRouterRepo.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: "org_inference", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat", MonthlyCredits: 100,
@@ -63,8 +82,8 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", MonthlyCredits: 100, Disabled: false},
-		{KeyType: "internal", MonthlyCredits: 50, Disabled: true},
+		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: false},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true},
 	}, result)
 }
 
@@ -81,6 +100,10 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	seedOrg(t, ctx, db, orgFixture{id: "org_inference_filtered", name: "Inference Filtered", slug: "inference-filtered"})
+	svc.openRouterUsage = &fakeOpenRouterUsage{
+		creditsByKeyType: map[openrouter.KeyType]float64{openrouter.KeyTypeChat: 7.25},
+		limitsByKeyType:  map[openrouter.KeyType]int{openrouter.KeyTypeChat: 999},
+	}
 	openRouterRepo := orrepo.New(db)
 	_, err := openRouterRepo.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: "org_inference_filtered", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat", MonthlyCredits: 100,
@@ -94,9 +117,37 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_filtered"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", MonthlyCredits: 100, Disabled: false},
+		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false},
 	}, result)
 
+}
+
+func TestGetInferenceKeysReportsUnavailableWhenOpenRouterIsNotConfigured(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_inference_usage_unavailable", name: "Inference Usage Unavailable", slug: "inference-usage-unavailable"})
+	svc.openRouterUsage = TrialKeysUnavailable{}
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_inference_usage_unavailable", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat", MonthlyCredits: 100,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_usage_unavailable"})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+func TestGetInferenceKeysFailsWhenOpenRouterUsageCannotBeRead(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_inference_usage_error", name: "Inference Usage Error", slug: "inference-usage-error"})
+	svc.openRouterUsage = &fakeOpenRouterUsage{err: errors.New("provider unavailable")}
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_inference_usage_error", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat", MonthlyCredits: 100,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_usage_error"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func TestGetPaygBillingSummaryUsesCanonicalOrganizationID(t *testing.T) {

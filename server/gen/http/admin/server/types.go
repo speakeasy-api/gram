@@ -4407,9 +4407,11 @@ type AdminOrganizationResponseBody struct {
 
 // AdminInferenceKeyResponse is used to define fields on response body types.
 type AdminInferenceKeyResponse struct {
-	KeyType        string `form:"key_type" json:"key_type" xml:"key_type"`
-	MonthlyCredits int64  `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-	Disabled       bool   `form:"disabled" json:"disabled" xml:"disabled"`
+	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
+	// Credits spent this month in USD.
+	CreditsUsed    float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
+	MonthlyCredits int64   `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+	Disabled       bool    `form:"disabled" json:"disabled" xml:"disabled"`
 }
 
 // NewGetProjectResponseBody builds the HTTP response body from the result of

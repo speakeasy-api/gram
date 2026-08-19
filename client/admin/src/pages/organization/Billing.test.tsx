@@ -57,16 +57,19 @@ beforeEach(() => {
   mocks.getInferenceKeys.mockResolvedValue([
     {
       key_type: "chat",
+      credits_used: 42.75,
       monthly_credits: 100,
       disabled: false,
     },
     {
       key_type: "internal",
+      credits_used: 12.5,
       monthly_credits: 0,
       disabled: true,
     },
     {
       key_type: "future-purpose",
+      credits_used: 1.25,
       monthly_credits: 25,
       disabled: false,
     },
@@ -113,9 +116,13 @@ describe("Billing", () => {
     expect(screen.getByText("Other inference")).toBeTruthy();
     expect(screen.getByText("Security and internal inference")).toBeTruthy();
     expect(screen.getByText("Platform-managed inference")).toBeTruthy();
+    expect(screen.getByText("$42.75 of $100.00")).toBeTruthy();
+    expect(screen.getByText("$12.50 (unlimited limit)")).toBeTruthy();
+    expect(screen.getByText("$1.25 of $25.00")).toBeTruthy();
     expect(screen.getByText("$100.00")).toBeTruthy();
     expect(screen.getByText("$25.00")).toBeTruthy();
     expect(screen.getByText("Unlimited")).toBeTruthy();
+    expect(screen.getAllByText("Current monthly usage")).toHaveLength(3);
     expect(screen.getAllByText("Configured monthly credit limit")).toHaveLength(
       3,
     );

@@ -5062,6 +5062,7 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 func unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey(v *AdminInferenceKeyResponse) *admin.AdminInferenceKey {
 	res := &admin.AdminInferenceKey{
 		KeyType:        *v.KeyType,
+		CreditsUsed:    *v.CreditsUsed,
 		MonthlyCredits: *v.MonthlyCredits,
 		Disabled:       *v.Disabled,
 	}

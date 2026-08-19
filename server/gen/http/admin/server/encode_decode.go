@@ -4486,6 +4486,7 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 func marshalAdminAdminInferenceKeyToAdminInferenceKeyResponse(v *admin.AdminInferenceKey) *AdminInferenceKeyResponse {
 	res := &AdminInferenceKeyResponse{
 		KeyType:        v.KeyType,
+		CreditsUsed:    v.CreditsUsed,
 		MonthlyCredits: v.MonthlyCredits,
 		Disabled:       v.Disabled,
 	}

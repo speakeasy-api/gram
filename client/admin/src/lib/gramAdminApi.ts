@@ -490,6 +490,7 @@ export function listOrganizationMembers(
 
 export type AdminInferenceKey = {
   key_type: string;
+  credits_used: number;
   monthly_credits: number;
   disabled: boolean;
 };

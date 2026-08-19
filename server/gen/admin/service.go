@@ -114,10 +114,12 @@ type AdminBulkUpdateAccountTypeResult struct {
 	MissingIds []string
 }
 
-// Configured state for one materialized platform-managed OpenRouter key,
-// without key material or provider identifiers.
+// Current usage and configured state for one materialized platform-managed
+// OpenRouter key, without key material or provider identifiers.
 type AdminInferenceKey struct {
-	KeyType        string
+	KeyType string
+	// Credits spent this month in USD.
+	CreditsUsed    float64
 	MonthlyCredits int64
 	Disabled       bool
 }

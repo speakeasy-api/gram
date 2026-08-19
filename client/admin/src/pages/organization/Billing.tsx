@@ -82,7 +82,7 @@ function inferenceKeyPurpose(keyType: AdminInferenceKey["key_type"]): string {
   }
 }
 
-function formatConfiguredCredits(value: number): string {
+function formatCredits(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -106,10 +106,16 @@ function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
         >
           <Row label="Key type">{key.key_type}</Row>
           <Row label="Purpose">{inferenceKeyPurpose(key.key_type)}</Row>
+          <Row label="Current monthly usage">
+            {formatCredits(key.credits_used)}
+            {key.monthly_credits === 0
+              ? " (unlimited limit)"
+              : ` of ${formatCredits(key.monthly_credits)}`}
+          </Row>
           <Row label="Configured monthly credit limit">
             {key.monthly_credits === 0
               ? "Unlimited"
-              : formatConfiguredCredits(key.monthly_credits)}
+              : formatCredits(key.monthly_credits)}
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
         </div>

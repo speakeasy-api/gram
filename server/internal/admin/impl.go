@@ -63,6 +63,7 @@ type Service struct {
 	workos orgprovision.WorkOSOrganizationCreator
 
 	openRouter      TrialKeyReviver
+	openRouterUsage OpenRouterUsageReader
 	productFeatures *productfeatures.Client
 
 	audit *audit.Logger
@@ -84,8 +85,19 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
-// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
-var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+// OpenRouterUsageReader reads the current monthly usage for a materialized key.
+type OpenRouterUsageReader interface {
+	GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error)
+}
+
+// AdminOpenRouter is the complete OpenRouter surface used by the admin service.
+type AdminOpenRouter interface {
+	TrialKeyReviver
+	OpenRouterUsageReader
+}
+
+// ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
+var ErrOpenRouterUnavailable = errors.New("no usable OpenRouter configuration")
 
 const keyBillingLockWaitTimeout = 5 * time.Second
 
@@ -93,15 +105,19 @@ const keyBillingLockWaitTimeout = 5 * time.Second
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
+	return 0, 0, ErrOpenRouterUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,7 +132,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
-	openRouter TrialKeyReviver,
+	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
 	billing BillingOperations,
@@ -147,6 +163,7 @@ func NewService(
 		allowedOrigins:  allowedOrigins,
 		workos:          workosClient,
 		openRouter:      openRouter,
+		openRouterUsage: openRouter,
 		productFeatures: productFeatures,
 		audit:           audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
@@ -1151,7 +1168,7 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lock
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
 		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
 		switch {
-		case errors.Is(err, ErrKeyRevivalUnavailable):
+		case errors.Is(err, ErrOpenRouterUnavailable):
 			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
 		case err != nil:
 			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)

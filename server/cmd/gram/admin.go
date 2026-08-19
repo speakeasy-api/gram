@@ -377,13 +377,13 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminTrialKeyReviver := newAdminTrialKeyReviver(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier, productFeatures, billingOperations))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, billingOperations))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

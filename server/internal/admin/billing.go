@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
@@ -35,14 +36,41 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 		return nil, oops.E(oops.CodeUnexpected, err, "list platform-managed inference keys").LogError(ctx, s.logger)
 	}
 
-	result := make([]*gen.AdminInferenceKey, len(keys))
-	for index, key := range keys {
-		result[index] = &gen.AdminInferenceKey{
-			KeyType:        key.KeyType,
-			MonthlyCredits: key.MonthlyCredits,
-			Disabled:       key.Disabled,
-		}
+	if len(keys) == 0 {
+		return []*gen.AdminInferenceKey{}, nil
 	}
+	if s.openRouterUsage == nil {
+		return nil, oops.E(oops.CodeUnavailable, ErrOpenRouterUnavailable, "OpenRouter usage is temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+
+	result := make([]*gen.AdminInferenceKey, len(keys))
+	group, groupCtx := errgroup.WithContext(ctx)
+	for index, key := range keys {
+		keyType := openrouter.KeyType(key.KeyType)
+		if err := keyType.Validate(); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "validate stored inference key type").LogError(ctx, s.logger)
+		}
+		group.Go(func() error {
+			creditsUsed, _, err := s.openRouterUsage.GetCreditsUsed(groupCtx, organizationID, keyType)
+			if err != nil {
+				return fmt.Errorf("read %s inference key usage: %w", keyType, err)
+			}
+			result[index] = &gen.AdminInferenceKey{
+				KeyType:        key.KeyType,
+				CreditsUsed:    creditsUsed,
+				MonthlyCredits: key.MonthlyCredits,
+				Disabled:       key.Disabled,
+			}
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		if errors.Is(err, ErrOpenRouterUnavailable) {
+			return nil, oops.E(oops.CodeUnavailable, err, "OpenRouter usage is temporarily unavailable").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "read OpenRouter inference key usage").LogError(ctx, s.logger)
+	}
+
 	return result, nil
 }
 

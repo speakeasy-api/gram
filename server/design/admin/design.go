@@ -173,11 +173,12 @@ var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 })
 
 var AdminInferenceKey = Type("AdminInferenceKey", func() {
-	Description("Configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
+	Description("Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
 	Attribute("key_type", String)
+	Attribute("credits_used", Float64, "Credits spent this month in USD.")
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
-	Required("key_type", "monthly_credits", "disabled")
+	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
 var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
