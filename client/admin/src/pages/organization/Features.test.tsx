@@ -1,6 +1,8 @@
+import { QueryClient } from "@tanstack/react-query";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organizationFeaturesQuery } from "@/lib/adminQueries";
 import { Features } from "@/pages/organization/Features";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -67,5 +69,23 @@ describe("Features", () => {
     await renderFeatures();
 
     expect(await screen.findByText("Unable to load features")).toBeTruthy();
+  });
+
+  it("keeps the last loaded state when a refresh fails", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await renderWithApp(<Features org={ORG} />, { queryClient });
+    expect(await screen.findByText("Consent tool filtering")).toBeTruthy();
+
+    mocks.getOrganizationFeatures.mockRejectedValue(new Error("boom"));
+    await queryClient.invalidateQueries(organizationFeaturesQuery(ORG.id));
+
+    expect(
+      await screen.findByText(
+        "Unable to refresh features; showing the last loaded state.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Consent tool filtering")).toBeTruthy();
   });
 });

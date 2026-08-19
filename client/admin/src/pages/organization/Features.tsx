@@ -75,7 +75,7 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
     return <span className="text-muted-foreground text-sm">Loading...</span>;
   }
 
-  if (isError || !data) {
+  if (!data) {
     return (
       <span className="text-muted-foreground text-sm">
         Unable to load features
@@ -83,7 +83,16 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
     );
   }
 
-  return <FeaturesView features={data} />;
+  return (
+    <>
+      {isError && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          Unable to refresh features; showing the last loaded state.
+        </p>
+      )}
+      <FeaturesView features={data} />
+    </>
+  );
 }
 
 function FeaturesView({
