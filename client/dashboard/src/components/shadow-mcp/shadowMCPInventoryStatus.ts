@@ -87,7 +87,13 @@ export function shadowMCPInventoryStatus(
   if (server.requestCount > 0) return "pending";
   if (server.access === "allowed") return "allowed";
   if (server.access === "blocked") return "blocked";
-  if (server.access === "restricted") return "restricted";
+  if (server.access === "restricted") {
+    // A denied review is a definitive block decision, so it outranks a
+    // targeted policy's partial "restricted" (blocked for some users).
+    return server.approvalRequest?.status === "denied"
+      ? "blocked"
+      : "restricted";
+  }
   if (policyState === "unavailable") return "unavailable";
   if (policyState === "blocking") return "blocked";
   return "observed";
@@ -158,11 +164,11 @@ export function shadowMCPInventoryStatusDescription(
       : "Blocked by policy";
   }
   if (server.access === "restricted") {
-    // A targeted policy blocks the server for its audience only, so it is not
-    // blocked for the whole project. Under allow_all the targeted block is the
-    // denied review's doing, so credit it like the blocked branch does.
+    // A denied review outranks the targeted policy: the deny is a definitive
+    // block, so the row reads as blocked rather than "for some users". Absent a
+    // deny, the targeted policy blocks the server for its audience only.
     if (server.approvalRequest?.status === "denied") {
-      return "Blocked for some users by review";
+      return "Blocked by policy & review";
     }
     return "Blocked for some users";
   }

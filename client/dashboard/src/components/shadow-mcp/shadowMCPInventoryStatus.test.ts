@@ -225,8 +225,8 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(restricted, "blocking", "block_all"),
     ).toBe("Blocked for some users");
-    // A denied review writes the targeted block under allow_all, so credit it
-    // like the blocked branch does.
+    // A denied review outranks the targeted policy: the deny is definitive, so
+    // the row is blocked rather than restricted-for-some.
     const deniedRestricted = server({
       access: "restricted",
       approvalRequest: {
@@ -236,13 +236,16 @@ describe("shadowMCPInventoryStatus", () => {
         evidenceChangedAt: undefined,
       },
     });
+    expect(shadowMCPInventoryStatus(deniedRestricted, "blocking")).toBe(
+      "blocked",
+    );
     expect(
       shadowMCPInventoryStatusDescription(
         deniedRestricted,
         "blocking",
         "allow_all",
       ),
-    ).toBe("Blocked for some users by review");
+    ).toBe("Blocked by policy & review");
   });
 
   it("leaves the blocked source unchanged when a review approved or is absent", () => {
