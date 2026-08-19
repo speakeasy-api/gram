@@ -4397,7 +4397,6 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   toolset_id uuid,
   unproxied_mcp_server_id uuid,
   plugin_id uuid,
-  member_deadline_ms INTEGER,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
   -- variations for runtime modifications.
@@ -4421,7 +4420,6 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, plugin_id) = 1),
-  CONSTRAINT mcp_servers_plugin_member_deadline_check CHECK ((plugin_id IS NULL AND member_deadline_ms IS NULL) OR (plugin_id IS NOT NULL AND member_deadline_ms IS NOT NULL AND member_deadline_ms > 0)),
   -- Remote, tunneled, and plugin-backed servers carry a Gram-as-AS issuer
   -- attached at create time for the server's lifetime, regardless of visibility.
   CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL AND plugin_id IS NULL) OR user_session_issuer_id IS NOT NULL)
