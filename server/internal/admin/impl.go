@@ -198,6 +198,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		"/admin/organization.features",
 		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
 	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
+	)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

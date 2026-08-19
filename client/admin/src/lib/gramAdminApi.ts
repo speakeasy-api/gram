@@ -496,18 +496,23 @@ export type AdminInferenceKey = {
 };
 
 export type AdminOrganizationFeatures = {
-  consent_tool_filtering_enabled: boolean;
-  hooks_browser_login_enabled: boolean;
-  hooks_fail_open_enabled: boolean;
+  authz_challenge_logging_enabled: boolean;
+  customer_managed_encryption_keys_enabled: boolean;
+  custom_model_keys_enabled: boolean;
   platform_mcp_enabled: boolean;
-  remote_session_auto_refresh_policy:
-    | "disabled"
-    | "user_controlled"
-    | "enforced";
-  session_capture_enabled: boolean;
-  skill_capture_metadata_only: boolean;
-  skills_enabled: boolean;
+  remote_session_auto_refresh_enabled: boolean;
+  sso_enabled: boolean;
+  scim_enabled: boolean;
 };
+
+export type AdminOrganizationFeatureName =
+  | "authz_challenge_logging"
+  | "customer_managed_encryption_keys"
+  | "custom_model_keys"
+  | "platform_mcp"
+  | "remote_session_auto_refresh"
+  | "sso"
+  | "scim";
 
 export function getOrganizationFeatures(
   organizationID: string,
@@ -515,6 +520,25 @@ export function getOrganizationFeatures(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<AdminOrganizationFeatures>(
     `/admin/organization.features?${qs}`,
+  );
+}
+
+export function setOrganizationFeature(input: {
+  organizationID: string;
+  featureName: AdminOrganizationFeatureName;
+  enabled: boolean;
+}): Promise<AdminOrganizationFeatures> {
+  return gramAdminMutation<AdminOrganizationFeatures>(
+    "/admin/organization.features",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        feature_name: input.featureName,
+        enabled: input.enabled,
+      }),
+    },
   );
 }
 

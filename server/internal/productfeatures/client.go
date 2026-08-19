@@ -130,6 +130,31 @@ func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string
 	return enabled
 }
 
+// SetFeatureEnabled writes a generic product-feature flag and refreshes its
+// cache entry. Callers must perform authorization and restrict feature names to
+// flags without specialized write behavior before calling this method.
+func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, feature Feature, enabled bool) error {
+	if enabled {
+		if _, err := c.repo.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable feature: %w", err)
+		}
+	} else {
+		_, err := c.repo.DeleteFeature(ctx, repo.DeleteFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("disable feature: %w", err)
+		}
+	}
+
+	c.UpdateFeatureCache(ctx, organizationID, feature, enabled)
+	return nil
+}
+
 // UpdateFeatureCache stores the given enabled state for the feature directly
 // into the cache. Call this after writing the feature flag to the database
 // from a code path that bypasses this client, so the cache stays consistent.
