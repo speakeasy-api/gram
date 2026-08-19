@@ -62,14 +62,12 @@ describe("isPartialToolCallAnnotation", () => {
 });
 
 describe("trailingAnnotationLine", () => {
-  it("uses the strict test by default and the partial one when streaming", () => {
+  it("matches only a settled annotation on the last line", () => {
+    expect(
+      trailingAnnotationLine("Here is what I found\nInvestigating spend"),
+    ).toBe("Investigating spend");
     expect(trailingAnnotationLine("Here is what I found\nInvestig")).toBe(
       undefined,
     );
-    expect(
-      trailingAnnotationLine("Here is what I found\nInvestig", {
-        streaming: true,
-      }),
-    ).toBe("Investig");
   });
 });

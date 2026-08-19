@@ -155,16 +155,10 @@ export function toolCallAnnotationTitle(text: string): string {
  * The last line still works as the annotation when it is terse; the remainder
  * renders as regular prose (see stripTrailingAnnotationLine).
  */
-export function trailingAnnotationLine(
-  text: string,
-  { streaming = false }: { streaming?: boolean } = {},
-): string | undefined {
+export function trailingAnnotationLine(text: string): string | undefined {
   const lines = text.trim().split("\n");
   const last = lines[lines.length - 1]?.trim() ?? "";
-  const matches = streaming
-    ? isPartialToolCallAnnotation(last)
-    : isToolCallAnnotation(last);
-  return matches ? last : undefined;
+  return isToolCallAnnotation(last) ? last : undefined;
 }
 
 /** The text minus its trailing annotation line (empty for a pure annotation). */

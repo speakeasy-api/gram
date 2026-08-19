@@ -95,6 +95,7 @@ import { dictationAdapter } from "@/elements/lib/dictation";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
+  isPartialToolCallAnnotation,
   stripTrailingAnnotationLine,
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
@@ -1895,27 +1896,32 @@ const withToolCallAnnotationSuppression = (
     const aui = useAui();
     const partQuery = aui.part.query;
     const partIndex = partQuery?.type === "index" ? partQuery.index : undefined;
+    const ownedByToolGroup = useAuiState(
+      ({ message }) =>
+        partIndex !== undefined &&
+        message.parts[partIndex + 1]?.type === "tool-call",
+    );
     // The tool call lands only after its annotation has finished streaming, so
     // waiting for parts[i + 1] means rendering the annotation as prose first
     // and yanking it into the group heading a moment later. While the message
-    // is still streaming and nothing follows this part yet, assume a trailing
-    // annotation belongs to the group that is about to open — and judge it
-    // with the streaming test, since a half-typed opener is not a gerund yet.
+    // is still streaming and nothing follows this part yet, hold a part that
+    // still looks like it is growing into an annotation.
     const streaming = useAuiState(
       ({ message }) =>
         partIndex !== undefined &&
         message.parts[partIndex + 1] === undefined &&
         message.status?.type === "running",
     );
-    const ownedByToolGroup = useAuiState(
-      ({ message }) =>
-        partIndex !== undefined &&
-        message.parts[partIndex + 1]?.type === "tool-call",
-    );
-    if (
-      (!ownedByToolGroup && !streaming) ||
-      !trailingAnnotationLine(props.text, { streaming })
-    ) {
+    // Whole-part test, not the trailing line: mid-stream every line is briefly
+    // one or two words long, so matching the tail would blink each new line of
+    // a long answer out of the render as it arrives. A multi-line part can
+    // never be an annotation, which is what makes the whole-part test safe.
+    if (streaming && !ownedByToolGroup) {
+      return isPartialToolCallAnnotation(props.text) ? null : (
+        <Inner {...props} />
+      );
+    }
+    if (!ownedByToolGroup || !trailingAnnotationLine(props.text)) {
       return <Inner {...props} />;
     }
     const remainder = stripTrailingAnnotationLine(props.text);
