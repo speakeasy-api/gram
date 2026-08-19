@@ -39,6 +39,7 @@ trackedFiles:
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
   src/funcs/accessListGrants.ts: {}
+  src/funcs/accessListMemberGrants.ts: {}
   src/funcs/accessListMembers.ts: {}
   src/funcs/accessListRoles.ts: {}
   src/funcs/accessListScopes.ts: {}
@@ -435,6 +436,7 @@ trackedFiles:
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
   src/funcs/riskPolicyChallengesDecline.ts: {}
   src/funcs/riskPolicyChallengesGet.ts: {}
+  src/funcs/riskPolicyChallengesList.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListDismissed.ts: {}
@@ -954,6 +956,7 @@ trackedFiles:
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
   src/models/components/listriskpolicybypassrequestsresult.ts: {}
+  src/models/components/listriskpolicychallengesresult.ts: {}
   src/models/components/listriskresultsbychatresult.ts: {}
   src/models/components/listriskresultsforagentresult.ts: {}
   src/models/components/listriskresultsresult.ts: {}
@@ -1163,6 +1166,7 @@ trackedFiles:
   src/models/components/riskpolicy.ts: {}
   src/models/components/riskpolicybypassapprovalrequestbody.ts: {}
   src/models/components/riskpolicybypassrequest.ts: {}
+  src/models/components/riskpolicychallenge.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}
   src/models/components/riskpolicymodelconfig.ts: {}
   src/models/components/riskpolicystatus.ts: {}
@@ -1765,6 +1769,7 @@ trackedFiles:
   src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
   src/models/operations/listmcpservertoolmetadata.ts: {}
+  src/models/operations/listmembergrants.ts: {}
   src/models/operations/listmembers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
@@ -1787,6 +1792,7 @@ trackedFiles:
   src/models/operations/listriskexclusions.ts: {}
   src/models/operations/listriskpolicies.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
+  src/models/operations/listriskpolicychallenges.ts: {}
   src/models/operations/listriskresults.ts: {}
   src/models/operations/listriskresultsbychat.ts: {}
   src/models/operations/listriskresultsforagent.ts: {}
@@ -2434,6 +2440,8 @@ trackedFiles:
   src/react-query/mcpRegistriesGetServerDetails.ts: {}
   src/react-query/mcpServers.core.ts: {}
   src/react-query/mcpServers.ts: {}
+  src/react-query/memberGrants.core.ts: {}
+  src/react-query/memberGrants.ts: {}
   src/react-query/members.core.ts: {}
   src/react-query/members.ts: {}
   src/react-query/migrateOrganizationRemoteSessionIssuer.ts: {}
@@ -2604,6 +2612,8 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts: {}
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
+  src/react-query/riskPolicyChallenges.core.ts: {}
+  src/react-query/riskPolicyChallenges.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
   src/react-query/riskRuleBreakdown.core.ts: {}
   src/react-query/riskRuleBreakdown.ts: {}
@@ -6598,6 +6608,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMemberGrants:
+    speakeasy-default-list-member-grants:
+      parameters:
+        query:
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"grants": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listMembers:
     speakeasy-default-list-members:
       responses:
@@ -6835,6 +6857,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listRiskPolicyChallenges:
+    speakeasy-default-list-risk-policy-challenges:
+      parameters:
+        query:
+          user_ids: []
+      responses:
+        "200":
+          application/json: {"challenges": [{"challenged_at": "2026-10-14T19:56:06.836Z", "id": "6b5f37d7-c584-4472-8550-f3368f411bfc", "risk_policy_id": "7abbf57d-7ef7-4391-abed-cdbaf85ec5ed", "status": "acknowledged", "user_id": "<id>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listRiskResults:
     speakeasy-default-list-risk-results:
       responses:

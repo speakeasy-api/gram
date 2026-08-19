@@ -57,9 +57,10 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
 	}
 	rows, err := s.repo.ListRiskPolicyBypassRequests(ctx, repo.ListRiskPolicyBypassRequestsParams{
-		ProjectID:    *authCtx.ProjectID,
-		RiskPolicyID: policyID,
-		Status:       conv.PtrToPGText(payload.Status),
+		ProjectID:        *authCtx.ProjectID,
+		RiskPolicyID:     policyID,
+		Status:           conv.PtrToPGText(payload.Status),
+		RequesterUserIds: payload.RequesterUserIds,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policy bypass requests").LogError(ctx, s.logger)

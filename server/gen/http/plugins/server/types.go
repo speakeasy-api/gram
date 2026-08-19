@@ -7145,8 +7145,9 @@ func NewUpdateMarketplaceSettingsGatewayErrorResponseBody(res *goa.ServiceError)
 }
 
 // NewListPluginsPayload builds a plugins service listPlugins endpoint payload.
-func NewListPluginsPayload(sessionToken *string, projectSlugInput *string) *plugins.ListPluginsPayload {
+func NewListPluginsPayload(principalUrns []string, sessionToken *string, projectSlugInput *string) *plugins.ListPluginsPayload {
 	v := &plugins.ListPluginsPayload{}
+	v.PrincipalUrns = principalUrns
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

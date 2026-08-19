@@ -421,6 +421,48 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
 }
 
+// ListMemberGrants returns another member's effective grants. It is separate
+// from ListGrants rather than a parameter on it because ListGrants answers
+// "what may I do", and every carve-out in it — scope overrides, impersonation,
+// the demo org, sessions that have not selected an organization yet — is about
+// the caller. None of them apply when the subject is somebody else.
+func (s *Service) ListMemberGrants(ctx context.Context, payload *gen.ListMemberGrantsPayload) (*gen.ListUserGrantsResult, error) {
+	ac, _, err := s.roleOrgContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogAccessMemberID(payload.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.AccessMemberID(payload.UserID),
+	)
+
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid member principal").LogError(ctx, logger)
+	case errors.Is(err, authz.ErrPrincipalNotFound):
+		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve member principals").LogError(ctx, logger)
+	}
+
+	grants, err := authz.LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load effective member grants").LogError(ctx, logger)
+	}
+
+	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
+}
+
 // UpdateMemberRoles replaces all role assignments for a member. It is
 // intentionally stricter than member listing: it only mutates access for users
 // Gram knows are connected to the local organization.

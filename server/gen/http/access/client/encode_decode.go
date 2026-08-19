@@ -1892,6 +1892,243 @@ func DecodeListGrantsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListMemberGrantsRequest instantiates a HTTP request object with method
+// and path set to call the "access" service "listMemberGrants" endpoint
+func (c *Client) BuildListMemberGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMemberGrantsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listMemberGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMemberGrantsRequest returns an encoder for requests sent to the
+// access listMemberGrants server.
+func EncodeListMemberGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListMemberGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listMemberGrants", "*access.ListMemberGrantsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_id", p.UserID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListMemberGrantsResponse returns a decoder for responses returned by
+// the access listMemberGrants endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListMemberGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMemberGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMemberGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			res := NewListMemberGrantsListUserGrantsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMemberGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMemberGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMemberGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMemberGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMemberGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMemberGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMemberGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMemberGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+				}
+				err = ValidateListMemberGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+				}
+				return nil, NewListMemberGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMemberGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+				}
+				err = ValidateListMemberGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+				}
+				return nil, NewListMemberGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listMemberGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMemberGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listMemberGrants", err)
+			}
+			err = ValidateListMemberGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listMemberGrants", err)
+			}
+			return nil, NewListMemberGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listMemberGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateMemberRolesRequest instantiates a HTTP request object with method
 // and path set to call the "access" service "updateMemberRoles" endpoint
 func (c *Client) BuildUpdateMemberRolesRequest(ctx context.Context, v any) (*http.Request, error) {

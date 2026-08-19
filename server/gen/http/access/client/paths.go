@@ -47,6 +47,11 @@ func ListGrantsAccessPath() string {
 	return "/rpc/access.listGrants"
 }
 
+// ListMemberGrantsAccessPath returns the URL path to the access service listMemberGrants HTTP endpoint.
+func ListMemberGrantsAccessPath() string {
+	return "/rpc/access.listMemberGrants"
+}
+
 // UpdateMemberRolesAccessPath returns the URL path to the access service updateMemberRoles HTTP endpoint.
 func UpdateMemberRolesAccessPath() string {
 	return "/rpc/access.updateMemberRoles"

@@ -12,6 +12,10 @@ export type ListPluginsSecurity = {
 
 export type ListPluginsRequest = {
   /**
+   * Optional principal URNs to narrow the listing to the plugins those principals receive. Plugins distributed to everyone ('*' or 'user:all') are always included, because from a principal's side an org-wide plugin is one they get.
+   */
+  principalUrns?: Array<string> | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -54,6 +58,7 @@ export function listPluginsSecurityToJSON(
 
 /** @internal */
 export type ListPluginsRequest$Outbound = {
+  principal_urns?: Array<string> | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -64,11 +69,13 @@ export const ListPluginsRequest$outboundSchema: z.ZodMiniType<
   ListPluginsRequest
 > = z.pipe(
   z.object({
+    principalUrns: z.optional(z.array(z.string())),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      principalUrns: "principal_urns",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });

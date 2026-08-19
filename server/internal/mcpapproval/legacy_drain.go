@@ -59,9 +59,10 @@ func (s *Service) drainLegacyBypassRequests(
 
 	if request.TargetKind == targetKindServerURL {
 		rows, err := q.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
-			ProjectID:    projectID,
-			RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Status:       conv.ToPGText(statusRequested),
+			ProjectID:        projectID,
+			RiskPolicyID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Status:           conv.ToPGText(statusRequested),
+			RequesterUserIds: nil,
 		})
 		if err != nil {
 			return fmt.Errorf("list pending bypass requests: %w", err)

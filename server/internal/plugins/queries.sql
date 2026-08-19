@@ -77,6 +77,10 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: ListPlugins :many
+-- @principal_urns optionally narrows the listing to the plugins one principal
+-- receives. A plugin assigned to everyone (the '*' or 'user:all' wildcards)
+-- counts as assigned: from the principal's side, a plugin distributed org-wide
+-- is one they get, however it was targeted.
 SELECT
   p.*,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
@@ -105,6 +109,14 @@ FROM plugins p
 WHERE p.organization_id = @organization_id
   AND p.project_id = @project_id
   AND p.deleted IS FALSE
+  AND (
+    COALESCE(cardinality(@principal_urns::text[]), 0) = 0
+    OR EXISTS (
+      SELECT 1 FROM plugin_assignments pa
+      WHERE pa.plugin_id = p.id
+        AND (pa.principal_urn = ANY(@principal_urns::text[]) OR pa.principal_urn IN ('*', 'user:all'))
+    )
+  )
 ORDER BY p.created_at DESC;
 
 -- name: ListActivePluginsForProject :many

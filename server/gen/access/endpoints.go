@@ -24,6 +24,7 @@ type Endpoints struct {
 	ListScopes                         goa.Endpoint
 	ListMembers                        goa.Endpoint
 	ListGrants                         goa.Endpoint
+	ListMemberGrants                   goa.Endpoint
 	UpdateMemberRoles                  goa.Endpoint
 	ListShadowMCPInventory             goa.Endpoint
 	GetShadowMCPInventoryServer        goa.Endpoint
@@ -49,6 +50,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListScopes:                         NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                        NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                         NewListGrantsEndpoint(s, a.APIKeyAuth),
+		ListMemberGrants:                   NewListMemberGrantsEndpoint(s, a.APIKeyAuth),
 		UpdateMemberRoles:                  NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventory:             NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
 		GetShadowMCPInventoryServer:        NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
@@ -72,6 +74,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
+	e.ListMemberGrants = m(e.ListMemberGrants)
 	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
 	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
@@ -361,6 +364,29 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.ListGrants(ctx, p)
+	}
+}
+
+// NewListMemberGrantsEndpoint returns an endpoint function that calls the
+// method "listMemberGrants" of service "access".
+func NewListMemberGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMemberGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMemberGrants(ctx, p)
 	}
 }
 

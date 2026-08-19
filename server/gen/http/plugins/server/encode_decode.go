@@ -37,9 +37,11 @@ func DecodeListPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*plugins.ListPluginsPayload, error) {
 		var payload *plugins.ListPluginsPayload
 		var (
+			principalUrns    []string
 			sessionToken     *string
 			projectSlugInput *string
 		)
+		principalUrns = r.URL.Query()["principal_urns"]
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -48,7 +50,7 @@ func DecodeListPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListPluginsPayload(sessionToken, projectSlugInput)
+		payload = NewListPluginsPayload(principalUrns, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

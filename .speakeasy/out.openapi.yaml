@@ -788,6 +788,103 @@ paths:
       x-speakeasy-name-override: listGrants
       x-speakeasy-react-hook:
         name: Grants
+  /rpc/access.listMemberGrants:
+    get:
+      description: List another member's effective grants, including the ones inherited from their roles.
+      operationId: listMemberGrants
+      parameters:
+        - allowEmptyValue: true
+          description: The Gram user id of the member whose grants to list.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: The Gram user id of the member whose grants to list.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUserGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listMemberGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: listMemberGrants
+      x-speakeasy-react-hook:
+        name: MemberGrants
   /rpc/access.listMembers:
     get:
       description: List all team members with their role assignments.
@@ -30811,6 +30908,15 @@ paths:
       operationId: listPlugins
       parameters:
         - allowEmptyValue: true
+          description: Optional principal URNs to narrow the listing to the plugins those principals receive. Plugins distributed to everyone ('*' or 'user:all') are always included, because from a principal's side an org-wide plugin is one they get.
+          in: query
+          name: principal_urns
+          schema:
+            description: Optional principal URNs to narrow the listing to the plugins those principals receive. Plugins distributed to everyone ('*' or 'user:all') are always included, because from a principal's side an org-wide plugin is one they get.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -38852,6 +38958,15 @@ paths:
               - revoked
             type: string
         - allowEmptyValue: true
+          description: Optional requester identifiers to filter by. Pass every identifier a subject is known by, since the id recorded on a request is whichever one they were authenticated as.
+          in: query
+          name: requester_user_ids
+          schema:
+            description: Optional requester identifiers to filter by. Pass every identifier a subject is known by, since the id recorded on a request is whichever one they were authenticated as.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -38946,6 +39061,137 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskListPolicyBypassRequests
+  /rpc/risk.listPolicyChallenges:
+    get:
+      description: List the warn/challenge history for one or more user identifiers.
+      operationId: listRiskPolicyChallenges
+      parameters:
+        - allowEmptyValue: true
+          description: 'The user identifiers to list challenges for. Pass every identifier a subject is known by: the id recorded on a challenge is whichever one the agent reported at the time.'
+          in: query
+          name: user_ids
+          required: true
+          schema:
+            description: 'The user identifiers to list challenges for. Pass every identifier a subject is known by: the id recorded on a challenge is whichever one the agent reported at the time.'
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Optional status to filter by.
+          in: query
+          name: status
+          schema:
+            description: Optional status to filter by.
+            enum:
+              - challenged
+              - acknowledged
+              - declined
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of challenges to return.
+          in: query
+          name: limit
+          schema:
+            description: Maximum number of challenges to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRiskPolicyChallengesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskPolicyChallenges risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskPolicyChallenges
   /rpc/risk.listResults:
     get:
       description: List risk analysis results for the current project.
@@ -66694,6 +66940,14 @@ components:
       description: Result type for listing MCP servers
       required:
         - mcp_servers
+    ListMemberGrantsForm:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: The Gram user id of the member whose grants to list.
+      required:
+        - user_id
     ListMembersResult:
       type: object
       properties:
@@ -66917,6 +67171,16 @@ components:
           description: Current risk policy bypass request records.
       required:
         - requests
+    ListRiskPolicyChallengesResult:
+      type: object
+      properties:
+        challenges:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPolicyChallenge'
+          description: Matching challenge records, newest first.
+      required:
+        - challenges
     ListRiskResultsByChatResult:
       type: object
       properties:
@@ -72482,6 +72746,58 @@ components:
         - granted_principal_urns
         - created_at
         - updated_at
+    RiskPolicyChallenge:
+      type: object
+      properties:
+        acknowledged_at:
+          type: string
+          description: When the user acknowledged, if they did.
+          format: date-time
+        challenged_at:
+          type: string
+          description: When the warning was issued.
+          format: date-time
+        entity:
+          type: string
+          description: Log-safe description of what was flagged. Never the matched value itself.
+        expires_at:
+          type: string
+          description: When the acknowledgement stops suppressing re-challenge.
+          format: date-time
+        id:
+          type: string
+          description: Challenge identifier.
+          format: uuid
+        policy_name:
+          type: string
+          description: Display name of the policy that issued the warning.
+        risk_policy_id:
+          type: string
+          description: The policy that issued the warning.
+          format: uuid
+        rule_id:
+          type: string
+          description: The rule that matched.
+        status:
+          type: string
+          description: Where the challenge got to.
+          enum:
+            - challenged
+            - acknowledged
+            - declined
+        tool_name:
+          type: string
+          description: The tool the challenge applies to. Absent for a non-tool challenge.
+        user_id:
+          type: string
+          description: The user identifier the challenge was recorded against.
+      description: 'One warn/challenge lifecycle record: a warn-action policy matched, and the user was asked to acknowledge before proceeding.'
+      required:
+        - id
+        - risk_policy_id
+        - user_id
+        - status
+        - challenged_at
     RiskPolicyEvalReview:
       type: object
       properties:

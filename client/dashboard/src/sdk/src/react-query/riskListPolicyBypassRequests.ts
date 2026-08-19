@@ -120,6 +120,7 @@ export function setRiskListPolicyBypassRequestsData(
     parameters: {
       policyId?: string | undefined;
       status?: Status | undefined;
+      requesterUserIds?: Array<string> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -138,6 +139,7 @@ export function invalidateRiskListPolicyBypassRequests(
     [parameters: {
       policyId?: string | undefined;
       status?: Status | undefined;
+      requesterUserIds?: Array<string> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

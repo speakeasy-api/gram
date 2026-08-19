@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListRiskPolicyBypassRequestsResult,
-  ListRiskPolicyBypassRequestsResult$inboundSchema,
-} from "../models/components/listriskpolicybypassrequestsresult.js";
+  ListRiskPolicyChallengesResult,
+  ListRiskPolicyChallengesResult$inboundSchema,
+} from "../models/components/listriskpolicychallengesresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListRiskPolicyBypassRequestsRequest,
-  ListRiskPolicyBypassRequestsRequest$outboundSchema,
-  ListRiskPolicyBypassRequestsSecurity,
-} from "../models/operations/listriskpolicybypassrequests.js";
+  ListRiskPolicyChallengesRequest,
+  ListRiskPolicyChallengesRequest$outboundSchema,
+  ListRiskPolicyChallengesSecurity,
+} from "../models/operations/listriskpolicychallenges.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRiskPolicyBypassRequests risk
+ * listRiskPolicyChallenges risk
  *
  * @remarks
- * List current risk policy bypass request workflow records.
+ * List the warn/challenge history for one or more user identifiers.
  */
-export function riskPolicyBypassRequestsList(
+export function riskPolicyChallengesList(
   client: GramCore,
-  request?: ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
+  request: ListRiskPolicyChallengesRequest,
+  security?: ListRiskPolicyChallengesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListRiskPolicyBypassRequestsResult,
+    ListRiskPolicyChallengesResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function riskPolicyBypassRequestsList(
 
 async function $do(
   client: GramCore,
-  request?: ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
+  request: ListRiskPolicyChallengesRequest,
+  security?: ListRiskPolicyChallengesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListRiskPolicyBypassRequestsResult,
+      ListRiskPolicyChallengesResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,11 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(ListRiskPolicyBypassRequestsRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(ListRiskPolicyChallengesRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,25 +104,25 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.listPolicyBypassRequests")();
+  const path = pathToFunc("/rpc/risk.listPolicyChallenges")();
 
   const query = encodeFormQuery({
-    "policy_id": payload?.policy_id,
-    "requester_user_ids": payload?.requester_user_ids,
-    "status": payload?.status,
+    "limit": payload.limit,
+    "status": payload.status,
+    "user_ids": payload.user_ids,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -162,7 +158,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listRiskPolicyBypassRequests",
+    operationID: "listRiskPolicyChallenges",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -207,7 +203,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListRiskPolicyBypassRequestsResult,
+    ListRiskPolicyChallengesResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -218,7 +214,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListRiskPolicyBypassRequestsResult$inboundSchema),
+    M.json(200, ListRiskPolicyChallengesResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

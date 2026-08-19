@@ -9,6 +9,7 @@ import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPIn
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
+import { accessListMemberGrants } from "../funcs/accessListMemberGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
@@ -63,6 +64,10 @@ import {
   ListGrantsRequest,
   ListGrantsSecurity,
 } from "../models/operations/listgrants.js";
+import {
+  ListMemberGrantsRequest,
+  ListMemberGrantsSecurity,
+} from "../models/operations/listmembergrants.js";
 import {
   ListMembersRequest,
   ListMembersSecurity,
@@ -236,6 +241,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListUserGrantsResult> {
     return unwrapAsync(accessListGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMemberGrants access
+   *
+   * @remarks
+   * List another member's effective grants, including the ones inherited from their roles.
+   */
+  async listMemberGrants(
+    request: ListMemberGrantsRequest,
+    security?: ListMemberGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListUserGrantsResult> {
+    return unwrapAsync(accessListMemberGrants(
       this,
       request,
       security,
