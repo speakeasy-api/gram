@@ -47,6 +47,7 @@ export function buildAgentPluginsQuery(
 } {
   return {
     queryKey: queryKeyAgentPlugins({
+      email: request?.email,
       gramKey: request?.gramKey,
       gramUserEmail: request?.gramUserEmail,
       gramDeviceSerial: request?.gramDeviceSerial,
@@ -78,6 +79,7 @@ export function buildAgentPluginsQuery(
 
 export function queryKeyAgentPlugins(
   parameters: {
+    email?: string | undefined;
     gramKey?: string | undefined;
     gramUserEmail?: string | undefined;
     gramDeviceSerial?: string | undefined;

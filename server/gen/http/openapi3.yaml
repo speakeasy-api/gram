@@ -6673,6 +6673,15 @@ paths:
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
+                  description: 'Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.'
+                  example: dev@acme.corp
+                  in: query
+                  name: email
+                  schema:
+                    description: 'Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.'
+                    example: dev@acme.corp
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key

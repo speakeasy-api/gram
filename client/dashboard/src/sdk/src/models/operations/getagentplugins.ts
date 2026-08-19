@@ -11,6 +11,10 @@ export type GetAgentPluginsSecurity = {
 
 export type GetAgentPluginsRequest = {
   /**
+   * Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.
+   */
+  email?: string | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -58,6 +62,7 @@ export function getAgentPluginsSecurityToJSON(
 
 /** @internal */
 export type GetAgentPluginsRequest$Outbound = {
+  email?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-User-Email"?: string | undefined;
   "Gram-Device-Serial"?: string | undefined;
@@ -70,6 +75,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
   GetAgentPluginsRequest
 > = z.pipe(
   z.object({
+    email: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramUserEmail: z.optional(z.string()),
     gramDeviceSerial: z.optional(z.string()),

@@ -463,6 +463,33 @@ func TestGetPlugins_InvalidEmail(t *testing.T) {
 	require.Error(t, err, "empty email header must be rejected")
 }
 
+// TestGetPlugins_LegacyEmailParamFallback pins the compatibility contract for
+// deployed org-key agents that predate the Gram-User-Email header: the
+// deprecated ?email= query param still vouches, and the header wins when both
+// are present.
+func TestGetPlugins_LegacyEmailParamFallback(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	headerTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "header-tool")
+	assignPlugin(t, ctx, ti.conn, headerTool, ti.orgID, "email:header@example.com")
+	legacyTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "legacy-tool")
+	assignPlugin(t, ctx, ti.conn, legacyTool, ti.orgID, "email:legacy@example.com")
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{LegacyEmail: new("legacy@example.com")})
+	require.NoError(t, err, "param-only vouching must keep working for deployed agents")
+	require.Contains(t, pluginSlugs(res), "legacy-tool")
+
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:       new("header@example.com"),
+		LegacyEmail: new("legacy@example.com"),
+	})
+	require.NoError(t, err)
+	require.Contains(t, pluginSlugs(res), "header-tool")
+	require.NotContains(t, pluginSlugs(res), "legacy-tool", "the header must win over the deprecated param")
+}
+
 // TestGetPlugins_PerUserKeyBindsToOwner pins the DNO-383 scope-aware attribution:
 // a per-user `agent_user` key resolves the polling identity from the
 // authenticated key owner, so a vouched email header is ignored — a leaked

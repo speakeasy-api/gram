@@ -57,6 +57,11 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.Hostname
 			req.Header.Set("Gram-Device-Hostname", head)
 		}
+		values := req.URL.Query()
+		if p.LegacyEmail != nil {
+			values.Add("email", *p.LegacyEmail)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

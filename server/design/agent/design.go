@@ -37,6 +37,13 @@ var _ = Service("agent", func() {
 			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.", func() {
 				Example("dev@acme.corp")
 			})
+			// Deployed org-key agents predate the header and vouch via `?email=`;
+			// an updated server must keep accepting it or their polls 400 until
+			// the device updates — which auto-update settings can defer
+			// indefinitely. Remove once org-key polls no longer carry it.
+			Attribute("legacy_email", String, "Deprecated: the vouched email as the `?email=` query parameter, sent by agents predating the Gram-User-Email header. Used only when the header is absent.", func() {
+				Example("dev@acme.corp")
+			})
 			// Hardware identity, reported by agents that can read it. Both are
 			// optional and MUST stay that way: agents predating the capability
 			// omit them entirely, and Goa rejects a request missing a Required
@@ -59,9 +66,10 @@ var _ = Service("agent", func() {
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.
-			// Legacy agents still append `?email=`; the decoder ignores
-			// undeclared params and the logging middleware redacts it.
+			// The deprecated `?email=` fallback stays redacted by the logging
+			// middleware.
 			Header("email:Gram-User-Email")
+			Param("legacy_email:email")
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
 			Response(StatusOK)

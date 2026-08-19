@@ -192,8 +192,13 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	var email string
 	if isInstallKey {
 		// Org key: the owner is an admin, not the developer, so we must be vouched
-		// an email — the MDM profile supplies it via the Gram-User-Email header.
-		email = conv.NormalizeEmail(conv.PtrValOr(payload.Email, ""))
+		// an email — the MDM profile supplies it via the Gram-User-Email header,
+		// or the deprecated `?email=` param on agents predating it.
+		vouched := conv.PtrValOr(payload.Email, "")
+		if vouched == "" {
+			vouched = conv.PtrValOr(payload.LegacyEmail, "")
+		}
+		email = conv.NormalizeEmail(vouched)
 		if email == "" {
 			return nil, oops.E(oops.CodeBadRequest, nil, "the Gram-User-Email header is required when authenticating with an org-scoped agent install key")
 		}

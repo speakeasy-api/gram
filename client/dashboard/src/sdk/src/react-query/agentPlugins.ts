@@ -108,6 +108,7 @@ export function setAgentPluginsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      email?: string | undefined;
       gramKey?: string | undefined;
       gramUserEmail?: string | undefined;
       gramDeviceSerial?: string | undefined;
@@ -125,6 +126,7 @@ export function invalidateAgentPlugins(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      email?: string | undefined;
       gramKey?: string | undefined;
       gramUserEmail?: string | undefined;
       gramDeviceSerial?: string | undefined;
