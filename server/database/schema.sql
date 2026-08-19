@@ -3694,6 +3694,15 @@ CREATE TABLE IF NOT EXISTS mcp_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   url TEXT NOT NULL CHECK (url <> '' AND CHAR_LENGTH(url) <= 500),
+  -- Operator-owned source configuration. Legacy rows remain readable during
+  -- the expand phase until the catalogue service backfills and enforces these.
+  source_type TEXT,
+  auth_profile TEXT,
+  enabled boolean,
+  certification_state TEXT,
+  certification_version TEXT,
+  priority INT,
+  source_key TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3706,6 +3715,10 @@ CREATE TABLE IF NOT EXISTS mcp_registries (
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
   ON mcp_registries (url)
   WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_source_key_key
+  ON mcp_registries (source_key)
+  WHERE source_key IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_origins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -7080,6 +7093,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   CONSTRAINT platform_mcp_readiness_pkey PRIMARY KEY (id),
   CONSTRAINT platform_mcp_readiness_connection_generation_check
     CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
+  CONSTRAINT platform_mcp_readiness_connectionless_actor_check
+    CHECK (connection_id IS NOT NULL OR (user_id IS NOT NULL AND acting_surface IS NOT NULL)),
   CONSTRAINT platform_mcp_readiness_provider_authorization_fingerprint_check CHECK (provider_authorization_fingerprint <> ''),
   CONSTRAINT platform_mcp_readiness_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_readiness_organization_id_fkey
@@ -7100,6 +7115,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
 ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
 NULLS NOT DISTINCT;
 
+-- Retained alongside the legacy full index during expand so new external and
+-- future assistant writers have independent predicate-qualified arbiters.
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_external_binding_key
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+WHERE connection_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_assistant_binding_key
+ON platform_mcp_readiness (registration_id, user_id, acting_surface, provider_authorization_fingerprint)
+WHERE connection_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
 ON platform_mcp_readiness (registration_id, checked_at DESC);
 
@@ -7112,6 +7137,10 @@ ON platform_mcp_readiness (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_connection_idx
 ON platform_mcp_readiness (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_actor_idx
+ON platform_mcp_readiness (organization_id, user_id, acting_surface)
+WHERE connection_id IS NULL;
 
 -- Session handoff links: short-lived capability URLs through which a rendered
 -- session-handoff document can be fetched by a cloud agent or another machine
@@ -7261,6 +7290,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
   default_plugin_id uuid NOT NULL,
+  -- Nullable during expand; later exact-plugin writers dual-write this and the
+  -- legacy default_plugin_id until compatibility readers become the rollback floor.
+  plugin_id uuid,
   plugin_server_id uuid,
   state TEXT NOT NULL,
   version BIGINT NOT NULL,
@@ -7281,19 +7313,25 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   CONSTRAINT platform_mcp_distributions_pkey PRIMARY KEY (id),
   CONSTRAINT platform_mcp_distributions_connection_generation_check
     CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
+  CONSTRAINT platform_mcp_distributions_connectionless_actor_check
+    CHECK (connection_id IS NOT NULL OR (user_id IS NOT NULL AND acting_surface IS NOT NULL)),
   CONSTRAINT platform_mcp_distributions_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_distributions_version_check CHECK (version > 0),
   CONSTRAINT platform_mcp_distributions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_distributions_organization_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_distributions_project_registration_fkey FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_distributions_project_default_plugin_fkey FOREIGN KEY (project_id, default_plugin_id) REFERENCES plugins (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_distributions_project_plugin_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_distributions_default_plugin_plugin_server_fkey FOREIGN KEY (default_plugin_id, plugin_server_id) REFERENCES plugin_servers (plugin_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_distributions_organization_connection_fkey FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_distributions_identity_key ON platform_mcp_distributions (organization_id, project_id, registration_id, default_plugin_id);
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_distributions_project_registration_id_key ON platform_mcp_distributions (project_id, registration_id, id);
 CREATE INDEX IF NOT EXISTS platform_mcp_distributions_project_default_plugin_idx ON platform_mcp_distributions (project_id, default_plugin_id);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_distributions_plugin_identity_key ON platform_mcp_distributions (organization_id, project_id, registration_id, plugin_id) WHERE plugin_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS platform_mcp_distributions_project_plugin_idx ON platform_mcp_distributions (project_id, plugin_id) WHERE plugin_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_distributions_organization_connection_idx ON platform_mcp_distributions (organization_id, connection_id);
+CREATE INDEX IF NOT EXISTS platform_mcp_distributions_organization_actor_idx ON platform_mcp_distributions (organization_id, user_id, acting_surface) WHERE connection_id IS NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_distributions_project_plugin_server_idx ON platform_mcp_distributions (project_id, plugin_server_id) WHERE plugin_server_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS platform_mcp_selected_use_evidence (

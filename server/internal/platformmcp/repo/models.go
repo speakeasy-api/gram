@@ -73,6 +73,7 @@ type PlatformMcpDistribution struct {
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
 	DefaultPluginID      uuid.UUID
+	PluginID             uuid.NullUUID
 	PluginServerID       uuid.NullUUID
 	State                string
 	Version              int64

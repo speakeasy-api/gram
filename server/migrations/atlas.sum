@@ -1,4 +1,4 @@
-h1:04JyIgKPxiUZYTyDHDyystWPVn4RvFlXk/JPc+uuy48=
+h1:FDBq1SCxfZLxlFf5YGjFfNzJgOtaUEcp56NbB3CUUao=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -357,3 +357,4 @@ h1:04JyIgKPxiUZYTyDHDyystWPVn4RvFlXk/JPc+uuy48=
 20260818203516_mcp-approval-evidence-change-detection.sql h1:yNs/1liPkJfSG3clzyfd+6zGfhYbWVHVFo4rUfXOQ3Q=
 20260818203838_mcp-research-tool-calls.sql h1:fhhTuuxv18VW3fc5N07RpyZEygKdoaBGVCdx/oAUpxw=
 20260820013033_add-chat-session-links.sql h1:3UEJgkRNXr+31yQFpteFRyq48s1l7HYq+kttJm2Q0rQ=
+20260820053103_platform-mcp-d1-lifecycle-registry-prerequisite.sql h1:4Ci7OgdkcBEp3xDucTJcjzzqfrt4LopTeWolre7Ej50=
