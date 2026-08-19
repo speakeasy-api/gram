@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useOrganization } from "@/contexts/Auth";
 
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
@@ -58,12 +59,17 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
   const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data: productFeatures } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
   const isPlatformAdmin = useIsPlatformAdmin();
   const { enabled: isPlatformMcpDashboardEnabled } =
     usePlatformMcpDashboardVisibility();
