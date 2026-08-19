@@ -184,7 +184,8 @@ type PaygBillingSummary struct {
 	TumUnitPriceUsd string
 	// Exact estimated tokens-under-management cost in USD
 	TumCostUsd string
-	// Exact durable Other inference spend in USD through recorded_through
+	// Exact durable customer-billable OpenRouter inference spend in USD through
+	// recorded_through
 	OtherInferenceSpendUsd string
 	// Most recent completed durable UTC spend day included in the estimate
 	RecordedThrough *string

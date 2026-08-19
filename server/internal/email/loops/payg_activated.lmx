@@ -13,7 +13,7 @@
 </Columns>
 <Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">BILLING · PAY AS YOU GO ACTIVE</Strong></Paragraph>
 <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Pay as you go is active.</H1>
-<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is on pay as you go with the full feature set. Tokens under management are metered and billed each cycle. Other inference is billed at provider cost, and security inference is funded by Speakeasy.</Paragraph>
+<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is on pay as you go with the full feature set. Tokens under management are metered and billed each cycle. Customer-facing and platform-initiated inference are billed at provider cost.</Paragraph>
 <Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
   <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">METERED RATE</Strong></Paragraph>
   <Paragraph fontSize="14" lineHeight="155" paddingTop="8"><Text textColor="#121212">${data.tum_price_per_million_usd} per million tokens under management</Text></Paragraph>

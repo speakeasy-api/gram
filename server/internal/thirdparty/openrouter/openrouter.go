@@ -3,6 +3,7 @@ package openrouter
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +76,36 @@ func (s KeyDesiredState) Validate() error {
 // limit refreshes) consume it, so adding a key type here propagates without
 // hunting call sites.
 var AllKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
+
+var billableKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
+
+// BillableKeyTypes returns the platform-managed OpenRouter keys whose spend a
+// PAYG organization owns. Estimate and invoice paths must consume this set.
+func BillableKeyTypes() []KeyType {
+	return slices.Clone(billableKeyTypes)
+}
+
+// BillableKeyTypeStrings returns BillableKeyTypes in the shape SQL queries use.
+func BillableKeyTypeStrings() []string {
+	keyTypes := make([]string, len(billableKeyTypes))
+	for i, keyType := range billableKeyTypes {
+		keyTypes[i] = string(keyType)
+	}
+	return keyTypes
+}
+
+// BillableKeyPolicyFingerprint mechanically identifies the ordered canonical
+// billable key set so collection and settlement can reject rolling-deployment
+// handoffs that used different policies.
+func BillableKeyPolicyFingerprint() string {
+	sum := sha256.Sum256([]byte(strings.Join(BillableKeyTypeStrings(), "\x00")))
+	return fmt.Sprintf("%x", sum)
+}
+
+// IsBillable reports whether PAYG invoices include this key type.
+func (k KeyType) IsBillable() bool {
+	return slices.Contains(billableKeyTypes, k.OrDefault())
+}
 
 const (
 	// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while

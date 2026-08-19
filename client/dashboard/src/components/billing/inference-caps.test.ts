@@ -78,16 +78,15 @@ describe("cap copy", () => {
     );
   });
 
-  // Only one of the two caps is money the customer is invoiced for. Saying so
-  // is the whole job of this half of the note.
-  it("claims a place on the invoice for the billed cap only", () => {
-    expect(inferenceCapInvoiceNote("chat")).toMatch(
-      /billed to this organization as its own line/,
-    );
-    expect(inferenceCapInvoiceNote("internal")).toMatch(
-      /never reaches your invoice/,
-    );
-  });
+  it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
+    "includes the %s key in PAYG billing",
+    (keyType) => {
+      expect(inferenceCapInvoiceNote(keyType)).toMatch(
+        /included in the inference spend.*invoice/i,
+      );
+      expect(inferenceCapInvoiceNote(keyType)).not.toMatch(/estimate above/i);
+    },
+  );
 
   // The uncapped meter renders the invoice half on its own, so it has to read
   // as a whole sentence rather than as a fragment of the note it comes from.
@@ -170,7 +169,7 @@ describe("isInferenceCapReached", () => {
 describe("sortInferenceCaps", () => {
   // A refetch that returns the rows in a different order must not reorder the
   // controls under an admin who is typing into one of them.
-  it("puts the invoiced cap first whichever order the list arrives in", () => {
+  it("keeps the product order whichever order the list arrives in", () => {
     const internal = cap({ keyType: "internal" });
     const chat = cap({ keyType: "chat" });
 

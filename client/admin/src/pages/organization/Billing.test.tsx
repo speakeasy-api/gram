@@ -112,6 +112,8 @@ describe("Billing", () => {
     expect(await screen.findByText("1,234,567")).toBeTruthy();
     expect(screen.getByText("$0.00000035 per token")).toBeTruthy();
     expect(screen.getByText("$2.53209845")).toBeTruthy();
+    expect(screen.getByText("Inference spend")).toBeTruthy();
+    expect(screen.getByText("$2.10")).toBeTruthy();
     expect(screen.getByText("No payment failure reported")).toBeTruthy();
     expect(screen.getByText("Other inference")).toBeTruthy();
     expect(screen.getByText("Security and internal inference")).toBeTruthy();

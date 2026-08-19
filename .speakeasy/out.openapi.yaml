@@ -69829,7 +69829,7 @@ components:
           description: Exact estimated current-cycle total in USD through recorded_through
         other_inference_spend_usd:
           type: string
-          description: Exact durable Other inference spend in USD through recorded_through
+          description: Exact durable customer-billable OpenRouter inference spend in USD through recorded_through
         period_end:
           type: string
           description: End of the live paid Stripe service period (exclusive)
