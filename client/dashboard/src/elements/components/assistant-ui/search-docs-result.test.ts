@@ -3,8 +3,8 @@ import {
   excerptFromReadDoc,
   findDocsExcerpts,
   findReadDocs,
+  previewText,
 } from "./search-docs-result";
-import { previewText } from "./docs-citations";
 
 const excerpt = {
   uri: "gram://platform-mcp/setup/acme/provider_setup",

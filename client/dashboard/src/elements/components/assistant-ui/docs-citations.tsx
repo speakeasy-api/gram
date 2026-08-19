@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { BookTextIcon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DocsExcerpt } from "./search-docs-result";
+import { previewText, type DocsExcerpt } from "./search-docs-result";
 
 /**
  * Inline preview cards for the reviewed guides an answer was built from.
@@ -103,24 +103,4 @@ function hostOf(link: string): string {
   } catch {
     return link;
   }
-}
-
-/**
- * Renders guide markdown as the plain text a preview needs.
- *
- * The excerpt is markdown, and a clamped preview of it shows the syntax rather
- * than the sentence — "click **Settings**" reads worse than "click Settings".
- * Only inline emphasis, code ticks, and link syntax are unwrapped; the full
- * guide keeps its formatting when the reader opens it.
- */
-export function previewText(markdown: string): string {
-  return markdown
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^\s*#{1,6}\s*/gm, "")
-    .replace(/^\s*[-*]\s+/gm, "")
-    .replace(/\s*\n\s*/g, " ")
-    .trim();
 }
