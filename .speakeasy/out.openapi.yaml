@@ -57768,6 +57768,10 @@ components:
     AdminInferenceKey:
       type: object
       properties:
+        credits_used:
+          type: number
+          description: Credits spent this month in USD.
+          format: double
         disabled:
           type: boolean
         key_type:
@@ -57775,9 +57779,10 @@ components:
         monthly_credits:
           type: integer
           format: int64
-      description: Configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
+      description: Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
       required:
         - key_type
+        - credits_used
         - monthly_credits
         - disabled
     AdminListOrganizationMembersResult:
