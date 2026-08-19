@@ -1,5 +1,6 @@
 import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   describePrincipal,
@@ -15,6 +16,7 @@ function principalDescription(
   kind: PrincipalKind,
   roleByUrn: Map<string, Role>,
   memberByUrn: Map<string, AccessMember>,
+  audienceByUrn: Map<string, PluginAudience>,
 ): string {
   switch (kind) {
     case "everyone":
@@ -28,6 +30,20 @@ function principalDescription(
     }
     case "user":
       return memberByUrn.get(urn)?.email ?? "Organization member";
+    case "directory_group": {
+      const memberCount = audienceByUrn.get(urn)?.memberCount;
+      if (memberCount !== undefined) {
+        return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+      }
+      return "Directory group";
+    }
+    case "directory_attribute": {
+      const memberCount = audienceByUrn.get(urn)?.memberCount;
+      if (memberCount !== undefined) {
+        return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+      }
+      return "Directory attribute";
+    }
     case "unknown":
       return "";
   }
@@ -39,14 +55,27 @@ export function PluginAssignmentRow({
   urn,
   roleByUrn,
   memberByUrn,
+  audienceByUrn,
 }: {
   urn: string;
   roleByUrn: Map<string, Role>;
   memberByUrn: Map<string, AccessMember>;
+  audienceByUrn: Map<string, PluginAudience>;
 }): JSX.Element {
-  const { kind, label } = describePrincipal(urn, roleByUrn, memberByUrn);
+  const { kind, label } = describePrincipal(
+    urn,
+    roleByUrn,
+    memberByUrn,
+    audienceByUrn,
+  );
   const IconComponent = principalIcon(kind);
-  const description = principalDescription(urn, kind, roleByUrn, memberByUrn);
+  const description = principalDescription(
+    urn,
+    kind,
+    roleByUrn,
+    memberByUrn,
+    audienceByUrn,
+  );
 
   return (
     <div className="flex items-center gap-3 py-3">

@@ -1,5 +1,12 @@
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -9,17 +16,34 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
+import type { PluginAudienceKind } from "@gram/client/models/components/pluginaudience.js";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { useSetPluginAssignmentsMutation } from "@gram/client/react-query/setPluginAssignments";
-import { useMembers } from "@gram/client/react-query/members";
-import { useRoles } from "@gram/client/react-query/roles";
 import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  normalizeToPrincipalUrn,
-  principalIcon,
-  WILDCARD_PRINCIPAL,
-} from "./principals";
+import { principalIcon } from "./principals";
+
+const audienceTypeOptions: {
+  value: PluginAudienceKind;
+  label: string;
+}[] = [
+  { value: "everyone", label: "Everyone" },
+  { value: "role", label: "Role" },
+  { value: "directory_group", label: "Directory group" },
+  { value: "directory_attribute", label: "Directory attribute" },
+];
+
+function isAudienceType(value: string): value is PluginAudienceKind {
+  return audienceTypeOptions.some((type) => type.value === value);
+}
+
+function memberCountDescription(
+  memberCount: number | undefined,
+): string | undefined {
+  if (memberCount === undefined) return undefined;
+  return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+}
 
 export function PluginAssignmentsSheet({
   pluginId,
@@ -75,12 +99,10 @@ function AssignmentsEditor({
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }): JSX.Element {
-  const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
-  const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
-  const members = useMemo(
-    () => membersData?.members ?? [],
-    [membersData?.members],
+  const { data: audiencesData } = useAudiences();
+  const audiences = useMemo(
+    () => audiencesData?.audiences ?? [],
+    [audiencesData?.audiences],
   );
 
   const initialUrns = useMemo(
@@ -88,55 +110,38 @@ function AssignmentsEditor({
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
+  const [audienceType, setAudienceType] =
+    useState<PluginAudienceKind>("everyone");
 
-  // Options provide friendly labels for every principal a plugin can already be
-  // assigned to, so current assignments (seeded via defaultValue) render as
-  // names rather than raw URNs. New emails are added via the creatable input.
-  const options = useMemo(() => {
-    const everyone = {
-      label: "Everyone",
-      value: WILDCARD_PRINCIPAL,
-      icon: principalIcon("everyone"),
-    };
-    const roleOptions = roles.map((role) => ({
-      label: role.name,
-      value: role.principalUrn,
-      icon: principalIcon("role"),
-    }));
-    const memberOptions = members.map((member) => ({
-      label: member.name ? `${member.name} (${member.email})` : member.email,
-      value: member.principalUrn,
-      icon: principalIcon("user"),
-    }));
+  const audienceByUrn = useMemo(
+    () =>
+      new Map(audiences.map((audience) => [audience.principalUrn, audience])),
+    [audiences],
+  );
+  const selectedForAudienceType = useMemo(
+    () =>
+      selected.filter((urn) => audienceByUrn.get(urn)?.kind === audienceType),
+    [audienceByUrn, audienceType, selected],
+  );
+  const options = useMemo(
+    () =>
+      audiences
+        .filter((audience) => audience.kind === audienceType)
+        .map((audience) => ({
+          label: audience.displayName,
+          value: audience.principalUrn,
+          description: memberCountDescription(audience.memberCount),
+          icon: principalIcon(audience.kind),
+        })),
+    [audienceType, audiences],
+  );
 
-    // Surface existing email assignments as their own options so they show the
-    // address as a label and stay selected. Members already cover user: URNs.
-    const knownValues = new Set([
-      everyone.value,
-      ...roleOptions.map((o) => o.value),
-      ...memberOptions.map((o) => o.value),
+  const handleAudienceSelection = (values: string[]) => {
+    setSelected((current) => [
+      ...current.filter((urn) => audienceByUrn.get(urn)?.kind !== audienceType),
+      ...values,
     ]);
-    const emailOptions = initialUrns
-      .filter((urn) => urn.startsWith("email:") && !knownValues.has(urn))
-      .map((urn) => ({
-        label: urn.slice("email:".length),
-        value: urn,
-        icon: principalIcon("email"),
-      }));
-
-    return [
-      { heading: "General", options: [everyone] },
-      ...(roleOptions.length
-        ? [{ heading: "Roles", options: roleOptions }]
-        : []),
-      ...(memberOptions.length
-        ? [{ heading: "Users", options: memberOptions }]
-        : []),
-      ...(emailOptions.length
-        ? [{ heading: "Emails", options: emailOptions }]
-        : []),
-    ];
-  }, [roles, members, initialUrns]);
+  };
 
   const mutation = useSetPluginAssignmentsMutation({
     onSuccess: () => {
@@ -149,27 +154,12 @@ function AssignmentsEditor({
   });
 
   const handleSave = () => {
-    // Canonicalize the picked values into principal URNs. Anything that is
-    // neither a known URN nor a valid email (e.g. a typo typed into the picker)
-    // blocks the save so we never persist an assignment that can't deliver.
-    const normalized: string[] = [];
-    const invalid: string[] = [];
-    for (const value of selected) {
-      const urn = normalizeToPrincipalUrn(value);
-      if (urn) normalized.push(urn);
-      else invalid.push(value);
-    }
-    if (invalid.length > 0) {
-      toast.error(`Not a valid role, user, or email: ${invalid.join(", ")}`);
-      return;
-    }
-
     mutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
         setPluginAssignmentsForm: {
           pluginId,
-          principalUrns: Array.from(new Set(normalized)),
+          principalUrns: Array.from(new Set(selected)),
         },
       },
     });
@@ -178,26 +168,52 @@ function AssignmentsEditor({
   return (
     <>
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        <label className="mb-2 block text-sm font-medium">
-          Assigned principals
+        <label
+          className="mb-2 block text-sm font-medium"
+          htmlFor="audience-type"
+        >
+          Audience type
+        </label>
+        <Select
+          value={audienceType}
+          onValueChange={(value) => {
+            if (isAudienceType(value)) setAudienceType(value);
+          }}
+        >
+          <SelectTrigger id="audience-type" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {audienceTypeOptions.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label className="mb-2 mt-5 block text-sm font-medium">
+          {
+            audienceTypeOptions.find((type) => type.value === audienceType)
+              ?.label
+          }
         </label>
         <MultiSelect
-          options={options}
-          defaultValue={initialUrns}
-          onValueChange={setSelected}
-          placeholder="Add roles, users, or emails"
-          // Selections here are names and email addresses, so the badge's
-          // default mono/uppercase token styling has to be undone.
+          key={audienceType}
+          options={[{ heading: "Available audiences", options }]}
+          defaultValue={selectedForAudienceType}
+          onValueChange={handleAudienceSelection}
+          placeholder={`Select ${audienceTypeOptions
+            .find((type) => type.value === audienceType)
+            ?.label.toLowerCase()}`}
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
-          creatable
           searchable
           hideSelectAll
           modalPopover
           maxCount={20}
         />
         <Text muted small className="mt-2">
-          Type an email and select “Create” to assign it directly. Role and user
-          assignments deliver once the recipient runs the device agent.
+          Choose a type, then select the specific audiences that should receive
+          this plugin. Assignments apply when a device next syncs.
         </Text>
       </div>
       <SheetFooter className="px-6 pb-6">
