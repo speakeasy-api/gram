@@ -31,6 +31,10 @@ vi.mock("./useProjectGuideProgress", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "project-guide-test",
+}));
+
 vi.mock("./ThirdPartyMcpJourney", () => ({
   ThirdPartyMcpJourney: ({
     onComplete,
@@ -94,11 +98,28 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
-  invalidateAllGetMcpServerActivity: invalidations.activity,
+  invalidateGetMcpServerActivity: invalidations.activity,
+  invalidateAllGetMcpServerActivity: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/riskListResults.js", () => ({
-  invalidateAllRiskListResults: invalidations.results,
+  invalidateRiskListResults: invalidations.results,
+  invalidateAllRiskListResults: vi.fn(),
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    logs: {
+      Link: ({ children }: { children: React.ReactNode }) => (
+        <a href="/logs">{children}</a>
+      ),
+    },
+    riskEvents: {
+      Link: ({ children }: { children: React.ReactNode }) => (
+        <a href="/risk-events">{children}</a>
+      ),
+    },
+  }),
 }));
 
 import { ProjectGuide } from "./ProjectGuide.tsx";
@@ -229,6 +250,29 @@ describe("ProjectGuide", () => {
     expect(journeyBodies.secretBlock).not.toHaveBeenCalled();
   });
 
+  it("expands one journey column and collapses its sibling to a switchable spine", () => {
+    render(<ProjectGuide />);
+    const thirdPartyCard = screen.getByTestId(
+      "project-guide-third-party-mcp-card",
+    );
+    const secretBlockCard = screen.getByTestId(
+      "project-guide-secret-block-card",
+    );
+
+    expect(thirdPartyCard.getAttribute("data-state")).toBe("closed");
+    expect(secretBlockCard.getAttribute("data-state")).toBe("closed");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+
+    expect(thirdPartyCard.getAttribute("data-state")).toBe("open");
+    expect(secretBlockCard.getAttribute("data-state")).toBe("spine");
+    expect(secretBlockCard.className).toContain("md:w-[54px]");
+    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
+    expect(screen.queryByTestId("secret-block-journey")).toBeNull();
+  });
+
   it("switches journeys from the body without leaving the guide", () => {
     render(<ProjectGuide />);
     fireEvent.click(
@@ -253,7 +297,7 @@ describe("ProjectGuide", () => {
     expect(screen.queryByTestId("journey-body")).toBeNull();
   });
 
-  it("offers the other journey when one body completes", () => {
+  it("keeps a completed journey open until its derived progress updates", () => {
     render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -262,7 +306,7 @@ describe("ProjectGuide", () => {
       screen.getByRole("button", { name: "Complete third-party journey" }),
     );
 
-    expect(screen.getByTestId("secret-block-journey")).toBeTruthy();
+    expect(screen.getByTestId("third-party-journey")).toBeTruthy();
   });
 
   it("refreshes the derived progress query after each persisted completion", () => {
@@ -274,13 +318,42 @@ describe("ProjectGuide", () => {
       screen.getByRole("button", { name: "Complete third-party journey" }),
     );
 
-    expect(invalidations.activity).toHaveBeenCalledWith(queryClient);
+    expect(invalidations.activity).toHaveBeenCalledWith(queryClient, [
+      { gramProject: "project-guide-test" },
+    ]);
 
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Switch to Block a leaked credential mid-prompt journey",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Complete secret-block journey" }),
     );
 
-    expect(invalidations.results).toHaveBeenCalledWith(queryClient);
+    expect(invalidations.results).toHaveBeenCalledWith(queryClient, [
+      { gramProject: "project-guide-test" },
+    ]);
+  });
+
+  it("shows the approved one-journey completion treatment with an other-journey action", () => {
+    statusByJourney.current = {
+      "third-party-mcp": "done",
+      "secret-block": "not-started",
+    };
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+
+    expect(screen.getByText("The path is governed.")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Open Tool Logs" }).getAttribute("href"),
+    ).toBe("/logs");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start the other journey" }),
+    );
+    expect(screen.getByTestId("secret-block-journey")).toBeTruthy();
   });
 
   it("shows a completion state only after both derived journey statuses are done", () => {
@@ -291,7 +364,29 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     expect(screen.getByTestId("project-guide-complete")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Review what you set up" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("This card is replaced on next visit"),
+    ).toBeTruthy();
     expect(screen.queryByTestId("journey-body")).toBeNull();
+  });
+
+  it("returns to the completed journey records for review", () => {
+    statusByJourney.current = {
+      "third-party-mcp": "done",
+      "secret-block": "done",
+    };
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review what you set up" }),
+    );
+
+    expect(screen.queryByTestId("project-guide-complete")).toBeNull();
+    expect(
+      screen.getByTestId("project-guide-third-party-mcp-card"),
+    ).toBeTruthy();
   });
 
   it("returns to normal project home through the existing query gate", () => {

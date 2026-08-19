@@ -2,6 +2,7 @@ import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStat
 import { SecretBlockJourney } from "@/components/project-guide/SecretBlockJourney";
 import { ThirdPartyMcpJourney } from "@/components/project-guide/ThirdPartyMcpJourney";
 import {
+  PROJECT_GUIDE_COMPLETE,
   PROJECT_GUIDE_JOURNEYS,
   JOURNEY_STATUS_LABELS,
   otherProjectGuideJourney,
@@ -10,9 +11,11 @@ import {
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { invalidateAllGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
-import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useRoutes } from "@/routes";
+import { invalidateGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
+import { invalidateRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useState } from "react";
@@ -27,8 +30,11 @@ export function ProjectGuide(): JSX.Element {
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const [expanded, setExpanded] = useState<JourneyId | null>(null);
+  const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
+    useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const gramProject = useProjectSlugForRequests();
   const shouldReduceMotion = useReducedMotion();
   const isComplete =
     statusByJourney["third-party-mcp"] === "done" &&
@@ -43,13 +49,13 @@ export function ProjectGuide(): JSX.Element {
   const markJourneyComplete = useCallback(
     (id: JourneyId) => {
       if (id === "third-party-mcp") {
-        void invalidateAllGetMcpServerActivity(queryClient);
+        void invalidateGetMcpServerActivity(queryClient, [{ gramProject }]);
       } else {
-        void invalidateAllRiskListResults(queryClient);
+        void invalidateRiskListResults(queryClient, [{ gramProject }]);
       }
-      setExpanded(otherProjectGuideJourney(id));
+      setExpanded(id);
     },
-    [queryClient],
+    [gramProject, queryClient],
   );
   const returnToProjectHome = useCallback(() => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -57,11 +63,12 @@ export function ProjectGuide(): JSX.Element {
     setSearchParams(nextSearchParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  if (isComplete) {
+  if (isComplete && !reviewingCompletedJourneys) {
     return (
       <ProjectGuideComplete
         reducedMotion={shouldReduceMotion}
         onReturnToProjectHome={returnToProjectHome}
+        onReview={() => setReviewingCompletedJourneys(true)}
       />
     );
   }
@@ -94,7 +101,7 @@ export function ProjectGuide(): JSX.Element {
         )}
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="bg-card border-border flex flex-col overflow-hidden border md:flex-row">
         {PROJECT_GUIDE_JOURNEYS.map((journey) => (
           <JourneyCard
             key={journey.id}
@@ -102,6 +109,7 @@ export function ProjectGuide(): JSX.Element {
             status={statusByJourney[journey.id]}
             statusPending={progressPending}
             expanded={expanded === journey.id}
+            spine={expanded !== null && expanded !== journey.id}
             onToggle={() => toggle(journey.id)}
             onComplete={() => markJourneyComplete(journey.id)}
             onSwitchJourney={() =>
@@ -119,6 +127,7 @@ function JourneyCard({
   status,
   statusPending,
   expanded,
+  spine,
   onToggle,
   onComplete,
   onSwitchJourney,
@@ -127,17 +136,33 @@ function JourneyCard({
   status: JourneyStatus;
   statusPending: boolean;
   expanded: boolean;
+  spine: boolean;
   onToggle: () => void;
   onComplete: () => void;
   onSwitchJourney: () => void;
 }): JSX.Element {
   const currentStep = firstIncompleteStepIndex(status, journey.steps.length);
   const reducedMotion = useReducedMotion();
+  const routes = useRoutes();
   const triggerId = `project-guide-${journey.id}-trigger`;
   const panelId = `project-guide-${journey.id}-panel`;
 
   return (
-    <section className="bg-card border-border hover:border-foreground/40 border transition-colors">
+    <motion.section
+      layout={!reducedMotion}
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : { layout: { duration: 0.5, ease: [0.65, 0, 0.25, 1] } }
+      }
+      data-testid={`project-guide-${journey.id}-card`}
+      data-state={expanded ? "open" : spine ? "spine" : "closed"}
+      className={cn(
+        "min-w-0 overflow-hidden",
+        expanded || !spine ? "md:flex-1" : "md:w-[54px] md:flex-none",
+        journey.id === "third-party-mcp" && "border-border md:border-l",
+      )}
+    >
       <h3>
         <button
           id={triggerId}
@@ -145,13 +170,33 @@ function JourneyCard({
           onClick={onToggle}
           aria-controls={panelId}
           aria-expanded={expanded}
-          className="flex w-full flex-col items-start gap-2 px-6.5 py-5 text-left"
+          aria-label={spine ? `Switch to ${journey.title} journey` : undefined}
+          className={cn(
+            "flex w-full flex-col items-start gap-2 px-6.5 py-5 text-left",
+            spine && "md:h-full md:w-[54px] md:items-center md:px-2 md:py-4",
+          )}
         >
-          <span className="flex w-full items-center gap-2.5">
-            <span className="text-muted-foreground font-mono text-xs tracking-wider">
+          <span
+            className={cn(
+              "flex w-full items-center gap-2.5",
+              spine && "md:flex-col",
+            )}
+          >
+            <span
+              className={cn(
+                "text-muted-foreground font-mono text-xs tracking-wider",
+                spine && "md:hidden",
+              )}
+            >
               {journey.index}
             </span>
-            <span className="text-foreground text-[19px] leading-[1.25]">
+            <span
+              className={cn(
+                "text-foreground text-[19px] leading-[1.25]",
+                spine &&
+                  "md:[writing-mode:vertical-rl] md:rotate-180 md:whitespace-nowrap",
+              )}
+            >
               {journey.title}
             </span>
             <span
@@ -161,12 +206,20 @@ function JourneyCard({
                   ? `Loading ${journey.title} journey status`
                   : undefined
               }
-              className="border-border text-muted-foreground ml-auto border px-1.5 py-px font-mono text-[9px] tracking-[0.08em] uppercase"
+              className={cn(
+                "border-border text-muted-foreground ml-auto border px-1.5 py-px font-mono text-[9px] tracking-[0.08em] uppercase",
+                spine && "md:ml-0",
+              )}
             >
               {statusPending ? "Loading" : JOURNEY_STATUS_LABELS[status]}
             </span>
           </span>
-          <span className="text-muted-foreground max-w-[64ch] text-[13px] leading-[1.6]">
+          <span
+            className={cn(
+              "text-muted-foreground max-w-[64ch] text-[13px] leading-[1.6]",
+              spine && "md:hidden",
+            )}
+          >
             {journey.win}
           </span>
         </button>
@@ -186,55 +239,111 @@ function JourneyCard({
           }}
           className="border-border border-t px-6.5 py-5"
         >
-          <ol className="flex flex-wrap items-center gap-4 pb-4">
-            {journey.steps.map((step, index) => (
-              <li key={step} className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    index === currentStep ? "bg-foreground" : "bg-border",
-                  )}
-                />
-                <span
-                  aria-current={index === currentStep ? "step" : undefined}
-                  className={cn(
-                    "font-mono text-[11px] tracking-[0.04em]",
-                    index === currentStep
-                      ? "text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {step}
-                </span>
-              </li>
-            ))}
-          </ol>
-          {journey.id === "third-party-mcp" ? (
-            <ThirdPartyMcpJourney
-              status={status}
-              onComplete={onComplete}
+          {status === "done" ? (
+            <JourneyCompleteSummary
+              journey={journey}
               onSwitchJourney={onSwitchJourney}
+              routes={routes}
             />
           ) : (
-            <SecretBlockJourney
-              status={status}
-              onComplete={onComplete}
-              onSwitchJourney={onSwitchJourney}
-            />
+            <>
+              <ol className="flex flex-wrap items-center gap-4 pb-4">
+                {journey.steps.map((step, index) => (
+                  <li key={step} className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        index === currentStep ? "bg-foreground" : "bg-border",
+                      )}
+                    />
+                    <span
+                      aria-current={index === currentStep ? "step" : undefined}
+                      className={cn(
+                        "font-mono text-[11px] tracking-[0.04em]",
+                        index === currentStep
+                          ? "text-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {step}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {journey.id === "third-party-mcp" ? (
+                <ThirdPartyMcpJourney
+                  status={status}
+                  onComplete={onComplete}
+                  onSwitchJourney={onSwitchJourney}
+                />
+              ) : (
+                <SecretBlockJourney
+                  status={status}
+                  onComplete={onComplete}
+                  onSwitchJourney={onSwitchJourney}
+                />
+              )}
+            </>
           )}
         </motion.div>
       )}
-    </section>
+    </motion.section>
+  );
+}
+
+function JourneyCompleteSummary({
+  journey,
+  onSwitchJourney,
+  routes,
+}: {
+  journey: JourneyMeta;
+  onSwitchJourney: () => void;
+  routes: ReturnType<typeof useRoutes>;
+}): JSX.Element {
+  const completion = journey.completion;
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-1">
+        <span className="text-primary font-mono text-[10px] tracking-[0.05em] uppercase">
+          {completion.eyebrow}
+        </span>
+        <h4 className="text-[24px] leading-[1.1]">{completion.heading}</h4>
+        <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
+          {completion.body}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        {journey.id === "third-party-mcp" ? (
+          <routes.logs.Link className="font-mono text-[11px] uppercase">
+            {completion.primaryAction}
+          </routes.logs.Link>
+        ) : (
+          <routes.riskEvents.Link className="font-mono text-[11px] uppercase">
+            {completion.primaryAction}
+          </routes.riskEvents.Link>
+        )}
+        <button
+          type="button"
+          onClick={onSwitchJourney}
+          className="text-muted-foreground font-mono text-[11px] uppercase"
+        >
+          Start the other journey
+        </button>
+      </div>
+    </div>
   );
 }
 
 function ProjectGuideComplete({
   reducedMotion,
   onReturnToProjectHome,
+  onReview,
 }: {
   reducedMotion: boolean | null;
   onReturnToProjectHome: () => void;
+  onReview: () => void;
 }): JSX.Element {
   return (
     <motion.section
@@ -247,21 +356,34 @@ function ProjectGuideComplete({
       }}
       className="bg-card border-border grid gap-4 border p-6.5"
     >
-      <span className="text-eyebrow text-primary">Both journeys complete</span>
+      <span className="text-eyebrow text-primary">
+        {PROJECT_GUIDE_COMPLETE.eyebrow}
+      </span>
       <h2 className="text-foreground max-w-[24ch] font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
-        Both journeys are on the record.
+        {PROJECT_GUIDE_COMPLETE.heading}
       </h2>
       <p className="text-muted-foreground max-w-[56ch] text-[13px] leading-[1.6]">
-        Traffic is governed and recorded, and prompts are inspected before
-        transport. Return to project home to see the live project data.
+        {PROJECT_GUIDE_COMPLETE.body}
       </p>
-      <button
-        type="button"
-        onClick={onReturnToProjectHome}
-        className="bg-foreground text-background w-fit px-4 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
-      >
-        Go to project home
-      </button>
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          onClick={onReturnToProjectHome}
+          className="bg-foreground text-background w-fit px-4 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+        >
+          {PROJECT_GUIDE_COMPLETE.primaryAction}
+        </button>
+        <button
+          type="button"
+          onClick={onReview}
+          className="text-muted-foreground font-mono text-[11px] uppercase"
+        >
+          {PROJECT_GUIDE_COMPLETE.secondaryAction}
+        </button>
+      </div>
+      <span className="text-muted-foreground font-mono text-[10px] uppercase">
+        {PROJECT_GUIDE_COMPLETE.note}
+      </span>
     </motion.section>
   );
 }
