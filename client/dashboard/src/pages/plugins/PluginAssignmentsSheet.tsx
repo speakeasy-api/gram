@@ -1,12 +1,5 @@
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -33,19 +26,15 @@ import {
   principalIcon,
 } from "./principals";
 
-const audienceTypeOptions: {
+const audienceGroups: {
   value: PluginAudienceKind;
-  label: string;
+  heading: string;
 }[] = [
-  { value: "everyone", label: "Everyone" },
-  { value: "role", label: "Role" },
-  { value: "directory_group", label: "Directory group" },
-  { value: "directory_attribute", label: "Directory attribute" },
+  { value: "everyone", heading: "Everyone" },
+  { value: "role", heading: "Roles" },
+  { value: "directory_group", heading: "Directory groups" },
+  { value: "directory_attribute", heading: "Directory attributes" },
 ];
-
-function isAudienceType(value: string): value is PluginAudienceKind {
-  return audienceTypeOptions.some((type) => type.value === value);
-}
 
 function existingAssignmentOption(
   urn: string,
@@ -65,6 +54,7 @@ function existingAssignmentOption(
 function availableAudienceOptions(
   audienceType: PluginAudienceKind,
   audiences: PluginAudience[],
+  disabled: boolean,
 ) {
   return audiences
     .filter((audience) => audience.kind === audienceType)
@@ -73,6 +63,7 @@ function availableAudienceOptions(
       value: audience.principalUrn,
       description: memberCountDescription(audience.memberCount),
       icon: principalIcon(audience.kind),
+      disabled,
     }));
 }
 
@@ -162,28 +153,46 @@ function AssignmentsEditor({
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
-  const [audienceType, setAudienceType] =
-    useState<PluginAudienceKind>("everyone");
 
   const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
-  const selectedForAudienceType = useMemo(
+  const canSelectAudiences =
+    !audiencesQuery.isPending && !audiencesQuery.isError;
+  const availableAudienceGroups = useMemo(
     () =>
-      selected.filter(
-        (urn) => audienceKindForPrincipal(urn, audienceByUrn) === audienceType,
-      ),
-    [audienceByUrn, audienceType, selected],
+      audienceGroups.map((group) => ({
+        heading: group.heading,
+        options: availableAudienceOptions(
+          group.value,
+          audiences,
+          !canSelectAudiences,
+        ),
+      })),
+    [audiences, canSelectAudiences],
   );
-  const availableOptions = useMemo(
-    () => availableAudienceOptions(audienceType, audiences),
-    [audienceType, audiences],
-  );
-  const unavailableOptions = useMemo(
-    () => unavailableAudienceOptions(audienceType, selected, audienceByUrn),
-    [audienceByUrn, audienceType, selected],
+  const unavailableAudienceGroups = useMemo(
+    () =>
+      audienceGroups.map((group) => ({
+        heading: group.heading,
+        options: unavailableAudienceOptions(
+          group.value,
+          selected,
+          audienceByUrn,
+        ),
+      })),
+    [audienceByUrn, selected],
   );
   const options = useMemo(
-    () => [...availableOptions, ...unavailableOptions],
-    [availableOptions, unavailableOptions],
+    () =>
+      availableAudienceGroups
+        .map((group, index) => ({
+          heading: group.heading,
+          options: [
+            ...group.options,
+            ...unavailableAudienceGroups[index]!.options,
+          ],
+        }))
+        .filter((group) => group.options.length > 0),
+    [availableAudienceGroups, unavailableAudienceGroups],
   );
   const legacyOptions = useMemo(
     () =>
@@ -199,21 +208,16 @@ function AssignmentsEditor({
     [audienceByUrn, selected],
   );
 
-  const handleAudienceSelection = (values: string[]) => {
-    setSelected((current) => [
-      ...current.filter(
-        (urn) => audienceKindForPrincipal(urn, audienceByUrn) !== audienceType,
-      ),
-      ...values,
-    ]);
-  };
-
-  const handleLegacySelection = (values: string[]) => {
-    setSelected((current) => [
-      ...current.filter((urn) => audienceKindForPrincipal(urn, audienceByUrn)),
-      ...values,
-    ]);
-  };
+  const groupedOptions = useMemo(
+    () =>
+      legacyOptions.length > 0
+        ? [
+            ...options,
+            { heading: "Legacy assignments", options: legacyOptions },
+          ]
+        : options,
+    [legacyOptions, options],
+  );
 
   const mutation = useSetPluginAssignmentsMutation({
     onSuccess: () => {
@@ -240,49 +244,19 @@ function AssignmentsEditor({
   return (
     <>
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        <label
-          className="mb-2 block text-sm font-medium"
-          htmlFor="audience-type"
-        >
-          Audience type
-        </label>
-        <Select
-          value={audienceType}
-          onValueChange={(value) => {
-            if (isAudienceType(value)) setAudienceType(value);
-          }}
-        >
-          <SelectTrigger id="audience-type" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {audienceTypeOptions.map((type) => (
-              <SelectItem key={type.value} value={type.value}>
-                {type.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <label className="mb-2 mt-5 block text-sm font-medium">
-          {
-            audienceTypeOptions.find((type) => type.value === audienceType)
-              ?.label
-          }
+        <label className="mb-2 block text-sm font-medium">
+          Assigned audiences
         </label>
         <MultiSelect
-          key={audienceType}
-          options={[{ heading: "Available audiences", options }]}
-          defaultValue={selectedForAudienceType}
-          onValueChange={handleAudienceSelection}
-          placeholder={`Select ${audienceTypeOptions
-            .find((type) => type.value === audienceType)
-            ?.label.toLowerCase()}`}
+          options={groupedOptions}
+          defaultValue={selected}
+          onValueChange={setSelected}
+          placeholder="Select audiences"
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
           searchable
           hideSelectAll
           modalPopover
           maxCount={20}
-          disabled={audiencesQuery.isPending || audiencesQuery.isError}
         />
         {audiencesQuery.isPending && (
           <Text muted small className="mt-2">
@@ -295,30 +269,9 @@ function AssignmentsEditor({
           </Text>
         )}
         <Text muted small className="mt-2">
-          Choose a type, then select the specific audiences that should receive
-          this plugin. Assignments apply when a device next syncs.
+          Select the specific audiences that should receive this plugin.
+          Assignments apply when a device next syncs.
         </Text>
-        {legacyOptions.length > 0 && (
-          <>
-            <label className="mb-2 mt-5 block text-sm font-medium">
-              Legacy assignments
-            </label>
-            <MultiSelect
-              options={legacyOptions}
-              defaultValue={legacyOptions.map((option) => option.value)}
-              onValueChange={handleLegacySelection}
-              placeholder="No legacy assignments"
-              badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
-              searchable={false}
-              hideSelectAll
-              modalPopover
-              maxCount={20}
-            />
-            <Text muted small className="mt-2">
-              These assignments can be removed but not added again.
-            </Text>
-          </>
-        )}
       </div>
       <SheetFooter className="px-6 pb-6">
         <Button

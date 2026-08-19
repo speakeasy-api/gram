@@ -188,7 +188,16 @@ describe("MultiSelect disabled selected options", () => {
     render(
       <MultiSelect
         options={[
-          { label: "Legacy assignment", value: "legacy", disabled: true },
+          {
+            heading: "Legacy assignments",
+            options: [
+              {
+                label: "Legacy assignment",
+                value: "legacy",
+                disabled: true,
+              },
+            ],
+          },
         ]}
         defaultValue={["legacy"]}
         onValueChange={onValueChange}
