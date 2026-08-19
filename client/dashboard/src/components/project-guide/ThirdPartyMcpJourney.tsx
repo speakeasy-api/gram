@@ -150,8 +150,12 @@ export function ThirdPartyMcpJourney({
   } = useRemoteMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
+  const workflowServers = useMemo(
+    () => (selectedServer ? [filterToHttpRemotes(selectedServer)] : []),
+    [selectedServer],
+  );
   const workflow = useRemoteMcpInstallWorkflow({
-    servers: selectedServer ? [filterToHttpRemotes(selectedServer)] : [],
+    servers: workflowServers,
     projectSlug: gramProject,
     autoSelectRemotes: true,
   });

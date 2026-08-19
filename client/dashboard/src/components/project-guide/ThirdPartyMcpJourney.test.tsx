@@ -277,6 +277,31 @@ describe("ThirdPartyMcpJourney", () => {
     expect(catalog.refetch).toHaveBeenCalledOnce();
   });
 
+  it("keeps the workflow servers array stable before a server is selected", () => {
+    const rendered = render(
+      <ThirdPartyMcpJourney
+        status="not-started"
+        onComplete={noop}
+        onSwitchJourney={noop}
+      />,
+    );
+    const firstServers = (
+      workflowOptions.current as { servers: PulseMCPServer[] }
+    ).servers;
+
+    rendered.rerender(
+      <ThirdPartyMcpJourney
+        status="not-started"
+        onComplete={noop}
+        onSwitchJourney={noop}
+      />,
+    );
+
+    expect(
+      (workflowOptions.current as { servers: PulseMCPServer[] }).servers,
+    ).toBe(firstServers);
+  });
+
   it("advances to deployment and auto-selects every HTTP remote", () => {
     const selected = server("Linear", {
       remotes: ["streamable-http", "streamable-http"],
