@@ -176,6 +176,14 @@ type OpenAIChatRequest struct {
 	Messages []or.ChatMessages `json:"messages"`
 	Stream   bool              `json:"stream"`
 	Tools    []Tool            `json:"tools,omitempty"`
+	// ToolChoice forwards OpenAI tool_choice. Raw on purpose: the spec
+	// allows a string ("none", "auto", "required") or an object naming a
+	// function, and this struct also decodes inbound proxy requests — a
+	// typed string would 400 clients sending the object form. "none" is how
+	// a caller ends an agent loop without dropping the tools key:
+	// Anthropic-family models reject a request whose history carries
+	// tool_use/tool_result blocks once tools stops being defined.
+	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 	// No omitempty: temperature 0 is a meaningful value (deterministic
 	// sampling), not "unset". With omitempty a caller-requested 0 would be
 	// dropped from the wire and the provider would silently fall back to its
@@ -191,6 +199,36 @@ type OpenAIChatRequest struct {
 	User      string            `json:"user,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 	Trace     *TraceConfig      `json:"trace,omitempty"`
+	Plugins   []RequestPlugin   `json:"plugins,omitempty"`
+}
+
+// RequestPlugin is one entry in the outbound `plugins` array: the web-search
+// plugin ("web") and the response-healing plugin ("response-healing").
+type RequestPlugin struct {
+	ID string `json:"id"`
+
+	// Enabled turns a default-on plugin off when explicitly false.
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// MaxResults caps how many web results the search plugin returns. Zero
+	// leaves the provider default.
+	MaxResults int `json:"max_results,omitempty"`
+}
+
+// ResponseAnnotation is one annotation OpenRouter attaches to a response
+// message. The web-search plugin emits `url_citation` entries; other types
+// pass through with their citation absent.
+type ResponseAnnotation struct {
+	Type        string               `json:"type"`
+	URLCitation *ResponseURLCitation `json:"url_citation,omitempty"`
+}
+
+// ResponseURLCitation is one cited web result. Content is the snippet the
+// search engine returned for the page — third-party text, not the model's.
+type ResponseURLCitation struct {
+	URL     string `json:"url"`
+	Title   string `json:"title,omitempty"`
+	Content string `json:"content,omitempty"`
 }
 
 // Reasoning mirrors OpenRouter's `reasoning` request parameter. Callers set
@@ -294,14 +332,54 @@ type GramMetadata struct {
 
 // OpenAIChatResponse represents the response structure from OpenAI for non-streaming responses
 type OpenAIChatResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Message      or.ChatMessages `json:"message"`
+	ID           string           `json:"id"`
+	Object       string           `json:"object"`
+	Created      int64            `json:"created"`
+	Model        string           `json:"model"`
+	Choices      []ResponseChoice `json:"choices"`
+	Usage        *Usage           `json:"usage,omitempty"`
+	GramMetadata *GramMetadata    `json:"gram_metadata,omitempty"`
+}
+
+// ResponseChoice is one completion choice. The message decodes through the
+// SDK's union type, which drops fields the SDK does not model — annotations
+// among them — so the raw message is decoded a second time to keep the
+// annotation list the web-search plugin emits.
+type ResponseChoice struct {
+	Message      or.ChatMessages `json:"message"`
+	FinishReason string          `json:"finish_reason"`
+
+	// Annotations live inside the message object on the wire; they are
+	// lifted here at decode time because the SDK message type cannot carry
+	// them. Absent on re-marshalled proxy responses.
+	Annotations []ResponseAnnotation `json:"annotations,omitempty"`
+}
+
+func (rc *ResponseChoice) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Message      json.RawMessage `json:"message"`
 		FinishReason string          `json:"finish_reason"`
-	} `json:"choices"`
-	Usage        *Usage        `json:"usage,omitempty"`
-	GramMetadata *GramMetadata `json:"gram_metadata,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("decode completion choice: %w", err)
+	}
+
+	rc.FinishReason = raw.FinishReason
+	if len(raw.Message) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(raw.Message, &rc.Message); err != nil {
+		return fmt.Errorf("decode completion message: %w", err)
+	}
+
+	var annotated struct {
+		Annotations []ResponseAnnotation `json:"annotations"`
+	}
+	// Best-effort: a message whose annotations do not decode still carried a
+	// valid message, and the annotation list is supplementary.
+	if err := json.Unmarshal(raw.Message, &annotated); err == nil {
+		rc.Annotations = annotated.Annotations
+	}
+
+	return nil
 }

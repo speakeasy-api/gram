@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
@@ -457,6 +458,12 @@ func newStartCommand() *cli.Command {
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-portal-configuration-id",
+			Aliases: []string{"stripe.portal_configuration_id"},
+			Usage:   "The controlled Stripe customer portal configuration ID",
+			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
 		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
@@ -1031,6 +1038,7 @@ func newStartCommand() *cli.Command {
 				billingTracker,
 				toolDispositionCache,
 				platformSelectedUseRecorder,
+				toolfilter.NewSessionToolWitnessStore(logger, cache.NewRedisCacheAdapter(redisClient)),
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -1303,7 +1311,7 @@ func newStartCommand() *cli.Command {
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc))
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1507,7 +1515,19 @@ func newStartCommand() *cli.Command {
 					remoteProber,
 					remoteProber,
 					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
-				))
+				),
+				func(ctx context.Context, run mcpapproval.ResearchRun) error {
+					_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
+						ReportID:  run.ReportID,
+						RequestID: run.RequestID,
+						ProjectID: run.ProjectID,
+						OrgID:     run.OrgID,
+					})
+					if err != nil {
+						return fmt.Errorf("execute research workflow: %w", err)
+					}
+					return nil
+				})
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
@@ -1544,7 +1564,7 @@ func newStartCommand() *cli.Command {
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
@@ -1706,6 +1726,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						GitHubEvidenceToken:       c.String("github-evidence-token"),
 						SiteURL:                   siteURL,
 						BillingTracker:            billingTracker,
 						BillingRepository:         billingRepo,

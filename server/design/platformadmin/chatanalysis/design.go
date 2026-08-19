@@ -29,16 +29,19 @@ var _ = Service("adminChatAnalysis", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getSettings", func() {
-		Description("Get the active organization's chat analysis settings. Requires platform admin.")
+		Description("Get the named organization's chat analysis settings. Requires platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("organization_id", String, "Organization whose settings to read.")
+			Required("organization_id")
 		})
 
 		Result(Settings)
 
 		HTTP(func() {
 			GET("/rpc/adminChatAnalysis.getSettings")
+			Param("organization_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -53,13 +56,14 @@ var _ = Service("adminChatAnalysis", func() {
 	// bodies after the method, and a collision silently renames the other
 	// service's SDK types.
 	Method("upsertWorkUnitsSettings", func() {
-		Description("Create or replace the active organization's chat analysis settings. Requires platform admin.")
+		Description("Create or replace the named organization's chat analysis settings. Requires platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("organization_id", String, "Organization whose settings to replace.")
 			Attribute("work_units_enabled", Boolean, "Whether work-units chat analysis is enabled.")
 			Attribute("work_units_daily_cap", Int, "Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.", func() { Minimum(0); Maximum(10000) })
-			Required("work_units_enabled", "work_units_daily_cap")
+			Required("organization_id", "work_units_enabled", "work_units_daily_cap")
 		})
 
 		Result(Settings)
@@ -76,13 +80,14 @@ var _ = Service("adminChatAnalysis", func() {
 	})
 
 	Method("upsertBusinessMemorySettings", func() {
-		Description("Create or replace the active organization's business-memory extraction settings. Requires platform admin.")
+		Description("Create or replace the named organization's business-memory extraction settings. Requires platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("organization_id", String, "Organization whose settings to replace.")
 			Attribute("business_memory_enabled", Boolean, "Whether completed sessions are mined for business memories.")
 			Attribute("business_memory_daily_cap", Int, "Maximum business-memory extraction evaluations reserved across the organization each UTC day. 0 disables extraction.", func() { Minimum(0); Maximum(10000) })
-			Required("business_memory_enabled", "business_memory_daily_cap")
+			Required("organization_id", "business_memory_enabled", "business_memory_daily_cap")
 		})
 
 		Result(Settings)
@@ -99,10 +104,13 @@ var _ = Service("adminChatAnalysis", func() {
 	})
 
 	Method("triggerAnalysis", func() {
-		Description("Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.")
+		Description("Wake the chat analysis coordinator for every project in the named organization, instead of waiting for the periodic sweep. Requires platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("organization_id", String, "Organization whose projects to signal.")
+			Required("organization_id")
+			Meta("openapi:typename", "TriggerAnalysisRequestBody")
 		})
 
 		Result(func() {

@@ -1200,6 +1200,12 @@ FROM (
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    -- Whole-id matching, unlike @user_id above: one subject's findings, not
+    -- everyone whose id happens to contain theirs as a substring.
+    AND (
+      COALESCE(cardinality(@external_user_ids::text[]), 0) = 0
+      OR lower(c.external_user_id) = ANY(ARRAY(SELECT lower(e) FROM unnest(@external_user_ids::text[]) AS e))
+    )
     AND (NOT @non_assistant::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE

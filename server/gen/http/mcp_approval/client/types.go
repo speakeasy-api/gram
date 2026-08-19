@@ -81,6 +81,10 @@ type GetRequestResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
 }
@@ -111,6 +115,10 @@ type EnsureServerReviewResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -143,6 +151,10 @@ type CreateRequestResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -175,6 +187,10 @@ type PromoteResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -200,8 +216,41 @@ type RefreshEvidenceResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
+}
+
+// StartResearchResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body.
+type StartResearchResponseBody struct {
+	// The report ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The run's lifecycle state, such as running, completed, or failed.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The structured findings. Every claim carries a provenance tier and its
+	// citations.
+	Report any `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	// Shape version of the report payload.
+	ReportVersion *int `form:"report_version,omitempty" json:"report_version,omitempty" xml:"report_version,omitempty"`
+	// The model that produced the report.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The prompt version the run used, so reports stay distinguishable across
+	// prompt changes.
+	PromptVersion *string `form:"prompt_version,omitempty" json:"prompt_version,omitempty" xml:"prompt_version,omitempty"`
+	// Who asked for the research run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run finished.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// Why the run failed, when it did.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was requested.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
@@ -1338,6 +1387,190 @@ type RefreshEvidenceGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// StartResearchUnauthorizedResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the "unauthorized"
+// error.
+type StartResearchUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchForbiddenResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "forbidden" error.
+type StartResearchForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchBadRequestResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "bad_request" error.
+type StartResearchBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchNotFoundResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "not_found" error.
+type StartResearchNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchConflictResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "conflict" error.
+type StartResearchConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchUnsupportedMediaResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the
+// "unsupported_media" error.
+type StartResearchUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchInvalidResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "invalid" error.
+type StartResearchInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchInvariantViolationResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the
+// "invariant_violation" error.
+type StartResearchInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchUnexpectedResponseBody is the type of the "mcpApproval" service
+// "startResearch" endpoint HTTP response body for the "unexpected" error.
+type StartResearchUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartResearchGatewayErrorResponseBody is the type of the "mcpApproval"
+// service "startResearch" endpoint HTTP response body for the "gateway_error"
+// error.
+type StartResearchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RecordDecisionUnauthorizedResponseBody is the type of the "mcpApproval"
 // service "recordDecision" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1550,6 +1783,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -1592,6 +1829,49 @@ type ApprovalDecisionResponseBody struct {
 	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
 	// When the decision was made.
 	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+}
+
+// EvidenceDiffResponseBody is used to define fields on response body types.
+type EvidenceDiffResponseBody struct {
+	// Whether anything below is non-empty.
+	Changed *bool `form:"changed,omitempty" json:"changed,omitempty" xml:"changed,omitempty"`
+	// OAuth scopes the server's published authority metadata gained since the
+	// decision.
+	ScopesAdded []string `form:"scopes_added,omitempty" json:"scopes_added,omitempty" xml:"scopes_added,omitempty"`
+	// OAuth scopes the published authority metadata lost since the decision.
+	ScopesRemoved []string `form:"scopes_removed,omitempty" json:"scopes_removed,omitempty" xml:"scopes_removed,omitempty"`
+	// Credentials the server now demands that it did not at decision time.
+	SecretsAdded []string `form:"secrets_added,omitempty" json:"secrets_added,omitempty" xml:"secrets_added,omitempty"`
+	// Credentials the server demanded at decision time and no longer does.
+	SecretsRemoved []string `form:"secrets_removed,omitempty" json:"secrets_removed,omitempty" xml:"secrets_removed,omitempty"`
+	// Scalar drifts: authority mode, dynamic client registration,
+	// published-advisory count.
+	Fields []*EvidenceFieldChangeResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Advisories in the current gather's most-recent sample that the snapshot's
+	// sample did not carry.
+	AdvisoriesAdded []*EvidenceAdvisoryChangeResponseBody `form:"advisories_added,omitempty" json:"advisories_added,omitempty" xml:"advisories_added,omitempty"`
+}
+
+// EvidenceFieldChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceFieldChangeResponseBody struct {
+	// Which fact moved: authority_mode, dynamic_registration, or known_advisories.
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The value the decision rested on.
+	Before *string `form:"before,omitempty" json:"before,omitempty" xml:"before,omitempty"`
+	// The value the latest gather found.
+	After *string `form:"after,omitempty" json:"after,omitempty" xml:"after,omitempty"`
+}
+
+// EvidenceAdvisoryChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceAdvisoryChangeResponseBody struct {
+	// The advisory identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The advisory's summary, when the database published one.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The advisory's severity, when the database published one.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
 
 // ResearchReportResponseBody is used to define fields on response body types.
@@ -1860,6 +2140,9 @@ func NewGetRequestApprovalRequestDetailOK(body *GetRequestResponseBody) *mcpappr
 		}
 		v.Decisions[i] = unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(val)
 	}
+	if body.EvidenceDiff != nil {
+		v.EvidenceDiff = unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(body.EvidenceDiff)
+	}
 	v.ResearchReports = make([]*mcpapproval.ResearchReport, len(body.ResearchReports))
 	for i, val := range body.ResearchReports {
 		if val == nil {
@@ -2026,16 +2309,17 @@ func NewGetRequestGatewayError(body *GetRequestGatewayErrorResponseBody) *goa.Se
 // "ensureServerReview" endpoint result from a HTTP "OK" response.
 func NewEnsureServerReviewApprovalRequestSummaryOK(body *EnsureServerReviewResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2195,16 +2479,17 @@ func NewEnsureServerReviewGatewayError(body *EnsureServerReviewGatewayErrorRespo
 // "createRequest" endpoint result from a HTTP "OK" response.
 func NewCreateRequestApprovalRequestSummaryOK(body *CreateRequestResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2364,16 +2649,17 @@ func NewCreateRequestGatewayError(body *CreateRequestGatewayErrorResponseBody) *
 // endpoint result from a HTTP "OK" response.
 func NewPromoteApprovalRequestSummaryOK(body *PromoteResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2554,6 +2840,9 @@ func NewRefreshEvidenceApprovalRequestDetailOK(body *RefreshEvidenceResponseBody
 		}
 		v.Decisions[i] = unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(val)
 	}
+	if body.EvidenceDiff != nil {
+		v.EvidenceDiff = unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(body.EvidenceDiff)
+	}
 	v.ResearchReports = make([]*mcpapproval.ResearchReport, len(body.ResearchReports))
 	for i, val := range body.ResearchReports {
 		if val == nil {
@@ -2704,6 +2993,176 @@ func NewRefreshEvidenceUnexpected(body *RefreshEvidenceUnexpectedResponseBody) *
 // NewRefreshEvidenceGatewayError builds a mcpApproval service refreshEvidence
 // endpoint gateway_error error.
 func NewRefreshEvidenceGatewayError(body *RefreshEvidenceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchResearchReportOK builds a "mcpApproval" service
+// "startResearch" endpoint result from a HTTP "OK" response.
+func NewStartResearchResearchReportOK(body *StartResearchResponseBody) *mcpapproval.ResearchReport {
+	v := &mcpapproval.ResearchReport{
+		ID:            *body.ID,
+		Status:        *body.Status,
+		Report:        body.Report,
+		ReportVersion: *body.ReportVersion,
+		Model:         body.Model,
+		PromptVersion: body.PromptVersion,
+		RequestedBy:   body.RequestedBy,
+		StartedAt:     body.StartedAt,
+		CompletedAt:   body.CompletedAt,
+		Error:         body.Error,
+		CreatedAt:     *body.CreatedAt,
+	}
+
+	return v
+}
+
+// NewStartResearchUnauthorized builds a mcpApproval service startResearch
+// endpoint unauthorized error.
+func NewStartResearchUnauthorized(body *StartResearchUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchForbidden builds a mcpApproval service startResearch
+// endpoint forbidden error.
+func NewStartResearchForbidden(body *StartResearchForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchBadRequest builds a mcpApproval service startResearch
+// endpoint bad_request error.
+func NewStartResearchBadRequest(body *StartResearchBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchNotFound builds a mcpApproval service startResearch endpoint
+// not_found error.
+func NewStartResearchNotFound(body *StartResearchNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchConflict builds a mcpApproval service startResearch endpoint
+// conflict error.
+func NewStartResearchConflict(body *StartResearchConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchUnsupportedMedia builds a mcpApproval service startResearch
+// endpoint unsupported_media error.
+func NewStartResearchUnsupportedMedia(body *StartResearchUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchInvalid builds a mcpApproval service startResearch endpoint
+// invalid error.
+func NewStartResearchInvalid(body *StartResearchInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchInvariantViolation builds a mcpApproval service
+// startResearch endpoint invariant_violation error.
+func NewStartResearchInvariantViolation(body *StartResearchInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchUnexpected builds a mcpApproval service startResearch
+// endpoint unexpected error.
+func NewStartResearchUnexpected(body *StartResearchUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartResearchGatewayError builds a mcpApproval service startResearch
+// endpoint gateway_error error.
+func NewStartResearchGatewayError(body *StartResearchGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2940,6 +3399,11 @@ func ValidateGetRequestResponseBody(body *GetRequestResponseBody) (err error) {
 			}
 		}
 	}
+	if body.EvidenceDiff != nil {
+		if err2 := ValidateEvidenceDiffResponseBody(body.EvidenceDiff); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	for _, e := range body.ResearchReports {
 		if e != nil {
 			if err2 := ValidateResearchReportResponseBody(e); err2 != nil {
@@ -2977,6 +3441,9 @@ func ValidateEnsureServerReviewResponseBody(body *EnsureServerReviewResponseBody
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3013,6 +3480,9 @@ func ValidateCreateRequestResponseBody(body *CreateRequestResponseBody) (err err
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3048,6 +3518,9 @@ func ValidatePromoteResponseBody(body *PromoteResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3095,12 +3568,44 @@ func ValidateRefreshEvidenceResponseBody(body *RefreshEvidenceResponseBody) (err
 			}
 		}
 	}
+	if body.EvidenceDiff != nil {
+		if err2 := ValidateEvidenceDiffResponseBody(body.EvidenceDiff); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	for _, e := range body.ResearchReports {
 		if e != nil {
 			if err2 := ValidateResearchReportResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateStartResearchResponseBody runs the validations defined on
+// StartResearchResponseBody
+func ValidateStartResearchResponseBody(body *StartResearchResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ReportVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report_version", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.CompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.completed_at", *body.CompletedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4572,6 +5077,246 @@ func ValidateRefreshEvidenceGatewayErrorResponseBody(body *RefreshEvidenceGatewa
 	return
 }
 
+// ValidateStartResearchUnauthorizedResponseBody runs the validations defined
+// on startResearch_unauthorized_response_body
+func ValidateStartResearchUnauthorizedResponseBody(body *StartResearchUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchForbiddenResponseBody runs the validations defined on
+// startResearch_forbidden_response_body
+func ValidateStartResearchForbiddenResponseBody(body *StartResearchForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchBadRequestResponseBody runs the validations defined on
+// startResearch_bad_request_response_body
+func ValidateStartResearchBadRequestResponseBody(body *StartResearchBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchNotFoundResponseBody runs the validations defined on
+// startResearch_not_found_response_body
+func ValidateStartResearchNotFoundResponseBody(body *StartResearchNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchConflictResponseBody runs the validations defined on
+// startResearch_conflict_response_body
+func ValidateStartResearchConflictResponseBody(body *StartResearchConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchUnsupportedMediaResponseBody runs the validations
+// defined on startResearch_unsupported_media_response_body
+func ValidateStartResearchUnsupportedMediaResponseBody(body *StartResearchUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchInvalidResponseBody runs the validations defined on
+// startResearch_invalid_response_body
+func ValidateStartResearchInvalidResponseBody(body *StartResearchInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchInvariantViolationResponseBody runs the validations
+// defined on startResearch_invariant_violation_response_body
+func ValidateStartResearchInvariantViolationResponseBody(body *StartResearchInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchUnexpectedResponseBody runs the validations defined on
+// startResearch_unexpected_response_body
+func ValidateStartResearchUnexpectedResponseBody(body *StartResearchUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartResearchGatewayErrorResponseBody runs the validations defined
+// on startResearch_gateway_error_response_body
+func ValidateStartResearchGatewayErrorResponseBody(body *StartResearchGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRecordDecisionUnauthorizedResponseBody runs the validations defined
 // on recordDecision_unauthorized_response_body
 func ValidateRecordDecisionUnauthorizedResponseBody(body *RecordDecisionUnauthorizedResponseBody) (err error) {
@@ -4839,6 +5584,9 @@ func ValidateApprovalRequestSummaryResponseBody(body *ApprovalRequestSummaryResp
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4886,6 +5634,53 @@ func ValidateApprovalDecisionResponseBody(body *ApprovalDecisionResponseBody) (e
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateEvidenceDiffResponseBody runs the validations defined on
+// EvidenceDiffResponseBody
+func ValidateEvidenceDiffResponseBody(body *EvidenceDiffResponseBody) (err error) {
+	if body.Changed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changed", "body"))
+	}
+	for _, e := range body.Fields {
+		if e != nil {
+			if err2 := ValidateEvidenceFieldChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AdvisoriesAdded {
+		if e != nil {
+			if err2 := ValidateEvidenceAdvisoryChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEvidenceFieldChangeResponseBody runs the validations defined on
+// EvidenceFieldChangeResponseBody
+func ValidateEvidenceFieldChangeResponseBody(body *EvidenceFieldChangeResponseBody) (err error) {
+	if body.Field == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("field", "body"))
+	}
+	if body.Before == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("before", "body"))
+	}
+	if body.After == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("after", "body"))
+	}
+	return
+}
+
+// ValidateEvidenceAdvisoryChangeResponseBody runs the validations defined on
+// EvidenceAdvisoryChangeResponseBody
+func ValidateEvidenceAdvisoryChangeResponseBody(body *EvidenceAdvisoryChangeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	return
 }

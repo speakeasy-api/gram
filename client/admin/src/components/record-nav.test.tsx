@@ -125,14 +125,18 @@ describe("RecordNav", () => {
     expect(navItem("Projects").textContent).toContain("2");
   });
 
-  it("points Projects at the list when the organization has no projects", async () => {
+  it("points Projects at the list, still counted, when the organization has none", async () => {
     await mount([]);
 
     const item = navItem("Projects");
     expect(
       screen.getByRole("link", { name: "Projects" }).getAttribute("href"),
     ).toBe("/organizations/test-org/projects");
-    expect(item.textContent).not.toMatch(/\d/);
+    // The badge is dropped for one project and for nothing else. An answered
+    // zero is a fact about the record, and hiding it makes an empty
+    // organization look like the one-project case, which behaves differently.
+    // AGE-3278.
+    expect(item.textContent).toContain("0");
   });
 
   it("points Projects at the list when the organization has two projects", async () => {
@@ -166,6 +170,9 @@ describe("RecordNav", () => {
     expect(
       screen.getByRole("link", { name: "Members" }).getAttribute("href"),
     ).toBe("/organizations/org_1/members");
+    expect(
+      screen.getByRole("link", { name: "Billing" }).getAttribute("href"),
+    ).toBe("/organizations/org_1/billing");
   });
 
   it("names the account type and the trial state under the record", async () => {

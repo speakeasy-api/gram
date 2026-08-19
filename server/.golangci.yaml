@@ -81,6 +81,15 @@ linters:
         linters:
           - gosec
         text: G304
+      # An audit record's acting surface and client describe the request, not
+      # the event, so (*audit.Logger).log stamps them from the context for every
+      # audited mutation. Requiring each event to name them would invite call
+      # sites to set them individually, which is the drift the central stamp
+      # exists to prevent. Every other field of the struct stays enforced.
+      - path: internal/audit/
+        linters:
+          - exhaustruct
+        text: InsertAuditLogParams is missing fields ActingSurface, ActingClientID
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
@@ -95,6 +104,14 @@ linters:
         linters:
           - gosec
         text: G306
+      # NOT a false positive: the local development seed deliberately provisions
+      # well-known API and tunnel keys so mise.toml can ship them as defaults.
+      # They only ever exist in a developer's own database, and both carry a
+      # `local` marker in their prefix. See seed/demo/README.md.
+      - path: internal/demoseed/(local|mcpapp)\.go
+        linters:
+          - gosec
+        text: G101
       # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:

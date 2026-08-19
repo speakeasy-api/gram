@@ -1,9 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 interface EnableLoggingOverlayProps {
   onEnabled: () => void;
@@ -16,14 +18,36 @@ interface EnableLoggingOverlayProps {
 export function EnableLoggingOverlay({
   onEnabled,
 }: EnableLoggingOverlayProps): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <EnableLoggingOverlayInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+      onEnabled={onEnabled}
+    />
+  );
+}
+
+function EnableLoggingOverlayInner({
+  organizationId,
+  isCurrentOrganization,
+  onEnabled,
+}: EnableLoggingOverlayProps & {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
+        if (!isCurrentOrganization()) return;
         setMutationError(null);
         onEnabled();
       },
       onError: (err) => {
+        if (!isCurrentOrganization()) return;
         const message =
           err instanceof Error ? err.message : "Failed to enable logging";
         setMutationError(message);
@@ -37,6 +61,7 @@ export function EnableLoggingOverlay({
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.Logs,
           enabled: true,
         },

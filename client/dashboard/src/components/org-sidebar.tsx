@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useOrganization } from "@/contexts/Auth";
 
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
@@ -9,10 +10,11 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/Sidebar";
 
-import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { GramLogo } from "./gram-logo";
+import { HatchRule } from "./hatch-rule";
 import { Icon } from "@/components/ui/Icon";
 import { Link } from "react-router";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
@@ -22,7 +24,6 @@ import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -58,12 +59,17 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
   const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data: productFeatures } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
   const isPlatformAdmin = useIsPlatformAdmin();
   const { enabled: isPlatformMcpDashboardEnabled } =
     usePlatformMcpDashboardVisibility();
@@ -92,7 +98,7 @@ export function OrgSidebar({
   ].some((r) => r.active);
 
   const identityActive = [
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
@@ -133,7 +139,7 @@ export function OrgSidebar({
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
-    orgRoutes.userSessions,
+    orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
     orgRoutes.platformAdminOverview,
@@ -148,17 +154,19 @@ export function OrgSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="gap-3 pb-3">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+      {/* Matches AppSidebar: logo + collapse control on one --header-height row,
+          closed by the crosshatch rule so it lines up with the page header. */}
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Link
             to={orgRoutes.home.href()}
-            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
             <GramLogo className="w-28" />
           </Link>
-          <CommandPaletteTrigger />
+          <SidebarTrigger />
         </div>
-        <WorkspaceSwitcher />
+        <HatchRule />
       </SidebarHeader>
       <SidebarContent className="pt-2">
         {rbacLoading ? (
@@ -243,7 +251,7 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
                   ...(isUserSessionsEnabled
-                    ? [{ item: orgRoutes.userSessions, scope: orgReadOrAdmin }]
+                    ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),
                   { item: orgRoutes.identity, scope: orgReadOrAdmin },
                   {

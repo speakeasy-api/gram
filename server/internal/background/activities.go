@@ -32,6 +32,7 @@ import (
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -45,6 +46,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
+	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -104,7 +114,6 @@ type Activities struct {
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
-	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	syncIdentityMap                 *activities.SyncIdentityMap
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
@@ -120,6 +129,7 @@ type Activities struct {
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
+	setOpenRouterSpendCap           *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
@@ -164,6 +174,9 @@ type Activities struct {
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
 	trialEmails                     *trialemails.Service
+	mcpResearch                     *activities.McpResearch
+	mcpApprovalRecheck              *activities.McpApprovalRecheck
+	billingNotifications            *billingnotifications.Service
 }
 
 func NewActivities(
@@ -213,6 +226,7 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
 ) *Activities {
@@ -294,6 +308,47 @@ func NewActivities(
 		)
 	}
 
+	// The research agent needs completions and guardian egress; workers wired
+	// without either (test workers) get a nil activity and the wrapper fails
+	// loudly if a research run is ever scheduled there.
+	var mcpResearch *activities.McpResearch
+	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil && features != nil {
+		// One menu instance shared by search (writer), fetch (enforcer), and
+		// the runner (briefing seeder): the run's fetchable URLs are exactly
+		// what these three observed.
+		researchMenu := platformresearch.NewURLMenu()
+		mcpResearch = activities.NewMcpResearch(logger, db, researchagent.New(
+			chatClient,
+			// Every page the agent fetches goes through the same judge the
+			// risk pipeline uses: a page that tries to steer the reviewer is
+			// a finding about the server, not just a hazard to the run.
+			researchagent.NewScannerJudge(piScanner),
+			researchMenu,
+			researchagent.ProductionToolset(
+				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
+				platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
+			)...,
+		), features)
+	}
+
+	// The recheck sweep rebuilds the intake path's evidence assembler from the
+	// worker's own clients; workers wired without the full ingredient set
+	// (test workers) get a nil activity and no schedule.
+	var mcpApprovalRecheck *activities.McpApprovalRecheck
+	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
+		recheckProber := remoteprobe.New(logger, guardianPolicy)
+		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
+			packagemeta.NewClient(guardianPolicy.PooledClient()),
+			repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubEvidenceToken)),
+			mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+			domainmeta.NewClient(guardianPolicy.PooledClient()),
+			telemetryRepo,
+			recheckProber,
+			recheckProber,
+			mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
+		), features, auditLogger)
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
@@ -319,7 +374,6 @@ func NewActivities(
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
@@ -335,6 +389,7 @@ func NewActivities(
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		setOpenRouterSpendCap:           activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
@@ -372,8 +427,15 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
-		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger, trialEmailsService),
-		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
+		demoteExpiredTrials: activities.NewDemoteExpiredTrials(
+			logger,
+			db,
+			openrouterProvisioner,
+			auditLogger,
+			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
+			productFeatures,
+		),
+		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
@@ -388,6 +450,9 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		mcpResearch:             mcpResearch,
+		mcpApprovalRecheck:      mcpApprovalRecheck,
+		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -426,6 +491,48 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 	}
 }
 
+func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
+	if a.billingNotifications == nil {
+		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
+	}
+	state, err := a.billingNotifications.ResolveTrialReminder(ctx, organizationID)
+	if err != nil {
+		return billingnotifications.TrialReminderState{}, fmt.Errorf("resolve trial reminder: %w", err)
+	}
+	return state, nil
+}
+
+func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+	if a.billingNotifications == nil {
+		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
+	}
+	result, err := a.billingNotifications.SendTrialEndingSoon(ctx, input)
+	if err != nil {
+		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("send trial ending soon notification: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnotifications.SendAccessPausedInput) error {
+	if a.billingNotifications == nil {
+		return fmt.Errorf("billing notification service is not configured")
+	}
+	if err := a.billingNotifications.SendAccessPaused(ctx, input); err != nil {
+		return fmt.Errorf("send access paused notification: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingnotifications.SendPaygActivatedInput) error {
+	if a.billingNotifications == nil {
+		return fmt.Errorf("billing notification service is not configured")
+	}
+	if err := a.billingNotifications.SendPaygActivated(ctx, input); err != nil {
+		return fmt.Errorf("send PAYG activated notification: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
@@ -448,6 +555,10 @@ func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID,
 
 func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {
 	return a.refreshOpenRouterKey.Do(ctx, input)
+}
+
+func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) error {
+	return a.setOpenRouterSpendCap.Do(ctx, input)
 }
 
 func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {
@@ -613,10 +724,6 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
-}
-
-func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
-	return a.correlateClaudePrompts.Do(ctx, input)
 }
 
 func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {
@@ -905,6 +1012,56 @@ func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
 func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
 	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
 		return fmt.Errorf("demote expired trial: %w", err)
+	}
+	return nil
+}
+
+// RunMcpResearch executes one research-agent run for an MCP approval request
+// and lands the outcome on its report row.
+func (a *Activities) RunMcpResearch(ctx context.Context, input activities.McpResearchInput) error {
+	if a.mcpResearch == nil {
+		return fmt.Errorf("run mcp research: research activity not configured on this worker")
+	}
+	if err := a.mcpResearch.Run(ctx, input); err != nil {
+		return fmt.Errorf("run mcp research: %w", err)
+	}
+	return nil
+}
+
+// MarkMcpResearchInterrupted resolves a research report whose run died
+// without reaching its own failure handling. A no-op for reports that
+// already resolved.
+func (a *Activities) MarkMcpResearchInterrupted(ctx context.Context, input activities.McpResearchInput) error {
+	if a.mcpResearch == nil {
+		return fmt.Errorf("mark mcp research interrupted: research activity not configured on this worker")
+	}
+	if err := a.mcpResearch.MarkInterrupted(ctx, input); err != nil {
+		return fmt.Errorf("mark mcp research interrupted: %w", err)
+	}
+	return nil
+}
+
+// ListMcpApprovalRecheckPage returns one page of approved MCP approval
+// requests with the decision snapshots their daily recheck compares against.
+func (a *Activities) ListMcpApprovalRecheckPage(ctx context.Context, args activities.McpApprovalRecheckPageArgs) ([]activities.McpApprovalRecheckTarget, error) {
+	if a.mcpApprovalRecheck == nil {
+		return nil, fmt.Errorf("list mcp approval recheck page: recheck activity not configured on this worker")
+	}
+	targets, err := a.mcpApprovalRecheck.ListPage(ctx, args)
+	if err != nil {
+		return nil, fmt.Errorf("list mcp approval recheck page: %w", err)
+	}
+	return targets, nil
+}
+
+// RecheckMcpApprovalRequest re-gathers one approved request's evidence and
+// flags permission-relevant drift from the snapshot its approval rested on.
+func (a *Activities) RecheckMcpApprovalRequest(ctx context.Context, target activities.McpApprovalRecheckTarget) error {
+	if a.mcpApprovalRecheck == nil {
+		return fmt.Errorf("recheck mcp approval request: recheck activity not configured on this worker")
+	}
+	if err := a.mcpApprovalRecheck.Recheck(ctx, target); err != nil {
+		return fmt.Errorf("recheck mcp approval request: %w", err)
 	}
 	return nil
 }

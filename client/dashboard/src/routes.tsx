@@ -229,7 +229,9 @@ const ROUTE_STRUCTURE = {
     unauthenticated: true,
   },
   home: {
-    title: "Home",
+    // "Home" now belongs to the org-level nav entry; the project's landing
+    // page is its overview.
+    title: "Project Overview",
     url: "",
     icon: "house",
     component: Home,
@@ -1098,9 +1100,9 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
-  userSessions: {
-    title: "MCP Connections",
-    url: "user-sessions",
+  mcpSessions: {
+    title: "MCP Sessions",
+    url: "mcp-sessions",
     icon: "users",
     component: UserSessions,
   },

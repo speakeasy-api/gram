@@ -1,15 +1,15 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "pnpm lint:format && pnpm lint:no-barrels && pnpm lint:oxlint && pnpm type-check",
+    "lint": "aube run lint:format && aube run lint:no-barrels && aube run lint:oxlint && aube run type-check",
     "lint:oxlint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix",
-    "lint:format": "oxfmt --check .",
+    "lint:format": "aube exec oxfmt -- --check .",
     "lint:no-barrels": "! grep -rEn '^export \\*' src --include='*.ts' --include='*.tsx' || (echo 'Barrel re-exports (export *) are not allowed. Re-export named symbols instead.' && exit 1)",
     "preview": "vite preview",
     "test": "vitest run",

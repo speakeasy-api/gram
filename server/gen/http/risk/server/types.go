@@ -195,6 +195,10 @@ type UnmarkRiskResultsFalsePositiveRequestBody struct {
 type CreateRiskPolicyBypassRequestRequestBody struct {
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken *string `form:"request_token,omitempty" json:"request_token,omitempty" xml:"request_token,omitempty"`
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeRequestBody is the type of the "risk" service
@@ -18903,13 +18907,14 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, externalUserIds []string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
+	v.ExternalUserIds = externalUserIds
 	v.UniqueMatch = uniqueMatch
 	v.NonAssistant = nonAssistant
 	v.AssistantID = assistantID
@@ -19111,6 +19116,7 @@ func NewGetRiskPolicyStatusPayload(id string, apikeyToken *string, sessionToken 
 func NewCreateRiskPolicyBypassRequestPayload(body *CreateRiskPolicyBypassRequestRequestBody, sessionToken *string, apikeyToken *string) *risk.CreateRiskPolicyBypassRequestPayload {
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: *body.RequestToken,
+		Note:         body.Note,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -19693,6 +19699,11 @@ func ValidateUnmarkRiskResultsFalsePositiveRequestBody(body *UnmarkRiskResultsFa
 func ValidateCreateRiskPolicyBypassRequestRequestBody(body *CreateRiskPolicyBypassRequestRequestBody) (err error) {
 	if body.RequestToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request_token", "body"))
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 4000, false))
+		}
 	}
 	return
 }

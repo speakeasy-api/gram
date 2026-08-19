@@ -1665,6 +1665,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		ProjectID:      authCtx.ProjectID.String(),
 		Messages:       chatRequest.Messages,
 		Tools:          chatRequest.Tools,
+		ToolChoice:     chatRequest.ToolChoice,
 		Temperature:    &temp,
 		Model:          chatRequest.Model,
 		Stream:         false,
@@ -1685,6 +1686,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Reasoning:                 reasoning,
 		CacheControl:              chatRequest.CacheControl,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
+		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	}
 
 	// Opt-in: callers must pass includeContextWindow=1 to receive the
@@ -1767,13 +1770,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
 		Model:   response.Model,
-		Choices: []struct {
-			Message      or.ChatMessages `json:"message"`
-			FinishReason string          `json:"finish_reason"`
-		}{
+		Choices: []openrouter.ResponseChoice{
 			{
 				Message:      *response.Message,
 				FinishReason: conv.PtrValOr(response.FinishReason, "stop"),
+				Annotations:  nil,
 			},
 		},
 		Usage:        &response.Usage,
@@ -2181,6 +2182,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 			openrouter.CreateMessageUser(transcript),
 		},
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               nil,
 		Model:                     "",
 		Stream:                    false,
@@ -2196,6 +2198,8 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
@@ -2371,10 +2375,17 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 			openrouter.CreateMessageUser(string(input)),
 		},
 		Tools: nil, Temperature: nil, Model: "google/gemini-3.1-flash-lite", Stream: false, UsageSource: billing.ModelUsageSourceGram,
-		KeyType: openrouter.KeyTypeInternal, KeySlot: "", UserID: "", ExternalUserID: "", UserEmail: "",
+		ToolChoice: nil,
+		KeyType:    openrouter.KeyTypeInternal, KeySlot: "", UserID: "", ExternalUserID: "", UserEmail: "",
 		HTTPMetadata: nil, APIKeyID: "", JSONSchema: &jsonSchema,
 		Reasoning:    &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl: nil, NormalizeOutboundMessages: false,
+		// Zero values stated for exhaustruct, deliberately not opting out of
+		// response healing: this call predates the opt-out and keeps its
+		// original behavior. Whether a healed summary (schema-valid filler in
+		// the ops timeline) beats a failed one is the summary feature's call
+		// to make, with a test — not a merge resolution's.
+		WebSearch: nil, DisableResponseHealing: false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to summarize tool call").LogError(ctx, s.logger)

@@ -922,3 +922,45 @@ func TestM3FreezeObservationAndCarrySettlementLifecycle(t *testing.T) {
 	require.Empty(t, allocationStripe.creditInputs)
 	meterStripe.AssertExpectations(t)
 }
+
+// freezeInvoice writes each day on the pool with no enclosing transaction, so a
+// pass that dies partway leaves the days it already wrote. Those snapshots are
+// what the carry pass reconciles against, so a later pass has to continue the
+// cumulative chain from them rather than from spend backfilled since.
+func TestSettleStripeInvoiceAllocations_BackfilledSpendKeepsFrozenChain(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_backfill_chain")
+	start := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	secondDay := start.AddDate(0, 0, 1)
+	end := start.AddDate(0, 0, 2)
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	putDailySpend(t, db, organizationID, start, "0.004000")
+	putDailySpend(t, db, organizationID, secondDay, "0.004000")
+
+	now := end.Add(48 * time.Hour)
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
+
+	// Stand in for a pass that died after day one.
+	deleted, err := backgroundrepo.New(db).DeleteStripeInvoiceAllocationFixture(t.Context(),
+		backgroundrepo.DeleteStripeInvoiceAllocationFixtureParams{
+			OrganizationID: pgtype.Text{String: organizationID, Valid: true},
+			SourceKind:     "openrouter_daily_spend",
+			SourceKey:      secondDay.Format(time.DateOnly) + ":chat",
+			Seq:            1,
+		})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted, "the partial-freeze simulation must remove exactly one day")
+
+	// Day one's spend lands late, after its row was frozen.
+	putDailySpend(t, db, organizationID, start, "0.006000")
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
+
+	rows := listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 2)
+	require.Equal(t, "0.004000", numericString(t, rows[0].SourceSnapshotUsd),
+		"the frozen day keeps the snapshot it was written with, not the backfill")
+	require.Equal(t, "0", numericString(t, rows[0].AmountUsd))
+	require.Equal(t, "0.004000", numericString(t, rows[1].SourceSnapshotUsd))
+	require.Equal(t, "0.010000", numericString(t, rows[1].AmountUsd),
+		"day two carries the cent the frozen chain rounds up to")
+}

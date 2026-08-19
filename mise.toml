@@ -57,7 +57,7 @@ pkl = "0.32.1"
 buf = "1.72.0"
 ruff = "0.16.1"
 "github:ast-grep/ast-grep" = "0.45.0"
-pitchfork = "2.20.0"
+pitchfork = "2.22.0"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -148,6 +148,17 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Material the local seed provisions (`mise run seed`). These are fixed,
+## well-known local-only values written straight into the database by
+## `gram demo-seed --local`, so they are checked in here rather than written
+## back into mise.local.toml after a seed run — a fresh clone is configured
+## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
+GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
+TUNNEL_LOCAL_ID = "10ca1000-0000-4000-a000-000000007001"
+TUNNEL_LOCAL_MCP_SERVER_ID = "10ca1000-0000-4000-a000-000000007002"
+TUNNEL_LOCAL_KEY = "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000"
+TUNNEL_LOCAL_MCP_ENDPOINT_SLUG = "default-seeded-local-postgres-mcp"
+
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
@@ -303,6 +314,7 @@ STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
+STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
 
 #########################
 ## Polar configuration ##

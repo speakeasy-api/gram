@@ -258,6 +258,8 @@ type AuditLog struct {
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
 	Metadata           []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 }
 
@@ -1115,6 +1117,8 @@ type McpApprovalRequest struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
@@ -1196,6 +1200,7 @@ type McpResearchReport struct {
 	Status               string
 	Report               []byte
 	ReportVersion        int32
+	ToolCalls            []byte
 	Model                pgtype.Text
 	PromptVersion        pgtype.Text
 	RequestedBy          pgtype.Text
@@ -1616,8 +1621,10 @@ type PlatformMcpDistribution struct {
 	AttachmentWasCreated bool
 	PublicationState     string
 	PublicationUpdatedAt pgtype.Timestamptz
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }
@@ -1668,6 +1675,8 @@ type PlatformMcpOnboardingMilestone struct {
 	Milestone            string
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProjectID            uuid.NullUUID
 	McpKey               string
 	AttemptID            uuid.NullUUID
@@ -1718,8 +1727,10 @@ type PlatformMcpReadiness struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.UUID
-	ConnectionGeneration             uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -1766,8 +1777,10 @@ type PlatformMcpSetupHandoff struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	ProviderKey          string
 	Intent               string
 	HandoffHash          string
@@ -2048,6 +2061,7 @@ type RemoteSessionIssuer struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool

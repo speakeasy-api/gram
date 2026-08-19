@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	ActionBillingMetadataCreateStripeCheckout Action = "billing_metadata:create_stripe_checkout"
-	ActionBillingMetadataUpdate               Action = "billing_metadata:update"
+	ActionBillingMetadataCancelStripeSubscription Action = "billing_metadata:cancel_stripe_subscription"
+	ActionBillingMetadataCreateStripeCheckout     Action = "billing_metadata:create_stripe_checkout"
+	ActionBillingMetadataCreateStripePortal       Action = "billing_metadata:create_stripe_portal"
+	ActionBillingMetadataResumeStripeSubscription Action = "billing_metadata:resume_stripe_subscription"
+	ActionBillingMetadataUpdate                   Action = "billing_metadata:update"
 )
 
 // BillingMetadataSnapshot captures an organization's billing contract terms
@@ -55,19 +58,74 @@ type LogBillingMetadataCreateStripeCheckoutEvent struct {
 	BillingMetadataURN urn.BillingMetadata
 }
 
+type LogBillingMetadataCreateStripePortalEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
+type LogBillingMetadataCancelStripeSubscriptionEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
+type LogBillingMetadataResumeStripeSubscriptionEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	BillingMetadataURN urn.BillingMetadata
+}
+
 func (l *Logger) LogBillingMetadataCreateStripeCheckout(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripeCheckoutEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCreateStripeCheckout)
+}
+
+func (l *Logger) LogBillingMetadataCreateStripePortal(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripePortalEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCreateStripePortal)
+}
+
+func (l *Logger) LogBillingMetadataCancelStripeSubscription(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCancelStripeSubscriptionEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCancelStripeSubscription)
+}
+
+func (l *Logger) LogBillingMetadataResumeStripeSubscription(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataResumeStripeSubscriptionEvent) error {
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataResumeStripeSubscription)
+}
+
+func (l *Logger) logBillingMetadataAction(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	organizationID string,
+	actor urn.Principal,
+	actorDisplayName *string,
+	actorSlug *string,
+	billingMetadataURN urn.BillingMetadata,
+	action Action,
+) error {
 	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
+		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+		ActorID:          actor.ID,
+		ActorType:        string(actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(actorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(actorSlug),
 
-		Action: string(ActionBillingMetadataCreateStripeCheckout),
+		Action: string(action),
 
-		SubjectID:          event.BillingMetadataURN.ID.String(),
+		SubjectID:          billingMetadataURN.ID.String(),
 		SubjectType:        string(subjectTypeBillingMetadata),
 		SubjectDisplayName: conv.ToPGTextEmpty("Billing metadata"),
 		SubjectSlug:        conv.ToPGTextEmpty(""),

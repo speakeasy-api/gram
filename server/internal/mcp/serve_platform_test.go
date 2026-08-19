@@ -106,6 +106,33 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
+// The research tools are the MCP research runner's, and it holds them
+// in-process. Served over HTTP they would give any assistant in any
+// mcp_approval organization billable web search and arbitrary page fetch, so
+// the entrypoint refuses the slug outright — including for the project's own
+// managed assistant, which is the most privileged token that reaches here.
+func TestServePlatformToolset_ResearchToolsetIsNotServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	_, err = servePlatformHTTP(t, ti, platformtools.ResearchToolsetSlug, toolsListBody(), token)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
 func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	t.Parallel()
 

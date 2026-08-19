@@ -209,6 +209,42 @@ var EnterpriseTrialBundle = []Feature{
 	FeatureCustomerManagedEncryptionKeys,
 }
 
+// TrialRuntimeFeatures are disabled when an enterprise trial expires and
+// restored when the organization returns to a paid or trial state.
+var TrialRuntimeFeatures = []Feature{
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+	FeaturePlatformMCP,
+}
+
+// SetTrialRuntimeFeaturesTx toggles the runtime capabilities whose trial state
+// must not outlive an expired trial. It does not modify any other entitlement.
+func SetTrialRuntimeFeaturesTx(ctx context.Context, tx pgx.Tx, organizationID string, enabled bool) error {
+	q := repo.New(tx)
+	for _, feature := range TrialRuntimeFeatures {
+		if enabled {
+			if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+				OrganizationID: organizationID,
+				FeatureName:    string(feature),
+			}); err != nil {
+				return fmt.Errorf("enable %s: %w", feature, err)
+			}
+			continue
+		}
+
+		if _, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); errors.Is(err, pgx.ErrNoRows) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("disable %s: %w", feature, err)
+		}
+	}
+	return nil
+}
+
 // SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
 // caller's transaction. Idempotent, so a replayed signup is safe. The feature
 // cache is left untouched: the organization is created in the same transaction,

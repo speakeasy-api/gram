@@ -50,6 +50,9 @@ type Finding struct {
 	xxx_hidden_Field             *string                `protobuf:"bytes,21,opt,name=field"`
 	xxx_hidden_Path              *string                `protobuf:"bytes,22,opt,name=path"`
 	xxx_hidden_ToolCallId        *string                `protobuf:"bytes,23,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_ExcludedAt        *string                `protobuf:"bytes,24,opt,name=excluded_at,json=excludedAt"`
+	xxx_hidden_ExcludedReason    *string                `protobuf:"bytes,25,opt,name=excluded_reason,json=excludedReason"`
+	xxx_hidden_ExcludedDetail    *string                `protobuf:"bytes,26,opt,name=excluded_detail,json=excludedDetail"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -296,69 +299,99 @@ func (x *Finding) GetToolCallId() string {
 	return ""
 }
 
+func (x *Finding) GetExcludedAt() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedAt != nil {
+			return *x.xxx_hidden_ExcludedAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetExcludedReason() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedReason != nil {
+			return *x.xxx_hidden_ExcludedReason
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding) GetExcludedDetail() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedDetail != nil {
+			return *x.xxx_hidden_ExcludedDetail
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Finding) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 26)
 }
 
 func (x *Finding) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 26)
 }
 
 func (x *Finding) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 26)
 }
 
 func (x *Finding) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 26)
 }
 
 func (x *Finding) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 26)
 }
 
 func (x *Finding) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 26)
 }
 
 func (x *Finding) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 26)
 }
 
 func (x *Finding) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 26)
 }
 
 func (x *Finding) SetRuleId(v string) {
 	x.xxx_hidden_RuleId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 26)
 }
 
 func (x *Finding) SetDescription(v string) {
 	x.xxx_hidden_Description = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 26)
 }
 
 func (x *Finding) SetMatch(v string) {
 	x.xxx_hidden_Match = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 26)
 }
 
 func (x *Finding) SetStartPos(v int32) {
 	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 26)
 }
 
 func (x *Finding) SetEndPos(v int32) {
 	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 26)
 }
 
 func (x *Finding) SetTags(v []string) {
@@ -367,47 +400,62 @@ func (x *Finding) SetTags(v []string) {
 
 func (x *Finding) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 26)
 }
 
 func (x *Finding) SetConfidence(v float64) {
 	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 26)
 }
 
 func (x *Finding) SetDeadLetterReason(v string) {
 	x.xxx_hidden_DeadLetterReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 26)
 }
 
 func (x *Finding) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 26)
 }
 
 func (x *Finding) SetFalsePositiveAt(v string) {
 	x.xxx_hidden_FalsePositiveAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 26)
 }
 
 func (x *Finding) SetSurface(v string) {
 	x.xxx_hidden_Surface = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 26)
 }
 
 func (x *Finding) SetField(v string) {
 	x.xxx_hidden_Field = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 26)
 }
 
 func (x *Finding) SetPath(v string) {
 	x.xxx_hidden_Path = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 26)
 }
 
 func (x *Finding) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 26)
+}
+
+func (x *Finding) SetExcludedAt(v string) {
+	x.xxx_hidden_ExcludedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 26)
+}
+
+func (x *Finding) SetExcludedReason(v string) {
+	x.xxx_hidden_ExcludedReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 26)
+}
+
+func (x *Finding) SetExcludedDetail(v string) {
+	x.xxx_hidden_ExcludedDetail = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 26)
 }
 
 func (x *Finding) HasId() bool {
@@ -564,6 +612,27 @@ func (x *Finding) HasToolCallId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 22)
 }
 
+func (x *Finding) HasExcludedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 23)
+}
+
+func (x *Finding) HasExcludedReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
+}
+
+func (x *Finding) HasExcludedDetail() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
+}
+
 func (x *Finding) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -674,6 +743,21 @@ func (x *Finding) ClearToolCallId() {
 	x.xxx_hidden_ToolCallId = nil
 }
 
+func (x *Finding) ClearExcludedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 23)
+	x.xxx_hidden_ExcludedAt = nil
+}
+
+func (x *Finding) ClearExcludedReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 24)
+	x.xxx_hidden_ExcludedReason = nil
+}
+
+func (x *Finding) ClearExcludedDetail() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 25)
+	x.xxx_hidden_ExcludedDetail = nil
+}
+
 type Finding_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -712,6 +796,22 @@ type Finding_builder struct {
 	// Recorded tool call id anchoring the finding when the scanned text belongs
 	// to a tool call. Empty when not applicable or unknown.
 	ToolCallId *string
+	// Suppression state carried on republished findings, superseding
+	// false_positive_at as part of the suppression convergence. Set only when
+	// this message re-publishes an already-persisted finding to record a manual
+	// suppression state change (risk.markResultsFalsePositive /
+	// risk.unmarkResultsFalsePositive): excluded_at is the suppression time and
+	// must be UTC RFC3339 when present. Empty on every finding produced by a
+	// scanner — the ClickHouse writer computes rule-based exclusions at ingest
+	// itself and stamps excluded_reason=rule there.
+	ExcludedAt *string
+	// Why the finding is suppressed: "rule" (exclusion rule), "manual" (user
+	// dismissal via UI or agent tool) or "automated" (offline false-positive
+	// sweep). Meaningful only alongside excluded_at.
+	ExcludedReason *string
+	// Free-form suppression context: the user-supplied dismissal reason for
+	// manual suppressions, the catalog reason for automated ones. Optional.
+	ExcludedDetail *string
 }
 
 func (b0 Finding_builder) Build() *Finding {
@@ -719,93 +819,105 @@ func (b0 Finding_builder) Build() *Finding {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 26)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 26)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 26)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 26)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 26)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 26)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 26)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 26)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.RuleId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 26)
 		x.xxx_hidden_RuleId = b.RuleId
 	}
 	if b.Description != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 26)
 		x.xxx_hidden_Description = b.Description
 	}
 	if b.Match != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 26)
 		x.xxx_hidden_Match = b.Match
 	}
 	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 26)
 		x.xxx_hidden_StartPos = *b.StartPos
 	}
 	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 26)
 		x.xxx_hidden_EndPos = *b.EndPos
 	}
 	x.xxx_hidden_Tags = b.Tags
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 26)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 26)
 		x.xxx_hidden_Confidence = *b.Confidence
 	}
 	if b.DeadLetterReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 26)
 		x.xxx_hidden_DeadLetterReason = b.DeadLetterReason
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 26)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.FalsePositiveAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 26)
 		x.xxx_hidden_FalsePositiveAt = b.FalsePositiveAt
 	}
 	if b.Surface != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 26)
 		x.xxx_hidden_Surface = b.Surface
 	}
 	if b.Field != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 26)
 		x.xxx_hidden_Field = b.Field
 	}
 	if b.Path != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 26)
 		x.xxx_hidden_Path = b.Path
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 26)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
+	}
+	if b.ExcludedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 26)
+		x.xxx_hidden_ExcludedAt = b.ExcludedAt
+	}
+	if b.ExcludedReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 26)
+		x.xxx_hidden_ExcludedReason = b.ExcludedReason
+	}
+	if b.ExcludedDetail != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 26)
+		x.xxx_hidden_ExcludedDetail = b.ExcludedDetail
 	}
 	return m0
 }
@@ -814,7 +926,7 @@ var File_gram_risk_v1_finding_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\n" +
-	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe4\x05\n" +
+	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xd7\x06\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -845,7 +957,11 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x05field\x18\x15 \x01(\tR\x05field\x12\x12\n" +
 	"\x04path\x18\x16 \x01(\tR\x04path\x12 \n" +
 	"\ftool_call_id\x18\x17 \x01(\tR\n" +
-	"toolCallId:\n" +
+	"toolCallId\x12\x1f\n" +
+	"\vexcluded_at\x18\x18 \x01(\tR\n" +
+	"excludedAt\x12'\n" +
+	"\x0fexcluded_reason\x18\x19 \x01(\tR\x0eexcludedReason\x12'\n" +
+	"\x0fexcluded_detail\x18\x1a \x01(\tR\x0eexcludedDetail:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

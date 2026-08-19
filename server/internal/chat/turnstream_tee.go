@@ -229,6 +229,7 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		FinishReason: assembled.FinishReason,
 		ToolCalls:    assembled.ToolCalls,
 		Content:      assembled.Content,
+		Annotations:  nil,
 	}, nil
 }
 

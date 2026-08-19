@@ -35,6 +35,11 @@ type Server struct {
 	CreateOrganization       http.Handler
 	RearmTrial               http.Handler
 	GetOrganizationStats     http.Handler
+	GetInferenceKeys         http.Handler
+	GetPaygBillingSummary    http.Handler
+	GetStripeSubscription    http.Handler
+	CancelStripeSubscription http.Handler
+	ResumeStripeSubscription http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -80,6 +85,11 @@ func New(
 			{"CreateOrganization", "POST", "/admin/organization.create"},
 			{"RearmTrial", "POST", "/admin/trial.rearm"},
 			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
+			{"GetInferenceKeys", "GET", "/admin/organization.inferenceKeys"},
+			{"GetPaygBillingSummary", "GET", "/admin/organization.paygBillingSummary"},
+			{"GetStripeSubscription", "GET", "/admin/organization.stripeSubscription"},
+			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
+			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 		},
 		Login:                    NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                 NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -97,6 +107,11 @@ func New(
 		CreateOrganization:       NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
 		RearmTrial:               NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationStats:     NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceKeys:         NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:    NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:    NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription: NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription: NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -121,6 +136,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateOrganization = m(s.CreateOrganization)
 	s.RearmTrial = m(s.RearmTrial)
 	s.GetOrganizationStats = m(s.GetOrganizationStats)
+	s.GetInferenceKeys = m(s.GetInferenceKeys)
+	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
+	s.GetStripeSubscription = m(s.GetStripeSubscription)
+	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
+	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
 }
 
 // MethodNames returns the methods served.
@@ -144,6 +164,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
 	MountRearmTrialHandler(mux, h.RearmTrial)
 	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
+	MountGetInferenceKeysHandler(mux, h.GetInferenceKeys)
+	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
+	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
+	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
+	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -978,6 +1003,273 @@ func NewGetOrganizationStatsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationStats")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInferenceKeysHandler configures the mux to serve the "admin" service
+// "getInferenceKeys" endpoint.
+func MountGetInferenceKeysHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.inferenceKeys", f)
+}
+
+// NewGetInferenceKeysHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getInferenceKeys" endpoint.
+func NewGetInferenceKeysHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInferenceKeysRequest(mux, decoder)
+		encodeResponse = EncodeGetInferenceKeysResponse(encoder)
+		encodeError    = EncodeGetInferenceKeysError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceKeys")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPaygBillingSummaryHandler configures the mux to serve the "admin"
+// service "getPaygBillingSummary" endpoint.
+func MountGetPaygBillingSummaryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.paygBillingSummary", f)
+}
+
+// NewGetPaygBillingSummaryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getPaygBillingSummary" endpoint.
+func NewGetPaygBillingSummaryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPaygBillingSummaryRequest(mux, decoder)
+		encodeResponse = EncodeGetPaygBillingSummaryResponse(encoder)
+		encodeError    = EncodeGetPaygBillingSummaryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPaygBillingSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetStripeSubscriptionHandler configures the mux to serve the "admin"
+// service "getStripeSubscription" endpoint.
+func MountGetStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.stripeSubscription", f)
+}
+
+// NewGetStripeSubscriptionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getStripeSubscription" endpoint.
+func NewGetStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeGetStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeGetStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStripeSubscription")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCancelStripeSubscriptionHandler configures the mux to serve the "admin"
+// service "cancelStripeSubscription" endpoint.
+func MountCancelStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.cancelStripeSubscription", f)
+}
+
+// NewCancelStripeSubscriptionHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "cancelStripeSubscription"
+// endpoint.
+func NewCancelStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCancelStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeCancelStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeCancelStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cancelStripeSubscription")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResumeStripeSubscriptionHandler configures the mux to serve the "admin"
+// service "resumeStripeSubscription" endpoint.
+func MountResumeStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.resumeStripeSubscription", f)
+}
+
+// NewResumeStripeSubscriptionHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "resumeStripeSubscription"
+// endpoint.
+func NewResumeStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResumeStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeResumeStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeResumeStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resumeStripeSubscription")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

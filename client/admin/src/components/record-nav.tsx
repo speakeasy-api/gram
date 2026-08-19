@@ -4,6 +4,7 @@ import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   BuildingIcon,
   ChevronLeftIcon,
+  CreditCardIcon,
   ExternalLinkIcon,
   FolderIcon,
   SlidersHorizontalIcon,
@@ -98,6 +99,10 @@ export function RecordNav({
   });
   const onOverview = !!matchRoute({
     to: "/organizations/$idOrSlug",
+    params: { idOrSlug },
+  });
+  const onBilling = !!matchRoute({
+    to: "/organizations/$idOrSlug/billing",
     params: { idOrSlug },
   });
   const onMembers = !!matchRoute({
@@ -195,9 +200,26 @@ export function RecordNav({
                   </Link>
                 )}
               </SidebarMenuButton>
-              {projectCount !== undefined && projectCount > 1 && (
+              {/* Dropped at exactly one, and only there. That is the case the
+                  item's target already answers, so a "1" beside a link that
+                  opens the project itself counts a list the operator will never
+                  see. Zero is a fact about the record and keeps its badge. */}
+              {projectCount !== undefined && projectCount !== 1 && (
                 <SidebarMenuBadge>{projectCount}</SidebarMenuBadge>
               )}
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={onBilling} tooltip="Billing">
+                <Link
+                  to="/organizations/$idOrSlug/billing"
+                  params={{ idOrSlug }}
+                  {...currentProps(onBilling)}
+                >
+                  <CreditCardIcon />
+                  <span>Billing</span>
+                </Link>
+              </SidebarMenuButton>
             </SidebarMenuItem>
 
             {/* Absent rather than dead when the record has no slug or no app

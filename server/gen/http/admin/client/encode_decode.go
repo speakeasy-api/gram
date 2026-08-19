@@ -3824,6 +3824,1183 @@ func DecodeGetOrganizationStatsResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildGetInferenceKeysRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getInferenceKeys" endpoint
+func (c *Client) BuildGetInferenceKeysRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInferenceKeysAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getInferenceKeys", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetInferenceKeysRequest returns an encoder for requests sent to the
+// admin getInferenceKeys server.
+func EncodeGetInferenceKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetInferenceKeysPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getInferenceKeys", "*admin.GetInferenceKeysPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetInferenceKeysResponse returns a decoder for responses returned by
+// the admin getInferenceKeys endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetInferenceKeysResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetInferenceKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*AdminInferenceKeyResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := ValidateAdminInferenceKeyResponse(e); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			res := NewGetInferenceKeysAdminInferenceKeyOK(body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInferenceKeysUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInferenceKeysForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInferenceKeysBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInferenceKeysNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInferenceKeysConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInferenceKeysUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInferenceKeysInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInferenceKeysInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+				}
+				err = ValidateGetInferenceKeysInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+				}
+				return nil, NewGetInferenceKeysInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInferenceKeysUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+				}
+				err = ValidateGetInferenceKeysUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+				}
+				return nil, NewGetInferenceKeysUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getInferenceKeys", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetInferenceKeysGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getInferenceKeys", err)
+			}
+			err = ValidateGetInferenceKeysGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getInferenceKeys", err)
+			}
+			return nil, NewGetInferenceKeysGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getInferenceKeys", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetPaygBillingSummaryRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getPaygBillingSummary"
+// endpoint
+func (c *Client) BuildGetPaygBillingSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPaygBillingSummaryAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getPaygBillingSummary", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPaygBillingSummaryRequest returns an encoder for requests sent to
+// the admin getPaygBillingSummary server.
+func EncodeGetPaygBillingSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetPaygBillingSummaryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getPaygBillingSummary", "*admin.GetPaygBillingSummaryPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetPaygBillingSummaryResponse returns a decoder for responses returned
+// by the admin getPaygBillingSummary endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetPaygBillingSummaryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPaygBillingSummaryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			res := NewGetPaygBillingSummaryAdminPaygBillingSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPaygBillingSummaryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPaygBillingSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPaygBillingSummaryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPaygBillingSummaryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPaygBillingSummaryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPaygBillingSummaryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPaygBillingSummaryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPaygBillingSummaryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPaygBillingSummaryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getPaygBillingSummary", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPaygBillingSummaryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getPaygBillingSummary", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getStripeSubscription"
+// endpoint
+func (c *Client) BuildGetStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeSubscriptionAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStripeSubscriptionRequest returns an encoder for requests sent to
+// the admin getStripeSubscription server.
+func EncodeGetStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getStripeSubscription", "*admin.GetStripeSubscriptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetStripeSubscriptionResponse returns a decoder for responses returned
+// by the admin getStripeSubscription endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			res := NewGetStripeSubscriptionAdminStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+				}
+				err = ValidateGetStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+				}
+				return nil, NewGetStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+				}
+				err = ValidateGetStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+				}
+				return nil, NewGetStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCancelStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "cancelStripeSubscription"
+// endpoint
+func (c *Client) BuildCancelStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CancelStripeSubscriptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "cancelStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCancelStripeSubscriptionRequest returns an encoder for requests sent
+// to the admin cancelStripeSubscription server.
+func EncodeCancelStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.CancelStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "cancelStripeSubscription", "*admin.CancelStripeSubscriptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewCancelStripeSubscriptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "cancelStripeSubscription", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCancelStripeSubscriptionResponse returns a decoder for responses
+// returned by the admin cancelStripeSubscription endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCancelStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCancelStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CancelStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			res := NewCancelStripeSubscriptionAdminStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CancelStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CancelStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CancelStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CancelStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CancelStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CancelStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CancelStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CancelStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+				}
+				err = ValidateCancelStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+				}
+				return nil, NewCancelStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CancelStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+				}
+				err = ValidateCancelStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+				}
+				return nil, NewCancelStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "cancelStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CancelStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "cancelStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildResumeStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "resumeStripeSubscription"
+// endpoint
+func (c *Client) BuildResumeStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResumeStripeSubscriptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "resumeStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeResumeStripeSubscriptionRequest returns an encoder for requests sent
+// to the admin resumeStripeSubscription server.
+func EncodeResumeStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ResumeStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "resumeStripeSubscription", "*admin.ResumeStripeSubscriptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewResumeStripeSubscriptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "resumeStripeSubscription", err)
+		}
+		return nil
+	}
+}
+
+// DecodeResumeStripeSubscriptionResponse returns a decoder for responses
+// returned by the admin resumeStripeSubscription endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeResumeStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeResumeStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ResumeStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			res := NewResumeStripeSubscriptionAdminStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ResumeStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ResumeStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ResumeStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ResumeStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ResumeStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ResumeStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ResumeStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ResumeStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+				}
+				err = ValidateResumeStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+				}
+				return nil, NewResumeStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ResumeStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+				}
+				err = ValidateResumeStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+				}
+				return nil, NewResumeStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "resumeStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ResumeStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "resumeStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -3844,11 +5021,12 @@ func unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember(
 // *admin.AdminProject from a value of type *AdminProjectResponseBody.
 func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectResponseBody) *admin.AdminProject {
 	res := &admin.AdminProject{
-		ID:        *v.ID,
-		Name:      *v.Name,
-		Slug:      *v.Slug,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+		ID:             *v.ID,
+		Name:           *v.Name,
+		Slug:           *v.Slug,
+		McpServerCount: *v.McpServerCount,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
 	}
 
 	return res
@@ -3873,6 +5051,20 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		MemberCount:        *v.MemberCount,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey builds a value of
+// type *admin.AdminInferenceKey from a value of type
+// *AdminInferenceKeyResponse.
+func unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey(v *AdminInferenceKeyResponse) *admin.AdminInferenceKey {
+	res := &admin.AdminInferenceKey{
+		KeyType:        *v.KeyType,
+		CreditsUsed:    *v.CreditsUsed,
+		MonthlyCredits: *v.MonthlyCredits,
+		Disabled:       *v.Disabled,
 	}
 
 	return res

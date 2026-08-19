@@ -34,6 +34,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -89,6 +90,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -164,6 +166,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -203,7 +206,7 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID, "incorrect active organization id after switch")
 	})
 
-	t.Run("switch preserves WorkOSSessionID", func(t *testing.T) {
+	t.Run("switch preserves WorkOS session metadata", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := speakeasyMockUserInfo()
@@ -219,6 +222,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "workos-sid-abc123",
+			ImpersonatorEmail:    "support@example.com",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -238,10 +242,10 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Verify the WorkOSSessionID survived the switch
 		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
 		require.NoError(t, err)
 		require.Equal(t, "workos-sid-abc123", stored.WorkOSSessionID, "WorkOSSessionID must survive SwitchScopes")
+		require.Equal(t, "support@example.com", stored.ImpersonatorEmail, "ImpersonatorEmail must survive SwitchScopes")
 		require.Equal(t, newOrgID, stored.ActiveOrganizationID)
 	})
 }

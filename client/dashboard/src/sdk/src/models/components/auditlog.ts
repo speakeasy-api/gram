@@ -9,6 +9,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AuditLog = {
+  /**
+   * The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+   */
+  actingClientId?: string | undefined;
+  /**
+   * How the change was made: 'dashboard', 'api_key', 'platform_mcp', 'project_assistant', or 'unknown' when no surface was identifiable. Always present.
+   */
+  actingSurface: string;
   action: string;
   actorDisplayName?: string | undefined;
   actorId: string;
@@ -33,6 +41,8 @@ export type AuditLog = {
 /** @internal */
 export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   z.object({
+    acting_client_id: z.optional(z.string()),
+    acting_surface: z.string(),
     action: z.string(),
     actor_display_name: z.optional(z.string()),
     actor_id: z.string(),
@@ -55,6 +65,8 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "acting_client_id": "actingClientId",
+      "acting_surface": "actingSurface",
       "actor_display_name": "actorDisplayName",
       "actor_id": "actorId",
       "actor_slug": "actorSlug",

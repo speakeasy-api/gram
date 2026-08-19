@@ -5,13 +5,19 @@
 -- to the fixed demo constants below; the function aborts before writing if any
 -- preflight isolation check fails.
 --
---   Local:  applied by `mise run seed:demo` (psql -f this file, which also
---           executes the function at the bottom).
---   Prod:   the function is installed once, then the scheduled runner executes
---           it daily via `gram demo-seed`. Timestamps are relative to
---           now(), so each run regenerates a fresh trailing ~12-day window.
+--   Prod:  the scheduled runner applies this file and executes the function
+--          daily via `gram demo-seed`. Timestamps are relative to now(), so
+--          each run regenerates a fresh trailing ~12-day window.
+--   Demo:  `mise run seed:demo` locally, same thing, same tenant.
+--   Local: `mise run seed` runs `gram demo-seed --local`, which rewrites the
+--          constants below to the dev-idp's org before applying them (see
+--          demoseed.Spec). The retargeted tenant is writable and gets your
+--          user plus the local-only fixtures on top.
 --
--- Constants (must match seed/demo/clickhouse.sql):
+-- Constants (must match seed/demo/clickhouse.sql). Every one of them is an
+-- identifier family registered in demoseed.Spec — renaming one here without
+-- updating DefaultSpec breaks the retargeting the local and test tenants rely
+-- on, and TestDemoSeedSafety fails loudly rather than silently:
 --   org id       org_gram_demo_workspace
 --   project id   dec0de00-0000-4000-a000-000000000001 ('Default' — the only
 --                project)
@@ -80,6 +86,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   demo_org  CONSTANT text := 'org_gram_demo_workspace';
+  -- The WorkOS organization this tenant mirrors. For the demo org there is
+  -- none: the value is a placeholder no real row can carry.
+  demo_workos CONSTANT text := 'workos_gram_demo_unlinked';
   proj_a    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000001';
   policy_a  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f001';
   policy_pi CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f002';
@@ -222,9 +231,16 @@ BEGIN
   -- it. A WorkOS link or a foreign slug, however, means this id belongs to a
   -- real org — abort.
   ------------------------------------------------------------------
+  -- workos_id is compared against this tenant's expected link rather than
+  -- merely tested for NULL: the shared demo org never links to WorkOS (its
+  -- constant below is an inert placeholder that matches nothing), but the
+  -- local development tenant IS a real dev-idp org, and its auth callback
+  -- stamps that link here on first login. Any OTHER workos_id means this id
+  -- belongs to somebody else — abort.
   IF EXISTS (
     SELECT 1 FROM organization_metadata
-    WHERE id = demo_org AND (workos_id IS NOT NULL OR slug <> 'acme-demo')
+    WHERE id = demo_org
+      AND ((workos_id IS NOT NULL AND workos_id <> demo_workos) OR slug <> 'acme-demo')
   ) THEN
     RAISE EXCEPTION 'demo seed aborted: org % exists but is not the demo org', demo_org;
   END IF;
@@ -254,6 +270,11 @@ BEGIN
         gram_account_type = EXCLUDED.gram_account_type;
 
   DELETE FROM toolsets WHERE organization_id = demo_org;
+  -- environments.project_id is NOT NULL but its FK is ON DELETE SET NULL, so
+  -- the projects delete below fails outright on any environment row. The demo
+  -- tenant seeds none, but the local development tenant does (see
+  -- RunLocalFixtures), and a reseed there must not wedge.
+  DELETE FROM environments WHERE organization_id = demo_org;
   DELETE FROM deployment_statuses WHERE deployment_id IN
     (SELECT id FROM deployments WHERE organization_id = demo_org);
   DELETE FROM deployment_logs WHERE project_id = proj_a;

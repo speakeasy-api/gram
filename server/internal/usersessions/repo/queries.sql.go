@@ -70,7 +70,8 @@ INSERT INTO user_sessions (
     jti,
     refresh_token_hash,
     refresh_expires_at,
-    expires_at
+    expires_at,
+    tool_selection
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -80,7 +81,8 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
 RETURNING id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
@@ -93,6 +95,7 @@ type CreateUserSessionParams struct {
 	RefreshTokenHash    string
 	RefreshExpiresAt    pgtype.Timestamptz
 	ExpiresAt           pgtype.Timestamptz
+	ToolSelection       []byte
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -107,6 +110,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresAt,
 		arg.ExpiresAt,
+		arg.ToolSelection,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -451,6 +455,46 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 	return i, err
 }
 
+const getLatestLiveUserSessionToolSelection = `-- name: GetLatestLiveUserSessionToolSelection :one
+SELECT tool_selection
+FROM user_sessions
+WHERE project_id = $1
+  AND user_session_issuer_id = $2
+  AND user_session_client_id = $3
+  AND subject_urn = $4
+  AND tool_selection ->> 'resource' = $5::text
+  AND deleted IS FALSE
+  AND refresh_expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestLiveUserSessionToolSelectionParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	Resource            string
+}
+
+// Reauth prefill: the identified subject's newest live restrictive policy
+// for the same issuer + client + endpoint resource. Filtering by resource in
+// SQL keeps a newer session on a sibling endpoint from shadowing this
+// endpoint's policy. Anonymous subjects never prefill (each authorization
+// mints a fresh random subject).
+func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg GetLatestLiveUserSessionToolSelectionParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLatestLiveUserSessionToolSelection,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+		arg.Resource,
+	)
+	var tool_selection []byte
+	err := row.Scan(&tool_selection)
+	return tool_selection, err
+}
+
 const getUserSessionByID = `-- name: GetUserSessionByID :one
 SELECT s.id, s.project_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM user_sessions AS s
@@ -785,6 +829,36 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getUserSessionToolSelectionByJTI = `-- name: GetUserSessionToolSelectionByJTI :one
+SELECT tool_selection, expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+`
+
+type GetUserSessionToolSelectionByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+type GetUserSessionToolSelectionByJTIRow struct {
+	ToolSelection []byte
+	ExpiresAt     pgtype.Timestamptz
+}
+
+// Serve-path lookup for the consent-screen tool selection, keyed the same way
+// runtime requests are addressed (issuer + jti). Deliberately narrow: request
+// handling must not haul refresh-token material around. Project scoping is
+// intentionally NOT applied here -- the OAuth surface is public and the
+// issuer_id is the authoritative scope.
+func (q *Queries) GetUserSessionToolSelectionByJTI(ctx context.Context, arg GetUserSessionToolSelectionByJTIParams) (GetUserSessionToolSelectionByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionToolSelectionByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i GetUserSessionToolSelectionByJTIRow
+	err := row.Scan(&i.ToolSelection, &i.ExpiresAt)
+	return i, err
+}
+
 const issuerAdmitsCimdClientURI = `-- name: IssuerAdmitsCimdClientURI :one
 SELECT EXISTS (
   SELECT 1
@@ -813,6 +887,114 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
+SELECT rs.id,
+       rs.subject_urn,
+       rs.user_session_issuer_id,
+       rs.remote_session_client_id,
+       rc.remote_session_issuer_id,
+       ri.slug AS issuer_slug,
+       rs.access_expires_at,
+       rs.refresh_expires_at,
+       rs.authorization_expires_at,
+       -- Cast so sqlc types this as bool rather than interface{}; the token
+       -- itself is never projected, only whether a refresh grant exists.
+       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       rs.auto_refresh,
+       rs.last_used_at,
+       rs.scopes
+FROM remote_sessions AS rs
+JOIN (
+       SELECT unnest($1::text[]) AS subject_urn,
+              unnest($2::uuid[]) AS issuer_id
+     ) AS pair
+  ON rs.subject_urn = pair.subject_urn
+  AND rs.user_session_issuer_id = pair.issuer_id
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE usi.project_id = $3
+  AND (rc.project_id IS NULL OR rc.project_id = $3)
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+ORDER BY ri.slug ASC, rs.id ASC
+`
+
+type ListRemoteSessionUpstreamsForSubjectsParams struct {
+	SubjectUrns []string
+	IssuerIds   []uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ListRemoteSessionUpstreamsForSubjectsRow struct {
+	ID                     uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	RemoteSessionIssuerID  uuid.UUID
+	IssuerSlug             string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	HasRefreshToken        bool
+	AutoRefresh            bool
+	LastUsedAt             pgtype.Timestamptz
+	Scopes                 []string
+}
+
+// The outbound leg of the brokered connections on one page of user_sessions.
+// user_sessions and remote_sessions both carry (subject_urn,
+// user_session_issuer_id), so that pair is the join between "an agent can reach
+// Gram" and "Gram can reach an upstream on this subject's behalf".
+// Takes the page's pairs as parallel arrays rather than two independent IN
+// lists: filtering on subjects and issuers separately would return the cross
+// product, attributing one subject's upstream session to another subject who
+// happens to share an issuer.
+// Token material is never projected — only expiry metadata and a boolean for
+// whether a refresh grant exists.
+// Scoped by the session's user_session_issuer project, not the client's project
+// (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
+// through an organization-level or global client, whose project_id is NULL,
+// still belongs to the project whose user_session_issuer minted it. Filtering
+// on the client's project would silently drop those upstreams and report a
+// brokered session as having none. A client that does carry a project must
+// still match, so a row that somehow paired one project's client with another
+// project's issuer stays invisible rather than being read as a shared one.
+func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg ListRemoteSessionUpstreamsForSubjectsParams) ([]ListRemoteSessionUpstreamsForSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects, arg.SubjectUrns, arg.IssuerIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionUpstreamsForSubjectsRow
+	for rows.Next() {
+		var i ListRemoteSessionUpstreamsForSubjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectUrn,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionClientID,
+			&i.RemoteSessionIssuerID,
+			&i.IssuerSlug,
+			&i.AccessExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.AuthorizationExpiresAt,
+			&i.HasRefreshToken,
+			&i.AutoRefresh,
+			&i.LastUsedAt,
+			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUserSessionClientFacets = `-- name: ListUserSessionClientFacets :many
@@ -1176,7 +1358,7 @@ func (q *Queries) ListUserSessionUserFacets(ctx context.Context, projectID uuid.
 
 const listUserSessionsByProjectID = `-- name: ListUserSessionsByProjectID :many
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
-       s.refresh_expires_at, s.expires_at,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
@@ -1240,6 +1422,7 @@ type ListUserSessionsByProjectIDRow struct {
 	Jti                 string
 	RefreshExpiresAt    pgtype.Timestamptz
 	ExpiresAt           pgtype.Timestamptz
+	LastUsedAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -1281,6 +1464,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.Jti,
 			&i.RefreshExpiresAt,
 			&i.ExpiresAt,
+			&i.LastUsedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

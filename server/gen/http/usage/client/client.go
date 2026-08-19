@@ -37,6 +37,14 @@ type Client struct {
 	// setBillingEmail endpoint.
 	SetBillingEmailDoer goahttp.Doer
 
+	// SetSpendCap Doer is the HTTP client used to make requests to the setSpendCap
+	// endpoint.
+	SetSpendCapDoer goahttp.Doer
+
+	// GetInferenceSpendCaps Doer is the HTTP client used to make requests to the
+	// getInferenceSpendCaps endpoint.
+	GetInferenceSpendCapsDoer goahttp.Doer
+
 	// GetUsageTiers Doer is the HTTP client used to make requests to the
 	// getUsageTiers endpoint.
 	GetUsageTiersDoer goahttp.Doer
@@ -52,6 +60,26 @@ type Client struct {
 	// CreateStripeCheckout Doer is the HTTP client used to make requests to the
 	// createStripeCheckout endpoint.
 	CreateStripeCheckoutDoer goahttp.Doer
+
+	// GetStripeSubscription Doer is the HTTP client used to make requests to the
+	// getStripeSubscription endpoint.
+	GetStripeSubscriptionDoer goahttp.Doer
+
+	// GetPaygBillingSummary Doer is the HTTP client used to make requests to the
+	// getPaygBillingSummary endpoint.
+	GetPaygBillingSummaryDoer goahttp.Doer
+
+	// CreateStripePortalSession Doer is the HTTP client used to make requests to
+	// the createStripePortalSession endpoint.
+	CreateStripePortalSessionDoer goahttp.Doer
+
+	// CancelStripeSubscription Doer is the HTTP client used to make requests to
+	// the cancelStripeSubscription endpoint.
+	CancelStripeSubscriptionDoer goahttp.Doer
+
+	// ResumeStripeSubscription Doer is the HTTP client used to make requests to
+	// the resumeStripeSubscription endpoint.
+	ResumeStripeSubscriptionDoer goahttp.Doer
 
 	// CreateTopUpCheckout Doer is the HTTP client used to make requests to the
 	// createTopUpCheckout endpoint.
@@ -77,21 +105,28 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPeriodUsageDoer:           doer,
-		GetTokensUnderManagementDoer: doer,
-		SetBillingMetadataDoer:       doer,
-		GetBillingEmailDoer:          doer,
-		SetBillingEmailDoer:          doer,
-		GetUsageTiersDoer:            doer,
-		CreateCustomerSessionDoer:    doer,
-		CreateCheckoutDoer:           doer,
-		CreateStripeCheckoutDoer:     doer,
-		CreateTopUpCheckoutDoer:      doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		GetPeriodUsageDoer:            doer,
+		GetTokensUnderManagementDoer:  doer,
+		SetBillingMetadataDoer:        doer,
+		GetBillingEmailDoer:           doer,
+		SetBillingEmailDoer:           doer,
+		SetSpendCapDoer:               doer,
+		GetInferenceSpendCapsDoer:     doer,
+		GetUsageTiersDoer:             doer,
+		CreateCustomerSessionDoer:     doer,
+		CreateCheckoutDoer:            doer,
+		CreateStripeCheckoutDoer:      doer,
+		GetStripeSubscriptionDoer:     doer,
+		GetPaygBillingSummaryDoer:     doer,
+		CreateStripePortalSessionDoer: doer,
+		CancelStripeSubscriptionDoer:  doer,
+		ResumeStripeSubscriptionDoer:  doer,
+		CreateTopUpCheckoutDoer:       doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
@@ -215,6 +250,54 @@ func (c *Client) SetBillingEmail() goa.Endpoint {
 	}
 }
 
+// SetSpendCap returns an endpoint that makes HTTP requests to the usage
+// service setSpendCap server.
+func (c *Client) SetSpendCap() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSpendCapRequest(c.encoder)
+		decodeResponse = DecodeSetSpendCapResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSpendCapRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSpendCapDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "setSpendCap", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetInferenceSpendCaps returns an endpoint that makes HTTP requests to the
+// usage service getInferenceSpendCaps server.
+func (c *Client) GetInferenceSpendCaps() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetInferenceSpendCapsRequest(c.encoder)
+		decodeResponse = DecodeGetInferenceSpendCapsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetInferenceSpendCapsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetInferenceSpendCapsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getInferenceSpendCaps", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetUsageTiers returns an endpoint that makes HTTP requests to the usage
 // service getUsageTiers server.
 func (c *Client) GetUsageTiers() goa.Endpoint {
@@ -301,6 +384,126 @@ func (c *Client) CreateStripeCheckout() goa.Endpoint {
 		resp, err := c.CreateStripeCheckoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "createStripeCheckout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeSubscription returns an endpoint that makes HTTP requests to the
+// usage service getStripeSubscription server.
+func (c *Client) GetStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeGetStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPaygBillingSummary returns an endpoint that makes HTTP requests to the
+// usage service getPaygBillingSummary server.
+func (c *Client) GetPaygBillingSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPaygBillingSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetPaygBillingSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPaygBillingSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPaygBillingSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getPaygBillingSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateStripePortalSession returns an endpoint that makes HTTP requests to
+// the usage service createStripePortalSession server.
+func (c *Client) CreateStripePortalSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateStripePortalSessionRequest(c.encoder)
+		decodeResponse = DecodeCreateStripePortalSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateStripePortalSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateStripePortalSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createStripePortalSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CancelStripeSubscription returns an endpoint that makes HTTP requests to the
+// usage service cancelStripeSubscription server.
+func (c *Client) CancelStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCancelStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeCancelStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCancelStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CancelStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "cancelStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResumeStripeSubscription returns an endpoint that makes HTTP requests to the
+// usage service resumeStripeSubscription server.
+func (c *Client) ResumeStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResumeStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeResumeStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResumeStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResumeStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "resumeStripeSubscription", err)
 		}
 		return decodeResponse(resp)
 	}

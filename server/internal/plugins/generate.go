@@ -408,7 +408,7 @@ const (
 	platformMCPPluginName         = "speakeasy-aicp-platform-mcp"
 	platformMCPServerName         = "platform-mcp"
 	platformMCPPluginRoot         = "platform-mcp"
-	platformMCPDescription        = "Manage reviewed MCP Catalogue servers through the Speakeasy AICP Platform MCP."
+	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
 	platformMCPCodexPluginRoot    = "platform-mcp-codex"
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"

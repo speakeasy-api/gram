@@ -270,8 +270,10 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
+	logger := s.logger
+
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
+		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
 			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 			SessionToken:  "",
@@ -283,8 +285,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	if err := s.validateAuthNonce(ctx, payload); err != nil {
-		return redirectWithError(authErrCodeLookup, err)
+	stateProvided := conv.PtrValOr(payload.State, "") != ""
+	if stateProvided {
+		if err := s.validateAuthNonce(ctx, payload); err != nil {
+			return redirectWithError(authErrCodeLookup, err)
+		}
 	}
 
 	// Consume the signup intent on every path, not only the zero-org one, so a
@@ -303,13 +308,22 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			// Swallow so a cache blip cannot fail an otherwise valid login, but
 			// say so: without this line a signup silently degrades into landing
 			// on the register page with nothing explaining why.
-			s.logger.WarnContext(ctx, "failed to read signup intent", attr.SlogError(err))
+			logger.WarnContext(ctx, "failed to read signup intent", attr.SlogError(err))
 		}
 	}
 
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
+	}
+	if !stateProvided && idpUser.ImpersonatorEmail() == "" {
+		return redirectWithError(authErrCodeLookup, errors.New("missing or invalid state parameter"))
+	}
+
+	if ie := idpUser.ImpersonatorEmail(); ie != "" {
+		logger = logger.With(attr.SlogAuthImpersonatorEmail(ie))
+		logger.InfoContext(ctx, "impersonating user")
+		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
 	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
@@ -337,6 +351,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		UserID:               userID,
 		ActiveOrganizationID: "",
 		WorkOSSessionID:      idpUser.WorkOSSessionID,
+		ImpersonatorEmail:    idpUser.ImpersonatorEmail(),
 	}
 
 	if len(userInfo.Organizations) == 0 {
@@ -360,7 +375,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			}
 
 			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
-				s.logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
+				logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
@@ -450,7 +465,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 	if inviteeEmail := conv.NormalizeEmail(userInfo.Email); inviteeEmail != "" {
 		if err := s.acceptPendingInvitationForMember(ctx, activeOrgID, inviteeEmail, userID, idpUser.Sub); err != nil {
-			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
+			logger.WarnContext(ctx, "failed to accept pending invite after login",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(activeOrgID),
 				attr.SlogAuthUserEmail(inviteeEmail),
@@ -769,6 +784,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
@@ -791,6 +807,11 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
+	}
+
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting auth session").LogError(ctx, s.logger)
 	}
 
 	// Sessions in the shared demo org: append the demo org alongside real
@@ -909,6 +930,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		UserDisplayName:       userInfo.DisplayName,
 		UserPhotoURL:          userInfo.PhotoURL,
 		IsAdmin:               userInfo.Admin,
+		ImpersonatorEmail:     conv.PtrEmpty(session.ImpersonatorEmail),
 		Organizations:         organizations,
 	}, nil
 }

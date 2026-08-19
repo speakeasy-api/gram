@@ -237,6 +237,28 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
 	})
 
+	Method("listAudiences", func() {
+		Description("List the audiences that can be assigned to plugins.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAudiencesResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.listAudiences")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Audiences"}`)
+	})
+
 	Method("downloadPluginPackage", func() {
 		Description("Download a ZIP of a single plugin package for direct installation.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
@@ -571,6 +593,18 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 	})
 })
 
+var PluginAudienceModel = Type("PluginAudience", func() {
+	Required("kind", "display_name", "principal_urn")
+
+	Attribute("kind", String, func() {
+		Description("Audience kind.")
+		Enum("everyone", "role", "directory_group", "directory_attribute")
+	})
+	Attribute("display_name", String, "Display name for the audience.")
+	Attribute("member_count", Int64, "Number of current members, when the audience has an enumerable membership.")
+	Attribute("principal_urn", String, "Principal URN used to assign the audience to a plugin.")
+})
+
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
 	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
@@ -675,6 +709,12 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 var ListPluginsResult = Type("ListPluginsResult", func() {
 	Required("plugins")
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
+})
+
+var ListAudiencesResult = Type("ListAudiencesResult", func() {
+	Required("audiences")
+
+	Attribute("audiences", ArrayOf(PluginAudienceModel), "Audiences that can be assigned to plugins.")
 })
 
 var PlatformMCPPackageStatusResult = Type("PlatformMCPPackageStatusResult", func() {

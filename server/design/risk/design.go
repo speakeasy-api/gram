@@ -280,6 +280,7 @@ var _ = Service("risk", func() {
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
+			Attribute("external_user_ids", ArrayOf(String), "Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("non_assistant", Boolean, "If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.")
 			Attribute("assistant_id", String, "Optional assistant ID; only return findings from chats linked to this assistant.", func() {
@@ -310,6 +311,7 @@ var _ = Service("risk", func() {
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
+			Param("external_user_ids")
 			Param("unique_match")
 			Param("non_assistant")
 			Param("assistant_id")
@@ -779,6 +781,9 @@ var _ = Service("risk", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Attribute("note", String, "The requester's own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy's block reason.", func() {
+				MaxLength(4000)
+			})
 			Required("request_token")
 		})
 

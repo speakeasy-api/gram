@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -13,7 +14,11 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import {
+  invalidateAllMcpServers,
+  useMcpServers,
+} from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
@@ -177,6 +182,14 @@ function ModifyRemoteIdentityProviderSheetBody({
   // backend.
   const [name, setName] = useState(issuer.name ?? "");
 
+  // Editable logo, seeded from the saved record like name. The update always
+  // sends this field, and "" is the explicit "clear to NULL" sentinel, so the
+  // seed keeps an unrelated save from wiping the stored logo.
+  const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
+  // Save is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
+
   // Repointing a provider can duplicate an existing one just as creating it
   // can, so the same preflight runs here. Gated on the URL having diverged from
   // what is saved: while they match, the only record it could report is this
@@ -224,6 +237,8 @@ function ModifyRemoteIdentityProviderSheetBody({
           // Empty string clears the saved display name to NULL, same three-state
           // semantics the backend applies to the nullable endpoint fields.
           name: name.trim(),
+          // Same three-state semantics: "" clears the saved logo to NULL.
+          logoAssetId,
           authorizationEndpoint: authorizationEndpoint.trim(),
           tokenEndpoint: tokenEndpoint.trim(),
           registrationEndpoint: registrationEndpoint.trim(),
@@ -270,6 +285,10 @@ function ModifyRemoteIdentityProviderSheetBody({
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        // Also invalidate MCP server queries so the sidebar readiness bar
+        // refreshes (AGE-3279).
+        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
       toast.success("Identity provider updated");
       onClose();
@@ -304,7 +323,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   const submittable = !!primaryClient && issuerUrl.trim().length > 0;
 
   const handleSubmit = () => {
-    if (!submittable || submitting || !primaryClient) return;
+    if (!submittable || submitting || logoUploading || !primaryClient) return;
     modifyMutation.mutate();
   };
 
@@ -392,6 +411,14 @@ function ModifyRemoteIdentityProviderSheetBody({
           </Text>
         </Stack>
 
+        <AssetImageUploadField
+          tier="project"
+          value={logoAssetId}
+          onChange={setLogoAssetId}
+          onUploadingChange={setLogoUploading}
+          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+        />
+
         <EndpointsFields
           issuerUrl={issuerUrl}
           authorizationEndpoint={authorizationEndpoint}
@@ -451,7 +478,9 @@ function ModifyRemoteIdentityProviderSheetBody({
         </Button>
         <Button
           variant="primary"
-          disabled={!submittable || submitting || isLoadingClient}
+          disabled={
+            !submittable || submitting || logoUploading || isLoadingClient
+          }
           onClick={handleSubmit}
         >
           <Button.Text>{submitting ? "Saving…" : "Save"}</Button.Text>

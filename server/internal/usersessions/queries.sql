@@ -319,7 +319,7 @@ WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
 -- refresh_token_hash is excluded from the projection so the management API
 -- surface cannot accidentally return it.
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
-       s.refresh_expires_at, s.expires_at,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
@@ -388,6 +388,36 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND refresh_token_hash = @refresh_token_hash
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: GetUserSessionToolSelectionByJTI :one
+-- Serve-path lookup for the consent-screen tool selection, keyed the same way
+-- runtime requests are addressed (issuer + jti). Deliberately narrow: request
+-- handling must not haul refresh-token material around. Project scoping is
+-- intentionally NOT applied here -- the OAuth surface is public and the
+-- issuer_id is the authoritative scope.
+SELECT tool_selection, expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE;
+
+-- name: GetLatestLiveUserSessionToolSelection :one
+-- Reauth prefill: the identified subject's newest live restrictive policy
+-- for the same issuer + client + endpoint resource. Filtering by resource in
+-- SQL keeps a newer session on a sibling endpoint from shadowing this
+-- endpoint's policy. Anonymous subjects never prefill (each authorization
+-- mints a fresh random subject).
+SELECT tool_selection
+FROM user_sessions
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id
+  AND subject_urn = @subject_urn
+  AND tool_selection ->> 'resource' = @resource::text
+  AND deleted IS FALSE
+  AND refresh_expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: GetUserSessionByJTI :one
 -- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
@@ -604,7 +634,8 @@ INSERT INTO user_sessions (
     jti,
     refresh_token_hash,
     refresh_expires_at,
-    expires_at
+    expires_at,
+    tool_selection
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -614,7 +645,8 @@ VALUES (
     @jti,
     @refresh_token_hash,
     @refresh_expires_at,
-    @expires_at
+    @expires_at,
+    @tool_selection
 )
 RETURNING *;
 
@@ -676,3 +708,54 @@ WHERE project_id = @project_id
   AND jti = @jti
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListRemoteSessionUpstreamsForSubjects :many
+-- The outbound leg of the brokered connections on one page of user_sessions.
+-- user_sessions and remote_sessions both carry (subject_urn,
+-- user_session_issuer_id), so that pair is the join between "an agent can reach
+-- Gram" and "Gram can reach an upstream on this subject's behalf".
+-- Takes the page's pairs as parallel arrays rather than two independent IN
+-- lists: filtering on subjects and issuers separately would return the cross
+-- product, attributing one subject's upstream session to another subject who
+-- happens to share an issuer.
+-- Token material is never projected — only expiry metadata and a boolean for
+-- whether a refresh grant exists.
+-- Scoped by the session's user_session_issuer project, not the client's project
+-- (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
+-- through an organization-level or global client, whose project_id is NULL,
+-- still belongs to the project whose user_session_issuer minted it. Filtering
+-- on the client's project would silently drop those upstreams and report a
+-- brokered session as having none. A client that does carry a project must
+-- still match, so a row that somehow paired one project's client with another
+-- project's issuer stays invisible rather than being read as a shared one.
+SELECT rs.id,
+       rs.subject_urn,
+       rs.user_session_issuer_id,
+       rs.remote_session_client_id,
+       rc.remote_session_issuer_id,
+       ri.slug AS issuer_slug,
+       rs.access_expires_at,
+       rs.refresh_expires_at,
+       rs.authorization_expires_at,
+       -- Cast so sqlc types this as bool rather than interface{}; the token
+       -- itself is never projected, only whether a refresh grant exists.
+       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       rs.auto_refresh,
+       rs.last_used_at,
+       rs.scopes
+FROM remote_sessions AS rs
+JOIN (
+       SELECT unnest(@subject_urns::text[]) AS subject_urn,
+              unnest(@issuer_ids::uuid[]) AS issuer_id
+     ) AS pair
+  ON rs.subject_urn = pair.subject_urn
+  AND rs.user_session_issuer_id = pair.issuer_id
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE usi.project_id = @project_id
+  AND (rc.project_id IS NULL OR rc.project_id = @project_id)
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+ORDER BY ri.slug ASC, rs.id ASC;

@@ -12,13 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acquireOpenRouterChatBillingLock = `-- name: AcquireOpenRouterChatBillingLock :exec
-SELECT pg_advisory_xact_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
+const acquireOpenRouterBillingLock = `-- name: AcquireOpenRouterBillingLock :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
 `
 
-// Serializes billing state changes with the chat-key reconciler.
-func (q *Queries) AcquireOpenRouterChatBillingLock(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, acquireOpenRouterChatBillingLock, organizationID)
+type AcquireOpenRouterBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Serializes one platform inference key with cap writes/reconciliation. The
+// caller acquires every platform key in the order defined by AllKeyTypes.
+func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireOpenRouterBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingLock, arg.KeyType, arg.OrganizationID)
 	return err
 }
 
@@ -733,6 +741,31 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 	return count, err
 }
 
+const getMaterializedOpenRouterInferenceKey = `-- name: GetMaterializedOpenRouterInferenceKey :one
+SELECT key_type, disabled
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type GetMaterializedOpenRouterInferenceKeyParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+type GetMaterializedOpenRouterInferenceKeyRow struct {
+	KeyType  string
+	Disabled bool
+}
+
+func (q *Queries) GetMaterializedOpenRouterInferenceKey(ctx context.Context, arg GetMaterializedOpenRouterInferenceKeyParams) (GetMaterializedOpenRouterInferenceKeyRow, error) {
+	row := q.db.QueryRow(ctx, getMaterializedOpenRouterInferenceKey, arg.OrganizationID, arg.KeyType)
+	var i GetMaterializedOpenRouterInferenceKeyRow
+	err := row.Scan(&i.KeyType, &i.Disabled)
+	return i, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name
 FROM organization_metadata
@@ -789,6 +822,69 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 		&i.OrganizationSlug,
 		&i.GramAccountType,
 		&i.Whitelisted,
+	)
+	return i, err
+}
+
+const getPaygBillingSummaryCosts = `-- name: GetPaygBillingSummaryCosts :one
+WITH inputs AS (
+  SELECT
+      $1::bigint AS tum_tokens
+    , $2::text::numeric(20, 8) AS tum_unit_price_usd
+), completed_spend AS (
+  SELECT
+      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
+    , MAX(day)::date AS recorded_through
+  FROM openrouter_spend_daily
+  WHERE organization_id = $3::text
+    AND key_type = 'chat'
+    AND day >= ($4::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($5::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($6::timestamptz AT TIME ZONE 'UTC')::date
+)
+SELECT
+    inputs.tum_unit_price_usd::text AS tum_unit_price_usd
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
+  , completed_spend.other_inference_spend_usd::text AS other_inference_spend_usd
+  , completed_spend.recorded_through
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd + completed_spend.other_inference_spend_usd)::numeric(30, 8)::text AS estimated_total_usd
+FROM inputs
+CROSS JOIN completed_spend
+`
+
+type GetPaygBillingSummaryCostsParams struct {
+	TumTokens       int64
+	TumUnitPriceUsd string
+	OrganizationID  string
+	PeriodStart     pgtype.Timestamptz
+	PeriodEnd       pgtype.Timestamptz
+	CompletedBefore pgtype.Timestamptz
+}
+
+type GetPaygBillingSummaryCostsRow struct {
+	TumUnitPriceUsd        string
+	TumCostUsd             string
+	OtherInferenceSpendUsd string
+	RecordedThrough        pgtype.Date
+	EstimatedTotalUsd      string
+}
+
+func (q *Queries) GetPaygBillingSummaryCosts(ctx context.Context, arg GetPaygBillingSummaryCostsParams) (GetPaygBillingSummaryCostsRow, error) {
+	row := q.db.QueryRow(ctx, getPaygBillingSummaryCosts,
+		arg.TumTokens,
+		arg.TumUnitPriceUsd,
+		arg.OrganizationID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.CompletedBefore,
+	)
+	var i GetPaygBillingSummaryCostsRow
+	err := row.Scan(
+		&i.TumUnitPriceUsd,
+		&i.TumCostUsd,
+		&i.OtherInferenceSpendUsd,
+		&i.RecordedThrough,
+		&i.EstimatedTotalUsd,
 	)
 	return i, err
 }
@@ -977,6 +1073,46 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 			return nil, err
 		}
 		items = append(items, cycle_start)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
+SELECT key_type, monthly_credits, disabled
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = ANY($2::text[])
+  AND deleted IS FALSE
+ORDER BY key_type
+`
+
+type ListMaterializedOpenRouterInferenceKeysParams struct {
+	OrganizationID string
+	KeyTypes       []string
+}
+
+type ListMaterializedOpenRouterInferenceKeysRow struct {
+	KeyType        string
+	MonthlyCredits int64
+	Disabled       bool
+}
+
+func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, arg ListMaterializedOpenRouterInferenceKeysParams) ([]ListMaterializedOpenRouterInferenceKeysRow, error) {
+	rows, err := q.db.Query(ctx, listMaterializedOpenRouterInferenceKeys, arg.OrganizationID, arg.KeyTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMaterializedOpenRouterInferenceKeysRow
+	for rows.Next() {
+		var i ListMaterializedOpenRouterInferenceKeysRow
+		if err := rows.Scan(&i.KeyType, &i.MonthlyCredits, &i.Disabled); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1838,6 +1974,26 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertOpenRouterDailySpendFixture = `-- name: UpsertOpenRouterDailySpendFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES ($1, 'chat', $2, $3)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOpenRouterDailySpendFixtureParams struct {
+	OrganizationID string
+	Day            pgtype.Date
+	SpendUsd       pgtype.Numeric
+}
+
+// Test-only fixture for billing-summary reads.
+func (q *Queries) UpsertOpenRouterDailySpendFixture(ctx context.Context, arg UpsertOpenRouterDailySpendFixtureParams) error {
+	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpendFixture, arg.OrganizationID, arg.Day, arg.SpendUsd)
+	return err
 }
 
 const upsertStripeInvoice = `-- name: UpsertStripeInvoice :one

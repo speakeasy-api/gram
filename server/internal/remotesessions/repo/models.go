@@ -69,6 +69,7 @@ type RemoteSessionIssuer struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool

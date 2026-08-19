@@ -812,6 +812,8 @@ INSERT INTO platform_mcp_setup_handoffs (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_key,
     intent,
     handoff_hash,
@@ -821,8 +823,10 @@ SELECT
     @organization_id,
     @project_id,
     @registration_id,
-    @connection_id,
-    @connection_generation,
+    sqlc.narg(connection_id),
+    sqlc.narg(connection_generation),
+    @user_id,
+    @acting_surface,
     @provider_key,
     @intent,
     @handoff_hash,
@@ -848,12 +852,21 @@ SET invalidated_at = clock_timestamp(),
 WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND registration_id = @registration_id
-  AND connection_id = @connection_id
-  AND connection_generation = @connection_generation
+  AND (
+    (
+      connection_id = sqlc.narg(connection_id)
+      AND connection_generation = sqlc.narg(connection_generation)
+    )
+    OR (connection_id IS NULL AND user_id = @user_id)
+  )
   AND intent = @intent
   AND redeemed_at IS NULL
   AND invalidated_at IS NULL;
 
+-- A handoff issued by a surface with no OAuth connection is redeemed by the
+-- same user from the dashboard, so identity comes from the handoff's own user
+-- attribution. A handoff that does carry a connection still has that
+-- connection's liveness checked.
 -- name: GetPlatformMCPSetupHandoffForDashboardStart :one
 SELECT
     handoff.id,
@@ -863,6 +876,7 @@ SELECT
     handoff.intent,
     handoff.connection_id,
     handoff.connection_generation,
+    handoff.user_id,
     registration.catalog_reference,
     project.slug AS project_slug
 FROM platform_mcp_setup_handoffs AS handoff
@@ -875,14 +889,23 @@ JOIN projects AS project
   ON project.id = registration.project_id
  AND project.organization_id = registration.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_connections AS connection
+LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = handoff.connection_id
  AND connection.organization_id = handoff.organization_id
 WHERE handoff.handoff_hash = @handoff_hash
   AND handoff.organization_id = @organization_id
-  AND connection.subject_urn = @subject_urn
-  AND connection.active_generation = handoff.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+    handoff.user_id = @user_id
+    OR (handoff.user_id IS NULL AND connection.subject_urn = @subject_urn)
+  )
+  AND (
+    handoff.connection_id IS NULL
+    OR (
+      connection.subject_urn = @subject_urn
+      AND connection.active_generation = handoff.connection_generation
+      AND connection.revoked_at IS NULL
+    )
+  )
   AND handoff.redeemed_at IS NULL
   AND handoff.invalidated_at IS NULL
   AND handoff.expires_at > clock_timestamp();
@@ -895,8 +918,15 @@ WHERE handoff.handoff_hash = @handoff_hash
   AND handoff.organization_id = @organization_id
   AND handoff.project_id = @project_id
   AND handoff.registration_id = @registration_id
-  AND handoff.connection_id = @connection_id
-  AND handoff.connection_generation = @connection_generation
+  -- A handoff issued by a connection-less surface is matched by its user, the
+  -- same way the dashboard-start lookup above matches it.
+  AND (
+    (
+      handoff.connection_id = sqlc.narg(connection_id)
+      AND handoff.connection_generation = sqlc.narg(connection_generation)
+    )
+    OR (handoff.connection_id IS NULL AND handoff.user_id = @user_id)
+  )
   AND handoff.provider_key = @provider_key
   AND handoff.intent = @intent
   AND handoff.redeemed_at IS NULL
@@ -909,16 +939,21 @@ WHERE handoff.handoff_hash = @handoff_hash
         ON project.id = registration.project_id
        AND project.organization_id = registration.organization_id
        AND project.deleted IS FALSE
-      JOIN platform_mcp_connections AS connection
+      LEFT JOIN platform_mcp_connections AS connection
         ON connection.id = handoff.connection_id
        AND connection.organization_id = handoff.organization_id
       WHERE registration.id = handoff.registration_id
         AND registration.organization_id = handoff.organization_id
         AND registration.project_id = handoff.project_id
         AND registration.deleted IS FALSE
-        AND connection.subject_urn = @subject_urn
-        AND connection.active_generation = handoff.connection_generation
-        AND connection.revoked_at IS NULL
+        AND (
+          handoff.connection_id IS NULL
+          OR (
+            connection.subject_urn = @subject_urn
+            AND connection.active_generation = handoff.connection_generation
+            AND connection.revoked_at IS NULL
+          )
+        )
   )
 RETURNING handoff.*;
 
@@ -1638,6 +1673,37 @@ WHERE EXISTS (
 ON CONFLICT (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
   AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'catalog_explored',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+)
+DO NOTHING;
+
+-- A surface acting under assistant identity holds no connection, so its
+-- evidence is keyed by the acting user and dedupes on the user grain instead of
+-- the connection generation.
+-- name: RecordPlatformMCPCatalogExploredForUser :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    user_id,
+    acting_surface
+)
+VALUES (
+    @organization_id,
+    'catalog_explored',
+    @user_id,
+    @acting_surface
+)
+ON CONFLICT (organization_id, milestone, user_id)
+WHERE connection_id IS NULL
+  AND connection_generation IS NULL
+  AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
     'authorization_failed',

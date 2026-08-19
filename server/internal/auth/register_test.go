@@ -36,6 +36,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -80,6 +81,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // Has active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -125,6 +127,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -170,6 +173,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -231,6 +235,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -315,6 +320,7 @@ func TestService_Register(t *testing.T) {
 					UserID:               userInfo.UserID,
 					ActiveOrganizationID: "",
 					WorkOSSessionID:      "",
+					ImpersonatorEmail:    "",
 				}
 				err := instance.sessionManager.StoreSession(ctx, session)
 				require.NoError(t, err)
@@ -389,7 +395,7 @@ func TestService_Register(t *testing.T) {
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
 
-	t.Run("register preserves WorkOSSessionID", func(t *testing.T) {
+	t.Run("register preserves WorkOS session metadata", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -401,6 +407,7 @@ func TestService_Register(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
 			WorkOSSessionID:      "workos-sid-register-456",
+			ImpersonatorEmail:    "support@example.com",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -421,6 +428,7 @@ func TestService_Register(t *testing.T) {
 		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
 		require.NoError(t, err)
 		require.Equal(t, "workos-sid-register-456", stored.WorkOSSessionID, "WorkOSSessionID must survive Register")
+		require.Equal(t, "support@example.com", stored.ImpersonatorEmail, "ImpersonatorEmail must survive Register")
 		require.NotEmpty(t, stored.ActiveOrganizationID, "should have an active org after Register")
 	})
 
@@ -435,6 +443,7 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "slug-no-collision",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -477,6 +486,7 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "slug-collision",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -519,6 +529,7 @@ func TestRegister_CreatesOrganizationForNameWithNoDerivableSlug(t *testing.T) {
 		SessionID:            "slug-non-latin",
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: "",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -558,6 +569,7 @@ func TestRegisterHTTP_OrganizationlessSessionProvisionsOrg(t *testing.T) {
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: "",
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 

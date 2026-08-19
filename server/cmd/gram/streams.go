@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -163,6 +164,12 @@ func newStreamsCommand() *cli.Command {
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-portal-configuration-id",
+			Aliases: []string{"stripe.portal_configuration_id"},
+			Usage:   "The controlled Stripe customer portal configuration ID",
+			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
 		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
@@ -487,11 +494,19 @@ func newStreamsCommand() *cli.Command {
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
-				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
-					return fmt.Errorf("schedule PAYG key refresh: %w", err)
+				var handlerErrors []error
+				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("relay webhook event to Svix: %w", err))
 				}
-				return svixRelayHandler.Handle(ctx, event, metadata)
+				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
+				}
+				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				return errors.Join(handlerErrors...)
 			})
 
 			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
@@ -756,4 +771,78 @@ func mustReceiveBatch[M proto.Message](
 	options ...gcp.SubscriberOption,
 ) {
 	must.Nil(receiveBatch(g, msg, subscription, settings, handler, options...))
+}
+
+// receiveBatchWithResult registers a BatchResultHandler whose messages can
+// stage individual failures without changing the all-or-nothing BatchHandler
+// contract.
+//
+//nolint:unused // Available for result-aware stream registrations.
+func receiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchResultHandler[M],
+	options ...gcp.SubscriberOption,
+) error {
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
+	if err != nil {
+		return err
+	}
+
+	g.group.Go(func() error {
+		if err := sub.ReceiveBatchWithResult(ctx, settings, func(ctx context.Context, msgs []gcp.BatchMessage[M]) (err error) {
+			ctx, span := g.tracer.Start(ctx, "stream.handleBatch", trace.WithAttributes(
+				attr.TopicProtoName(msgName),
+				attr.SubscriptionProtoName(subName),
+				attr.SubscriberBatchSize(len(msgs)),
+			))
+
+			defer func() {
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic recovered in batch result handler: %v", r)
+					g.logger.ErrorContext(ctx, "panic recovered in batch result handler",
+						attr.SlogError(err),
+						attr.SlogErrorStack(string(debug.Stack())),
+					)
+				}
+			}()
+
+			err = handler.HandleBatchWithResult(ctx, msgs)
+			if err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			if err = ctx.Err(); err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("subscriber receive batch with result error: %w", err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+//nolint:unused // Available for result-aware stream registrations.
+func mustReceiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchResultHandler[M],
+	options ...gcp.SubscriberOption,
+) {
+	must.Nil(receiveBatchWithResult(g, msg, subscription, settings, handler, options...))
 }

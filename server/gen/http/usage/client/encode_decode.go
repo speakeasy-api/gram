@@ -16,6 +16,7 @@ import (
 
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPeriodUsageRequest instantiates a HTTP request object with method
@@ -1177,6 +1178,477 @@ func DecodeSetBillingEmailResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSetSpendCapRequest instantiates a HTTP request object with method and
+// path set to call the "usage" service "setSpendCap" endpoint
+func (c *Client) BuildSetSpendCapRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSpendCapUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "setSpendCap", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSpendCapRequest returns an encoder for requests sent to the usage
+// setSpendCap server.
+func EncodeSetSpendCapRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.SetSpendCapPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "setSpendCap", "*usage.SetSpendCapPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetSpendCapRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("usage", "setSpendCap", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSpendCapResponse returns a decoder for responses returned by the
+// usage setSpendCap endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSetSpendCapResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSpendCapResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSpendCapResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			res := NewSetSpendCapSpendCapOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSpendCapUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSpendCapForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSpendCapBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSpendCapNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSpendCapConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSpendCapUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSpendCapInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSpendCapInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+				}
+				err = ValidateSetSpendCapInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+				}
+				return nil, NewSetSpendCapInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSpendCapUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+				}
+				err = ValidateSetSpendCapUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+				}
+				return nil, NewSetSpendCapUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "setSpendCap", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSpendCapGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setSpendCap", err)
+			}
+			err = ValidateSetSpendCapGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setSpendCap", err)
+			}
+			return nil, NewSetSpendCapGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "setSpendCap", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetInferenceSpendCapsRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getInferenceSpendCaps"
+// endpoint
+func (c *Client) BuildGetInferenceSpendCapsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInferenceSpendCapsUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getInferenceSpendCaps", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetInferenceSpendCapsRequest returns an encoder for requests sent to
+// the usage getInferenceSpendCaps server.
+func EncodeGetInferenceSpendCapsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetInferenceSpendCapsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getInferenceSpendCaps", "*usage.GetInferenceSpendCapsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetInferenceSpendCapsResponse returns a decoder for responses returned
+// by the usage getInferenceSpendCaps endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetInferenceSpendCapsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetInferenceSpendCapsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*InferenceSpendCapResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := ValidateInferenceSpendCapResponse(e); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			res := NewGetInferenceSpendCapsInferenceSpendCapOK(body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInferenceSpendCapsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInferenceSpendCapsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInferenceSpendCapsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInferenceSpendCapsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInferenceSpendCapsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInferenceSpendCapsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInferenceSpendCapsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInferenceSpendCapsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+				}
+				err = ValidateGetInferenceSpendCapsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+				}
+				return nil, NewGetInferenceSpendCapsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInferenceSpendCapsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+				}
+				err = ValidateGetInferenceSpendCapsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+				}
+				return nil, NewGetInferenceSpendCapsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendCaps", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetInferenceSpendCapsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendCaps", err)
+			}
+			err = ValidateGetInferenceSpendCapsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendCaps", err)
+			}
+			return nil, NewGetInferenceSpendCapsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendCaps", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetUsageTiersRequest instantiates a HTTP request object with method and
 // path set to call the "usage" service "getUsageTiers" endpoint
 func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2068,6 +2540,1156 @@ func DecodeCreateStripeCheckoutResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getStripeSubscription"
+// endpoint
+func (c *Client) BuildGetStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeSubscriptionUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStripeSubscriptionRequest returns an encoder for requests sent to
+// the usage getStripeSubscription server.
+func EncodeGetStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getStripeSubscription", "*usage.GetStripeSubscriptionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetStripeSubscriptionResponse returns a decoder for responses returned
+// by the usage getStripeSubscription endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			res := NewGetStripeSubscriptionStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+				}
+				err = ValidateGetStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+				}
+				return nil, NewGetStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+				}
+				err = ValidateGetStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+				}
+				return nil, NewGetStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getStripeSubscription", err)
+			}
+			err = ValidateGetStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeSubscription", err)
+			}
+			return nil, NewGetStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetPaygBillingSummaryRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getPaygBillingSummary"
+// endpoint
+func (c *Client) BuildGetPaygBillingSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPaygBillingSummaryUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getPaygBillingSummary", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPaygBillingSummaryRequest returns an encoder for requests sent to
+// the usage getPaygBillingSummary server.
+func EncodeGetPaygBillingSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetPaygBillingSummaryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getPaygBillingSummary", "*usage.GetPaygBillingSummaryPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetPaygBillingSummaryResponse returns a decoder for responses returned
+// by the usage getPaygBillingSummary endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetPaygBillingSummaryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPaygBillingSummaryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			res := NewGetPaygBillingSummaryPaygBillingSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPaygBillingSummaryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPaygBillingSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPaygBillingSummaryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPaygBillingSummaryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPaygBillingSummaryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPaygBillingSummaryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPaygBillingSummaryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPaygBillingSummaryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPaygBillingSummaryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+				}
+				err = ValidateGetPaygBillingSummaryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+				}
+				return nil, NewGetPaygBillingSummaryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getPaygBillingSummary", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPaygBillingSummaryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getPaygBillingSummary", err)
+			}
+			err = ValidateGetPaygBillingSummaryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getPaygBillingSummary", err)
+			}
+			return nil, NewGetPaygBillingSummaryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getPaygBillingSummary", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateStripePortalSessionRequest instantiates a HTTP request object
+// with method and path set to call the "usage" service
+// "createStripePortalSession" endpoint
+func (c *Client) BuildCreateStripePortalSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateStripePortalSessionUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "createStripePortalSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateStripePortalSessionRequest returns an encoder for requests sent
+// to the usage createStripePortalSession server.
+func EncodeCreateStripePortalSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.CreateStripePortalSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "createStripePortalSession", "*usage.CreateStripePortalSessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateStripePortalSessionResponse returns a decoder for responses
+// returned by the usage createStripePortalSession endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateStripePortalSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateStripePortalSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body string
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateStripePortalSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateStripePortalSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateStripePortalSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateStripePortalSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateStripePortalSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateStripePortalSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateStripePortalSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateStripePortalSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+				}
+				err = ValidateCreateStripePortalSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+				}
+				return nil, NewCreateStripePortalSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateStripePortalSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+				}
+				err = ValidateCreateStripePortalSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+				}
+				return nil, NewCreateStripePortalSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createStripePortalSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateStripePortalSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createStripePortalSession", err)
+			}
+			err = ValidateCreateStripePortalSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripePortalSession", err)
+			}
+			return nil, NewCreateStripePortalSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "createStripePortalSession", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCancelStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "cancelStripeSubscription"
+// endpoint
+func (c *Client) BuildCancelStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CancelStripeSubscriptionUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "cancelStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCancelStripeSubscriptionRequest returns an encoder for requests sent
+// to the usage cancelStripeSubscription server.
+func EncodeCancelStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.CancelStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "cancelStripeSubscription", "*usage.CancelStripeSubscriptionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCancelStripeSubscriptionResponse returns a decoder for responses
+// returned by the usage cancelStripeSubscription endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCancelStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCancelStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CancelStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			res := NewCancelStripeSubscriptionStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CancelStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CancelStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CancelStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CancelStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CancelStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CancelStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CancelStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CancelStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+				}
+				err = ValidateCancelStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+				}
+				return nil, NewCancelStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CancelStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+				}
+				err = ValidateCancelStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+				}
+				return nil, NewCancelStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "cancelStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CancelStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "cancelStripeSubscription", err)
+			}
+			err = ValidateCancelStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "cancelStripeSubscription", err)
+			}
+			return nil, NewCancelStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "cancelStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildResumeStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "resumeStripeSubscription"
+// endpoint
+func (c *Client) BuildResumeStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResumeStripeSubscriptionUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "resumeStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeResumeStripeSubscriptionRequest returns an encoder for requests sent
+// to the usage resumeStripeSubscription server.
+func EncodeResumeStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.ResumeStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "resumeStripeSubscription", "*usage.ResumeStripeSubscriptionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeResumeStripeSubscriptionResponse returns a decoder for responses
+// returned by the usage resumeStripeSubscription endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeResumeStripeSubscriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeResumeStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ResumeStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			res := NewResumeStripeSubscriptionStripeSubscriptionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ResumeStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ResumeStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ResumeStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ResumeStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ResumeStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ResumeStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ResumeStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ResumeStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+				}
+				err = ValidateResumeStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+				}
+				return nil, NewResumeStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ResumeStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+				}
+				err = ValidateResumeStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+				}
+				return nil, NewResumeStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "resumeStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ResumeStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "resumeStripeSubscription", err)
+			}
+			err = ValidateResumeStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "resumeStripeSubscription", err)
+			}
+			return nil, NewResumeStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "resumeStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateTopUpCheckoutRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "createTopUpCheckout"
 // endpoint
@@ -2320,6 +3942,20 @@ func unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(v *TUMPeriodDayRespons
 	res := &usage.TUMPeriodDay{
 		Date:   *v.Date,
 		Tokens: *v.Tokens,
+	}
+
+	return res
+}
+
+// unmarshalInferenceSpendCapResponseToUsageInferenceSpendCap builds a value of
+// type *usage.InferenceSpendCap from a value of type
+// *InferenceSpendCapResponse.
+func unmarshalInferenceSpendCapResponseToUsageInferenceSpendCap(v *InferenceSpendCapResponse) *usage.InferenceSpendCap {
+	res := &usage.InferenceSpendCap{
+		KeyType:        *v.KeyType,
+		CreditsUsed:    *v.CreditsUsed,
+		MonthlyCredits: *v.MonthlyCredits,
+		Disabled:       *v.Disabled,
 	}
 
 	return res

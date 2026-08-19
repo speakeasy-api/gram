@@ -27,7 +27,10 @@ export const AUDIT_ACTIONS = [
   "aws_kms_key:create",
   "aws_kms_key:delete",
   "aws_kms_key:update",
+  "billing_metadata:cancel_stripe_subscription",
   "billing_metadata:create_stripe_checkout",
+  "billing_metadata:create_stripe_portal",
+  "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
@@ -65,6 +68,8 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
   "mcp_approval_request:deny",
+  "mcp_approval_request:evidence_changed",
+  "mcp_approval_request:research_start",
   "mcp_collection:attach_server",
   "mcp_collection:create",
   "mcp_collection:delete",
@@ -75,6 +80,7 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:upsert",
   "openrouter-key:disable",
   "openrouter-key:enable",
+  "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
@@ -271,6 +277,12 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "billing_metadata:create_stripe_checkout":
       return "started Stripe checkout for";
+    case "billing_metadata:create_stripe_portal":
+      return "opened Stripe billing portal for";
+    case "billing_metadata:cancel_stripe_subscription":
+      return "canceled Stripe subscription for";
+    case "billing_metadata:resume_stripe_subscription":
+      return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
     case "chat_analysis_settings:upsert":
@@ -341,6 +353,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "requested MCP access to";
     case "mcp_approval_request:deny":
       return "denied MCP access to";
+    case "mcp_approval_request:evidence_changed":
+      return "detected changed evidence for approved MCP server";
+    case "mcp_approval_request:research_start":
+      return "started research on";
 
     case "mcp_collection:create":
       return "created collection";
@@ -365,6 +381,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled platform OpenRouter key";
     case "openrouter-key:enable":
       return "enabled platform OpenRouter key";
+    case "openrouter-key:set_spend_cap":
+      return "changed inference cap for";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";

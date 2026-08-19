@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -309,4 +310,340 @@ func TestRefreshAPIKeyLimit_RejectsChangedUpstreamIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "hash-stored", row.KeyHash)
 	require.Equal(t, int64(100), row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_NilPreservesEachPaygInferenceCap(t *testing.T) {
+	t.Parallel()
+
+	for _, keyType := range []KeyType{KeyTypeChat, KeyTypeInternal} {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierPayg),
+			}))
+
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, keyType)
+			require.NoError(t, err)
+			raisedCap := 321
+			_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, &raisedCap)
+			require.NoError(t, err)
+
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, nil)
+			require.NoError(t, err)
+			require.Equal(t, raisedCap, refreshed)
+
+			patches := upstream.recorded()
+			require.Len(t, patches, 1, "a nil PAYG refresh must not PATCH upstream")
+			require.JSONEq(t, `{"limit":321,"limit_reset":"monthly"}`, patches[0])
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(raisedCap), row.MonthlyCredits)
+		})
+	}
+}
+
+func TestReconcileMonthlyCredits_UncappedUpstreamClearsMirror(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Zero(t, effective, "an uncapped provider key has no enforceable alert denominator")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Zero(t, row.MonthlyCredits, "the local display mirror must follow provider authority")
+}
+
+func TestReconcileMonthlyCredits_DoesNotOverwriteConcurrentCapChange(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	const newerCap = int64(250)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: newerCap,
+	}))
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Equal(t, newerCap, effective)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, newerCap, row.MonthlyCredits)
+}
+
+func TestReconcileMonthlyCredits_DetectsSameValueCapOperation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+
+	// A user can deliberately save the same numeric cap. The write generation,
+	// not just the number, makes that operation newer than this poll.
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: before.MonthlyCredits,
+	}))
+
+	effective, err := provisioner.ReconcileMonthlyCredits(ctx, orgID, KeyTypeChat, before.MonthlyCredits, before.UpdatedAt.Time.UnixMicro(), nil)
+	require.NoError(t, err)
+	require.Equal(t, before.MonthlyCredits, effective)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_NilPreservesDisabledKeyAfterTierTransition(t *testing.T) {
+	t.Parallel()
+
+	for _, keyType := range AllKeyTypes {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierPayg),
+			}))
+
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, keyType)
+			require.NoError(t, err)
+			raisedCap := 321
+			_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, &raisedCap)
+			require.NoError(t, err)
+			require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, keyType))
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierBase),
+			}))
+			patchesBeforeRefresh := upstream.recorded()
+
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, nil)
+			require.NoError(t, err)
+			require.Equal(t, raisedCap, refreshed)
+			require.Equal(t, patchesBeforeRefresh, upstream.recorded(),
+				"a generic refresh must not reinstate a disabled platform key")
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+			})
+			require.NoError(t, err)
+			require.True(t, row.Disabled)
+			require.Equal(t, int64(raisedCap), row.MonthlyCredits)
+		})
+	}
+}
+
+func TestRefreshAPIKeyLimit_NilRepairsLegacyEnabledZeroKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+		MonthlyCredits: 0,
+	}))
+
+	expected, ok := ResolveDefaultCreditLimit(ctx, provisioner.logger, provisioner.db, orgID, billing.TierBase)
+	require.True(t, ok)
+	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, nil)
+	require.NoError(t, err)
+	require.Equal(t, expected, refreshed)
+	require.Len(t, upstream.recorded(), 1, "generic reconciliation must repair a legacy zero key")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, expected, row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_NilPreservesPaygZeroSpendCap(t *testing.T) {
+	t.Parallel()
+
+	for _, keyType := range AllKeyTypes {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierPayg),
+			}))
+
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, keyType)
+			require.NoError(t, err)
+			require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+				MonthlyCredits: 0,
+			}))
+
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, nil)
+			require.NoError(t, err)
+			require.Zero(t, refreshed)
+			require.Empty(t, upstream.recorded(), "generic reconciliation must preserve a PAYG zero spend cap")
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+			})
+			require.NoError(t, err)
+			require.Zero(t, row.MonthlyCredits)
+			require.False(t, row.Disabled)
+		})
+	}
+}
+
+func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+
+	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
+	require.NoError(t, err)
+	require.Positive(t, refreshed)
+	patches := upstream.recorded()
+	require.Len(t, patches, 2, "trial rearm must explicitly PATCH the disabled legacy key")
+	require.Contains(t, patches[1], `"disabled":false`)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, row.Disabled)
+	require.EqualValues(t, refreshed, row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_ExplicitLimitRepairsLegacyEnabledZeroKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+		MonthlyCredits: 0,
+	}))
+
+	limit := 100
+	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+	require.Equal(t, limit, refreshed)
+	require.Len(t, upstream.recorded(), 1, "explicit lifecycle repair must PATCH the legacy key")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, limit, row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_RejectsExplicitZeroLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+
+	zero := 0
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &zero)
+	require.ErrorContains(t, err, "monthly credits must be positive")
+	require.Empty(t, upstream.recorded(), "an invalid ceiling must fail before PATCH")
+
+	after, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Equal(t, before.MonthlyCredits, after.MonthlyCredits)
 }

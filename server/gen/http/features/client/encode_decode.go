@@ -46,6 +46,9 @@ func EncodeGetProductFeaturesRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

@@ -434,7 +434,15 @@ func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, re
 	if session.RevokedAt == nil {
 		return false, nil
 	}
-	s.revokeGeneration(session.Connection.ID, session.Connection.Generation, now)
+	connection, ok := s.connections[session.Connection.ID]
+	if !ok || connection.OrganizationID != organizationID {
+		return false, ErrNotFound
+	}
+	if connection.Generation == session.Connection.Generation && connection.ReauthorizationRequiredAt == nil {
+		s.markGenerationTerminal(connection, ReauthorizationReasonRefreshReuse, now)
+	} else {
+		s.revokeGeneration(session.Connection.ID, session.Connection.Generation, now)
+	}
 	return true, nil
 }
 

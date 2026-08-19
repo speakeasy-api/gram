@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -27,6 +29,88 @@ type OpenRouterKeyRefreshParams struct {
 
 type OpenRouterKeyRefresher struct {
 	TemporalEnv *tenv.Environment
+}
+
+// SetOpenRouterSpendCap starts one durable cap operation and waits until its
+// upstream PATCH, local mirror update, and audit entry have all completed.
+func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, operationID, orgID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) error {
+	if operationID == "" {
+		return errors.New("spend-cap operation ID is required")
+	}
+	if orgID == "" {
+		return errors.New("organization ID is required")
+	}
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("invalid OpenRouter key type: %w", err)
+	}
+	if limit < constants.MinimumPaygSpendCapUSD || limit > constants.MaximumPaygSpendCapUSD {
+		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, limit)
+	}
+
+	workflowID := fmt.Sprintf("v1:openrouter-spend-cap:%s:%s", keyType, operationID)
+	run, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             string(w.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowRunTimeout:    10 * time.Minute,
+	}, OpenRouterSpendCapWorkflow, OpenRouterSpendCapParams{
+		OperationID:      operationID,
+		OrganizationID:   orgID,
+		KeyType:          string(keyType),
+		Limit:            limit,
+		Actor:            actor,
+		ActorDisplayName: actorDisplayName,
+	})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		run = w.TemporalEnv.Client().GetWorkflow(ctx, workflowID, "")
+	case err != nil:
+		return fmt.Errorf("start OpenRouter spend-cap workflow: %w", err)
+	}
+
+	if err := run.Get(ctx, nil); err != nil {
+		return fmt.Errorf("complete OpenRouter spend-cap workflow: %w", err)
+	}
+	return nil
+}
+
+type OpenRouterSpendCapParams struct {
+	OperationID    string
+	OrganizationID string
+	// KeyType is empty only for workflows created before per-key caps. Those
+	// legacy payloads continue to target the other-inference (chat) key.
+	KeyType          string
+	Limit            int
+	Actor            urn.Principal
+	ActorDisplayName *string
+}
+
+func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 45 * time.Second,
+		// The heartbeat carries retry state; it does not extend StartToClose.
+		// Lock acquisition is bounded at 10 seconds and the upstream PATCH at
+		// 20 seconds, leaving time for the local mirror and audit transaction.
+		HeartbeatTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 5,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.SetOpenRouterSpendCap, activities.SetOpenRouterSpendCapArgs{
+		OperationID:      params.OperationID,
+		OrganizationID:   params.OrganizationID,
+		KeyType:          params.KeyType,
+		Limit:            params.Limit,
+		Actor:            params.Actor,
+		ActorDisplayName: params.ActorDisplayName,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("set OpenRouter spend cap: %w", err)
+	}
+	return nil
 }
 
 func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {

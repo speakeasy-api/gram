@@ -3,11 +3,13 @@ package platformmcp
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -32,6 +34,16 @@ func TestConnectionFromRowDerivesLegacyAuthorizationDeadline(t *testing.T) {
 
 	connection := connectionFromRow(row, "client-1")
 	require.Equal(t, reauthorizedAt.Add(platformoauth.AuthorizationLifetime), connection.AuthorizationExpiresAt)
+}
+
+func TestJWTAuthenticationStoreErrorClassifiesAvailability(t *testing.T) {
+	t.Parallel()
+
+	storeErr := errors.New("database unavailable")
+
+	require.ErrorIs(t, jwtAuthenticationStoreError(pgx.ErrNoRows), ErrUnauthorized)
+	require.ErrorIs(t, jwtAuthenticationStoreError(storeErr), ErrUnavailable)
+	require.ErrorIs(t, jwtAuthenticationStoreError(storeErr), storeErr)
 }
 
 func TestVerifyPKCE(t *testing.T) {

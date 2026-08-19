@@ -33,6 +33,16 @@ type SetBillingEmailRequestBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
+// SetSpendCapRequestBody is the type of the "usage" service "setSpendCap"
+// endpoint HTTP request body.
+type SetSpendCapRequestBody struct {
+	// The platform-managed inference key to update. Defaults to chat for
+	// compatibility.
+	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// The monthly inference spend cap in USD
+	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+}
+
 // GetPeriodUsageResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body.
 type GetPeriodUsageResponseBody struct {
@@ -119,6 +129,19 @@ type SetBillingEmailResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
+// SetSpendCapResponseBody is the type of the "usage" service "setSpendCap"
+// endpoint HTTP response body.
+type SetSpendCapResponseBody struct {
+	// The platform-managed inference key whose cap is reported
+	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
+	// The monthly inference spend cap in USD
+	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
+
+// GetInferenceSpendCapsResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body.
+type GetInferenceSpendCapsResponseBody []*InferenceSpendCapResponse
+
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
 // endpoint HTTP response body.
 type GetUsageTiersResponseBody struct {
@@ -130,6 +153,99 @@ type GetUsageTiersResponseBody struct {
 	Payg *TierLimitsResponseBody `form:"payg" json:"payg" xml:"payg"`
 	// The limits for the enterprise tier
 	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
+}
+
+// GetStripeSubscriptionResponseBody is the type of the "usage" service
+// "getStripeSubscription" endpoint HTTP response body.
+type GetStripeSubscriptionResponseBody struct {
+	// The live Stripe subscription status
+	Status string `form:"status" json:"status" xml:"status"`
+	// Start of the current Stripe service period
+	CurrentPeriodStart string `form:"current_period_start" json:"current_period_start" xml:"current_period_start"`
+	// End of the current Stripe service period (exclusive)
+	CurrentPeriodEnd string `form:"current_period_end" json:"current_period_end" xml:"current_period_end"`
+	// Start of the Stripe trial, when the subscription is trialing
+	TrialStart *string `form:"trial_start,omitempty" json:"trial_start,omitempty" xml:"trial_start,omitempty"`
+	// End of the Stripe trial, when one is configured
+	TrialEnd *string `form:"trial_end,omitempty" json:"trial_end,omitempty" xml:"trial_end,omitempty"`
+	// Whether Stripe will cancel the subscription at the end of the current period
+	CancelAtPeriodEnd bool `form:"cancel_at_period_end" json:"cancel_at_period_end" xml:"cancel_at_period_end"`
+	// Scheduled cancellation time, when present
+	CancelAt *string `form:"cancel_at,omitempty" json:"cancel_at,omitempty" xml:"cancel_at,omitempty"`
+	// Time cancellation was requested or completed, when present
+	CanceledAt *string `form:"canceled_at,omitempty" json:"canceled_at,omitempty" xml:"canceled_at,omitempty"`
+	// Whether a past-due subscription has an open latest invoice with an unpaid
+	// balance
+	PaymentFailed bool `form:"payment_failed" json:"payment_failed" xml:"payment_failed"`
+}
+
+// GetPaygBillingSummaryResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body.
+type GetPaygBillingSummaryResponseBody struct {
+	// Start of the live paid Stripe service period
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the live paid Stripe service period (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management in the live paid service period
+	TumTokens int64 `form:"tum_tokens" json:"tum_tokens" xml:"tum_tokens"`
+	// Exact flat USD price per token under management
+	TumUnitPriceUsd string `form:"tum_unit_price_usd" json:"tum_unit_price_usd" xml:"tum_unit_price_usd"`
+	// Exact estimated tokens-under-management cost in USD
+	TumCostUsd string `form:"tum_cost_usd" json:"tum_cost_usd" xml:"tum_cost_usd"`
+	// Exact durable Other inference spend in USD through recorded_through
+	OtherInferenceSpendUsd string `form:"other_inference_spend_usd" json:"other_inference_spend_usd" xml:"other_inference_spend_usd"`
+	// Most recent completed durable UTC spend day included in the estimate
+	RecordedThrough *string `form:"recorded_through,omitempty" json:"recorded_through,omitempty" xml:"recorded_through,omitempty"`
+	// Exact estimated current-cycle total in USD through recorded_through
+	EstimatedTotalUsd string `form:"estimated_total_usd" json:"estimated_total_usd" xml:"estimated_total_usd"`
+}
+
+// CancelStripeSubscriptionResponseBody is the type of the "usage" service
+// "cancelStripeSubscription" endpoint HTTP response body.
+type CancelStripeSubscriptionResponseBody struct {
+	// The live Stripe subscription status
+	Status string `form:"status" json:"status" xml:"status"`
+	// Start of the current Stripe service period
+	CurrentPeriodStart string `form:"current_period_start" json:"current_period_start" xml:"current_period_start"`
+	// End of the current Stripe service period (exclusive)
+	CurrentPeriodEnd string `form:"current_period_end" json:"current_period_end" xml:"current_period_end"`
+	// Start of the Stripe trial, when the subscription is trialing
+	TrialStart *string `form:"trial_start,omitempty" json:"trial_start,omitempty" xml:"trial_start,omitempty"`
+	// End of the Stripe trial, when one is configured
+	TrialEnd *string `form:"trial_end,omitempty" json:"trial_end,omitempty" xml:"trial_end,omitempty"`
+	// Whether Stripe will cancel the subscription at the end of the current period
+	CancelAtPeriodEnd bool `form:"cancel_at_period_end" json:"cancel_at_period_end" xml:"cancel_at_period_end"`
+	// Scheduled cancellation time, when present
+	CancelAt *string `form:"cancel_at,omitempty" json:"cancel_at,omitempty" xml:"cancel_at,omitempty"`
+	// Time cancellation was requested or completed, when present
+	CanceledAt *string `form:"canceled_at,omitempty" json:"canceled_at,omitempty" xml:"canceled_at,omitempty"`
+	// Whether a past-due subscription has an open latest invoice with an unpaid
+	// balance
+	PaymentFailed bool `form:"payment_failed" json:"payment_failed" xml:"payment_failed"`
+}
+
+// ResumeStripeSubscriptionResponseBody is the type of the "usage" service
+// "resumeStripeSubscription" endpoint HTTP response body.
+type ResumeStripeSubscriptionResponseBody struct {
+	// The live Stripe subscription status
+	Status string `form:"status" json:"status" xml:"status"`
+	// Start of the current Stripe service period
+	CurrentPeriodStart string `form:"current_period_start" json:"current_period_start" xml:"current_period_start"`
+	// End of the current Stripe service period (exclusive)
+	CurrentPeriodEnd string `form:"current_period_end" json:"current_period_end" xml:"current_period_end"`
+	// Start of the Stripe trial, when the subscription is trialing
+	TrialStart *string `form:"trial_start,omitempty" json:"trial_start,omitempty" xml:"trial_start,omitempty"`
+	// End of the Stripe trial, when one is configured
+	TrialEnd *string `form:"trial_end,omitempty" json:"trial_end,omitempty" xml:"trial_end,omitempty"`
+	// Whether Stripe will cancel the subscription at the end of the current period
+	CancelAtPeriodEnd bool `form:"cancel_at_period_end" json:"cancel_at_period_end" xml:"cancel_at_period_end"`
+	// Scheduled cancellation time, when present
+	CancelAt *string `form:"cancel_at,omitempty" json:"cancel_at,omitempty" xml:"cancel_at,omitempty"`
+	// Time cancellation was requested or completed, when present
+	CanceledAt *string `form:"canceled_at,omitempty" json:"canceled_at,omitempty" xml:"canceled_at,omitempty"`
+	// Whether a past-due subscription has an open latest invoice with an unpaid
+	// balance
+	PaymentFailed bool `form:"payment_failed" json:"payment_failed" xml:"payment_failed"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -1052,6 +1168,375 @@ type SetBillingEmailGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetSpendCapUnauthorizedResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unauthorized" error.
+type SetSpendCapUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapForbiddenResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "forbidden" error.
+type SetSpendCapForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapBadRequestResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "bad_request" error.
+type SetSpendCapBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapNotFoundResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "not_found" error.
+type SetSpendCapNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapConflictResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "conflict" error.
+type SetSpendCapConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapUnsupportedMediaResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unsupported_media" error.
+type SetSpendCapUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapInvalidResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "invalid" error.
+type SetSpendCapInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapInvariantViolationResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "invariant_violation"
+// error.
+type SetSpendCapInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapUnexpectedResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "unexpected" error.
+type SetSpendCapUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSpendCapGatewayErrorResponseBody is the type of the "usage" service
+// "setSpendCap" endpoint HTTP response body for the "gateway_error" error.
+type SetSpendCapGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsUnauthorizedResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetInferenceSpendCapsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsForbiddenResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "forbidden" error.
+type GetInferenceSpendCapsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsBadRequestResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "bad_request" error.
+type GetInferenceSpendCapsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsNotFoundResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "not_found"
+// error.
+type GetInferenceSpendCapsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsConflictResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "conflict" error.
+type GetInferenceSpendCapsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsUnsupportedMediaResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetInferenceSpendCapsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsInvalidResponseBody is the type of the "usage" service
+// "getInferenceSpendCaps" endpoint HTTP response body for the "invalid" error.
+type GetInferenceSpendCapsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsInvariantViolationResponseBody is the type of the
+// "usage" service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetInferenceSpendCapsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsUnexpectedResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "unexpected" error.
+type GetInferenceSpendCapsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInferenceSpendCapsGatewayErrorResponseBody is the type of the "usage"
+// service "getInferenceSpendCaps" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetInferenceSpendCapsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetUsageTiersUnauthorizedResponseBody is the type of the "usage" service
 // "getUsageTiers" endpoint HTTP response body for the "unauthorized" error.
 type GetUsageTiersUnauthorizedResponseBody struct {
@@ -1790,6 +2275,952 @@ type CreateStripeCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetStripeSubscriptionUnauthorizedResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetStripeSubscriptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionForbiddenResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "forbidden" error.
+type GetStripeSubscriptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionBadRequestResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "bad_request" error.
+type GetStripeSubscriptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionNotFoundResponseBody is the type of the "usage" service
+// "getStripeSubscription" endpoint HTTP response body for the "not_found"
+// error.
+type GetStripeSubscriptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionConflictResponseBody is the type of the "usage" service
+// "getStripeSubscription" endpoint HTTP response body for the "conflict" error.
+type GetStripeSubscriptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionUnsupportedMediaResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetStripeSubscriptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionInvalidResponseBody is the type of the "usage" service
+// "getStripeSubscription" endpoint HTTP response body for the "invalid" error.
+type GetStripeSubscriptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionInvariantViolationResponseBody is the type of the
+// "usage" service "getStripeSubscription" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetStripeSubscriptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionUnexpectedResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "unexpected" error.
+type GetStripeSubscriptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeSubscriptionGatewayErrorResponseBody is the type of the "usage"
+// service "getStripeSubscription" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetPaygBillingSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryForbiddenResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetPaygBillingSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryBadRequestResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "bad_request" error.
+type GetPaygBillingSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryNotFoundResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "not_found"
+// error.
+type GetPaygBillingSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryConflictResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "conflict" error.
+type GetPaygBillingSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryUnsupportedMediaResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetPaygBillingSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryInvalidResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "invalid" error.
+type GetPaygBillingSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryInvariantViolationResponseBody is the type of the
+// "usage" service "getPaygBillingSummary" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetPaygBillingSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryUnexpectedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unexpected" error.
+type GetPaygBillingSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPaygBillingSummaryGatewayErrorResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetPaygBillingSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionUnauthorizedResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateStripePortalSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionForbiddenResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateStripePortalSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionBadRequestResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateStripePortalSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionNotFoundResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "not_found" error.
+type CreateStripePortalSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionConflictResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "conflict" error.
+type CreateStripePortalSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionUnsupportedMediaResponseBody is the type of the
+// "usage" service "createStripePortalSession" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateStripePortalSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionInvalidResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "invalid" error.
+type CreateStripePortalSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionInvariantViolationResponseBody is the type of the
+// "usage" service "createStripePortalSession" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateStripePortalSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionUnexpectedResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateStripePortalSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripePortalSessionGatewayErrorResponseBody is the type of the "usage"
+// service "createStripePortalSession" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateStripePortalSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionUnauthorizedResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "unauthorized" error.
+type CancelStripeSubscriptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionForbiddenResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "forbidden" error.
+type CancelStripeSubscriptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionBadRequestResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "bad_request" error.
+type CancelStripeSubscriptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionNotFoundResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "not_found" error.
+type CancelStripeSubscriptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionConflictResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "conflict" error.
+type CancelStripeSubscriptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionUnsupportedMediaResponseBody is the type of the
+// "usage" service "cancelStripeSubscription" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CancelStripeSubscriptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionInvalidResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "invalid" error.
+type CancelStripeSubscriptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionInvariantViolationResponseBody is the type of the
+// "usage" service "cancelStripeSubscription" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CancelStripeSubscriptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionUnexpectedResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "unexpected" error.
+type CancelStripeSubscriptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelStripeSubscriptionGatewayErrorResponseBody is the type of the "usage"
+// service "cancelStripeSubscription" endpoint HTTP response body for the
+// "gateway_error" error.
+type CancelStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionUnauthorizedResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "unauthorized" error.
+type ResumeStripeSubscriptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionForbiddenResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "forbidden" error.
+type ResumeStripeSubscriptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionBadRequestResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "bad_request" error.
+type ResumeStripeSubscriptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionNotFoundResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "not_found" error.
+type ResumeStripeSubscriptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionConflictResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "conflict" error.
+type ResumeStripeSubscriptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionUnsupportedMediaResponseBody is the type of the
+// "usage" service "resumeStripeSubscription" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ResumeStripeSubscriptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionInvalidResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "invalid" error.
+type ResumeStripeSubscriptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionInvariantViolationResponseBody is the type of the
+// "usage" service "resumeStripeSubscription" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ResumeStripeSubscriptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionUnexpectedResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "unexpected" error.
+type ResumeStripeSubscriptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeStripeSubscriptionGatewayErrorResponseBody is the type of the "usage"
+// service "resumeStripeSubscription" endpoint HTTP response body for the
+// "gateway_error" error.
+type ResumeStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateTopUpCheckoutUnauthorizedResponseBody is the type of the "usage"
 // service "createTopUpCheckout" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1995,6 +3426,18 @@ type TUMPeriodDayResponseBody struct {
 	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
 }
 
+// InferenceSpendCapResponse is used to define fields on response body types.
+type InferenceSpendCapResponse struct {
+	// The platform-managed inference function
+	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
+	// Monthly usage in USD
+	CreditsUsed float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
+	// The enforced monthly spend cap in USD
+	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+	// Whether the platform-managed key is disabled
+	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -2108,6 +3551,30 @@ func NewSetBillingEmailResponseBody(res *usage.BillingEmail) *SetBillingEmailRes
 	return body
 }
 
+// NewSetSpendCapResponseBody builds the HTTP response body from the result of
+// the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapResponseBody(res *usage.SpendCap) *SetSpendCapResponseBody {
+	body := &SetSpendCapResponseBody{
+		KeyType:        res.KeyType,
+		MonthlyCredits: res.MonthlyCredits,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsResponseBody builds the HTTP response body from the
+// result of the "getInferenceSpendCaps" endpoint of the "usage" service.
+func NewGetInferenceSpendCapsResponseBody(res []*usage.InferenceSpendCap) GetInferenceSpendCapsResponseBody {
+	body := make([]*InferenceSpendCapResponse, len(res))
+	for i, val := range res {
+		if val == nil {
+			body[i] = nil
+			continue
+		}
+		body[i] = marshalUsageInferenceSpendCapToInferenceSpendCapResponse(val)
+	}
+	return body
+}
+
 // NewGetUsageTiersResponseBody builds the HTTP response body from the result
 // of the "getUsageTiers" endpoint of the "usage" service.
 func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseBody {
@@ -2123,6 +3590,73 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	}
 	if res.Enterprise != nil {
 		body.Enterprise = marshalUsageTierLimitsToTierLimitsResponseBody(res.Enterprise)
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionResponseBody builds the HTTP response body from the
+// result of the "getStripeSubscription" endpoint of the "usage" service.
+func NewGetStripeSubscriptionResponseBody(res *usage.StripeSubscription) *GetStripeSubscriptionResponseBody {
+	body := &GetStripeSubscriptionResponseBody{
+		Status:             res.Status,
+		CurrentPeriodStart: res.CurrentPeriodStart,
+		CurrentPeriodEnd:   res.CurrentPeriodEnd,
+		TrialStart:         res.TrialStart,
+		TrialEnd:           res.TrialEnd,
+		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
+		CancelAt:           res.CancelAt,
+		CanceledAt:         res.CanceledAt,
+		PaymentFailed:      res.PaymentFailed,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryResponseBody builds the HTTP response body from the
+// result of the "getPaygBillingSummary" endpoint of the "usage" service.
+func NewGetPaygBillingSummaryResponseBody(res *usage.PaygBillingSummary) *GetPaygBillingSummaryResponseBody {
+	body := &GetPaygBillingSummaryResponseBody{
+		PeriodStart:            res.PeriodStart,
+		PeriodEnd:              res.PeriodEnd,
+		TumTokens:              res.TumTokens,
+		TumUnitPriceUsd:        res.TumUnitPriceUsd,
+		TumCostUsd:             res.TumCostUsd,
+		OtherInferenceSpendUsd: res.OtherInferenceSpendUsd,
+		RecordedThrough:        res.RecordedThrough,
+		EstimatedTotalUsd:      res.EstimatedTotalUsd,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionResponseBody builds the HTTP response body from
+// the result of the "cancelStripeSubscription" endpoint of the "usage" service.
+func NewCancelStripeSubscriptionResponseBody(res *usage.StripeSubscription) *CancelStripeSubscriptionResponseBody {
+	body := &CancelStripeSubscriptionResponseBody{
+		Status:             res.Status,
+		CurrentPeriodStart: res.CurrentPeriodStart,
+		CurrentPeriodEnd:   res.CurrentPeriodEnd,
+		TrialStart:         res.TrialStart,
+		TrialEnd:           res.TrialEnd,
+		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
+		CancelAt:           res.CancelAt,
+		CanceledAt:         res.CanceledAt,
+		PaymentFailed:      res.PaymentFailed,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionResponseBody builds the HTTP response body from
+// the result of the "resumeStripeSubscription" endpoint of the "usage" service.
+func NewResumeStripeSubscriptionResponseBody(res *usage.StripeSubscription) *ResumeStripeSubscriptionResponseBody {
+	body := &ResumeStripeSubscriptionResponseBody{
+		Status:             res.Status,
+		CurrentPeriodStart: res.CurrentPeriodStart,
+		CurrentPeriodEnd:   res.CurrentPeriodEnd,
+		TrialStart:         res.TrialStart,
+		TrialEnd:           res.TrialEnd,
+		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
+		CancelAt:           res.CancelAt,
+		CanceledAt:         res.CanceledAt,
+		PaymentFailed:      res.PaymentFailed,
 	}
 	return body
 }
@@ -2841,6 +4375,296 @@ func NewSetBillingEmailGatewayErrorResponseBody(res *goa.ServiceError) *SetBilli
 	return body
 }
 
+// NewSetSpendCapUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapUnauthorizedResponseBody(res *goa.ServiceError) *SetSpendCapUnauthorizedResponseBody {
+	body := &SetSpendCapUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapForbiddenResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapForbiddenResponseBody(res *goa.ServiceError) *SetSpendCapForbiddenResponseBody {
+	body := &SetSpendCapForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapBadRequestResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapBadRequestResponseBody(res *goa.ServiceError) *SetSpendCapBadRequestResponseBody {
+	body := &SetSpendCapBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapNotFoundResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapNotFoundResponseBody(res *goa.ServiceError) *SetSpendCapNotFoundResponseBody {
+	body := &SetSpendCapNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapConflictResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapConflictResponseBody(res *goa.ServiceError) *SetSpendCapConflictResponseBody {
+	body := &SetSpendCapConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapUnsupportedMediaResponseBody(res *goa.ServiceError) *SetSpendCapUnsupportedMediaResponseBody {
+	body := &SetSpendCapUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapInvalidResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapInvalidResponseBody(res *goa.ServiceError) *SetSpendCapInvalidResponseBody {
+	body := &SetSpendCapInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapInvariantViolationResponseBody(res *goa.ServiceError) *SetSpendCapInvariantViolationResponseBody {
+	body := &SetSpendCapInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapUnexpectedResponseBody builds the HTTP response body from the
+// result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapUnexpectedResponseBody(res *goa.ServiceError) *SetSpendCapUnexpectedResponseBody {
+	body := &SetSpendCapUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSpendCapGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "setSpendCap" endpoint of the "usage" service.
+func NewSetSpendCapGatewayErrorResponseBody(res *goa.ServiceError) *SetSpendCapGatewayErrorResponseBody {
+	body := &SetSpendCapGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsUnauthorizedResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsUnauthorizedResponseBody {
+	body := &GetInferenceSpendCapsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsForbiddenResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsForbiddenResponseBody {
+	body := &GetInferenceSpendCapsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsBadRequestResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsBadRequestResponseBody {
+	body := &GetInferenceSpendCapsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsNotFoundResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsNotFoundResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsNotFoundResponseBody {
+	body := &GetInferenceSpendCapsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsConflictResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsConflictResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsConflictResponseBody {
+	body := &GetInferenceSpendCapsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getInferenceSpendCaps" endpoint of the
+// "usage" service.
+func NewGetInferenceSpendCapsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsUnsupportedMediaResponseBody {
+	body := &GetInferenceSpendCapsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsInvalidResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsInvalidResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsInvalidResponseBody {
+	body := &GetInferenceSpendCapsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getInferenceSpendCaps" endpoint of the
+// "usage" service.
+func NewGetInferenceSpendCapsInvariantViolationResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsInvariantViolationResponseBody {
+	body := &GetInferenceSpendCapsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsUnexpectedResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsUnexpectedResponseBody {
+	body := &GetInferenceSpendCapsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInferenceSpendCapsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getInferenceSpendCaps" endpoint of the "usage"
+// service.
+func NewGetInferenceSpendCapsGatewayErrorResponseBody(res *goa.ServiceError) *GetInferenceSpendCapsGatewayErrorResponseBody {
+	body := &GetInferenceSpendCapsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetUsageTiersUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "getUsageTiers" endpoint of the "usage" service.
 func NewGetUsageTiersUnauthorizedResponseBody(res *goa.ServiceError) *GetUsageTiersUnauthorizedResponseBody {
@@ -3421,6 +5245,756 @@ func NewCreateStripeCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 	return body
 }
 
+// NewGetStripeSubscriptionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionUnauthorizedResponseBody(res *goa.ServiceError) *GetStripeSubscriptionUnauthorizedResponseBody {
+	body := &GetStripeSubscriptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionForbiddenResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionForbiddenResponseBody(res *goa.ServiceError) *GetStripeSubscriptionForbiddenResponseBody {
+	body := &GetStripeSubscriptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionBadRequestResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionBadRequestResponseBody(res *goa.ServiceError) *GetStripeSubscriptionBadRequestResponseBody {
+	body := &GetStripeSubscriptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionNotFoundResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionNotFoundResponseBody(res *goa.ServiceError) *GetStripeSubscriptionNotFoundResponseBody {
+	body := &GetStripeSubscriptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionConflictResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionConflictResponseBody(res *goa.ServiceError) *GetStripeSubscriptionConflictResponseBody {
+	body := &GetStripeSubscriptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getStripeSubscription" endpoint of the
+// "usage" service.
+func NewGetStripeSubscriptionUnsupportedMediaResponseBody(res *goa.ServiceError) *GetStripeSubscriptionUnsupportedMediaResponseBody {
+	body := &GetStripeSubscriptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionInvalidResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionInvalidResponseBody(res *goa.ServiceError) *GetStripeSubscriptionInvalidResponseBody {
+	body := &GetStripeSubscriptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getStripeSubscription" endpoint of the
+// "usage" service.
+func NewGetStripeSubscriptionInvariantViolationResponseBody(res *goa.ServiceError) *GetStripeSubscriptionInvariantViolationResponseBody {
+	body := &GetStripeSubscriptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionUnexpectedResponseBody(res *goa.ServiceError) *GetStripeSubscriptionUnexpectedResponseBody {
+	body := &GetStripeSubscriptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeSubscriptionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getStripeSubscription" endpoint of the "usage"
+// service.
+func NewGetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *GetStripeSubscriptionGatewayErrorResponseBody {
+	body := &GetStripeSubscriptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryUnauthorizedResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnauthorizedResponseBody {
+	body := &GetPaygBillingSummaryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryForbiddenResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryForbiddenResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryForbiddenResponseBody {
+	body := &GetPaygBillingSummaryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryBadRequestResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryBadRequestResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryBadRequestResponseBody {
+	body := &GetPaygBillingSummaryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryNotFoundResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryNotFoundResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryNotFoundResponseBody {
+	body := &GetPaygBillingSummaryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryConflictResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryConflictResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryConflictResponseBody {
+	body := &GetPaygBillingSummaryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getPaygBillingSummary" endpoint of the
+// "usage" service.
+func NewGetPaygBillingSummaryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnsupportedMediaResponseBody {
+	body := &GetPaygBillingSummaryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryInvalidResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryInvalidResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryInvalidResponseBody {
+	body := &GetPaygBillingSummaryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getPaygBillingSummary" endpoint of the
+// "usage" service.
+func NewGetPaygBillingSummaryInvariantViolationResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryInvariantViolationResponseBody {
+	body := &GetPaygBillingSummaryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryUnexpectedResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryUnexpectedResponseBody {
+	body := &GetPaygBillingSummaryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPaygBillingSummaryGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getPaygBillingSummary" endpoint of the "usage"
+// service.
+func NewGetPaygBillingSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetPaygBillingSummaryGatewayErrorResponseBody {
+	body := &GetPaygBillingSummaryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createStripePortalSession" endpoint of
+// the "usage" service.
+func NewCreateStripePortalSessionUnauthorizedResponseBody(res *goa.ServiceError) *CreateStripePortalSessionUnauthorizedResponseBody {
+	body := &CreateStripePortalSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionForbiddenResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionForbiddenResponseBody(res *goa.ServiceError) *CreateStripePortalSessionForbiddenResponseBody {
+	body := &CreateStripePortalSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionBadRequestResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionBadRequestResponseBody(res *goa.ServiceError) *CreateStripePortalSessionBadRequestResponseBody {
+	body := &CreateStripePortalSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionNotFoundResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionNotFoundResponseBody(res *goa.ServiceError) *CreateStripePortalSessionNotFoundResponseBody {
+	body := &CreateStripePortalSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionConflictResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionConflictResponseBody(res *goa.ServiceError) *CreateStripePortalSessionConflictResponseBody {
+	body := &CreateStripePortalSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createStripePortalSession" endpoint of
+// the "usage" service.
+func NewCreateStripePortalSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateStripePortalSessionUnsupportedMediaResponseBody {
+	body := &CreateStripePortalSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionInvalidResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionInvalidResponseBody(res *goa.ServiceError) *CreateStripePortalSessionInvalidResponseBody {
+	body := &CreateStripePortalSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createStripePortalSession" endpoint of
+// the "usage" service.
+func NewCreateStripePortalSessionInvariantViolationResponseBody(res *goa.ServiceError) *CreateStripePortalSessionInvariantViolationResponseBody {
+	body := &CreateStripePortalSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createStripePortalSession" endpoint of the
+// "usage" service.
+func NewCreateStripePortalSessionUnexpectedResponseBody(res *goa.ServiceError) *CreateStripePortalSessionUnexpectedResponseBody {
+	body := &CreateStripePortalSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripePortalSessionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createStripePortalSession" endpoint of
+// the "usage" service.
+func NewCreateStripePortalSessionGatewayErrorResponseBody(res *goa.ServiceError) *CreateStripePortalSessionGatewayErrorResponseBody {
+	body := &CreateStripePortalSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionUnauthorizedResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionUnauthorizedResponseBody {
+	body := &CancelStripeSubscriptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionForbiddenResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionForbiddenResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionForbiddenResponseBody {
+	body := &CancelStripeSubscriptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionBadRequestResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionBadRequestResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionBadRequestResponseBody {
+	body := &CancelStripeSubscriptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionNotFoundResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionNotFoundResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionNotFoundResponseBody {
+	body := &CancelStripeSubscriptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionConflictResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionConflictResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionConflictResponseBody {
+	body := &CancelStripeSubscriptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "cancelStripeSubscription" endpoint of
+// the "usage" service.
+func NewCancelStripeSubscriptionUnsupportedMediaResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionUnsupportedMediaResponseBody {
+	body := &CancelStripeSubscriptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionInvalidResponseBody builds the HTTP response body
+// from the result of the "cancelStripeSubscription" endpoint of the "usage"
+// service.
+func NewCancelStripeSubscriptionInvalidResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionInvalidResponseBody {
+	body := &CancelStripeSubscriptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "cancelStripeSubscription" endpoint of
+// the "usage" service.
+func NewCancelStripeSubscriptionInvariantViolationResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionInvariantViolationResponseBody {
+	body := &CancelStripeSubscriptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionUnexpectedResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionUnexpectedResponseBody {
+	body := &CancelStripeSubscriptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelStripeSubscriptionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "cancelStripeSubscription" endpoint of the
+// "usage" service.
+func NewCancelStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *CancelStripeSubscriptionGatewayErrorResponseBody {
+	body := &CancelStripeSubscriptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionUnauthorizedResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionUnauthorizedResponseBody {
+	body := &ResumeStripeSubscriptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionForbiddenResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionForbiddenResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionForbiddenResponseBody {
+	body := &ResumeStripeSubscriptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionBadRequestResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionBadRequestResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionBadRequestResponseBody {
+	body := &ResumeStripeSubscriptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionNotFoundResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionNotFoundResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionNotFoundResponseBody {
+	body := &ResumeStripeSubscriptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionConflictResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionConflictResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionConflictResponseBody {
+	body := &ResumeStripeSubscriptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "resumeStripeSubscription" endpoint of
+// the "usage" service.
+func NewResumeStripeSubscriptionUnsupportedMediaResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionUnsupportedMediaResponseBody {
+	body := &ResumeStripeSubscriptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionInvalidResponseBody builds the HTTP response body
+// from the result of the "resumeStripeSubscription" endpoint of the "usage"
+// service.
+func NewResumeStripeSubscriptionInvalidResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionInvalidResponseBody {
+	body := &ResumeStripeSubscriptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "resumeStripeSubscription" endpoint of
+// the "usage" service.
+func NewResumeStripeSubscriptionInvariantViolationResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionInvariantViolationResponseBody {
+	body := &ResumeStripeSubscriptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionUnexpectedResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionUnexpectedResponseBody {
+	body := &ResumeStripeSubscriptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeStripeSubscriptionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "resumeStripeSubscription" endpoint of the
+// "usage" service.
+func NewResumeStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *ResumeStripeSubscriptionGatewayErrorResponseBody {
+	body := &ResumeStripeSubscriptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateTopUpCheckoutUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "createTopUpCheckout" endpoint of the "usage" service.
 func NewCreateTopUpCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutUnauthorizedResponseBody {
@@ -3615,6 +6189,26 @@ func NewSetBillingEmailPayload(body *SetBillingEmailRequestBody, sessionToken *s
 	return v
 }
 
+// NewSetSpendCapPayload builds a usage service setSpendCap endpoint payload.
+func NewSetSpendCapPayload(body *SetSpendCapRequestBody, sessionToken *string) *usage.SetSpendCapPayload {
+	v := &usage.SetSpendCapPayload{
+		KeyType:        body.KeyType,
+		MonthlyCredits: *body.MonthlyCredits,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetInferenceSpendCapsPayload builds a usage service getInferenceSpendCaps
+// endpoint payload.
+func NewGetInferenceSpendCapsPayload(sessionToken *string) *usage.GetInferenceSpendCapsPayload {
+	v := &usage.GetInferenceSpendCapsPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateCustomerSessionPayload builds a usage service createCustomerSession
 // endpoint payload.
 func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomerSessionPayload {
@@ -3637,6 +6231,51 @@ func NewCreateCheckoutPayload(sessionToken *string) *usage.CreateCheckoutPayload
 // endpoint payload.
 func NewCreateStripeCheckoutPayload(sessionToken *string) *usage.CreateStripeCheckoutPayload {
 	v := &usage.CreateStripeCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetStripeSubscriptionPayload builds a usage service getStripeSubscription
+// endpoint payload.
+func NewGetStripeSubscriptionPayload(sessionToken *string) *usage.GetStripeSubscriptionPayload {
+	v := &usage.GetStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetPaygBillingSummaryPayload builds a usage service getPaygBillingSummary
+// endpoint payload.
+func NewGetPaygBillingSummaryPayload(sessionToken *string) *usage.GetPaygBillingSummaryPayload {
+	v := &usage.GetPaygBillingSummaryPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateStripePortalSessionPayload builds a usage service
+// createStripePortalSession endpoint payload.
+func NewCreateStripePortalSessionPayload(sessionToken *string) *usage.CreateStripePortalSessionPayload {
+	v := &usage.CreateStripePortalSessionPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCancelStripeSubscriptionPayload builds a usage service
+// cancelStripeSubscription endpoint payload.
+func NewCancelStripeSubscriptionPayload(sessionToken *string) *usage.CancelStripeSubscriptionPayload {
+	v := &usage.CancelStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewResumeStripeSubscriptionPayload builds a usage service
+// resumeStripeSubscription endpoint payload.
+func NewResumeStripeSubscriptionPayload(sessionToken *string) *usage.ResumeStripeSubscriptionPayload {
+	v := &usage.ResumeStripeSubscriptionPayload{}
 	v.SessionToken = sessionToken
 
 	return v
@@ -3688,6 +6327,30 @@ func ValidateSetBillingMetadataRequestBody(body *SetBillingMetadataRequestBody) 
 func ValidateSetBillingEmailRequestBody(body *SetBillingEmailRequestBody) (err error) {
 	if body.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", *body.Email, goa.FormatEmail))
+	}
+	return
+}
+
+// ValidateSetSpendCapRequestBody runs the validations defined on
+// SetSpendCapRequestBody
+func ValidateSetSpendCapRequestBody(body *SetSpendCapRequestBody) (err error) {
+	if body.MonthlyCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 1, true))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 10000, false))
+		}
 	}
 	return
 }

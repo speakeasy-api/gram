@@ -212,6 +212,7 @@ var _ = Service("auth", func() {
 			Attribute("user_display_name", String)
 			Attribute("user_photo_url", String)
 			Attribute("is_admin", Boolean)
+			Attribute("impersonator_email", String, "The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.")
 			Attribute("active_organization_id", String)
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")

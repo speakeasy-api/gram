@@ -719,7 +719,7 @@ function PlatformMCPPluginCard(): JSX.Element {
           variant="subheading"
           as="div"
           className="text-md truncate"
-          title="Speakeasy AICP Platform MCP"
+          title="Platform MCP"
         >
           Platform MCP
         </Text>
@@ -729,9 +729,7 @@ function PlatformMCPPluginCard(): JSX.Element {
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        Connects your selected coding agent to Speakeasy through OAuth and
-        includes a reviewed workflow for adding an MCP Catalogue server to an
-        explicit project.
+        Manage MCPs, Risk Policies and explore logs in your favorite agent.
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">

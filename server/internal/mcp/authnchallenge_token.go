@@ -22,6 +22,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -197,7 +199,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "invalid_request")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -223,17 +225,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
@@ -242,7 +244,26 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		d := time.Duration(grant.DesiredSessionDurationHours) * time.Hour
 		desiredSessionDuration = &d
 	}
-	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, baseURL, logger); err != nil {
+	var toolSelection []byte
+	if grant.ToolSelection != nil {
+		// Codes are cached issuer-wide, so a sibling endpoint sharing the
+		// issuer could otherwise redeem this code and mint a session whose
+		// selection is bound to another endpoint's resource — rejected at use
+		// time anyway, but failing the redemption is cheaper than a
+		// 200-then-401 loop.
+		if grant.ToolSelection.Resource != endpointToolSelectionResource(endpoint) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+		}
+		encoded, merr := json.Marshal(grant.ToolSelection)
+		if merr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return oops.E(oops.CodeUnexpected, merr, "encode tool selection").LogError(ctx, logger)
+		}
+		toolSelection = encoded
+	}
+	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, toolSelection, baseURL, logger); err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
 		// lookup, session_duration validation, signing, or persisting the
 		// user_sessions row — so no token reached the client and failed is
@@ -252,7 +273,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// usable token, so the flow did not complete from its perspective.
 		// Conservatively bucketing this rare case as failed (not completed)
 		// keeps completed meaning "a token the client could actually use."
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
 	}
 
@@ -328,7 +349,25 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	// that deadline forward verbatim; it never opens a fresh authorization
 	// window merely because the client exchanged its refresh token.
 	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
-	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, baseURL, logger)
+	// The tool selection rides refresh slides verbatim; only a fresh
+	// authorization-code grant (which re-runs consent) replaces it. Validate
+	// before minting: the serve path rejects a malformed or cross-endpoint
+	// policy anyway, so refusing here returns invalid_grant (forcing reauth)
+	// instead of consuming the refresh token and minting tokens that
+	// immediately 401. The resource check matters on issuers shared across
+	// endpoints: sessions are portable there, but a restrictive selection is
+	// bound to the inventory the user consented on and must not slide onto a
+	// sibling.
+	oldSelection, perr := toolfilter.ParseSessionSelection(oldSession.ToolSelection)
+	if perr != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
+	}
+	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
+	}
+	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, oldSession.ToolSelection, baseURL, logger)
 }
 
 // accessTokenLifetime is the wall-clock validity of a minted access-token
@@ -358,6 +397,10 @@ const accessTokenLifetime = 1 * time.Hour
 // "no explicit choice", falling back to the issuer's session_duration.
 // authorizationExpiresAt is used only for rotation and is carried from the
 // prior row. Exactly one is normally non-nil.
+//
+// toolSelection is the consent-screen tool policy JSON persisted verbatim on
+// the new row (nil = all tools). The auth-code grant encodes it from the
+// consent choice; the refresh grant carries the old row's value.
 func (s *Service) mintSessionAndRespond(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -366,6 +409,7 @@ func (s *Service) mintSessionAndRespond(
 	subject urn.SessionSubject,
 	desiredSessionDuration *time.Duration,
 	authorizationExpiresAt *time.Time,
+	toolSelection []byte,
 	baseURL string,
 	logger *slog.Logger,
 ) error {
@@ -443,6 +487,7 @@ func (s *Service) mintSessionAndRespond(
 		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: *authorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		ToolSelection:       toolSelection,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}

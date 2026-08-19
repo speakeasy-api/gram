@@ -68,6 +68,13 @@ const (
 	// friends). Unregistered for the same reason as skill efficacy: platform
 	// internal key, excluded from Polar and TUM billing, never a BYOK slot.
 	ModelUsageSourceChatAnalysis ModelUsageSource = "chat-analysis"
+
+	// ModelUsageSourceMCPResearch tags the MCP research tools' web-search
+	// completions. Unregistered so it can never appear as a
+	// customer-configurable BYOK slot; the calls run on the org's chat key by
+	// decision, and this tag is what attributes their spend distinctly within
+	// that key's usage.
+	ModelUsageSourceMCPResearch ModelUsageSource = "mcp-research"
 )
 
 // The platform-initiated risk-analysis judges are likewise unregistered:
@@ -104,7 +111,7 @@ func ModelUsageSourceStrings() []string {
 // traffic, and everything Gram itself spends (reactive scanning inference
 // and user-initiated hosted chat alike) is out of scope.
 func GramHostedHookSourceStrings() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), "")
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch), "")
 }
 
 type ModelUsageEvent struct {

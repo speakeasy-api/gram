@@ -32,6 +32,16 @@ func SetBillingEmailUsagePath() string {
 	return "/rpc/usage.setBillingEmail"
 }
 
+// SetSpendCapUsagePath returns the URL path to the usage service setSpendCap HTTP endpoint.
+func SetSpendCapUsagePath() string {
+	return "/rpc/usage.setSpendCap"
+}
+
+// GetInferenceSpendCapsUsagePath returns the URL path to the usage service getInferenceSpendCaps HTTP endpoint.
+func GetInferenceSpendCapsUsagePath() string {
+	return "/rpc/usage.getInferenceSpendCaps"
+}
+
 // GetUsageTiersUsagePath returns the URL path to the usage service getUsageTiers HTTP endpoint.
 func GetUsageTiersUsagePath() string {
 	return "/rpc/usage.getUsageTiers"
@@ -50,6 +60,31 @@ func CreateCheckoutUsagePath() string {
 // CreateStripeCheckoutUsagePath returns the URL path to the usage service createStripeCheckout HTTP endpoint.
 func CreateStripeCheckoutUsagePath() string {
 	return "/rpc/usage.createStripeCheckout"
+}
+
+// GetStripeSubscriptionUsagePath returns the URL path to the usage service getStripeSubscription HTTP endpoint.
+func GetStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.getStripeSubscription"
+}
+
+// GetPaygBillingSummaryUsagePath returns the URL path to the usage service getPaygBillingSummary HTTP endpoint.
+func GetPaygBillingSummaryUsagePath() string {
+	return "/rpc/usage.getPaygBillingSummary"
+}
+
+// CreateStripePortalSessionUsagePath returns the URL path to the usage service createStripePortalSession HTTP endpoint.
+func CreateStripePortalSessionUsagePath() string {
+	return "/rpc/usage.createStripePortalSession"
+}
+
+// CancelStripeSubscriptionUsagePath returns the URL path to the usage service cancelStripeSubscription HTTP endpoint.
+func CancelStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.cancelStripeSubscription"
+}
+
+// ResumeStripeSubscriptionUsagePath returns the URL path to the usage service resumeStripeSubscription HTTP endpoint.
+func ResumeStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.resumeStripeSubscription"
 }
 
 // CreateTopUpCheckoutUsagePath returns the URL path to the usage service createTopUpCheckout HTTP endpoint.

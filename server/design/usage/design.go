@@ -3,6 +3,7 @@ package usage
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -97,6 +98,84 @@ var BillingEmail = Type("BillingEmail", func() {
 	Attribute("email", String, "The configured billing notification email. Omitted when organization administrators receive billing notifications.", func() {
 		Format(FormatEmail)
 	})
+})
+
+// SpendCap is the monthly USD ceiling enforced by one of the organization's
+// platform-managed inference keys.
+var SpendCap = Type("SpendCap", func() {
+	Attribute("key_type", String, "The platform-managed inference key whose cap is reported", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
+		Minimum(constants.MinimumPaygSpendCapUSD)
+		Maximum(constants.MaximumPaygSpendCapUSD)
+	})
+
+	Required("key_type", "monthly_credits")
+})
+
+// InferenceSpendCap reports current usage and the enforced monthly ceiling for
+// one materialized platform-managed inference key.
+var InferenceSpendCap = Type("InferenceSpendCap", func() {
+	Attribute("key_type", String, "The platform-managed inference function", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("credits_used", Float64, "Monthly usage in USD")
+	Attribute("monthly_credits", Int, "The enforced monthly spend cap in USD")
+	Attribute("disabled", Boolean, "Whether the platform-managed key is disabled")
+
+	Required("key_type", "credits_used", "monthly_credits", "disabled")
+})
+
+// StripeSubscription reports the live lifecycle state of the organization's
+// Stripe PAYG subscription.
+var StripeSubscription = Type("StripeSubscription", func() {
+	Attribute("status", String, "The live Stripe subscription status", func() {
+		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
+	})
+	Attribute("current_period_start", String, "Start of the current Stripe service period", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("current_period_end", String, "End of the current Stripe service period (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("trial_start", String, "Start of the Stripe trial, when the subscription is trialing", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("trial_end", String, "End of the Stripe trial, when one is configured", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("cancel_at_period_end", Boolean, "Whether Stripe will cancel the subscription at the end of the current period")
+	Attribute("cancel_at", String, "Scheduled cancellation time, when present", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("canceled_at", String, "Time cancellation was requested or completed, when present", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("payment_failed", Boolean, "Whether a past-due subscription has an open latest invoice with an unpaid balance")
+
+	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
+})
+
+// PaygBillingSummary reports billable usage and exact estimated cost for the
+// organization's live Stripe service period.
+var PaygBillingSummary = Type("PaygBillingSummary", func() {
+	Attribute("period_start", String, "Start of the live paid Stripe service period", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("period_end", String, "End of the live paid Stripe service period (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("tum_tokens", Int64, "Tokens under management in the live paid service period")
+	Attribute("tum_unit_price_usd", String, "Exact flat USD price per token under management")
+	Attribute("tum_cost_usd", String, "Exact estimated tokens-under-management cost in USD")
+	Attribute("other_inference_spend_usd", String, "Exact durable Other inference spend in USD through recorded_through")
+	Attribute("recorded_through", String, "Most recent completed durable UTC spend day included in the estimate", func() {
+		Format(FormatDate)
+	})
+	Attribute("estimated_total_usd", String, "Exact estimated current-cycle total in USD through recorded_through")
+
+	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
 var _ = Service("usage", func() {
@@ -222,6 +301,54 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingEmail"}`)
 	})
 
+	Method("setSpendCap", func() {
+		Description("Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("key_type", String, "The platform-managed inference key to update. Defaults to chat for compatibility.", func() {
+				Enum("chat", "internal")
+			})
+			Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
+			})
+			Required("monthly_credits")
+		})
+
+		Result(SpendCap)
+
+		HTTP(func() {
+			POST("/rpc/usage.setSpendCap")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setSpendCap"}`)
+	})
+
+	Method("getInferenceSpendCaps", func() {
+		Description("List current usage and caps for the organization's materialized platform-managed inference keys")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ArrayOf(InferenceSpendCap))
+
+		HTTP(func() {
+			GET("/rpc/usage.getInferenceSpendCaps")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getInferenceSpendCaps"}`)
+	})
+
 	Method("getUsageTiers", func() {
 		Description("Get the usage tiers")
 
@@ -297,6 +424,106 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "createStripeCheckout")
 		Meta("openapi:extension:x-speakeasy-name-override", "createStripeCheckout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
+	})
+
+	Method("getStripeSubscription", func() {
+		Description("Get the live lifecycle state of the organization's Stripe PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			GET("/rpc/usage.getStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "getStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getStripeSubscription"}`)
+	})
+
+	Method("getPaygBillingSummary", func() {
+		Description("Get exact billable usage and estimated cost for the organization's live paid Stripe service period")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(PaygBillingSummary)
+
+		HTTP(func() {
+			GET("/rpc/usage.getPaygBillingSummary")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPaygBillingSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPaygBillingSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPaygBillingSummary"}`)
+	})
+
+	Method("createStripePortalSession", func() {
+		Description("Create a Stripe customer portal session for the organization's PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createStripePortalSession")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStripePortalSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStripePortalSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripePortalSession"}`)
+	})
+
+	Method("cancelStripeSubscription", func() {
+		Description("Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			POST("/rpc/usage.cancelStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "cancelStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "cancelStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "cancelStripeSubscription"}`)
+	})
+
+	Method("resumeStripeSubscription", func() {
+		Description("Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			POST("/rpc/usage.resumeStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resumeStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "resumeStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "resumeStripeSubscription"}`)
 	})
 
 	Method("createTopUpCheckout", func() {

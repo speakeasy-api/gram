@@ -10,6 +10,46 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: GetPaygBillingSummaryCosts :one
+WITH inputs AS (
+  SELECT
+      sqlc.arg(tum_tokens)::bigint AS tum_tokens
+    , sqlc.arg(tum_unit_price_usd)::text::numeric(20, 8) AS tum_unit_price_usd
+), completed_spend AS (
+  SELECT
+      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
+    , MAX(day)::date AS recorded_through
+  FROM openrouter_spend_daily
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = 'chat'
+    AND day >= (sqlc.arg(period_start)::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < (sqlc.arg(period_end)::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < (sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
+)
+SELECT
+    inputs.tum_unit_price_usd::text AS tum_unit_price_usd
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
+  , completed_spend.other_inference_spend_usd::text AS other_inference_spend_usd
+  , completed_spend.recorded_through
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd + completed_spend.other_inference_spend_usd)::numeric(30, 8)::text AS estimated_total_usd
+FROM inputs
+CROSS JOIN completed_spend;
+
+-- name: ListMaterializedOpenRouterInferenceKeys :many
+SELECT key_type, monthly_credits, disabled
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = ANY(@key_types::text[])
+  AND deleted IS FALSE
+ORDER BY key_type;
+
+-- name: GetMaterializedOpenRouterInferenceKey :one
+SELECT key_type, disabled
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: LockBillingMetadata :one
 SELECT *
 FROM billing_metadata
@@ -190,9 +230,12 @@ SELECT EXISTS (
 -- Serializes distinct Stripe events that refer to the same subscription.
 SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
 
--- name: AcquireOpenRouterChatBillingLock :exec
--- Serializes billing state changes with the chat-key reconciler.
-SELECT pg_advisory_xact_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+-- name: AcquireOpenRouterBillingLock :exec
+-- Serializes one platform inference key with cap writes/reconciliation. The
+-- caller acquires every platform key in the order defined by AllKeyTypes.
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
 
 -- name: GetPaygActivationState :one
 SELECT
@@ -274,6 +317,14 @@ VALUES (@organization_id, @stripe_customer_id);
 -- Test-only fixture for checkout tests that need an existing Stripe subscription.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id, stripe_subscription_id)
 VALUES (@organization_id, @stripe_customer_id, @stripe_subscription_id);
+
+-- name: UpsertOpenRouterDailySpendFixture :exec
+-- Test-only fixture for billing-summary reads.
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES (@organization_id, 'chat', @day, @spend_usd)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp();
 
 -- name: SetStripeSubscriptionFixture :exec
 -- Test-only fixture for ownership-conflict webhook tests.

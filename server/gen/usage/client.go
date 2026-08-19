@@ -15,31 +15,45 @@ import (
 
 // Client is the "usage" service client.
 type Client struct {
-	GetPeriodUsageEndpoint           goa.Endpoint
-	GetTokensUnderManagementEndpoint goa.Endpoint
-	SetBillingMetadataEndpoint       goa.Endpoint
-	GetBillingEmailEndpoint          goa.Endpoint
-	SetBillingEmailEndpoint          goa.Endpoint
-	GetUsageTiersEndpoint            goa.Endpoint
-	CreateCustomerSessionEndpoint    goa.Endpoint
-	CreateCheckoutEndpoint           goa.Endpoint
-	CreateStripeCheckoutEndpoint     goa.Endpoint
-	CreateTopUpCheckoutEndpoint      goa.Endpoint
+	GetPeriodUsageEndpoint            goa.Endpoint
+	GetTokensUnderManagementEndpoint  goa.Endpoint
+	SetBillingMetadataEndpoint        goa.Endpoint
+	GetBillingEmailEndpoint           goa.Endpoint
+	SetBillingEmailEndpoint           goa.Endpoint
+	SetSpendCapEndpoint               goa.Endpoint
+	GetInferenceSpendCapsEndpoint     goa.Endpoint
+	GetUsageTiersEndpoint             goa.Endpoint
+	CreateCustomerSessionEndpoint     goa.Endpoint
+	CreateCheckoutEndpoint            goa.Endpoint
+	CreateStripeCheckoutEndpoint      goa.Endpoint
+	GetStripeSubscriptionEndpoint     goa.Endpoint
+	GetPaygBillingSummaryEndpoint     goa.Endpoint
+	CreateStripePortalSessionEndpoint goa.Endpoint
+	CancelStripeSubscriptionEndpoint  goa.Endpoint
+	ResumeStripeSubscriptionEndpoint  goa.Endpoint
+	CreateTopUpCheckoutEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
-		GetPeriodUsageEndpoint:           getPeriodUsage,
-		GetTokensUnderManagementEndpoint: getTokensUnderManagement,
-		SetBillingMetadataEndpoint:       setBillingMetadata,
-		GetBillingEmailEndpoint:          getBillingEmail,
-		SetBillingEmailEndpoint:          setBillingEmail,
-		GetUsageTiersEndpoint:            getUsageTiers,
-		CreateCustomerSessionEndpoint:    createCustomerSession,
-		CreateCheckoutEndpoint:           createCheckout,
-		CreateStripeCheckoutEndpoint:     createStripeCheckout,
-		CreateTopUpCheckoutEndpoint:      createTopUpCheckout,
+		GetPeriodUsageEndpoint:            getPeriodUsage,
+		GetTokensUnderManagementEndpoint:  getTokensUnderManagement,
+		SetBillingMetadataEndpoint:        setBillingMetadata,
+		GetBillingEmailEndpoint:           getBillingEmail,
+		SetBillingEmailEndpoint:           setBillingEmail,
+		SetSpendCapEndpoint:               setSpendCap,
+		GetInferenceSpendCapsEndpoint:     getInferenceSpendCaps,
+		GetUsageTiersEndpoint:             getUsageTiers,
+		CreateCustomerSessionEndpoint:     createCustomerSession,
+		CreateCheckoutEndpoint:            createCheckout,
+		CreateStripeCheckoutEndpoint:      createStripeCheckout,
+		GetStripeSubscriptionEndpoint:     getStripeSubscription,
+		GetPaygBillingSummaryEndpoint:     getPaygBillingSummary,
+		CreateStripePortalSessionEndpoint: createStripePortalSession,
+		CancelStripeSubscriptionEndpoint:  cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:  resumeStripeSubscription,
+		CreateTopUpCheckoutEndpoint:       createTopUpCheckout,
 	}
 }
 
@@ -155,6 +169,51 @@ func (c *Client) SetBillingEmail(ctx context.Context, p *SetBillingEmailPayload)
 	return ires.(*BillingEmail), nil
 }
 
+// SetSpendCap calls the "setSpendCap" endpoint of the "usage" service.
+// SetSpendCap may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetSpendCap(ctx context.Context, p *SetSpendCapPayload) (res *SpendCap, err error) {
+	var ires any
+	ires, err = c.SetSpendCapEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SpendCap), nil
+}
+
+// GetInferenceSpendCaps calls the "getInferenceSpendCaps" endpoint of the
+// "usage" service.
+// GetInferenceSpendCaps may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceSpendCaps(ctx context.Context, p *GetInferenceSpendCapsPayload) (res []*InferenceSpendCap, err error) {
+	var ires any
+	ires, err = c.GetInferenceSpendCapsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*InferenceSpendCap), nil
+}
+
 // GetUsageTiers calls the "getUsageTiers" endpoint of the "usage" service.
 // GetUsageTiers may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -243,6 +302,121 @@ func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeChecko
 		return
 	}
 	return ires.(string), nil
+}
+
+// GetStripeSubscription calls the "getStripeSubscription" endpoint of the
+// "usage" service.
+// GetStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetStripeSubscription(ctx context.Context, p *GetStripeSubscriptionPayload) (res *StripeSubscription, err error) {
+	var ires any
+	ires, err = c.GetStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*StripeSubscription), nil
+}
+
+// GetPaygBillingSummary calls the "getPaygBillingSummary" endpoint of the
+// "usage" service.
+// GetPaygBillingSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSummaryPayload) (res *PaygBillingSummary, err error) {
+	var ires any
+	ires, err = c.GetPaygBillingSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PaygBillingSummary), nil
+}
+
+// CreateStripePortalSession calls the "createStripePortalSession" endpoint of
+// the "usage" service.
+// CreateStripePortalSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateStripePortalSession(ctx context.Context, p *CreateStripePortalSessionPayload) (res string, err error) {
+	var ires any
+	ires, err = c.CreateStripePortalSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(string), nil
+}
+
+// CancelStripeSubscription calls the "cancelStripeSubscription" endpoint of
+// the "usage" service.
+// CancelStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CancelStripeSubscription(ctx context.Context, p *CancelStripeSubscriptionPayload) (res *StripeSubscription, err error) {
+	var ires any
+	ires, err = c.CancelStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*StripeSubscription), nil
+}
+
+// ResumeStripeSubscription calls the "resumeStripeSubscription" endpoint of
+// the "usage" service.
+// ResumeStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResumeStripeSubscription(ctx context.Context, p *ResumeStripeSubscriptionPayload) (res *StripeSubscription, err error) {
+	var ires any
+	ires, err = c.ResumeStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*StripeSubscription), nil
 }
 
 // CreateTopUpCheckout calls the "createTopUpCheckout" endpoint of the "usage"

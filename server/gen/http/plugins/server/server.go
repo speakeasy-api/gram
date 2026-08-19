@@ -30,6 +30,7 @@ type Server struct {
 	UpdatePluginServer          http.Handler
 	RemovePluginServer          http.Handler
 	SetPluginAssignments        http.Handler
+	ListAudiences               http.Handler
 	DownloadPluginPackage       http.Handler
 	DownloadPlatformMCPPlugin   http.Handler
 	DownloadObservabilityPlugin http.Handler
@@ -78,6 +79,7 @@ func New(
 			{"UpdatePluginServer", "PUT", "/rpc/plugins.updatePluginServer"},
 			{"RemovePluginServer", "DELETE", "/rpc/plugins.removePluginServer"},
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
+			{"ListAudiences", "GET", "/rpc/plugins.listAudiences"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
 			{"DownloadPlatformMCPPlugin", "GET", "/rpc/plugins.downloadPlatformMCPPlugin"},
 			{"DownloadObservabilityPlugin", "GET", "/rpc/plugins.downloadObservabilityPlugin"},
@@ -98,6 +100,7 @@ func New(
 		UpdatePluginServer:          NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
 		RemovePluginServer:          NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
 		SetPluginAssignments:        NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
+		ListAudiences:               NewListAudiencesHandler(e.ListAudiences, mux, decoder, encoder, errhandler, formatter),
 		DownloadPluginPackage:       NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
 		DownloadPlatformMCPPlugin:   NewDownloadPlatformMCPPluginHandler(e.DownloadPlatformMCPPlugin, mux, decoder, encoder, errhandler, formatter),
 		DownloadObservabilityPlugin: NewDownloadObservabilityPluginHandler(e.DownloadObservabilityPlugin, mux, decoder, encoder, errhandler, formatter),
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdatePluginServer = m(s.UpdatePluginServer)
 	s.RemovePluginServer = m(s.RemovePluginServer)
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
+	s.ListAudiences = m(s.ListAudiences)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
 	s.DownloadPlatformMCPPlugin = m(s.DownloadPlatformMCPPlugin)
 	s.DownloadObservabilityPlugin = m(s.DownloadObservabilityPlugin)
@@ -151,6 +155,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdatePluginServerHandler(mux, h.UpdatePluginServer)
 	MountRemovePluginServerHandler(mux, h.RemovePluginServer)
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
+	MountListAudiencesHandler(mux, h.ListAudiences)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
 	MountDownloadPlatformMCPPluginHandler(mux, h.DownloadPlatformMCPPlugin)
 	MountDownloadObservabilityPluginHandler(mux, h.DownloadObservabilityPlugin)
@@ -622,6 +627,59 @@ func NewSetPluginAssignmentsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setPluginAssignments")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAudiencesHandler configures the mux to serve the "plugins" service
+// "listAudiences" endpoint.
+func MountListAudiencesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.listAudiences", f)
+}
+
+// NewListAudiencesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "plugins" service "listAudiences" endpoint.
+func NewListAudiencesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAudiencesRequest(mux, decoder)
+		encodeResponse = EncodeListAudiencesResponse(encoder)
+		encodeError    = EncodeListAudiencesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAudiences")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
 		payload, err := decodeRequest(r)
 		if err != nil {

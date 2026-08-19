@@ -31,19 +31,31 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 2 toolsets (+versions)           | `[~]`  |
 | Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                 | `[~]`  |
 | Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                     | `[~]`  |
-| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×4 + `hooks:` telemetry rows                                                                                              | `[~]`  |
+| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×15 + `hooks:` telemetry rows                                                                                             | `[~]`  |
 | Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                        | `[~]`  |
+
+## Local only (RunLocalFixtures, never the demo org)
+
+These come from `server/internal/demoseed/local.go` after the seed, so they are
+present in a developer's org and deliberately absent from the shared demo org.
+
+| Page               | Backing data                                                                      |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Environments       | One `Default` environment                                                         |
+| Sources → tunnels  | `tunneled_mcp_servers` + issuer + `mcp_servers`/`mcp_endpoints` fixed-key fixture |
+| Playground MCP App | Functions deployment + UI resource, zipped from `demoseed/mcpapp/`                |
+| API keys           | The well-known `seed-key`                                                         |
+| Catalog            | The global `Gram Recommended` registry row                                        |
 
 ## Not seeded (deliberate)
 
-| Page                                   | Why                                                          |
-| -------------------------------------- | ------------------------------------------------------------ |
-| Plugins / Assistants                   | Auto-provision on first visit; empty state is intentional    |
-| Catalog                                | Registry-backed, self-populating                             |
-| Environments / Integrations / Triggers | Acceptable empty states                                      |
-| Billing / Device agent / Settings      | Render fine without seed data                                |
-| ChatGPT/Work usage split               | Later phase (`chatgpt:usage:metrics` rows)                   |
-| Logs page content                      | Enterprise-gated for the demo account type (README change 7) |
+| Page                              | Why                                                          |
+| --------------------------------- | ------------------------------------------------------------ |
+| Plugins / Assistants              | Auto-provision on first visit; empty state is intentional    |
+| Integrations / Triggers           | Acceptable empty states                                      |
+| Billing / Device agent / Settings | Render fine without seed data                                |
+| ChatGPT/Work usage split          | Later phase (`chatgpt:usage:metrics` rows)                   |
+| Logs page content                 | Enterprise-gated for the demo account type (README change 7) |
 
 ## Rules when extending
 

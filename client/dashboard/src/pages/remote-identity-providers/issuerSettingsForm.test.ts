@@ -21,6 +21,7 @@ const snapshot = {
 const baseState = {
   id: "issuer-1",
   name: "  Example IdP  ",
+  logoAssetId: "  11111111-2222-3333-4444-555555555555  ",
   slug: "  example-idp  ",
   clientSetupDocumentationUrl: "  https://docs.example.com/oauth  ",
   issuerUrl: "  https://idp.example.com  ",
@@ -36,6 +37,7 @@ describe("buildUpdateIssuerForm", () => {
     const form = buildUpdateIssuerForm(baseState);
 
     expect(form.name).toBe("Example IdP");
+    expect(form.logoAssetId).toBe("11111111-2222-3333-4444-555555555555");
     expect(form.slug).toBe("example-idp");
     expect(form.issuer).toBe("https://idp.example.com");
     expect(form.authorizationEndpoint).toBe(
@@ -53,10 +55,13 @@ describe("buildUpdateIssuerForm", () => {
       ...baseState,
       clientSetupDocumentationUrl: "",
       registrationEndpoint: "",
+      logoAssetId: "",
     });
 
     expect(form).toHaveProperty("clientSetupDocumentationUrl", "");
     expect(form).toHaveProperty("registrationEndpoint", "");
+    // "" is the explicit "clear the saved logo to NULL" sentinel.
+    expect(form).toHaveProperty("logoAssetId", "");
   });
 
   // Without a discovery for the current URL the server must keep the metadata

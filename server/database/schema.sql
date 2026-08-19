@@ -1300,6 +1300,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_project_id_deleted_idx ON http_tool_definitions (project_id, deleted);
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1912,6 +1913,14 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Deliberately nullable with no default, unlike the capability arrays
+  -- above: MCP requires refusing authorization when the upstream advertises
+  -- no PKCE methods, so an empty array is a load-bearing "refuse" signal.
+  -- NULL means discovery has not captured the field for this row yet (the
+  -- row predates capture or has not refreshed since), which must stay
+  -- distinct from "the upstream advertised nothing". Do not "fix" this into
+  -- consistency with the siblings.
+  code_challenge_methods_supported TEXT[],
   -- Unlike the fields above, this comes from the OAuth CIMD draft
   -- (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414. It
   -- marks whether the issuer accepts a Client ID Metadata Document URL as
@@ -4147,6 +4156,28 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- fields.
   metadata JSONB,
 
+  -- acting_surface and acting_client_id record how a change was made, which
+  -- the actor fields alone cannot express: the same user acting through the
+  -- dashboard and through an agent over Platform MCP is indistinguishable
+  -- without them. Reviewing a runaway agent's burst of activity depends on
+  -- telling the two apart.
+  --
+  -- The surface is a low-cardinality value drawn from a server-side allowlist,
+  -- never a client-supplied string.
+  --
+  -- Nullable, and left that way deliberately. Rows written before this column
+  -- existed have no recorded surface, and no backfill invents one for them;
+  -- the application reads NULL as an unknown surface, so the distinction is
+  -- explicit where it is displayed rather than written into every historic
+  -- row. Every row written from here on carries a value.
+  acting_surface TEXT,
+
+  -- The registered OAuth client the call authenticated as, when it had one.
+  -- Sourced from the token's client record rather than a request header, so a
+  -- caller cannot name itself. NULL means the call carried no OAuth client,
+  -- which is not the same as an unrecognized one.
+  acting_client_id TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
@@ -5376,6 +5407,17 @@ CREATE TABLE IF NOT EXISTS mcp_approval_requests (
   evidence_version INTEGER NOT NULL DEFAULT 1,
   evidence_collected_at timestamptz,
 
+  -- When the permission-relevant evidence (OAuth scopes, authority mode,
+  -- maintainer set, published advisories) was last seen to differ from what
+  -- the latest approval rested on. NULL means no outstanding change. Set by
+  -- change detection; cleared only by recording a new decision, which freezes
+  -- a fresh snapshot — the change stays flagged until an admin re-decides.
+  evidence_changed_at timestamptz,
+  -- Fingerprint of the changed evidence that has already been announced, so a
+  -- daily recheck flags each distinct change once instead of re-notifying on
+  -- every sweep.
+  notified_change_fingerprint TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -5448,6 +5490,15 @@ CREATE TABLE IF NOT EXISTS mcp_research_reports (
   report JSONB NOT NULL DEFAULT '{}'::jsonb,
   report_version INTEGER NOT NULL DEFAULT 1,
 
+  -- The per-action trace: an ordered array of the tool calls the run made,
+  -- one object per search or page fetch, with the outcome, the injection
+  -- judge's verdict, and a bounded preview of the untrusted text it saw. The
+  -- report above is a run-level synthesis that drops most of what was read;
+  -- this is what the agent actually did. The runner produces all of it during
+  -- the run and would otherwise discard it. No page bodies are stored — only
+  -- previews — and a preview is untrusted web content, never executed.
+  tool_calls JSONB NOT NULL DEFAULT '[]'::jsonb,
+
   -- Reproducibility. A report is part of an audit trail and re-runs are
   -- additive, so a reader must be able to tell which run a decision rested on
   -- and what produced it.
@@ -5466,6 +5517,7 @@ CREATE TABLE IF NOT EXISTS mcp_research_reports (
 
   CONSTRAINT mcp_research_reports_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_research_reports_report_check CHECK (jsonb_typeof(report) = 'object'),
+  CONSTRAINT mcp_research_reports_tool_calls_check CHECK (jsonb_typeof(tool_calls) = 'array'),
   CONSTRAINT mcp_research_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT mcp_research_reports_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   -- Composite so the report cannot claim one project while its request
@@ -5570,6 +5622,13 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS mcp_approval_requests_artifact_ref_idx
 ON mcp_approval_requests (artifact_ref)
 WHERE deleted IS FALSE AND artifact_ref IS NOT NULL;
+
+-- Serves the daily change-detection sweep, which scans approved reviews
+-- across every project in keyset order. Partial and id-ordered so a page is
+-- an index range rather than a walk over every review in the installation.
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_approved_id_idx
+ON mcp_approval_requests (id)
+WHERE deleted IS FALSE AND status = 'approved';
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_request_requesters_request_id_user_id_key
 ON mcp_approval_request_requesters (mcp_approval_request_id, user_id)
@@ -6661,6 +6720,12 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
   milestone TEXT NOT NULL,
   connection_id uuid,
   connection_generation uuid,
+  -- The real user the milestone is attributed to, and the surface that recorded
+  -- it. A surface acting under assistant identity holds no OAuth connection, so
+  -- its evidence is keyed by user instead. Values are validated in application
+  -- code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   project_id uuid,
   mcp_key TEXT NOT NULL DEFAULT '',
   attempt_id uuid,
@@ -6690,6 +6755,10 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
       'read_only_cohort'
     )
     OR (connection_id IS NOT NULL AND connection_generation IS NOT NULL)
+    -- A connection-less surface records the same evidence against its user, and
+    -- is connection-free on both columns: a row with a half-set pair would fall
+    -- between the two unique indexes below and have no idempotency grain.
+    OR (user_id IS NOT NULL AND connection_id IS NULL AND connection_generation IS NULL)
   ),
   CONSTRAINT platform_mcp_onboarding_milestones_first_value_target_check CHECK (
     milestone <> 'first_value_achieved'
@@ -6707,6 +6776,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_connection_
 ON platform_mcp_onboarding_milestones (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
   AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'catalog_explored',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+  );
+
+-- The same evidence recorded by a connection-less surface has no generation to
+-- key on, so its grain is the acting user. Without this a surface acting under
+-- assistant identity would append a new row on every catalogue search.
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_user_key
+ON platform_mcp_onboarding_milestones (organization_id, milestone, user_id)
+WHERE connection_id IS NULL
+  AND connection_generation IS NULL
+  AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
     'authorization_failed',
@@ -6906,8 +6993,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and setup handoffs must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_key TEXT NOT NULL,
   intent TEXT NOT NULL,
   handoff_hash TEXT NOT NULL,
@@ -6918,6 +7012,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_setup_handoffs_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_setup_handoffs_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_setup_handoffs_provider_key_check CHECK (provider_key <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_intent_check CHECK (intent <> ''),
   CONSTRAINT platform_mcp_setup_handoffs_handoff_hash_check CHECK (handoff_hash <> ''),
@@ -6936,8 +7032,13 @@ ON platform_mcp_setup_handoffs (handoff_hash);
 
 -- Issuers must invalidate an expired unredeemed handoff before issuing its
 -- replacement; a partial-index predicate cannot depend on clock time.
+-- NULLS NOT DISTINCT so the one-active-handoff invariant survives a
+-- connection-less issuer: with the default NULLS DISTINCT, two rows whose
+-- connection columns are both NULL would not collide and a surface acting
+-- under assistant identity could hold several active handoffs at once.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_active_binding_key
 ON platform_mcp_setup_handoffs (registration_id, connection_id, connection_generation, intent)
+NULLS NOT DISTINCT
 WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
@@ -6959,8 +7060,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid NOT NULL,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and readiness evidence must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   provider_authorization_fingerprint TEXT NOT NULL,
   state TEXT NOT NULL,
   evidence_code TEXT,
@@ -6970,6 +7078,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_readiness_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_readiness_provider_authorization_fingerprint_check CHECK (provider_authorization_fingerprint <> ''),
   CONSTRAINT platform_mcp_readiness_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_readiness_organization_id_fkey
@@ -6982,8 +7092,13 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
 
+-- NULLS NOT DISTINCT so readiness evidence stays one row per registration and
+-- fingerprint for a connection-less writer too. Otherwise the upsert never
+-- matches an existing NULL-connection row and each probe appends new evidence
+-- instead of refreshing the current row.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
-ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint);
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+NULLS NOT DISTINCT;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
 ON platform_mcp_readiness (registration_id, checked_at DESC);
@@ -7092,11 +7207,20 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   attachment_was_created boolean NOT NULL,
   publication_state TEXT NOT NULL DEFAULT 'pending',
   publication_updated_at timestamptz,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable together: a surface acting under assistant identity holds no
+  -- OAuth connection, and distributions must still be attributable.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the row is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated
+  -- in application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT platform_mcp_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_distributions_connection_generation_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_distributions_state_check CHECK (state <> ''),
   CONSTRAINT platform_mcp_distributions_version_check CHECK (version > 0),
   CONSTRAINT platform_mcp_distributions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,

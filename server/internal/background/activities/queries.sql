@@ -37,15 +37,6 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
--- name: AcquireOpenRouterKeyBillingLock :exec
--- Billing transitions take the matching transaction lock before changing an
--- organization's projection. Holding this session lock through the final
--- eligibility read and delivery makes either the old or new tier win cleanly.
-SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
-
--- name: ReleaseOpenRouterKeyBillingLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
-
 -- name: GetAllOrganizationsWithToolsets :many
 SELECT
     organization_metadata.id,
@@ -58,15 +49,15 @@ WHERE toolsets.deleted = false
 GROUP BY organization_metadata.id
 HAVING COUNT(toolsets.id) > 0;
 
--- name: AcquirePaygOpenRouterChatKeyLock :exec
+-- name: AcquireOpenRouterKeyBillingLock :exec
 -- A session lock lets the reconciler serialize a billing projection read and
 -- its upstream PATCH without holding a database transaction across the
 -- network call. Billing writers take the same key transactionally before
 -- changing the projection.
-SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0));
 
--- name: ReleasePaygOpenRouterChatKeyLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0)) AS unlocked;
+-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)) AS unlocked;
 
 -- name: GetPaygOpenRouterChatKeyProjection :one
 SELECT
@@ -81,6 +72,13 @@ LEFT JOIN openrouter_api_keys chat_key
  AND chat_key.key_type = 'chat'
  AND chat_key.deleted IS FALSE
 WHERE organization_metadata.id = @organization_id;
+
+-- name: GetOpenRouterInferenceKeyLimit :one
+SELECT monthly_credits
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
 
 -- name: SetPaygOpenRouterChatKeyProjectionFixture :exec
 WITH updated_organization AS (
@@ -119,6 +117,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -404,6 +403,7 @@ WHERE organization_id = @organization_id
 SELECT
     generated.source_timestamp::date AS source_day
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
+  , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
   invoice.service_period_start,
@@ -414,6 +414,13 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = generated.source_timestamp::date
+-- Surface a snapshot an earlier pass already froze; the caller must not reseed
+-- that day from spend backfilled since.
+LEFT JOIN stripe_invoice_allocations frozen
+  ON frozen.organization_id = invoice.organization_id
+ AND frozen.source_kind = 'openrouter_daily_spend'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.seq = 1
 WHERE invoice.organization_id = @organization_id
   AND invoice.stripe_invoice_id = @stripe_invoice_id
   AND invoice.service_period_end + interval '48 hours' <= @now
@@ -720,6 +727,13 @@ INSERT INTO stripe_invoice_allocations (
   , 'pending'
 );
 
+-- name: DeleteStripeInvoiceAllocationFixture :execrows
+DELETE FROM stripe_invoice_allocations
+WHERE organization_id = @organization_id
+  AND source_kind = @source_kind
+  AND source_key = @source_key
+  AND seq = @seq;
+
 -- name: ListStripeInvoiceAllocationsFixture :many
 SELECT
     seq
@@ -811,29 +825,6 @@ WHERE d.organization_id = ANY($1::text[])
     WHERE organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
-
--- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
--- Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
--- row to detect whether another drain pass is needed.
-SELECT id, seq, content, created_at
-FROM chat_messages
-WHERE chat_id = @chat_id
-  AND project_id = @project_id
-  AND role = 'user'
-  AND content != ''
-  AND (message_id IS NULL OR message_id = '')
-  AND seq > @after_message_seq
-ORDER BY seq ASC, created_at ASC
-LIMIT @limit_count;
-
--- name: BackfillClaudeUserMessagePromptID :exec
-UPDATE chat_messages
-SET message_id = @prompt_id
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id
-  AND role = 'user'
-  AND (message_id IS NULL OR message_id = '');
 
 -- name: FetchPendingOutboxIDs :many
 -- Fetch the next batch of outbox row IDs (across all organizations) that the

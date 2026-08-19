@@ -62,6 +62,18 @@ func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*
 	return f.checkout, f.checkoutError
 }
 
+func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) SetSubscriptionCancelAtPeriodEnd(context.Context, stripeclient.SetSubscriptionCancelAtPeriodEndInput) (*stripeclient.SubscriptionState, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) CreatePortalSession(context.Context, stripeclient.CreatePortalSessionInput) (*stripeclient.PortalSession, error) {
+	return nil, errors.New("not implemented")
+}
+
 type captureFeatureCache struct {
 	mu      sync.Mutex
 	enabled []productfeatures.Feature
@@ -130,7 +142,7 @@ func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: ""}
+	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
 }
 
 func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
@@ -1043,6 +1055,62 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NotContains(t, string(record.Metadata), "customer_placeholder")
 	require.NotContains(t, string(record.BeforeSnapshot), "subscription_activation")
 	require.NotContains(t, string(record.AfterSnapshot), "subscription_activation")
+}
+
+func TestStripeCheckoutCompletionRestoresDemotedTrialRuntimeFeatures(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	featureCache := configurePaygCheckout(t, service, "event_demoted_trial", "subscription_demoted_trial", "trialing")
+	ctx := t.Context()
+	tx := testenv.BeginTx(t, ctx, db)
+	q := featurerepo.New(tx)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+			OrganizationID: stripeWebhookOrganizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, tx.Commit(ctx))
+
+	err := trialsrepo.New(db).CreateTrial(ctx, trialsrepo.CreateTrialParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = trialsrepo.New(db).MarkTrialDemoted(ctx, stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := featurerepo.New(db).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+			OrganizationID: stripeWebhookOrganizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+	}
+
+	preparedAt := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	_, err = service.prepareStripeCheckoutIntent(
+		ctx,
+		stripeWebhookOrganizationID,
+		"customer_placeholder",
+		preparedAt,
+		newStripeCheckoutIntent(stripeWebhookOrganizationID, preparedAt, nil),
+		pgtype.Text{String: "", Valid: false},
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "demoted_trial").Code)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := featurerepo.New(db).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: stripeWebhookOrganizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, enabled, "PAYG activation should restore %s", feature)
+	}
+	require.ElementsMatch(t, productfeatures.TrialRuntimeFeatures, featureCache.snapshot())
 }
 
 func TestStripeCheckoutCompletionPreservesTrialFeatureChoices(t *testing.T) {

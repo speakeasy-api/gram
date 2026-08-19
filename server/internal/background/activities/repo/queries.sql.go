@@ -21,24 +21,12 @@ type AcquireOpenRouterKeyBillingLockParams struct {
 	OrganizationID string
 }
 
-// Billing transitions take the matching transaction lock before changing an
-// organization's projection. Holding this session lock through the final
-// eligibility read and delivery makes either the old or new tier win cleanly.
-func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
-	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
-	return err
-}
-
-const acquirePaygOpenRouterChatKeyLock = `-- name: AcquirePaygOpenRouterChatKeyLock :exec
-SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
-`
-
 // A session lock lets the reconciler serialize a billing projection read and
 // its upstream PATCH without holding a database transaction across the
 // network call. Billing writers take the same key transactionally before
 // changing the projection.
-func (q *Queries) AcquirePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, acquirePaygOpenRouterChatKeyLock, organizationID)
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
 	return err
 }
 
@@ -106,33 +94,6 @@ func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizat
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const backfillClaudeUserMessagePromptID = `-- name: BackfillClaudeUserMessagePromptID :exec
-UPDATE chat_messages
-SET message_id = $1
-WHERE id = $2
-  AND chat_id = $3
-  AND project_id = $4
-  AND role = 'user'
-  AND (message_id IS NULL OR message_id = '')
-`
-
-type BackfillClaudeUserMessagePromptIDParams struct {
-	PromptID  pgtype.Text
-	MessageID uuid.UUID
-	ChatID    uuid.UUID
-	ProjectID uuid.NullUUID
-}
-
-func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg BackfillClaudeUserMessagePromptIDParams) error {
-	_, err := q.db.Exec(ctx, backfillClaudeUserMessagePromptID,
-		arg.PromptID,
-		arg.MessageID,
-		arg.ChatID,
-		arg.ProjectID,
-	)
-	return err
 }
 
 const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
@@ -714,6 +675,34 @@ func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, arg DeletePubli
 	return result.RowsAffected(), nil
 }
 
+const deleteStripeInvoiceAllocationFixture = `-- name: DeleteStripeInvoiceAllocationFixture :execrows
+DELETE FROM stripe_invoice_allocations
+WHERE organization_id = $1
+  AND source_kind = $2
+  AND source_key = $3
+  AND seq = $4
+`
+
+type DeleteStripeInvoiceAllocationFixtureParams struct {
+	OrganizationID pgtype.Text
+	SourceKind     string
+	SourceKey      string
+	Seq            int32
+}
+
+func (q *Queries) DeleteStripeInvoiceAllocationFixture(ctx context.Context, arg DeleteStripeInvoiceAllocationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStripeInvoiceAllocationFixture,
+		arg.OrganizationID,
+		arg.SourceKind,
+		arg.SourceKey,
+		arg.Seq,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
 SELECT
     o.id,
@@ -995,6 +984,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -1011,6 +1001,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
+	LimitGeneration  int64
 	ApiKeyEncrypted  pgtype.Text
 }
 
@@ -1037,6 +1028,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
+			&i.LimitGeneration,
 			&i.ApiKeyEncrypted,
 		); err != nil {
 			return nil, err
@@ -1099,6 +1091,26 @@ func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, a
 	var recovery_start_day pgtype.Date
 	err := row.Scan(&recovery_start_day)
 	return recovery_start_day, err
+}
+
+const getOpenRouterInferenceKeyLimit = `-- name: GetOpenRouterInferenceKeyLimit :one
+SELECT monthly_credits
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type GetOpenRouterInferenceKeyLimitParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) GetOpenRouterInferenceKeyLimit(ctx context.Context, arg GetOpenRouterInferenceKeyLimitParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterInferenceKeyLimit, arg.OrganizationID, arg.KeyType)
+	var monthly_credits int64
+	err := row.Scan(&monthly_credits)
+	return monthly_credits, err
 }
 
 const getPaygOpenRouterChatKeyProjection = `-- name: GetPaygOpenRouterChatKeyProjection :one
@@ -1542,6 +1554,7 @@ const listOpenRouterInvoiceSourceDays = `-- name: ListOpenRouterInvoiceSourceDay
 SELECT
     generated.source_timestamp::date AS source_day
   , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
+  , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
   invoice.service_period_start,
@@ -1552,6 +1565,11 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = invoice.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = generated.source_timestamp::date
+LEFT JOIN stripe_invoice_allocations frozen
+  ON frozen.organization_id = invoice.organization_id
+ AND frozen.source_kind = 'openrouter_daily_spend'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':chat'
+ AND frozen.seq = 1
 WHERE invoice.organization_id = $1
   AND invoice.stripe_invoice_id = $2
   AND invoice.service_period_end + interval '48 hours' <= $3
@@ -1565,10 +1583,13 @@ type ListOpenRouterInvoiceSourceDaysParams struct {
 }
 
 type ListOpenRouterInvoiceSourceDaysRow struct {
-	SourceDay pgtype.Date
-	SpendUsd  pgtype.Numeric
+	SourceDay         pgtype.Date
+	SpendUsd          pgtype.Numeric
+	FrozenSnapshotUsd pgtype.Numeric
 }
 
+// Surface a snapshot an earlier pass already froze; the caller must not reseed
+// that day from spend backfilled since.
 func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListOpenRouterInvoiceSourceDaysParams) ([]ListOpenRouterInvoiceSourceDaysRow, error) {
 	rows, err := q.db.Query(ctx, listOpenRouterInvoiceSourceDays, arg.OrganizationID, arg.StripeInvoiceID, arg.Now)
 	if err != nil {
@@ -1578,7 +1599,7 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 	var items []ListOpenRouterInvoiceSourceDaysRow
 	for rows.Next() {
 		var i ListOpenRouterInvoiceSourceDaysRow
-		if err := rows.Scan(&i.SourceDay, &i.SpendUsd); err != nil {
+		if err := rows.Scan(&i.SourceDay, &i.SpendUsd, &i.FrozenSnapshotUsd); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1862,65 +1883,6 @@ func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, ar
 	return items, nil
 }
 
-const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
-SELECT id, seq, content, created_at
-FROM chat_messages
-WHERE chat_id = $1
-  AND project_id = $2
-  AND role = 'user'
-  AND content != ''
-  AND (message_id IS NULL OR message_id = '')
-  AND seq > $3
-ORDER BY seq ASC, created_at ASC
-LIMIT $4
-`
-
-type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
-	ChatID          uuid.UUID
-	ProjectID       uuid.NullUUID
-	AfterMessageSeq int64
-	LimitCount      int32
-}
-
-type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
-	ID        uuid.UUID
-	Seq       int64
-	Content   string
-	CreatedAt pgtype.Timestamptz
-}
-
-// Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
-// row to detect whether another drain pass is needed.
-func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.AfterMessageSeq,
-		arg.LimitCount,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUnlinkedClaudeUserMessagesForCorrelationRow
-	for rows.Next() {
-		var i ListUnlinkedClaudeUserMessagesForCorrelationRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Seq,
-			&i.Content,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listWeeklyUsageSummaryTargets = `-- name: ListWeeklyUsageSummaryTargets :many
 SELECT
     om.id AS organization_id,
@@ -2162,17 +2124,6 @@ type ReleaseOpenRouterKeyBillingLockParams struct {
 
 func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
 	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
-	var unlocked bool
-	err := row.Scan(&unlocked)
-	return unlocked, err
-}
-
-const releasePaygOpenRouterChatKeyLock = `-- name: ReleasePaygOpenRouterChatKeyLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || $1::text, 0)) AS unlocked
-`
-
-func (q *Queries) ReleasePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, releasePaygOpenRouterChatKeyLock, organizationID)
 	var unlocked bool
 	err := row.Scan(&unlocked)
 	return unlocked, err

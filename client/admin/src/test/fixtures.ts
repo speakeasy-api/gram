@@ -31,6 +31,7 @@ export function aProject(overrides: Partial<AdminProject> = {}): AdminProject {
     id: "proj_1",
     name: "First Project",
     slug: "first-project",
+    mcp_server_count: 0,
     created_at: "2026-01-15T00:00:00Z",
     updated_at: "2026-01-15T00:00:00Z",
     ...overrides,
