@@ -1895,12 +1895,27 @@ const withToolCallAnnotationSuppression = (
     const aui = useAui();
     const partQuery = aui.part.query;
     const partIndex = partQuery?.type === "index" ? partQuery.index : undefined;
-    const followedByToolCall = useAuiState(
+    // The tool call lands only after its annotation has finished streaming, so
+    // waiting for parts[i + 1] means rendering the annotation as prose first
+    // and yanking it into the group heading a moment later. While the message
+    // is still streaming and nothing follows this part yet, assume a trailing
+    // annotation belongs to the group that is about to open — and judge it
+    // with the streaming test, since a half-typed opener is not a gerund yet.
+    const streaming = useAuiState(
+      ({ message }) =>
+        partIndex !== undefined &&
+        message.parts[partIndex + 1] === undefined &&
+        message.status?.type === "running",
+    );
+    const ownedByToolGroup = useAuiState(
       ({ message }) =>
         partIndex !== undefined &&
         message.parts[partIndex + 1]?.type === "tool-call",
     );
-    if (!followedByToolCall || !trailingAnnotationLine(props.text)) {
+    if (
+      (!ownedByToolGroup && !streaming) ||
+      !trailingAnnotationLine(props.text, { streaming })
+    ) {
       return <Inner {...props} />;
     }
     const remainder = stripTrailingAnnotationLine(props.text);

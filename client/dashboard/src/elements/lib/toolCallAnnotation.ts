@@ -19,6 +19,29 @@ export const TOOL_CALL_ANNOTATION_MAX_LENGTH = 100;
  */
 export function isToolCallAnnotation(text: string): boolean {
   const trimmed = text.trim();
+  if (!hasAnnotationShape(trimmed)) return false;
+  // Doing-phrase opener: one of the first two words is a present participle
+  // ("Investigating…", "Deep diving…", "Cross-referencing…").
+  const words = trimmed.split(/\s+/);
+  return isGerund(words[0]) || isGerund(words[1]);
+}
+
+/**
+ * Mid-stream an annotation arrives a character at a time, so the strict test
+ * above rejects its own prefixes — "Inv" is not a gerund yet. Judging a
+ * still-streaming part with it renders the opening as prose and then retracts
+ * it once the word completes. Accept a prefix whose first two words could
+ * still turn into a doing-phrase; a third word settles the question.
+ */
+export function isPartialToolCallAnnotation(text: string): boolean {
+  const trimmed = text.trim();
+  if (!hasAnnotationShape(trimmed)) return false;
+  const words = trimmed.split(/\s+/);
+  return isGerund(words[0]) || isGerund(words[1]) || words.length <= 2;
+}
+
+/** Length, single-line and punctuation gates shared by both tests. */
+function hasAnnotationShape(trimmed: string): boolean {
   if (
     trimmed.length === 0 ||
     trimmed.length > TOOL_CALL_ANNOTATION_MAX_LENGTH ||
@@ -27,14 +50,11 @@ export function isToolCallAnnotation(text: string): boolean {
     return false;
   }
   // Multi-sentence commentary or Markdown formatting → prose.
-  if (/[.!?] /.test(trimmed) || /[`*_#[\]]/.test(trimmed)) return false;
-  // Doing-phrase opener: one of the first two words is a present participle
-  // ("Investigating…", "Deep diving…", "Cross-referencing…").
-  const words = trimmed.split(/\s+/);
-  const isGerund = (word: string | undefined) =>
-    !!word && /ing$/i.test(word.replace(/[^a-zA-Z-]/g, ""));
-  return isGerund(words[0]) || isGerund(words[1]);
+  return !/[.!?] /.test(trimmed) && !/[`*_#[\]]/.test(trimmed);
 }
+
+const isGerund = (word: string | undefined) =>
+  !!word && /ing$/i.test(word.replace(/[^a-zA-Z-]/g, ""));
 
 /** Normalize an annotation for display as a group heading. */
 export function toolCallAnnotationTitle(text: string): string {
@@ -46,10 +66,16 @@ export function toolCallAnnotationTitle(text: string): string {
  * The last line still works as the annotation when it is terse; the remainder
  * renders as regular prose (see stripTrailingAnnotationLine).
  */
-export function trailingAnnotationLine(text: string): string | undefined {
+export function trailingAnnotationLine(
+  text: string,
+  { streaming = false }: { streaming?: boolean } = {},
+): string | undefined {
   const lines = text.trim().split("\n");
   const last = lines[lines.length - 1]?.trim() ?? "";
-  return isToolCallAnnotation(last) ? last : undefined;
+  const matches = streaming
+    ? isPartialToolCallAnnotation(last)
+    : isToolCallAnnotation(last);
+  return matches ? last : undefined;
 }
 
 /** The text minus its trailing annotation line (empty for a pure annotation). */
