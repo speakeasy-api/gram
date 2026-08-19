@@ -172,21 +172,22 @@ func TestSessionSelectionInterceptor_ListNilSelectionFailsClosedToZeroTools(t *t
 	require.Empty(t, resp.Result.Tools)
 }
 
-func TestSessionSelectionInterceptor_ListSessionlessRequestExcludesLiveRows(t *testing.T) {
+func TestSessionSelectionInterceptor_SessionlessListWitnessAuthorizesCall(t *testing.T) {
 	t.Parallel()
 
-	// Without a client MCP session id the call side could never witness a
-	// live-matched tool, so the list must not show it: frozen names only.
+	// Stateless upstreams omit the MCP session id. Their witness is scoped by
+	// the consent grant and must support the same list-to-call round trip.
 	store := toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache())
 	interceptor := remotemcp.NewSessionSelectionInterceptor(liveSelection(t, toolfilter.AnnotationReadOnly, "writer"), store)
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		readOnlySDKTool("reader"),
 		{Name: "writer"},
 	})
-	// No session header stamped: RemoteMessage carries no user request.
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
-	require.Equal(t, []string{"writer"}, toolNames(resp.Result.Tools))
+	require.Equal(t, []string{"reader", "writer"}, toolNames(resp.Result.Tools))
+	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("reader")))
+	require.Error(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequestWithSession("reader", "sess-1")), "stateless witness must not leak into a stateful session")
 }
 
 // newToolsCallRequestWithSession builds a tools/call view carrying the

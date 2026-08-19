@@ -25,8 +25,10 @@ import (
 // carries no hints, so live grants use listing-witnessed enforcement: the
 // list side records the live-matched rows each MCP session was actually
 // shown, and the call side authorizes against that witness, falling back to
-// the frozen grant when nothing has been witnessed. Fail narrow, never
-// wide.
+// a grant-scoped witness when a stateless upstream supplies no MCP session
+// id. Concurrent stateless clients on one grant may replace or invalidate
+// that shared record; pagination mismatches drop it, so races fail narrow,
+// never wide.
 type SessionSelectionInterceptor struct {
 	selection *toolfilter.SessionSelection
 	store     *toolfilter.SessionToolWitnessStore
@@ -117,17 +119,15 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 		return fmt.Errorf("session tool selection: tools/list response carries neither result nor error")
 	}
 
-	// Live matching requires a witnessable identity: without a store and a
-	// client MCP session id the call side could never authorize a
-	// live-matched tool, so listing it would show tools that cannot be
-	// invoked. Sessionless requests fall back to the frozen name grant on
-	// both sides — narrower, but consistent.
+	// The upstream session id scopes stateful conversations. Stateless
+	// upstreams leave it empty and deliberately share the witness within this
+	// selection's grant; grant id remains part of every store key.
 	sessionID := ""
 	if list.RemoteMessage != nil && list.RemoteMessage.UserHTTPRequest != nil {
 		sessionID = list.RemoteMessage.UserHTTPRequest.Header.Get(proxy.McpSessionIDHeader)
 	}
 	live := i.selection.LiveAnnotations()
-	liveEligible := len(live) > 0 && i.store != nil && sessionID != ""
+	liveEligible := len(live) > 0 && i.store != nil
 
 	allowed := make([]*mcp.Tool, 0, len(list.Result.Tools))
 	witnessed := make([]toolfilter.WitnessedTool, 0, len(list.Result.Tools))

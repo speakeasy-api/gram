@@ -86,12 +86,13 @@ func TestSessionToolWitness_DuplicateAndOversizeRowsDropWitness(t *testing.T) {
 	require.False(t, s.MatchesWitnessed(t.Context(), "g", "s2", "", []string{AnnotationReadOnly}))
 }
 
-func TestSessionToolWitness_MissingIdentityNeverMatches(t *testing.T) {
+func TestSessionToolWitness_MissingGrantNeverMatchesAndEmptySessionDoes(t *testing.T) {
 	t.Parallel()
 
 	s := witnessStoreForTest(t)
 	s.WitnessPage(t.Context(), "", "s", "", []WitnessedTool{readOnlyTool("a")}, "")
 	s.WitnessPage(t.Context(), "g", "", "", []WitnessedTool{readOnlyTool("a")}, "")
 	require.False(t, s.MatchesWitnessed(t.Context(), "", "s", "a", []string{AnnotationReadOnly}))
-	require.False(t, s.MatchesWitnessed(t.Context(), "g", "", "a", []string{AnnotationReadOnly}))
+	require.True(t, s.MatchesWitnessed(t.Context(), "g", "", "a", []string{AnnotationReadOnly}))
+	require.False(t, s.MatchesWitnessed(t.Context(), "g", "stateful", "a", []string{AnnotationReadOnly}), "stateless fallback must be isolated from stateful sessions")
 }

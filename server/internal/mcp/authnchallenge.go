@@ -207,6 +207,19 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
 
+func issuerGateFailureReason(err error) string {
+	switch {
+	case errors.Is(err, errIssuerGateOrgLookup):
+		return "org_lookup_failed"
+	case errors.Is(err, errToolSelectionResourceMismatch):
+		return "tool_selection_resource_mismatch"
+	case errors.Is(err, errToolSelectionLoad):
+		return "tool_selection_load_failed"
+	default:
+		return "invalid_bearer_token"
+	}
+}
+
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
 // request matches no rows and costs one index probe. The window is therefore
@@ -276,7 +289,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	// widen a restrictive session to all tools.
 	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI)
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("resolve session tool selection: %w", err)
+		return ctx, nil, nil, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
 	if toolSelection != nil && toolSelection.Resource != endpointToolSelectionResource(endpoint) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
@@ -454,16 +467,9 @@ func (s *Service) ApplyIssuerGate(
 		// the token validated and the org lookup failed — an operational
 		// error, labeled distinctly so nobody chases a phantom bad token.
 		if valErr != nil {
-			failureReason := "invalid_bearer_token"
-			if errors.Is(valErr, errIssuerGateOrgLookup) {
-				failureReason = "org_lookup_failed"
-			}
-			if errors.Is(valErr, errToolSelectionResourceMismatch) {
-				failureReason = "tool_selection_resource_mismatch"
-			}
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason(failureReason),
+				attr.SlogOAuthFailureReason(issuerGateFailureReason(valErr)),
 				attr.SlogError(valErr),
 			)
 		}

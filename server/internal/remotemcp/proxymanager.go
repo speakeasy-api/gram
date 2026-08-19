@@ -214,7 +214,6 @@ func (f *ProxyManager) BuildTarget(
 
 	// Session-selection enforcement runs after the RBAC interceptors above so
 	// the effective catalog is the intersection of RBAC and consent.
-	var remoteMessageInterceptors []proxy.RemoteMessageInterceptor
 	if selection != nil {
 		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
@@ -262,7 +261,7 @@ func (f *ProxyManager) BuildTarget(
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
-		RemoteMessageInterceptors:     remoteMessageInterceptors,
+		RemoteMessageInterceptors:     nil,
 		ToolsCallRequestInterceptors:  toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors: toolsCallResponseInterceptors,
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{

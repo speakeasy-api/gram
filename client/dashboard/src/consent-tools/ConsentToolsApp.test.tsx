@@ -90,9 +90,16 @@ describe("ConsentToolsApp", () => {
     expect(terminateSession).toHaveBeenCalledOnce();
     const [url, opts] = transportCtor.mock.calls[0]!;
     expect((url as URL).pathname).toBe("/mcp/example/connect/mcp");
-    const headers = (
-      opts as { requestInit: { headers: Record<string, string> } }
-    ).requestInit.headers;
+    const requestInit = (
+      opts as {
+        requestInit: {
+          credentials: RequestCredentials;
+          headers: Record<string, string>;
+        };
+      }
+    ).requestInit;
+    expect(requestInit.credentials).toBe("omit");
+    const headers = requestInit.headers;
     expect(headers["Gram-Consent-State"]).toBe("state-1");
     expect(headers["Gram-Consent-Csrf"]).toBe("csrf-1");
     expect(headers["Gram-Consent-Inventory-Attempt"]).toMatch(

@@ -73,7 +73,7 @@ async function fetchConsentInventory(
     new URL(toolsUrl, window.location.origin),
     {
       requestInit: {
-        credentials: "same-origin",
+        credentials: "omit",
         headers: {
           "Gram-Consent-State": state,
           "Gram-Consent-Csrf": csrfToken,

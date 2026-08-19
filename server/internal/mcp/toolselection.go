@@ -31,6 +31,11 @@ const sessionToolSelectionTTL = 5 * time.Minute
 // caller must 401 into reauth rather than reinterpret the policy.
 var errToolSelectionResourceMismatch = errors.New("session tool selection is bound to a different endpoint")
 
+// errToolSelectionLoad marks a post-validation policy-store failure. The
+// bearer token itself is valid; the request still fails closed, but logs must
+// distinguish this operational or stored-data failure from bad credentials.
+var errToolSelectionLoad = errors.New("load session tool selection")
+
 // sessionToolSelectionEntry is the cached (issuer, jti) -> raw policy row.
 type sessionToolSelectionEntry struct {
 	IssuerID string `json:"issuer_id"`

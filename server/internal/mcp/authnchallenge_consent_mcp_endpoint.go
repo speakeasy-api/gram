@@ -21,18 +21,25 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Consent transport request headers. Header-borne so request bodies stay
@@ -84,12 +91,13 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		return oops.E(oops.CodeMethodNotAllowed, nil, "method not allowed").LogWarn(ctx, logger)
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, consentMCPBodyLimit)
 
 	// The consent transport enumerates live tool inventories, so it follows
-	// the runtime MCP dispatch's custom-domain lockdown — unlike the consent
-	// HTML page, which stays reachable like the install page. On the custom
-	// domain itself the island's same-host relative fetch passes the ingress
-	// allowlist with the rest of the flow.
+	// the runtime MCP dispatch's custom-domain lockdown. The consent HTML page
+	// stays reachable like the install page, but hides its picker island on a
+	// locked-down platform origin; on the custom domain the island's same-host
+	// relative fetch has already passed the ingress allowlist.
 	if err := s.enforceCustomDomainLockdown(ctx, logger, endpoint.ProjectID); err != nil {
 		return err
 	}
@@ -138,7 +146,10 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no tool picker").LogWarn(ctx, logger)
 	}
 	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogWarn(ctx, logger)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 
 	var serverRow *mcpservers_repo.McpServer
@@ -162,6 +173,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	r.Header.Del(consentStateHeader)
 	r.Header.Del(consentCSRFHeader)
 	r.Header.Del(consentAttemptHeader)
+	r.Header.Del("Cookie")
 
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
@@ -212,15 +224,34 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	case "ping":
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{})
 	case "tools/list":
+		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+			ID:        endpoint.ToolsetID.UUID,
+			ProjectID: endpoint.ProjectID,
+		})
+		if terr != nil {
+			return oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
+		}
+		private := !endpoint.IsPublic || !toolset.McpIsPublic
+		if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
+			return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+		}
 		// The RBAC gate keys off the consent subject, exactly like the
 		// runtime request the minted session will make.
 		authzCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 		if cerr != nil {
 			return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		if s.authz != nil {
+		if private {
+			if _, ok := contextvalues.GetAuthContext(authzCtx); !ok {
+				return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+			}
+		}
+		if s.authz != nil && private {
 			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
+			}
+			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.ToolsetID.UUID.String(), endpoint.ProjectID.String())); cerr != nil {
+				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, endpoint.ToolsetID.UUID.String(), toolset.Name)))
 			}
 		}
 		tools, roleHidden, terr := s.enumerateToolsetConsentInventory(authzCtx, endpoint)
@@ -277,6 +308,9 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 
 	subject := *challengeState.Subject
+	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
+		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+	}
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.UpstreamResource)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
@@ -292,6 +326,11 @@ func (s *Service) serveConsentProxiedMCP(
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "stamp consent subject context").LogError(ctx, logger)
+	}
+	if serverRow.Visibility == mcpservers.VisibilityPrivate {
+		if _, ok := contextvalues.GetAuthContext(ctx); !ok {
+			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+		}
 	}
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
 	if err != nil {
@@ -327,7 +366,7 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 
 	p.UserRequestInterceptors = append([]proxy.UserRequestInterceptor{consentMethodAllowlistInterceptor{}}, p.UserRequestInterceptors...)
-	p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, &consentInventoryCaptureInterceptor{service: s, draft: draft})
+	p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, &consentInventoryCaptureInterceptor{service: s, draft: &draft})
 
 	// The build above passes a nil selection (consent must see the full
 	// RBAC-allowed inventory), which leaves StrictToolSelection off. Turn it
@@ -350,9 +389,18 @@ func (s *Service) serveConsentProxiedMCP(
 		sessionWriter.sessionID = ""
 	}
 	if sessionWriter.sessionID != "" && draft.McpSessionID == "" {
-		draft.McpSessionID = sessionWriter.sessionID
-		if serr := s.consentToolInventoryCache.Store(ctx, draft); serr != nil {
-			s.logger.WarnContext(ctx, "record consent transport session id", attr.SlogError(serr))
+		// An SSE response can be flushed to the island before this handler
+		// returns, allowing its next tools/list request to capture a page in
+		// parallel. Re-read before storing the session id so a stale initialize
+		// draft cannot overwrite that newer capture.
+		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt)
+		if ferr != nil {
+			s.logger.WarnContext(ctx, "reload consent inventory before recording session id", attr.SlogError(ferr))
+		} else if freshDraft.McpSessionID == "" {
+			freshDraft.McpSessionID = sessionWriter.sessionID
+			if serr := s.consentToolInventoryCache.Store(ctx, freshDraft); serr != nil {
+				s.logger.WarnContext(ctx, "record consent transport session id", attr.SlogError(serr))
+			}
 		}
 	}
 	return nil
@@ -393,7 +441,7 @@ func (consentMethodAllowlistInterceptor) InterceptUserRequest(_ context.Context,
 // through uncaptured; a capture failure fails the relay closed.
 type consentInventoryCaptureInterceptor struct {
 	service *Service
-	draft   consentToolInventory
+	draft   *consentToolInventory
 }
 
 var _ proxy.ToolsListResponseInterceptor = (*consentInventoryCaptureInterceptor)(nil)
@@ -423,11 +471,11 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 			Annotations: consentAnnotationsFromSDK(tool.Annotations),
 		})
 	}
-	updated, err := i.service.appendConsentInventoryPage(ctx, i.draft, requestCursor, pageTools, list.Result.NextCursor)
+	updated, err := i.service.appendConsentInventoryPage(ctx, *i.draft, requestCursor, pageTools, list.Result.NextCursor)
 	if err != nil {
 		return fmt.Errorf("capture consent tool inventory page: %w", err)
 	}
-	i.draft = updated
+	*i.draft = updated
 	return nil
 }
 
@@ -464,7 +512,6 @@ type consentJSONRPCRequest struct {
 }
 
 func decodeConsentJSONRPCRequest(w http.ResponseWriter, r *http.Request) (*consentJSONRPCRequest, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, consentMCPBodyLimit)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read jsonrpc request body: %w", err)

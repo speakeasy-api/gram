@@ -77,7 +77,8 @@ type sessionToolWitness struct {
 }
 
 // sessionKey hashes the client-supplied MCP session id into a bounded key
-// segment so unbounded client input never lands in Redis keys verbatim.
+// segment so unbounded client input never lands in Redis keys verbatim. An
+// empty id is the stable grant-scoped fallback for stateless upstreams.
 func sessionKey(sessionID string) string {
 	sum := sha256.Sum256([]byte(sessionID))
 	return base64.RawURLEncoding.EncodeToString(sum[:16])
@@ -122,7 +123,7 @@ func NewSessionToolWitnessStore(logger *slog.Logger, adapter cache.Cache) *Sessi
 // leaves authorization behind. Errors are logged, never surfaced — a
 // witness failure narrows live matching, it must not fail the relay.
 func (s *SessionToolWitnessStore) WitnessPage(ctx context.Context, grantID, sessionID, requestCursor string, tools []WitnessedTool, nextCursor string) {
-	if grantID == "" || sessionID == "" {
+	if grantID == "" {
 		return
 	}
 	key := sessionKey(sessionID)
@@ -184,7 +185,7 @@ func (s *SessionToolWitnessStore) drop(ctx context.Context, grantID, sessionKeyH
 // for the named tool carrying a hint matching any of the given annotation
 // values. Any miss or store failure reads as no match.
 func (s *SessionToolWitnessStore) MatchesWitnessed(ctx context.Context, grantID, sessionID, name string, values []string) bool {
-	if grantID == "" || sessionID == "" || name == "" || len(values) == 0 {
+	if grantID == "" || name == "" || len(values) == 0 {
 		return false
 	}
 	witness, err := s.cache.Get(ctx, sessionToolWitnessCacheKey(grantID, sessionKey(sessionID)))

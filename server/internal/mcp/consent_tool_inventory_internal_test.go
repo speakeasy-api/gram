@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -296,6 +298,40 @@ func TestAppendConsentInventoryPage_MultiPageCursorChain(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, page2.Complete)
 	require.Len(t, page2.Tools, 2)
+}
+
+func TestConsentInventoryCaptureInterceptorUpdatesSharedDraft(t *testing.T) {
+	t.Parallel()
+
+	draft := emptyDraft()
+	interceptor := consentInventoryCaptureInterceptor{
+		service: inventoryServiceForTest(t),
+		draft:   &draft,
+	}
+	list := &proxy.ToolsListResponse{
+		Error:         nil,
+		RemoteMessage: nil,
+		Request: &proxy.ToolsListRequest{
+			Params:      &mcp.ListToolsParams{Meta: nil, Cursor: ""},
+			UserRequest: nil,
+		},
+		Result: &mcp.ListToolsResult{
+			Meta:       nil,
+			NextCursor: "",
+			Tools:      []*mcp.Tool{{Name: "reader"}},
+		},
+	}
+
+	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), list))
+	require.True(t, draft.Complete)
+	require.Equal(t, []consentInventoryTool{{Name: "reader", Annotations: []string{}}}, draft.Tools)
+
+	// The handler records a response session id after interception. Because
+	// both operate on the shared draft, this cannot overwrite the captured
+	// page with the stale pre-request value.
+	draft.McpSessionID = "upstream-session"
+	require.True(t, draft.Complete)
+	require.Len(t, draft.Tools, 1)
 }
 
 func TestAppendConsentInventoryPage_OutOfOrderCursorRejected(t *testing.T) {

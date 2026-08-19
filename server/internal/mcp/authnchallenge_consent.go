@@ -420,6 +420,20 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if !challengeState.FirstParty {
 		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
 	}
+	if showToolsIsland {
+		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if lerr != nil {
+			return lerr
+		}
+		// The consent transport enumerates the live upstream inventory and is
+		// therefore lockdown-protected like runtime MCP dispatch. On the
+		// platform origin, hide the island so the page does not deadlock on a
+		// relative transport request that must be rejected; the ordinary
+		// unrestricted approval path remains available.
+		if lockedDown {
+			showToolsIsland = false
+		}
+	}
 	prefillAttr := ""
 	if showToolsIsland {
 		prefillAttr = consentPrefillAttr(
