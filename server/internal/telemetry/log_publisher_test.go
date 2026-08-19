@@ -12,6 +12,7 @@ import (
 
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,8 +65,8 @@ func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pu
 }
 
 // fetchLog reads back exactly one telemetry_logs row for the given tool.
-// Callers must flush the async insert queue first
-// (testenv.FlushClickHouseAsyncInserts) so the single query is deterministic.
+// Callers using an async write path must flush the insert queue first with
+// testenv.FlushClickHouseAsyncInserts.
 func fetchLog(t *testing.T, ctx context.Context, client *repo.Queries, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
 	t.Helper()
 
@@ -207,11 +208,15 @@ func TestLogPublisher_PublishFailureDoesNotAffectWrite(t *testing.T) {
 
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
-	require.NoError(t, telemLogger.LogBulk(ctx, []telemetry.LogParams{
+	// The deduped path uses the same publisher after a synchronous ClickHouse
+	// write. With no fingerprint attribute, it writes this row unchanged.
+	written, dropped, err := telemLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, []telemetry.LogParams{
 		{Timestamp: timestamp, ToolInfo: toolInfo, Attributes: attrs},
-	}))
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, written)
+	require.Equal(t, 0, dropped)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	fetchLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 	require.Len(t, capture.all(), 1)
 
