@@ -454,9 +454,8 @@ func TestGetPlugins_InvalidEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
-	// The default context is an org install key, so the vouched email
-	// (Gram-User-Email header) is authoritative and a missing or empty one is
-	// rejected.
+	// The default context is an org install key, so the vouched email is
+	// authoritative and a missing or empty one is rejected.
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: nil})
 	require.Error(t, err, "absent email header must be rejected")
 

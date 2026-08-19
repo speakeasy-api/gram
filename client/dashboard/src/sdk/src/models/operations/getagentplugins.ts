@@ -15,7 +15,7 @@ export type GetAgentPluginsRequest = {
    */
   gramKey?: string | undefined;
   /**
-   * Email address of the enrolled user, carried in the Gram-User-Email header. Authoritative — and required by the handler — when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user. Optional at the transport level so per-user-key agents need not send it.
+   * Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
    */
   gramUserEmail?: string | undefined;
   /**

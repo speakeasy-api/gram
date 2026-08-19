@@ -89,9 +89,7 @@ var redactedQueryParams = map[string]bool{
 	"token": true,
 
 	// Email address on auth.login, and on agent.getPlugins polls from legacy
-	// device agents — the agent moved it to the Gram-User-Email header
-	// (DNO-935), but already-deployed agents keep appending `?email=` to the
-	// URL, so it must stay redacted.
+	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
 	// Chat search terms, which are user-typed free text.

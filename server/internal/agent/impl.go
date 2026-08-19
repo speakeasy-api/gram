@@ -120,14 +120,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // the key belongs to differs:
 //   - Per-user key (`agent_user`): the key owner IS the enrolled developer
 //     (minted by token-exchange or manual enrollment), so the polling identity
-//     is the authenticated key owner (authCtx.Email) and the vouched email
-//     (Gram-User-Email header) is ignored. Delivery is bound to the
-//     authenticated principal.
+//     is the authenticated key owner (authCtx.Email) and the vouched email is
+//     ignored. Delivery is bound to the authenticated principal.
 //   - Org install key (`agent` scope): the key owner is whoever minted the org
 //     token in the dashboard (an admin), NOT the developer. The polling identity
 //     is the vouched email the MDM profile supplies in the Gram-User-Email
-//     header (DNO-935) — required here. This is the zero-touch MDM path where
-//     the developer never signs in.
+//     header — required here. This is the zero-touch MDM path where the
+//     developer never signs in.
 //
 // SECURITY: a per-user `agent_user` key's polling identity is the authenticated
 // key owner, so it cannot claim another member's user-/role-scoped plugins. An
@@ -193,9 +192,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	var email string
 	if isInstallKey {
 		// Org key: the owner is an admin, not the developer, so we must be vouched
-		// an email — the MDM profile supplies it via the Gram-User-Email header
-		// (DNO-935; formerly the `?email=` query param, which legacy agents still
-		// send and the decoder now ignores).
+		// an email — the MDM profile supplies it via the Gram-User-Email header.
 		email = conv.NormalizeEmail(conv.PtrValOr(payload.Email, ""))
 		if email == "" {
 			return nil, oops.E(oops.CodeBadRequest, nil, "the Gram-User-Email header is required when authenticating with an org-scoped agent install key")
