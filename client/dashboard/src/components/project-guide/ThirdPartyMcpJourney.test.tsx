@@ -1,13 +1,15 @@
 import {
   cleanup,
   fireEvent,
-  render,
+  render as baseRender,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
+import { MemoryRouter } from "react-router";
 
 const catalog = vi.hoisted(() => ({
   current: [] as PulseMCPServer[],
@@ -23,6 +25,7 @@ const workflow = vi.hoisted(() => ({
   } as unknown,
 }));
 const queries = vi.hoisted(() => ({
+  activity: vi.fn(),
   endpoints: vi.fn(),
   plugins: vi.fn(),
   remoteServers: vi.fn(),
@@ -49,6 +52,10 @@ vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   useMcpEndpoints: queries.endpoints,
 }));
 
+vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
+  useGetMcpServerActivity: queries.activity,
+}));
+
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: queries.servers,
 }));
@@ -65,7 +72,25 @@ vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project-guide-test",
 }));
 
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: { x: { overview: { href: (server: string) => `/mcp/${server}` } } },
+  }),
+}));
+
 import { ThirdPartyMcpJourney } from "./ThirdPartyMcpJourney";
+
+function TestProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <ConfigProvider theme="light" setTheme={vi.fn()}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </ConfigProvider>
+  );
+}
+
+function render(ui: React.ReactNode) {
+  return baseRender(ui, { wrapper: TestProviders });
+}
 
 function server(
   title: string,
@@ -94,6 +119,39 @@ function server(
   };
 }
 
+function setVerifiedServer() {
+  const catalogEntry = server("Linear");
+  catalog.current = [catalogEntry];
+  queries.remoteServers.mockReturnValue({
+    data: {
+      remoteMcpServers: [
+        { id: "remote-mcp", url: catalogEntry.remotes?.[0]?.url },
+      ],
+    },
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  queries.servers.mockReturnValue({
+    data: {
+      mcpServers: [
+        {
+          id: "mcp-server",
+          name: "Linear",
+          remoteMcpServerId: "remote-mcp",
+          slug: "linear",
+        },
+      ],
+    },
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  queries.endpoints.mockReturnValue({
+    data: { mcpEndpoints: [{ mcpServerId: "mcp-server", slug: "linear" }] },
+    isPending: false,
+    refetch: vi.fn(),
+  });
+}
+
 beforeEach(() => {
   catalog.current = [];
   catalog.refetch.mockClear();
@@ -106,6 +164,7 @@ beforeEach(() => {
   };
   queries.servers.mockReset();
   queries.endpoints.mockReset();
+  queries.activity.mockReset();
   queries.plugins.mockReset();
   queries.remoteServers.mockReset();
   queries.servers.mockReturnValue({
@@ -115,6 +174,12 @@ beforeEach(() => {
   });
   queries.endpoints.mockReturnValue({
     data: { mcpEndpoints: [] },
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  queries.activity.mockReturnValue({
+    data: { activity: [] },
+    isError: false,
     isPending: false,
     refetch: vi.fn(),
   });
@@ -574,6 +639,242 @@ describe("ThirdPartyMcpJourney", () => {
     expect(screen.queryByText("Installed as a remote MCP server")).toBeNull();
   });
 
+  it("renders client configs, a safe prompt, and the governed endpoint", async () => {
+    setVerifiedServer();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="done"
+        onComplete={vi.fn()}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/"mcpServers"/)).toBeTruthy();
+      expect(screen.getByText(/"linear"/)).toBeTruthy();
+      expect(screen.getByText('"url"')).toBeTruthy();
+      expect(screen.getByText('"url"').closest("pre")?.textContent).toContain(
+        "/mcp/linear",
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cursor" }));
+    await waitFor(() => expect(screen.getByText(/"mcpServers"/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    await waitFor(() => {
+      expect(screen.getByText("mcp_servers").closest("pre")?.textContent).toBe(
+        '[mcp_servers.linear]url = "/mcp/linear"',
+      );
+    });
+    expect(
+      screen
+        .getByRole("link", { name: "View Linear MCP server" })
+        .getAttribute("href"),
+    ).toMatch(/\/mcp\/linear$/);
+    expect(screen.queryByText("mcp-server")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Connect to the Linear MCP server and list its available tools.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(queries.activity).toHaveBeenCalledWith(
+      { gramProject: "project-guide-test", getMcpServerActivityPayload: {} },
+      undefined,
+      expect.objectContaining({ enabled: true, throwOnError: false }),
+    );
+  });
+
+  it("credits a previously recorded governed call", async () => {
+    setVerifiedServer();
+    queries.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            lastToolCallAt: new Date("2026-08-18T00:00:00.000Z"),
+            recentToolCalls: 1,
+            targetId: "linear",
+            targetLabel: "List issues",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="done"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(screen.getByText("First call: List issues")).toBeTruthy();
+  });
+
+  it("does not credit a call recorded before a new prompt starts", async () => {
+    setVerifiedServer();
+    workflow.current = {
+      phase: "complete",
+      reset: vi.fn(),
+      statuses: [
+        {
+          key: "completed",
+          mcpServerId: "mcp-server",
+          name: "Linear",
+          status: "completed",
+        },
+      ],
+    };
+    queries.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            lastToolCallAt: new Date("2020-01-01T00:00:00.000Z"),
+            recentToolCalls: 1,
+            targetId: "linear",
+            targetLabel: "List issues",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "I've connected it" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Listening for the first call on your endpoint"),
+    ).toBeTruthy();
+  });
+
+  it("completes a new run only after a governed call arrives", async () => {
+    setVerifiedServer();
+    workflow.current = {
+      phase: "complete",
+      reset: vi.fn(),
+      statuses: [
+        {
+          key: "completed",
+          mcpServerId: "mcp-server",
+          name: "Linear",
+          status: "completed",
+        },
+      ],
+    };
+    const activity = {
+      current: [
+        {
+          lastToolCallAt: new Date("2020-01-01T00:00:00.000Z"),
+          recentToolCalls: 1,
+          targetId: "linear",
+          targetLabel: "List issues",
+          targetType: "hosted_mcp_server",
+          totalToolCalls: 1,
+        },
+      ],
+    };
+    queries.activity.mockImplementation(() => ({
+      data: { activity: activity.current },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    }));
+    const onComplete = vi.fn();
+    const rendered = render(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "I've connected it" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    activity.current = [
+      {
+        lastToolCallAt: new Date(Date.now() + 60_000),
+        recentToolCalls: 1,
+        targetId: "linear",
+        targetLabel: "List issues",
+        targetType: "hosted_mcp_server",
+        totalToolCalls: 2,
+      },
+    ];
+    rendered.rerender(
+      <ThirdPartyMcpJourney
+        status="in-progress"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  });
+
+  it("keeps the journey incomplete when activity cannot be checked", () => {
+    setVerifiedServer();
+    const refetch = vi.fn();
+    queries.activity.mockReturnValue({
+      data: undefined,
+      isError: true,
+      isPending: false,
+      refetch,
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <ThirdPartyMcpJourney
+        status="done"
+        onComplete={onComplete}
+        onSwitchJourney={vi.fn()}
+      />,
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Could not check for the first governed call."),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry activity check" }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it("scopes deployment workflow and queries to the request project", () => {
     render(
       <ThirdPartyMcpJourney
@@ -598,5 +899,10 @@ describe("ThirdPartyMcpJourney", () => {
         { throwOnError: false },
       );
     }
+    expect(queries.activity).toHaveBeenCalledWith(
+      { gramProject: "project-guide-test", getMcpServerActivityPayload: {} },
+      undefined,
+      expect.objectContaining({ throwOnError: false }),
+    );
   });
 });

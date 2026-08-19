@@ -1,6 +1,8 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
@@ -13,14 +15,18 @@ import {
 } from "@/pages/catalog/remotes";
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { motion, useReducedMotion } from "motion/react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 
 type JourneyPhase = "selection" | "deployment" | "verification";
+type Client = "claude" | "cursor" | "codex";
 
 function initialPhase(status: JourneyStatus): JourneyPhase {
   if (status === "not-started") return "selection";
@@ -45,6 +51,39 @@ function compareCatalogServers(a: PulseMCPServer, b: PulseMCPServer): number {
   );
 }
 
+function clientConfig(
+  client: Client,
+  serverSlug: string,
+  endpointUrl: string,
+): { code: string; language: string } {
+  if (client === "codex") {
+    return {
+      code: `[mcp_servers.${serverSlug}]\nurl = "${endpointUrl}"`,
+      language: "toml",
+    };
+  }
+
+  return {
+    code: JSON.stringify(
+      { mcpServers: { [serverSlug]: { url: endpointUrl } } },
+      null,
+      2,
+    ),
+    language: "json",
+  };
+}
+
+function clientLabel(client: Client): string {
+  switch (client) {
+    case "claude":
+      return "Claude";
+    case "cursor":
+      return "Cursor";
+    case "codex":
+      return "Codex";
+  }
+}
+
 export function ThirdPartyMcpJourney({
   status,
   onComplete,
@@ -57,13 +96,23 @@ export function ThirdPartyMcpJourney({
   expanded?: boolean;
 }): JSX.Element | null {
   const gramProject = useProjectSlugForRequests();
+  const routes = useRoutes();
   const [phase, setPhase] = useState(() => initialPhase(status));
   const [selectedServer, setSelectedServer] = useState<PulseMCPServer>();
   const [showMore, setShowMore] = useState(false);
+  const [client, setClient] = useState<Client>("claude");
+  const [isPromptPhase, setIsPromptPhase] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [promptStartedAt, setPromptStartedAt] = useState<Date>();
+  const [activityBaseline, setActivityBaseline] = useState<Date>();
+  const completionNotified = useRef(false);
   const catalog = useListMCPCatalog(
     undefined,
     undefined,
-    expanded && (phase === "selection" || phase === "deployment"),
+    expanded &&
+      (phase === "selection" ||
+        phase === "deployment" ||
+        phase === "verification"),
   );
   const deployableServers = useMemo(
     () =>
@@ -145,6 +194,63 @@ export function ThirdPartyMcpJourney({
       ? workflow.statuses.find((status) => status.mcpServerId === mcpServer?.id)
           ?.mcpEndpointUrl
       : undefined;
+  const {
+    data: activityData,
+    isError: activityError,
+    refetch: refetchActivity,
+  } = useGetMcpServerActivity(
+    { gramProject, getMcpServerActivityPayload: {} },
+    undefined,
+    {
+      enabled: Boolean(endpointUrl),
+      refetchInterval: endpointUrl
+        ? (query) => {
+            const activity = query.state.data?.activity.find(
+              (entry) =>
+                entry.targetType === "hosted_mcp_server" &&
+                entry.targetId === mcpServer?.slug &&
+                entry.totalToolCalls > 0,
+            );
+            if (status === "done" && activity) return false;
+            if (
+              isPromptPhase &&
+              promptStartedAt &&
+              activity?.lastToolCallAt &&
+              activity.lastToolCallAt >= promptStartedAt &&
+              (!activityBaseline || activity.lastToolCallAt > activityBaseline)
+            ) {
+              return false;
+            }
+            return 5_000;
+          }
+        : false,
+      throwOnError: false,
+    },
+  );
+  const serverActivity = activityError
+    ? undefined
+    : activityData?.activity.find(
+        (activity) =>
+          activity.targetType === "hosted_mcp_server" &&
+          activity.targetId === mcpServer?.slug &&
+          activity.totalToolCalls > 0,
+      );
+  const activityAfterPrompt = Boolean(
+    isListening &&
+    promptStartedAt &&
+    serverActivity?.lastToolCallAt &&
+    serverActivity.lastToolCallAt >= promptStartedAt &&
+    (!activityBaseline || serverActivity.lastToolCallAt > activityBaseline),
+  );
+  const activityCompletesJourney = Boolean(
+    serverActivity && (status === "done" || activityAfterPrompt),
+  );
+
+  useEffect(() => {
+    if (!activityCompletesJourney || completionNotified.current) return;
+    completionNotified.current = true;
+    onComplete();
+  }, [activityCompletesJourney, onComplete]);
 
   useEffect(() => {
     if (workflow.phase !== "complete") return;
@@ -278,23 +384,154 @@ export function ThirdPartyMcpJourney({
   }
 
   if (phase === "verification") {
+    const serverName = mcpServer?.name ?? "this server";
+    const serverSlug = mcpServer?.slug;
+    const config =
+      endpointUrl && serverSlug
+        ? clientConfig(client, serverSlug, endpointUrl)
+        : undefined;
+    const prompt = `Connect to the ${serverName} MCP server and list its available tools.`;
+    const startPrompt = () => {
+      setActivityBaseline(serverActivity?.lastToolCallAt);
+      setPromptStartedAt(new Date());
+      setIsPromptPhase(true);
+    };
+
     return (
       <JourneyPanel
         title="Verify your connection"
         onSwitchJourney={onSwitchJourney}
       >
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
-          {mcpServer?.name ?? "This server"} has a governed endpoint
-          {endpointUrl ? ` at ${endpointUrl}` : ""}. Review the connection to
-          continue.
+          {serverName} has a governed endpoint. Connect your client, then send
+          one read-only tools/list request to watch the first call arrive.
         </p>
-        <button
-          type="button"
-          onClick={onComplete}
-          className="border-foreground bg-foreground text-background px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
-        >
-          Complete journey
-        </button>
+        {endpointUrl && (
+          <a
+            href={endpointUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-information-default w-fit font-mono text-[11px] underline underline-offset-2"
+          >
+            {endpointUrl}
+          </a>
+        )}
+        {mcpServer && (
+          <Link
+            to={routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))}
+            className="text-information-default w-fit font-mono text-[11px] underline underline-offset-2"
+          >
+            View {serverName} MCP server
+          </Link>
+        )}
+        {activityCompletesJourney && !isPromptPhase && (
+          <motion.p
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22 }}
+            className="border-l-2 border-l-success-default pl-3 text-[13px]"
+          >
+            First call: {serverActivity?.targetLabel}
+          </motion.p>
+        )}
+        {config && !isPromptPhase && (
+          <>
+            <div className="border-border flex gap-3 border-b">
+              {(["claude", "cursor", "codex"] as const).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setClient(name)}
+                  className={`border-b-2 px-1 pb-2 font-mono text-[10px] tracking-[0.05em] uppercase ${
+                    client === name
+                      ? "border-foreground"
+                      : "border-transparent text-muted-foreground"
+                  }`}
+                >
+                  {clientLabel(name)}
+                </button>
+              ))}
+            </div>
+            <CodeSnippet
+              code={config.code}
+              language={config.language}
+              copyable
+            />
+            <button
+              type="button"
+              onClick={startPrompt}
+              className="border-foreground bg-foreground text-background px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+            >
+              I've connected it
+            </button>
+          </>
+        )}
+        {isPromptPhase && (
+          <>
+            <CodeSnippet code={prompt} language="text" copyable />
+            {!isListening && (
+              <button
+                type="button"
+                onClick={() => setIsListening(true)}
+                className="border-foreground bg-foreground text-background px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+              >
+                Sent it
+              </button>
+            )}
+            {isListening && activityError ? (
+              <>
+                <p className="text-destructive text-[13px]">
+                  Could not check for the first governed call.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refetchActivity()}
+                  className="border-border border px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+                >
+                  Retry activity check
+                </button>
+              </>
+            ) : isListening && activityCompletesJourney ? (
+              <motion.p
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22 }}
+                className="border-l-2 border-l-success-default pl-3 text-[13px]"
+              >
+                First call: {serverActivity?.targetLabel}
+              </motion.p>
+            ) : isListening ? (
+              <motion.p
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22 }}
+                className="text-muted-foreground flex items-center gap-2 font-mono text-[11px]"
+              >
+                <motion.span
+                  aria-hidden="true"
+                  animate={{ opacity: [0.2, 1, 0.2] }}
+                  transition={{ duration: 1.1, repeat: Infinity }}
+                  className="bg-foreground size-1.5"
+                />
+                Listening for the first call on your endpoint
+              </motion.p>
+            ) : null}
+          </>
+        )}
+        {activityError && !isPromptPhase && (
+          <>
+            <p className="text-destructive text-[13px]">
+              Could not check for the first governed call.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetchActivity()}
+              className="border-border border px-3 py-2 font-mono text-[11px] tracking-[0.05em] uppercase"
+            >
+              Retry activity check
+            </button>
+          </>
+        )}
       </JourneyPanel>
     );
   }
