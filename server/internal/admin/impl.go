@@ -185,12 +185,18 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// See sessionInfo in session_handler.go for why this one route is hand
-	// written rather than generated from the Goa design.
+	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
+	// features_handler.go for why these routes are hand written rather than
+	// generated from the Goa design.
 	mux.Handle(
 		http.MethodGet,
 		"/admin/session.get",
 		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
 	)
 }
 
@@ -1248,41 +1254,6 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
 	return adminOrganizationFromGetRow(row), nil
-}
-
-func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetOrganizationFeaturesPayload) (*gen.AdminOrganizationFeatures, error) {
-	if _, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        payload.OrganizationID,
-		AllowSlug: false,
-	}); errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.C(oops.CodeNotFound)
-	} else if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for features").LogError(ctx, s.logger)
-	}
-
-	isEnabled := func(feature productfeatures.Feature) bool {
-		enabled, err := s.productFeatures.IsFeatureEnabled(ctx, payload.OrganizationID, feature)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to read organization feature flag",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(payload.OrganizationID),
-				attr.SlogProductFeatureName(string(feature)),
-			)
-			return false
-		}
-		return enabled
-	}
-
-	return &gen.AdminOrganizationFeatures{
-		ConsentToolFilteringEnabled:     isEnabled(productfeatures.FeatureConsentToolFiltering),
-		HooksBrowserLoginEnabled:        isEnabled(productfeatures.FeatureHooksBrowserLogin),
-		HooksFailOpenEnabled:            isEnabled(productfeatures.FeatureHooksFailOpen),
-		PlatformMcpEnabled:              isEnabled(productfeatures.FeaturePlatformMCP),
-		RemoteSessionAutoRefreshEnabled: isEnabled(productfeatures.FeatureRemoteSessionAutoRefresh),
-		SessionCaptureEnabled:           isEnabled(productfeatures.FeatureSessionCapture),
-		SkillCaptureMetadataOnly:        isEnabled(productfeatures.FeatureSkillCaptureMetadataOnly),
-		SkillsEnabled:                   true,
-	}, nil
 }
 
 func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
