@@ -1,4 +1,3 @@
-import { useAllTimeProjectOverview } from "@/components/project-guide/allTimeOverviewQuery";
 import {
   catalogBackedMcpServers,
   deriveJourneyStatus,
@@ -66,9 +65,6 @@ export function useProjectGuideProgress(): {
   } = useRiskListPolicies({ gramProject }, undefined, {
     throwOnError: false,
   });
-  const { isPending: overviewPending } = useAllTimeProjectOverview({
-    enabled: true,
-  });
   // One row is enough: the card only asks whether a secrets finding exists.
   const {
     data: secretsFindings,
@@ -108,14 +104,14 @@ export function useProjectGuideProgress(): {
                 hasMcpServerActivity(activity, server),
             ),
           })
-        : "in-progress",
+        : "unreadable",
     "secret-block":
       policies && findings
         ? deriveJourneyStatus({
             startSignal: hasBlockingSecretsPolicy(policies),
             winSignal: Boolean(latestSecretsFinding(findings)),
           })
-        : "in-progress",
+        : "unreadable",
   };
 
   return {
@@ -127,7 +123,6 @@ export function useProjectGuideProgress(): {
       pluginsPending ||
       activityPending ||
       policiesPending ||
-      overviewPending ||
       findingsPending,
   };
 }

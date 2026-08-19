@@ -302,8 +302,8 @@ describe("useProjectGuideProgress", () => {
     const { result } = renderHook(() => useProjectGuideProgress());
 
     expect(result.current.statusByJourney).toEqual({
-      "third-party-mcp": "in-progress",
-      "secret-block": "in-progress",
+      "third-party-mcp": "unreadable",
+      "secret-block": "unreadable",
     });
   });
 
@@ -322,8 +322,8 @@ describe("useProjectGuideProgress", () => {
     const { result } = renderHook(() => useProjectGuideProgress());
 
     expect(result.current.statusByJourney).toEqual({
-      "third-party-mcp": "in-progress",
-      "secret-block": "in-progress",
+      "third-party-mcp": "unreadable",
+      "secret-block": "unreadable",
     });
   });
 

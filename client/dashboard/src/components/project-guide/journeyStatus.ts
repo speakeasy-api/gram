@@ -85,7 +85,10 @@ export function hasMcpServerActivity(
 export function latestSecretsFinding(
   results: RiskResult[] | undefined,
 ): RiskResult | undefined {
-  return results?.[0];
+  if (!results?.length) return undefined;
+  return results?.reduce((latest, result) =>
+    result.createdAt > latest.createdAt ? result : latest,
+  );
 }
 
 /**
@@ -130,5 +133,5 @@ export function firstIncompleteStepIndex(
   stepCount: number,
 ): number {
   if (status === "done") return stepCount;
-  return status === "not-started" ? 0 : 1;
+  return status === "in-progress" ? 1 : 0;
 }

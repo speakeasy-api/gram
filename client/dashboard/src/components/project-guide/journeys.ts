@@ -1,6 +1,10 @@
 export type JourneyId = "third-party-mcp" | "secret-block";
 
-export type JourneyStatus = "not-started" | "in-progress" | "done";
+export type JourneyStatus =
+  | "not-started"
+  | "in-progress"
+  | "done"
+  | "unreadable";
 
 export function otherProjectGuideJourney(id: JourneyId): JourneyId {
   return id === "third-party-mcp" ? "secret-block" : "third-party-mcp";
@@ -20,6 +24,7 @@ export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
   "not-started": "Not started",
   "in-progress": "In progress",
   done: "Done",
+  unreadable: "Progress unavailable",
 };
 
 export type JourneyMeta = {

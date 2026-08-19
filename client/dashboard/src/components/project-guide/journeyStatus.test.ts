@@ -4,6 +4,7 @@ import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { describe, expect, it } from "vitest";
 import {
@@ -14,6 +15,7 @@ import {
   hasCatalogBackedServer,
   hasDefaultPluginServer,
   hasMcpServerActivity,
+  latestSecretsFinding,
 } from "./journeyStatus";
 
 function server(overrides: Partial<McpServer>): McpServer {
@@ -324,6 +326,15 @@ describe("deriveJourneyStatus", () => {
   });
 });
 
+describe("latestSecretsFinding", () => {
+  it("selects the newest finding rather than trusting response order", () => {
+    const older = { id: "older", createdAt: new Date("2026-08-01") };
+    const newer = { id: "newer", createdAt: new Date("2026-08-02") };
+
+    expect(latestSecretsFinding([older, newer] as RiskResult[])).toBe(newer);
+  });
+});
+
 describe("firstIncompleteStepIndex", () => {
   it("opens a fresh journey on its first step", () => {
     expect(firstIncompleteStepIndex("not-started", 3)).toBe(0);
@@ -335,5 +346,9 @@ describe("firstIncompleteStepIndex", () => {
 
   it("leaves a finished journey past its last step", () => {
     expect(firstIncompleteStepIndex("done", 3)).toBe(3);
+  });
+
+  it("restarts an unreadable journey conservatively", () => {
+    expect(firstIncompleteStepIndex("unreadable", 3)).toBe(0);
   });
 });
