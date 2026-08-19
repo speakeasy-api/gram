@@ -220,7 +220,11 @@ export function RecordNav({
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={onFeatures} tooltip="Features">
+              <SidebarMenuButton
+                asChild
+                isActive={onFeatures}
+                tooltip="Features"
+              >
                 <Link
                   to="/organizations/$idOrSlug/features"
                   params={{ idOrSlug }}
