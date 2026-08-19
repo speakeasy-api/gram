@@ -12,12 +12,16 @@ import (
 const meterUpstreamAuthorize = "gram.remote_session.upstream_authorize"
 
 // Authorize holds the upstream-authorize instrument: an unsampled census of
-// authorize-URL builds against upstream identity providers, one count per
-// flow the consent screen sends a user out on.
+// authorize-URL attempts against upstream identity providers, one count per
+// flow the consent screen tries to send a user out on.
 //
-// It records at BuildAuthorizationUrl entry, before the endpoint validations
-// and the Redis write, so flows that die on unrelated errors still count
-// toward the census.
+// Attempts, not completed builds, on purpose: it records at
+// BuildAuthorizationUrl entry, before the endpoint validations and the Redis
+// write, so a flow that dies there still counts. A policy gate on the
+// upstream (such as PKCE enforcement) would evaluate at that same entry
+// point, so exit-recording would undercount exactly the flows such a gate
+// cares about — and failures past the entry are already visible through the
+// flow-level oauth.flow.failed counter and error logs.
 type Authorize struct {
 	flows metric.Int64Counter
 }
@@ -27,7 +31,7 @@ func NewAuthorize(logger *slog.Logger, meterProvider metric.MeterProvider) *Auth
 
 	flows, err := meter.Int64Counter(
 		meterUpstreamAuthorize,
-		metric.WithDescription("Upstream authorize URLs built for Remote Session OAuth flows, by the issuer's advertised PKCE support."),
+		metric.WithDescription("Upstream authorize URL attempts for Remote Session OAuth flows, by the issuer's advertised PKCE support."),
 		metric.WithUnit("{flow}"),
 	)
 	if err != nil {
@@ -37,7 +41,7 @@ func NewAuthorize(logger *slog.Logger, meterProvider metric.MeterProvider) *Auth
 	return &Authorize{flows: flows}
 }
 
-// Record counts one authorize-URL build.
+// Record counts one authorize-URL attempt.
 func (m *Authorize) Record(ctx context.Context, issuerURL string, pkceSupport PKCESupportState) {
 	if m == nil || m.flows == nil {
 		return
