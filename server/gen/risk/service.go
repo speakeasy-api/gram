@@ -52,9 +52,9 @@ type Service interface {
 	MarkRiskResultsFalsePositive(context.Context, *MarkRiskResultsFalsePositivePayload) (err error)
 	// Undo a false-positive dismissal for one or more risk results.
 	UnmarkRiskResultsFalsePositive(context.Context, *UnmarkRiskResultsFalsePositivePayload) (err error)
-	// List risk results manually marked as false positive for the current project
-	// (the Dismissed tab). Kept separate from listRiskResults, which never returns
-	// dismissed results.
+	// List suppressed risk results for the current project — findings hidden by an
+	// exclusion rule, a manual dismissal, or the automated false-positive sweep.
+	// Kept separate from listRiskResults, which never returns suppressed results.
 	ListDismissedRiskResults(context.Context, *ListDismissedRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
@@ -652,6 +652,9 @@ type ListDismissedRiskResultsPayload struct {
 	Cursor *string
 	// Maximum number of results to return per page.
 	Limit *int
+	// Only return results suppressed for these reasons. Omitted or empty means all
+	// reasons.
+	Reasons []string
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service

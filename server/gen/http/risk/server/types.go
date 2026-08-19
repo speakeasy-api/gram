@@ -19025,10 +19025,11 @@ func NewUnmarkRiskResultsFalsePositivePayload(body *UnmarkRiskResultsFalsePositi
 
 // NewListDismissedRiskResultsPayload builds a risk service
 // listDismissedRiskResults endpoint payload.
-func NewListDismissedRiskResultsPayload(cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListDismissedRiskResultsPayload {
+func NewListDismissedRiskResultsPayload(cursor *string, limit *int, reasons []string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListDismissedRiskResultsPayload {
 	v := &risk.ListDismissedRiskResultsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Reasons = reasons
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

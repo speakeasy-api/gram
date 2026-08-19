@@ -2998,6 +2998,9 @@ func EncodeListDismissedRiskResultsRequest(encoder func(*http.Request) goahttp.E
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		for _, value := range p.Reasons {
+			values.Add("reasons", value)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
