@@ -22,9 +22,9 @@ var _ = Service("agent", func() {
 		// Authenticated with an API key carrying the `agent_user` scope — the
 		// per-user key minted by token-exchange, so the enrolled user is the key
 		// owner and the org derives from the key. An org `agent` install key also
-		// passes (it implies `agent_user`; see auth.Authorize), so agents still
-		// on the shared org key keep working during the transition. `email` is
-		// retained as an optional param for the legacy vouched-email path.
+		// passes (it implies `agent_user`; see auth.Authorize); on that path the
+		// MDM profile vouches the enrolled user's email via the Gram-User-Email
+		// header (DNO-935).
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
@@ -35,7 +35,7 @@ var _ = Service("agent", func() {
 			// scope): that key's owner is an admin, not the enrolled developer, so
 			// the MDM profile vouches the developer's email here. Ignored for a
 			// per-user key (`agent_user`), whose owner is the enrolled user.
-			Attribute("email", String, "Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.", func() {
+			Attribute("email", String, "Email address of the enrolled user, carried in the Gram-User-Email header. Authoritative — and required by the handler — when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user. Optional at the transport level so per-user-key agents need not send it.", func() {
 				Example("dev@acme.corp")
 			})
 			// Hardware identity, reported by agents that can read it. Both are
@@ -51,7 +51,6 @@ var _ = Service("agent", func() {
 			Attribute("hostname", String, "Hostname of the machine the agent runs on, when it can be read.", func() {
 				Example("dev-macbook-pro")
 			})
-			Required("email")
 		})
 
 		Result(GetPluginsResult)
@@ -59,13 +58,14 @@ var _ = Service("agent", func() {
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
 			security.ByKeyHeader()
-			Param("email")
-			// Carried as headers rather than query params: a serial is a
-			// durable hardware identifier and a hostname frequently embeds a
-			// person's name, and the request logger records URLs but not
-			// headers. `email` remains a query param for compatibility with
-			// deployed agents; the request logging middleware redacts it from
-			// logged URLs.
+			// Carried as headers rather than query params: the email and
+			// hostname identify a person and a serial is a durable hardware
+			// identifier, and the request logger records URLs but not headers
+			// (DNO-935). Legacy agents still append `?email=` to the URL; the
+			// generated decoder only reads declared bindings so the param is
+			// ignored, and the request logging middleware keeps redacting it
+			// from logged URLs.
+			Header("email:Gram-User-Email")
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
 			Response(StatusOK)

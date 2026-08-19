@@ -47,7 +47,7 @@ func TestGetPlugins_ObservabilityWithoutAssignments(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -71,7 +71,7 @@ func TestGetPlugins_ScopesToAssignedPrincipals(t *testing.T) {
 	other := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "someone-elses-tool")
 	assignPlugin(t, ctx, ti.conn, other, ti.orgID, "email:someone-else@example.com")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
@@ -92,7 +92,7 @@ func TestGetPlugins_DeliversEmailAndWildcardAssignments(t *testing.T) {
 	wildcardTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "wildcard-tool")
 	assignPlugin(t, ctx, ti.conn, wildcardTool, ti.orgID, "*")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.ElementsMatch(t,
@@ -117,7 +117,7 @@ func TestGetPlugins_DeliversUserAndRoleAssignments(t *testing.T) {
 	roleURN := assignUserToRole(t, ctx, ti.conn, ti.orgID, mockidp.MockUserID, "engineering")
 	assignPlugin(t, ctx, ti.conn, roleTool, ti.orgID, roleURN)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 	require.ElementsMatch(t,
 		[]string{wantObservability, "user-tool", "role-tool"},
@@ -126,7 +126,7 @@ func TestGetPlugins_DeliversUserAndRoleAssignments(t *testing.T) {
 
 	// A non-member email resolves to no user, so it gets neither the user- nor
 	// role-scoped plugin — only observability.
-	nonMember, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "stranger@example.com"})
+	nonMember, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("stranger@example.com")})
 	require.NoError(t, err)
 	require.Equal(t, []string{wantObservability}, pluginSlugs(nonMember),
 		"user:/role: assignments are withheld from non-members")
@@ -143,7 +143,7 @@ func TestGetPlugins_DeliversDirectoryGroupAssignmentsToUnlinkedUsers(t *testing.
 	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "directory-group-tool")
 	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "unlinked@example.com"})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("unlinked@example.com")})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "directory-group-tool"}, pluginSlugs(res))
 }
@@ -169,7 +169,7 @@ func TestGetPlugins_DeliversDirectoryAttributeAssignments(t *testing.T) {
 	managerPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "manager-tool")
 	assignPlugin(t, ctx, ti.conn, managerPlugin, ti.orgID, plugins.DirectoryAttributePrincipal("manager.email", "lead@example.com"))
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "department-tool", "manager-tool"}, pluginSlugs(res))
 }
@@ -198,7 +198,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 		assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(assignment.group))
 	}
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "alpha-tool", "beta-tool", "gamma-tool"}, pluginSlugs(res))
 
@@ -207,7 +207,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 		DirectoryGroupID: alpha,
 	})
 	require.NoError(t, err)
-	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "beta-tool", "gamma-tool"}, pluginSlugs(res))
 
@@ -217,7 +217,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 		WorkosLastEventID:      conv.ToPGText("event-group-beta-deleted"),
 	})
 	require.NoError(t, err)
-	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "gamma-tool"}, pluginSlugs(res))
 
@@ -227,7 +227,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 		WorkosLastEventID:     conv.ToPGText("event-user-gamma-deleted"),
 	})
 	require.NoError(t, err)
-	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: email})
+	res, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
 	require.Equal(t, []string{wantObservability}, pluginSlugs(res))
 }
@@ -244,7 +244,7 @@ func TestGetPlugins_DirectoryGroupsAreOrganizationScoped(t *testing.T) {
 	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "other-org-group-tool")
 	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "directory-user@example.com"})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("directory-user@example.com")})
 	require.NoError(t, err)
 	require.Equal(t, []string{wantObservability}, pluginSlugs(res))
 }
@@ -257,7 +257,7 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	// nothing is installable and the endpoint returns empty.
 	seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unpublished-tool")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Empty(t, res.Marketplaces)
@@ -284,7 +284,7 @@ func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
 	wantBeta := naming.MarketplaceName(mockidp.MockOrgName, "beta", false) // local-dev-org-beta-speakeasy
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct project-scoped names do not collapse")
@@ -319,7 +319,7 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-only-tool")
 	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "colliding names collapse to one")
@@ -352,7 +352,7 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-tool")
 	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, "*")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 2, "distinct names must not collapse")
@@ -383,7 +383,7 @@ func TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
 	wantBeta := naming.MarketplaceName(mockidp.MockOrgName, "beta", false)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "only the default project surfaces")
@@ -406,7 +406,7 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	// A different org has a published marketplace + a wildcard-assigned plugin.
 	seedSecondOrg(t, ctx, ti.conn)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1, "only the caller's org marketplace")
@@ -444,7 +444,7 @@ func TestGetPlugins_IgnoresMismatchedOrgAssignment(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 	require.Equal(t, []string{wantObservability}, pluginSlugs(res),
 		"an assignment row stamped with a different org must not deliver the plugin")
@@ -454,15 +454,19 @@ func TestGetPlugins_InvalidEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
-	// The default context is an org install key, so the vouched email is
-	// authoritative and an empty one is rejected.
-	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: ""})
-	require.Error(t, err, "empty email must be rejected")
+	// The default context is an org install key, so the vouched email
+	// (Gram-User-Email header) is authoritative and a missing or empty one is
+	// rejected.
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: nil})
+	require.Error(t, err, "absent email header must be rejected")
+
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("")})
+	require.Error(t, err, "empty email header must be rejected")
 }
 
 // TestGetPlugins_PerUserKeyBindsToOwner pins the DNO-383 scope-aware attribution:
 // a per-user `agent_user` key resolves the polling identity from the
-// authenticated key owner, so a vouched `email` param is ignored — a leaked
+// authenticated key owner, so a vouched email header is ignored — a leaked
 // per-user key cannot claim another member's plugins.
 func TestGetPlugins_PerUserKeyBindsToOwner(t *testing.T) {
 	t.Parallel()
@@ -472,7 +476,7 @@ func TestGetPlugins_PerUserKeyBindsToOwner(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "someone-else@example.com"})
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("someone-else@example.com")})
 	require.NoError(t, err, "per-user key ignores the vouched email and uses its owner")
 	require.Len(t, res.Marketplaces, 1)
 }
@@ -486,7 +490,7 @@ func TestGetPlugins_RecordsDeviceSync(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-		Email:        mockidp.MockUserEmail,
+		Email:        new(mockidp.MockUserEmail),
 		SerialNumber: new("C02XK1ABCDEF"),
 		Hostname:     new("dev-macbook-pro"),
 	})
@@ -512,7 +516,7 @@ func TestGetPlugins_DeviceSyncSkippedWithoutSerial(t *testing.T) {
 
 	for _, serial := range []*string{nil, new(""), new("   ")} {
 		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-			Email:        mockidp.MockUserEmail,
+			Email:        new(mockidp.MockUserEmail),
 			SerialNumber: serial,
 			Hostname:     nil,
 		})
@@ -541,7 +545,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 
 	const serial = "C02XK1ABCDEF"
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-		Email:        mockidp.MockUserEmail,
+		Email:        new(mockidp.MockUserEmail),
 		SerialNumber: ptr(serial),
 		Hostname:     new("old-name"),
 	})
@@ -554,7 +558,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 
 	// Same machine, same user, immediately: the heartbeat throttle holds.
 	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-		Email:        mockidp.MockUserEmail,
+		Email:        new(mockidp.MockUserEmail),
 		SerialNumber: ptr(serial),
 		Hostname:     new("old-name"),
 	})
@@ -567,7 +571,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 
 	// A rename inside the same window must land despite the throttle.
 	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-		Email:        mockidp.MockUserEmail,
+		Email:        new(mockidp.MockUserEmail),
 		SerialNumber: ptr(serial),
 		Hostname:     new("new-name"),
 	})
@@ -580,7 +584,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 
 	// Dropping the hostname must not blank a known one.
 	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-		Email:        mockidp.MockUserEmail,
+		Email:        new(mockidp.MockUserEmail),
 		SerialNumber: ptr(serial),
 		Hostname:     nil,
 	})
@@ -603,7 +607,7 @@ func TestGetPlugins_DeviceSyncNormalizesSerialCase(t *testing.T) {
 
 	for _, reported := range []string{"C02XK1ABCDEF", "c02xk1abcdef", "  C02xk1AbCdEf  "} {
 		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-			Email:        mockidp.MockUserEmail,
+			Email:        new(mockidp.MockUserEmail),
 			SerialNumber: new(reported),
 			Hostname:     nil,
 		})
@@ -635,7 +639,7 @@ func TestGetPlugins_DeviceSyncRejectsPlaceholderSerials(t *testing.T) {
 		"N/A",
 	} {
 		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
-			Email:        mockidp.MockUserEmail,
+			Email:        new(mockidp.MockUserEmail),
 			SerialNumber: new(placeholder),
 			Hostname:     nil,
 		})

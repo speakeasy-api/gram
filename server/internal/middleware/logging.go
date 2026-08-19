@@ -88,7 +88,10 @@ var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
 	"token": true,
 
-	// Email address on auth.login and agent.getPlugins.
+	// Email address on auth.login, and on agent.getPlugins polls from legacy
+	// device agents — the agent moved it to the Gram-User-Email header
+	// (DNO-935), but already-deployed agents keep appending `?email=` to the
+	// URL, so it must stay redacted.
 	"email": true,
 
 	// Chat search terms, which are user-typed free text.

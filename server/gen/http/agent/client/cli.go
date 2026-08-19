@@ -18,15 +18,17 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyToken string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
-	var email string
-	{
-		email = agentGetPluginsEmail
-	}
+func BuildGetPluginsPayload(agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
 	var apikeyToken *string
 	{
 		if agentGetPluginsApikeyToken != "" {
 			apikeyToken = &agentGetPluginsApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetPluginsEmail != "" {
+			email = &agentGetPluginsEmail
 		}
 	}
 	var serialNumber *string
@@ -42,8 +44,8 @@ func BuildGetPluginsPayload(agentGetPluginsEmail string, agentGetPluginsApikeyTo
 		}
 	}
 	v := &agent.GetPluginsPayload{}
-	v.Email = email
 	v.ApikeyToken = apikeyToken
+	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 

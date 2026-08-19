@@ -22,7 +22,7 @@ export type AgentPluginsQueryData = GetPluginsResult;
 export function prefetchAgentPlugins(
   queryClient: QueryClient,
   client$: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -38,7 +38,7 @@ export function prefetchAgentPlugins(
 
 export function buildAgentPluginsQuery(
   client$: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -47,10 +47,10 @@ export function buildAgentPluginsQuery(
 } {
   return {
     queryKey: queryKeyAgentPlugins({
-      email: request.email,
-      gramKey: request.gramKey,
-      gramDeviceSerial: request.gramDeviceSerial,
-      gramDeviceHostname: request.gramDeviceHostname,
+      gramKey: request?.gramKey,
+      gramUserEmail: request?.gramUserEmail,
+      gramDeviceSerial: request?.gramDeviceSerial,
+      gramDeviceHostname: request?.gramDeviceHostname,
     }),
     queryFn: async function agentPluginsQueryFn(
       ctx,
@@ -78,8 +78,8 @@ export function buildAgentPluginsQuery(
 
 export function queryKeyAgentPlugins(
   parameters: {
-    email: string;
     gramKey?: string | undefined;
+    gramUserEmail?: string | undefined;
     gramDeviceSerial?: string | undefined;
     gramDeviceHostname?: string | undefined;
   },

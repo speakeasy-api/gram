@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -46,7 +46,7 @@ import { Result } from "../types/fp.js";
  */
 export function agentGetPlugins(
   client: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function agentGetPlugins(
 
 async function $do(
   client: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,7 +95,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(GetAgentPluginsRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(GetAgentPluginsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -106,26 +107,27 @@ async function $do(
 
   const path = pathToFunc("/rpc/agent.getPlugins")();
 
-  const query = encodeFormQuery({
-    "email": payload.email,
-  });
-
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Device-Hostname": encodeSimple(
       "Gram-Device-Hostname",
-      payload["Gram-Device-Hostname"],
+      payload?.["Gram-Device-Hostname"],
       { explode: false, charEncoding: "none" },
     ),
     "Gram-Device-Serial": encodeSimple(
       "Gram-Device-Serial",
-      payload["Gram-Device-Serial"],
+      payload?.["Gram-Device-Serial"],
       { explode: false, charEncoding: "none" },
     ),
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
+    "Gram-User-Email": encodeSimple(
+      "Gram-User-Email",
+      payload?.["Gram-User-Email"],
+      { explode: false, charEncoding: "none" },
+    ),
   }));
 
   const requestSecurity = resolveSecurity(
@@ -159,7 +161,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
