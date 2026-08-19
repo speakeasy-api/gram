@@ -36,6 +36,15 @@ for item in "${copy_from_main[@]}"; do
   [ -e "$src" ] && rsync -a "$src" .
 done
 
+gcl="${main_worktree}/server/bin/gcl"
+if [ -x "$gcl" ]; then
+  mkdir -p "${current_worktree}/server/bin"
+  rsync -a "$gcl" "${current_worktree}/server/bin/"
+  if [ -f "${gcl}.fingerprint" ]; then
+    rsync -a "${gcl}.fingerprint" "${current_worktree}/server/bin/"
+  fi
+fi
+
 mise trust
 if ! mise run install:aube --offline; then
   echo "Offline install failed, falling back to online install..."
