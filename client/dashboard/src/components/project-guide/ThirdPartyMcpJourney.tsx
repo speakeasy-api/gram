@@ -1,4 +1,5 @@
 import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import type { ProjectGuideEventCard } from "@/components/project-guide/projectGuideMachine";
 import { catalogBackedMcpServers } from "@/components/project-guide/journeyStatus";
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import {
@@ -457,6 +458,23 @@ export function ThirdPartyMcpJourney({
     return (
       <JourneyPanel
         complete={activityCompletesJourney}
+        completionEvent={
+          activityCompletesJourney && serverActivity
+            ? {
+                kind: "Governed call",
+                tone: "allow",
+                title: serverActivity.targetLabel,
+                rows: [
+                  { key: "server", value: serverName },
+                  {
+                    key: "calls",
+                    value: String(serverActivity.totalToolCalls),
+                  },
+                ],
+                note: "It sits in Observe → Tool Logs next to every other server.",
+              }
+            : null
+        }
         currentStep={
           activityCompletesJourney ? 4 : isListening ? 4 : isPromptPhase ? 3 : 2
         }
@@ -847,6 +865,8 @@ function JourneyPanel({
   onPause,
   onResume,
   onSwitchJourney,
+  completionEvent,
+  completionPrimary,
 }: {
   title: string;
   children: ReactNode;
@@ -858,6 +878,8 @@ function JourneyPanel({
   onPause?: () => void;
   onResume?: () => void;
   onSwitchJourney: () => void;
+  completionEvent?: ProjectGuideEventCard | null;
+  completionPrimary?: ReactNode;
 }): JSX.Element {
   return (
     <JourneyRun
@@ -873,6 +895,8 @@ function JourneyPanel({
       onPause={onPause}
       onResume={onResume}
       onSwitchJourney={onSwitchJourney}
+      completionEvent={completionEvent}
+      completionPrimary={completionPrimary}
     >
       {children}
     </JourneyRun>
@@ -889,6 +913,7 @@ function ServerButton({
   return (
     <button
       type="button"
+      data-testid="project-guide-catalog-server"
       onClick={() => onClick(server)}
       className="border-border hover:border-foreground flex items-center gap-2 border px-3 py-2 text-left transition-colors"
     >

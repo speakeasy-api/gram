@@ -1,5 +1,6 @@
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
 import { JourneyRun } from "@/components/project-guide/JourneyRun";
+import type { ProjectGuideEventCard } from "@/components/project-guide/projectGuideMachine";
 import {
   SECRET_BLOCK_STEPS,
   type JourneyStatus,
@@ -67,6 +68,8 @@ function Section({
   onPause,
   onResume,
   onSwitchJourney,
+  completionEvent,
+  completionPrimary,
 }: {
   title: string;
   children: React.ReactNode;
@@ -78,6 +81,8 @@ function Section({
   onPause?: () => void;
   onResume?: () => void;
   onSwitchJourney: () => void;
+  completionEvent?: ProjectGuideEventCard | null;
+  completionPrimary?: React.ReactNode;
 }): JSX.Element {
   return (
     <JourneyRun
@@ -93,6 +98,8 @@ function Section({
       onPause={onPause}
       onResume={onResume}
       onSwitchJourney={onSwitchJourney}
+      completionEvent={completionEvent}
+      completionPrimary={completionPrimary}
     >
       {children}
     </JourneyRun>
@@ -384,6 +391,27 @@ export function SecretBlockJourney({
     return (
       <Section
         complete
+        completionEvent={{
+          kind: "Denied · risk event",
+          tone: "deny",
+          title: "request denied by secrets policy",
+          rows: [
+            {
+              key: "rule",
+              value: getRuleTitleFallback(latestRiskResult.ruleId),
+            },
+            {
+              key: "match",
+              value: "synthetic credential · highlighted in the transcript",
+            },
+          ],
+          note: "The request was blocked before the model answered. The prompt was rejected before the model saw it.",
+        }}
+        completionPrimary={
+          <routes.riskEvents.Link className="bg-[#121212] px-[18px] py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase">
+            Open Risk Events
+          </routes.riskEvents.Link>
+        }
         currentStep={4}
         status={status}
         title="The prompt was denied"

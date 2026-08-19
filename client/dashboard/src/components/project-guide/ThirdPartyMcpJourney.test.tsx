@@ -269,12 +269,7 @@ describe("ThirdPartyMcpJourney", () => {
 
     expect(
       screen
-        .getAllByRole("button")
-        .filter(
-          (button) =>
-            button.textContent !== "Switch journey" &&
-            button.textContent !== "Start the journey",
-        )
+        .getAllByTestId("project-guide-catalog-server")
         .map((button) => button.textContent),
     ).toEqual([
       "Linear1 tools",
@@ -282,7 +277,6 @@ describe("ThirdPartyMcpJourney", () => {
       "Vercel1 tools",
       "Granola1 tools",
       "Ramp1 tools",
-      "More automatic servers",
     ]);
     fireEvent.click(
       screen.getByRole("button", { name: "More automatic servers" }),

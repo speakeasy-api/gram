@@ -159,7 +159,7 @@ function JourneyCard({
         journey.id === "third-party-mcp" && "border-border md:border-l",
       )}
     >
-      <h3>
+      <h3 className={expanded ? "hidden" : undefined}>
         <button
           id={triggerId}
           type="button"
@@ -221,6 +221,8 @@ function JourneyCard({
         </button>
       </h3>
 
+      {!expanded && !spine && <JourneyGraphic journey={journey} />}
+
       {expanded && (
         <motion.div
           id={panelId}
@@ -251,6 +253,92 @@ function JourneyCard({
         </motion.div>
       )}
     </motion.section>
+  );
+}
+
+function JourneyGraphic({ journey }: { journey: JourneyMeta }): JSX.Element {
+  const isA = journey.id === "third-party-mcp";
+  const accent = isA ? "#2879D8" : "#B45A28";
+  const plates = isA
+    ? [
+        ["Your client", "claude code · cursor · codex", "not connected"],
+        ["Your endpoint", "tool access · tool logs", "not installed"],
+        ["Upstream", "linear · vendor server", "not picked"],
+      ]
+    : [
+        ["Your agent", "claude code + observability plugin", "no plugin"],
+        ["Secrets policy", "deny on match", "off"],
+        ["Model provider", "anthropic · openai", "unproven"],
+      ];
+  return (
+    <div className="flex min-h-[400px] flex-col items-center justify-center px-6 pt-10 pb-8">
+      <style>{`@keyframes guidepulse{0%,45%{transform:scale(1)}50%{transform:scale(1.018)}58%,100%{transform:scale(1)}}@keyframes tickOn{0%,45%{opacity:.16}55%,74%{opacity:1}100%{opacity:.16}}@media(prefers-reduced-motion:reduce){.motion-safe\\:animate-\\[guidepulse_9s_linear_infinite\\],.motion-safe\\:animate-\\[tickOn_2\\.4s_linear_infinite\\]{animation:none}}`}</style>
+      {plates.map(([zone, name, status], index) => (
+        <div key={zone} className="flex w-full flex-col items-center">
+          <div
+            className={cn(
+              "relative flex w-[80%] flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
+              index === 1 &&
+                "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px] shadow-[inset_0_0_0_1px_#DBDBDB] motion-safe:animate-[guidepulse_9s_linear_infinite]",
+            )}
+          >
+            {index === 1 && (
+              <span className="absolute inset-y-0 left-0 w-[5px] bg-[linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)] opacity-40" />
+            )}
+            <div className="flex items-center gap-3 pl-0">
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/42 uppercase">
+                  {zone}
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-[12.5px] leading-[1.2]",
+                    index === 1 && "text-[18px]",
+                  )}
+                >
+                  {name}
+                </span>
+              </span>
+              <span className="shrink-0 font-mono text-[9.5px] text-[#121212]/40">
+                {status}
+              </span>
+            </div>
+            {index === 1 && (
+              <div className="flex items-center gap-2 pl-2">
+                <span className="flex flex-1 gap-[3px]">
+                  {Array.from({ length: 12 }, (_, tick) => (
+                    <span
+                      key={tick}
+                      className="h-[5px] flex-1 bg-[#B45A28] opacity-20 motion-safe:animate-[tickOn_2.4s_linear_infinite]"
+                      style={{
+                        animationDelay: `${-2.4 + tick * 0.2}s`,
+                        backgroundColor: accent,
+                      }}
+                    />
+                  ))}
+                </span>
+                <span className="font-mono text-[9px] tracking-[0.07em] text-[#121212]/45 uppercase">
+                  {isA ? "in tool logs" : "1 risk event"}
+                </span>
+              </div>
+            )}
+          </div>
+          {index < 2 && (
+            <div className="relative h-[34px] w-3 border-x border-dashed border-[#C4C4C4]">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/35 uppercase">
+                {isA
+                  ? index === 0
+                    ? "requests"
+                    : "governed hop"
+                  : index === 0
+                    ? "every prompt"
+                    : "denied here"}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
