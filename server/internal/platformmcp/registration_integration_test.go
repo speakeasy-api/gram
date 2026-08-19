@@ -50,6 +50,46 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestPostgresOAuthStoreRefreshReplayRecordsTerminalTransitionOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_refresh_replay_terminal_metric")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP OAuth test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	telemetry := &testOAuthTelemetry{}
+	store := NewPostgresOAuthStore(conn).WithTelemetry(telemetry)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP OAuth test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	parent := platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: "jti-" + uuid.NewString(), RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(30 * 24 * time.Hour)}
+	require.NoError(t, store.CreateSession(ctx, parent))
+	replacement := parent
+	replacement.ID = uuid.NewString()
+	replacement.JTI = "jti-" + uuid.NewString()
+	replacement.RefreshHash = "refresh-" + uuid.NewString()
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Generation: connection.Generation, Now: now.Add(time.Minute), Replacement: replacement})
+	require.NoError(t, err)
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Now: now.Add(2 * time.Minute)})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Generation: connection.Generation, Now: now.Add(3 * time.Minute), Replacement: platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: "jti-" + uuid.NewString(), RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(30 * 24 * time.Hour)}})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+	require.Equal(t, []platformoauth.ReauthorizationReason{platformoauth.ReauthorizationReasonRefreshReuse}, telemetry.terminalTransitionReasons)
+}
+
 func TestPostgresOAuthStoreRefreshReplayAfterConnectionRevocationIsTerminal(t *testing.T) {
 	t.Parallel()
 

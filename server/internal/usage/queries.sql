@@ -36,7 +36,7 @@ FROM inputs
 CROSS JOIN completed_spend;
 
 -- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, disabled
+SELECT key_type, monthly_credits, disabled
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = ANY(@key_types::text[])

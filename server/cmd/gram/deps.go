@@ -660,12 +660,13 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 	}
 }
 
-// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
-// It degrades rather than refusing to boot, because every other admin endpoint
-// works without OpenRouter; the unavailable case is logged at Error on startup.
+// newAdminOpenRouter builds the OpenRouter client used for live key usage and
+// trial re-arm operations. It degrades rather than refusing to boot, because
+// other admin endpoints work without OpenRouter; the unavailable case is logged
+// at Error on startup.
 //
 // The nil arguments are a billing tracker and a key refresher, neither reached.
-func newAdminTrialKeyReviver(
+func newAdminOpenRouter(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -673,7 +674,7 @@ func newAdminTrialKeyReviver(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
-) admin.TrialKeyReviver {
+) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
 		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
@@ -681,13 +682,13 @@ func newAdminTrialKeyReviver(
 
 	provisioningKey := c.String("openrouter-provisioning-key")
 	if provisioningKey == "" {
-		logger.ErrorContext(ctx, "trial re-arm is unavailable: no OpenRouter provisioning key configured")
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no provisioning key configured")
 		return admin.TrialKeysUnavailable{}
 	}
 
 	encryptionClient, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
-		logger.ErrorContext(ctx, "trial re-arm is unavailable: no usable encryption key configured", attr.SlogError(err))
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no usable encryption key configured", attr.SlogError(err))
 		return admin.TrialKeysUnavailable{}
 	}
 

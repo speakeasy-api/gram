@@ -40,6 +40,47 @@ func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	}
 }
 
+func TestSetTrialRuntimeFeaturesTx_TogglesOnlyRuntimeFeatures(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	assertEnabled := func(want bool) {
+		t.Helper()
+		q := featurerepo.New(ti.conn)
+		for _, feature := range productfeatures.TrialRuntimeFeatures {
+			enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+				OrganizationID: organizationID,
+				FeatureName:    string(feature),
+			})
+			require.NoError(t, err)
+			require.Equalf(t, want, enabled, "feature %s", feature)
+		}
+		ssoEnabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(productfeatures.FeatureSSO),
+		})
+		require.NoError(t, err)
+		require.True(t, ssoEnabled)
+	}
+
+	for range 2 {
+		for _, enabled := range []bool{false, true} {
+			tx := testenv.BeginTx(t, ctx, ti.conn)
+			require.NoError(t, productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, enabled))
+			require.NoError(t, tx.Commit(ctx))
+			assertEnabled(enabled)
+		}
+	}
+}
+
 func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 	t.Parallel()
 

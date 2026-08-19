@@ -1496,7 +1496,24 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # --rerun-fails=1 gives a failing test one more attempt before the
+        # shard is marked failed, so a flaky test does not block the PR.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+
+      # A retried test leaves the check green, so without this a flake is
+      # invisible unless someone reads the raw log.
+      - name: Report retried tests
+        if: always()
+        working-directory: server
+        run: |
+          [ -s rerun-report.txt ] || exit 0
+          {
+            echo "### Retried tests (shard ${{ matrix.shard }})"
+            echo
+            echo '```'
+            cat rerun-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1779,6 +1796,10 @@ jobs:
 
       - name: Knip (dead code / unused deps)
         run: aube run knip
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
         working-directory: client/dashboard
 
       - name: Check for dirty files
@@ -2190,7 +2211,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"

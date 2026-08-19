@@ -734,8 +734,18 @@ WHERE d.organization_id = $3
   AND ($4::text IS NULL OR c.provider = $4::text)
   AND ($5::uuid IS NULL OR d.id < $5::uuid)
   AND ($6::text IS NULL OR $6::text = cov.coverage_bucket)
+  -- One person's devices. Both legs are needed and neither subsumes the other:
+  -- user_id is only set when the MDM's reported email resolved to a member, so
+  -- matching on it alone would drop the devices of someone whose MDM email is
+  -- a work alias, while matching on email alone would drop a device whose
+  -- assigned email the MDM has since changed.
+  AND (
+    (COALESCE(cardinality($7::text[]), 0) = 0 AND COALESCE(cardinality($8::text[]), 0) = 0)
+    OR d.user_id = ANY($7::text[])
+    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest($8::text[]) AS e))
+  )
 ORDER BY d.id DESC
-LIMIT $7
+LIMIT $9
 `
 
 type ListManagedDevicesParams struct {
@@ -745,6 +755,8 @@ type ListManagedDevicesParams struct {
 	Provider       pgtype.Text
 	CursorID       uuid.NullUUID
 	Bucket         pgtype.Text
+	UserIds        []string
+	UserEmails     []string
 	PageLimit      int32
 }
 
@@ -786,6 +798,8 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 		arg.Provider,
 		arg.CursorID,
 		arg.Bucket,
+		arg.UserIds,
+		arg.UserEmails,
 		arg.PageLimit,
 	)
 	if err != nil {

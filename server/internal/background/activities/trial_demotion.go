@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -20,12 +21,13 @@ import (
 )
 
 type DemoteExpiredTrials struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	repo       *trialsrepo.Queries
-	openRouter openrouter.Provisioner
-	audit      *audit.Logger
-	notifier   trialemails.Notifier
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *trialsrepo.Queries
+	openRouter      openrouter.Provisioner
+	audit           *audit.Logger
+	notifier        trialemails.Notifier
+	productFeatures *productfeatures.Client
 }
 
 func NewDemoteExpiredTrials(
@@ -34,14 +36,16 @@ func NewDemoteExpiredTrials(
 	openRouterProvisioner openrouter.Provisioner,
 	auditLogger *audit.Logger,
 	notifier trialemails.Notifier,
+	productFeatures *productfeatures.Client,
 ) *DemoteExpiredTrials {
 	return &DemoteExpiredTrials{
-		logger:     logger.With(attr.SlogComponent("demote_expired_trials")),
-		db:         db,
-		repo:       trialsrepo.New(db),
-		openRouter: openRouterProvisioner,
-		audit:      auditLogger,
-		notifier:   notifier,
+		logger:          logger.With(attr.SlogComponent("demote_expired_trials")),
+		db:              db,
+		repo:            trialsrepo.New(db),
+		openRouter:      openRouterProvisioner,
+		audit:           auditLogger,
+		notifier:        notifier,
+		productFeatures: productFeatures,
 	}
 }
 
@@ -100,6 +104,10 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 		}
 	}
 
+	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, dbtx, args.OrganizationID, false); err != nil {
+		return fmt.Errorf("disable trial runtime features: %w", err)
+	}
+
 	organization, err := tx.DemoteOrganizationToFree(ctx, args.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("demote organization to free: %w", err)
@@ -120,6 +128,9 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit trial demotion: %w", err)
+	}
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		d.productFeatures.UpdateFeatureCache(ctx, args.OrganizationID, feature, false)
 	}
 	if d.notifier != nil {
 		if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {

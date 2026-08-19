@@ -21,6 +21,7 @@ export const Access = {
   None: "none",
   Allowed: "allowed",
   Blocked: "blocked",
+  Restricted: "restricted",
 } as const;
 export type Access = ClosedEnum<typeof Access>;
 

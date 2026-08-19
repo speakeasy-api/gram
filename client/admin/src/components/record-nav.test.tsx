@@ -170,6 +170,9 @@ describe("RecordNav", () => {
     expect(
       screen.getByRole("link", { name: "Members" }).getAttribute("href"),
     ).toBe("/organizations/org_1/members");
+    expect(
+      screen.getByRole("link", { name: "Billing" }).getAttribute("href"),
+    ).toBe("/organizations/org_1/billing");
   });
 
   it("names the account type and the trial state under the record", async () => {

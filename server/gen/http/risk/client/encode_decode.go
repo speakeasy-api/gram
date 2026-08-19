@@ -1501,6 +1501,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.UserID != nil {
 			values.Add("user_id", *p.UserID)
 		}
+		for _, value := range p.ExternalUserIds {
+			values.Add("external_user_ids", value)
+		}
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
 		}

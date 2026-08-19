@@ -269,6 +269,11 @@ func fpMirrorSurface(source string) string {
 	}
 }
 
+// ListDismissedRiskResults serves the Dismissed tab from ClickHouse: findings
+// whose latest state is a manual or automated dismissal, newest dismissal
+// first. Rows arrive store-side redacted like the Risk Events listing — the raw
+// match never reaches ClickHouse — so results carry MatchRedacted and a nil
+// Match where the Postgres-backed listing returned the raw value.
 func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.ListDismissedRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -277,47 +282,70 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "dismissed risk results are unavailable").LogError(ctx, s.logger)
+	}
 
 	cursor, err := parseRiskResultsCursor(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
 	}
 	pageSize := resolvePageSize(payload.Limit)
-	cursorFalsePositiveAt, cursorID := cursorToParams(cursor)
+	projectID := *authCtx.ProjectID
 
-	totalCount, err := s.repo.CountFalsePositiveRiskResults(ctx, *authCtx.ProjectID)
+	params := chrepo.ListDismissedRiskFindingsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		CursorTime:     nil,
+		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// resolvePageSize bounds pageSize to [1, 200], so the conversion
+		// cannot wrap.
+		Limit: uint64(conv.SafeInt32(pageSize)) + 1, // #nosec G115 -- non-negative by construction.
+	}
+	if cursor != nil {
+		// The cursor's time component is the suppression time on this listing,
+		// the same slot the Risk Events cursor fills with the message event
+		// time.
+		cursorTime := cursor.MessageCreatedAt
+		params.CursorTime = &cursorTime
+		params.CursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
+	}
+
+	totalCount, err := s.findingsCH.CountDismissedRiskFindings(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count dismissed risk results").LogError(ctx, s.logger)
 	}
 
-	rows, err := s.repo.ListFalsePositiveRiskResults(ctx, repo.ListFalsePositiveRiskResultsParams{
-		ProjectID:             *authCtx.ProjectID,
-		CursorFalsePositiveAt: cursorFalsePositiveAt,
-		CursorID:              cursorID,
-		PageLimit:             conv.SafeInt32(pageSize + 1),
-	})
+	rows, err := s.findingsCH.ListDismissedRiskFindings(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list dismissed risk results").LogError(ctx, s.logger)
 	}
 
+	listRows := make([]chrepo.RiskFindingListRow, 0, len(rows))
+	for _, row := range rows {
+		listRows = append(listRows, row.RiskFindingListRow)
+	}
+	titles, blocks := s.listDisplayEnrichment(ctx, projectID, listRows)
+
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
-		chatID := row.ChatID.String()
-		// The Dismissed tab doesn't need durable content-part links, so this is
-		// always the zero NullUUID (see foundRowToResult's block_id comment for
-		// the same convention on tool-call blocks).
-		noContentPartID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		result := foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, uuid.Nil, row.ChatMessageID, noContentPartID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.CreatedAt)
-		falsePositiveAt := row.FalsePositiveAt.Time.Format(time.RFC3339)
-		result.FalsePositiveAt = &falsePositiveAt
+		result := chListRowToResult(row.RiskFindingListRow, titles, blocks)
+		// The dashboard renders the dismissal timestamp from this field. It
+		// carries the effective suppression time — excluded_at, or the legacy
+		// false_positive_at for a row the suppression backfill did not reach.
+		result.FalsePositiveAt = new(row.SuppressedAt.UTC().Format(time.RFC3339))
 		results = append(results, result)
 		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.FalsePositiveAt.Time, ID: row.ID}
+			// Cursor from the LAST RETURNED row (not this extra row): the
+			// next-page predicate is a strict (suppressed_at, id) <, so a
+			// cursor pointing at the extra row would skip it entirely.
+			last := rows[pageSize-1]
+			nextCursor = &riskResultsCursor{MessageCreatedAt: last.SuppressedAt, ID: last.ID}
 		}
 	}
 
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
+	return s.paginateResults(results, nextCursor, pageSize, safeCount(totalCount)), nil
 }
 
 // payloadReason returns the dismissal reason as a plain string, defaulting to

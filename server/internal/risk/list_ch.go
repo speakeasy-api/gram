@@ -53,6 +53,7 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	pageSize int,
 	policyID uuid.NullUUID,
 	category, ruleID, userID string,
+	externalUserIDs []string,
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
@@ -68,19 +69,20 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	}
 
 	params := chrepo.ListRiskFindingsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID.String(),
-		PolicyIDs:      policyIDs,
-		From:           from,
-		To:             to,
-		Category:       category,
-		RuleIDSubstr:   ruleID,
-		UserIDSubstr:   userID,
-		AssistantID:    "",
-		NonAssistant:   nonAssistant,
-		UniqueMatch:    uniqueMatch,
-		CursorTime:     nil,
-		CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       projectID.String(),
+		PolicyIDs:       policyIDs,
+		From:            from,
+		To:              to,
+		Category:        category,
+		RuleIDSubstr:    ruleID,
+		UserIDSubstr:    userID,
+		ExternalUserIDs: externalUserIDs,
+		AssistantID:     "",
+		NonAssistant:    nonAssistant,
+		UniqueMatch:     uniqueMatch,
+		CursorTime:      nil,
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// resolvePageSize bounds pageSize to [1, 200], so the conversion
 		// cannot wrap.
 		Limit: uint64(conv.SafeInt32(pageSize)) + 1, // #nosec G115 -- non-negative by construction.
@@ -258,7 +260,7 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		MatchRedacted:     conv.PtrEmpty(row.MatchRedacted),
 		// The ClickHouse listing filters false_positive_at IS NULL, so a
 		// served row is never dismissed; only ListDismissedRiskResults
-		// populates this.
+		// populates this, which it does after calling this mapper.
 		FalsePositiveAt: nil,
 		// Message event time, not scan time: the Postgres listing exposes
 		// message_created_at as CreatedAt, and the sort order and cursor both

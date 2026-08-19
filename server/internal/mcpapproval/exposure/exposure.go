@@ -166,6 +166,8 @@ func Assess(ctx context.Context, reader Reader, projectID uuid.UUID, target stri
 		GramProjectID:       projectID.String(),
 		CanonicalServerURLs: []string{inventoryURL.CanonicalURL},
 		Limit:               usageLookupLimit,
+		OrganizationID:      "",
+		UserKeys:            nil,
 	})
 	if err != nil {
 		return Signals{}, fmt.Errorf("read shadow mcp inventory usage: %w", err)

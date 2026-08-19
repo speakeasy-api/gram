@@ -772,3 +772,77 @@ func mustReceiveBatch[M proto.Message](
 ) {
 	must.Nil(receiveBatch(g, msg, subscription, settings, handler, options...))
 }
+
+// receiveBatchWithResult registers a BatchResultHandler whose messages can
+// stage individual failures without changing the all-or-nothing BatchHandler
+// contract.
+//
+//nolint:unused // Available for result-aware stream registrations.
+func receiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchResultHandler[M],
+	options ...gcp.SubscriberOption,
+) error {
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
+	if err != nil {
+		return err
+	}
+
+	g.group.Go(func() error {
+		if err := sub.ReceiveBatchWithResult(ctx, settings, func(ctx context.Context, msgs []gcp.BatchMessage[M]) (err error) {
+			ctx, span := g.tracer.Start(ctx, "stream.handleBatch", trace.WithAttributes(
+				attr.TopicProtoName(msgName),
+				attr.SubscriptionProtoName(subName),
+				attr.SubscriberBatchSize(len(msgs)),
+			))
+
+			defer func() {
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic recovered in batch result handler: %v", r)
+					g.logger.ErrorContext(ctx, "panic recovered in batch result handler",
+						attr.SlogError(err),
+						attr.SlogErrorStack(string(debug.Stack())),
+					)
+				}
+			}()
+
+			err = handler.HandleBatchWithResult(ctx, msgs)
+			if err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			if err = ctx.Err(); err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("subscriber receive batch with result error: %w", err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+//nolint:unused // Available for result-aware stream registrations.
+func mustReceiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	settings gcp.BatchReceiveSettings,
+	handler streams.BatchResultHandler[M],
+	options ...gcp.SubscriberOption,
+) {
+	must.Nil(receiveBatchWithResult(g, msg, subscription, settings, handler, options...))
+}

@@ -13,6 +13,7 @@ func TestStripeFlagsAreAvailableInEveryServerProcess(t *testing.T) {
 	t.Parallel()
 
 	commands := map[string]*cli.Command{
+		"admin":   newAdminCommand(),
 		"server":  newStartCommand(),
 		"worker":  newWorkerCommand(),
 		"streams": newStreamsCommand(),
