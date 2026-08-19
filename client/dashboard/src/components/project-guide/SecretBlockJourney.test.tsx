@@ -592,4 +592,139 @@ describe("SecretBlockJourney", () => {
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
   });
+
+  it("does not complete from done status when scoped risk results are empty", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <SecretBlockJourney
+        status="done"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Listening for risk events on this project",
+    );
+    expect(screen.queryByText("Journey B complete")).toBeNull();
+  });
+
+  it("does not complete from done status when scoped risk results error", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+    queries.results.mockReturnValue({
+      data: undefined,
+      isError: true,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    const onComplete = vi.fn();
+
+    render(
+      <SecretBlockJourney
+        status="done"
+        onComplete={() => {
+          onComplete();
+        }}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Could not check for blocked risk events."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Journey B complete")).toBeNull();
+  });
+
+  it("shows the risk-event listener after hook activity until a result arrives", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+
+    render(
+      <SecretBlockJourney
+        status="in-progress"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "Listening for risk events on this project",
+    );
+    expect(screen.getByText("Waiting for a blocked risk event")).toBeTruthy();
+  });
+
+  it("renders the denied event in the completion summary", () => {
+    queries.policies.mockReturnValue({
+      data: { policies: [blockingPolicy()] },
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    queries.traces.mockReturnValue({
+      data: { traces: [hookTrace()] },
+      isError: false,
+      isPending: false,
+    });
+    queries.results.mockReturnValue({
+      data: {
+        results: [
+          secretResult({
+            description: "The request was blocked before the model answered.",
+            match: "must-not-render",
+          }),
+        ],
+        totalCount: 1,
+      },
+      isError: false,
+      isPending: false,
+    });
+
+    render(
+      <SecretBlockJourney
+        status="done"
+        onComplete={() => {}}
+        onSwitchJourney={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Journey B complete")).toBeTruthy();
+    expect(screen.getByText("The event you watched")).toBeTruthy();
+    expect(screen.getByText("Denied · risk event")).toBeTruthy();
+    expect(screen.queryByText("must-not-render")).toBeNull();
+  });
 });

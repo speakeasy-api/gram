@@ -17,6 +17,7 @@ import {
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import { useListHooksTraces } from "@gram/client/react-query/listHooksTraces.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -144,8 +145,81 @@ function WaitingForHookEvent(): JSX.Element {
   );
 }
 
+function WaitingForRiskEvent(): JSX.Element {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <div role="status" className="border-border bg-muted/30 border">
+      <div className="border-border flex items-center gap-2 border-b px-3 py-2">
+        <motion.span
+          aria-hidden="true"
+          animate={reducedMotion ? undefined : { opacity: [0.35, 1, 0.35] }}
+          transition={{ duration: 1.1, repeat: Infinity }}
+          className="bg-foreground size-1.5"
+        />
+        <span className="font-mono text-[10px] tracking-[0.05em] uppercase">
+          Live risk events
+        </span>
+        <span className="text-muted-foreground ml-auto font-mono text-[10px] uppercase">
+          Listening
+        </span>
+      </div>
+      <div className="grid gap-1 px-3 py-3">
+        <p className="font-mono text-[11px]">
+          Waiting for a blocked risk event
+        </p>
+        <p className="text-muted-foreground text-[13px] leading-[1.6]">
+          Listening for risk events on this project. The policy should deny the
+          prompt before the model answers.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DeniedRiskEventCard({ result }: { result: RiskResult }): JSX.Element {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: reducedMotion ? 0 : 0.34,
+        ease: [0.2, 0.7, 0.3, 1],
+      }}
+      className="border-border grid gap-3 border-l-2 border-l-destructive bg-muted/30 p-3"
+    >
+      <div className="grid gap-1">
+        <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
+          Denied · risk event
+        </span>
+        <p className="font-mono text-[11px]">Blocked by secrets policy</p>
+      </div>
+      <dl className="border-border grid gap-2 border-y py-2 text-[13px]">
+        <div className="grid grid-cols-[64px_1fr] gap-2">
+          <dt className="text-muted-foreground font-mono text-[10px] uppercase">
+            Rule
+          </dt>
+          <dd>{getRuleTitleFallback(result.ruleId)}</dd>
+        </div>
+        {result.description && (
+          <div className="grid grid-cols-[64px_1fr] gap-2">
+            <dt className="text-muted-foreground font-mono text-[10px] uppercase">
+              Result
+            </dt>
+            <dd className="text-muted-foreground">{result.description}</dd>
+          </div>
+        )}
+      </dl>
+      <p className="text-muted-foreground text-[13px] leading-[1.6]">
+        The prompt was rejected before the model saw it.
+      </p>
+    </motion.div>
+  );
+}
+
 export function SecretBlockJourney({
-  status,
   onComplete,
   onSwitchJourney,
 }: {
@@ -216,12 +290,10 @@ export function SecretBlockJourney({
   const createPolicy = useRiskCreatePolicyMutation();
 
   useEffect(() => {
-    if ((status !== "done" && !hasRiskResult) || completionNotified.current) {
-      return;
-    }
+    if (!hasRiskResult || completionNotified.current) return;
     completionNotified.current = true;
     onComplete();
-  }, [hasRiskResult, onComplete, status]);
+  }, [hasRiskResult, onComplete]);
 
   const publishPolicy = async () => {
     if (policiesQuery.isError || policiesQuery.isPending || hasPolicy) return;
@@ -279,35 +351,26 @@ export function SecretBlockJourney({
   if (latestRiskResult) {
     return (
       <Section title="The prompt was denied" onSwitchJourney={onSwitchJourney}>
-        <div className="border-border grid gap-3 border-l-2 border-l-destructive bg-muted/30 p-3">
-          <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
-            Blocked by secrets policy
-          </span>
-          <div className="grid gap-1">
-            <p className="font-mono text-[11px]">
-              {getRuleTitleFallback(latestRiskResult.ruleId)}
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
+              Journey B complete
+            </span>
+            <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
+              The prompt matched the secrets policy and was rejected before the
+              model answered.
             </p>
-            {latestRiskResult.description && (
-              <p className="text-muted-foreground text-[13px] leading-[1.6]">
-                {latestRiskResult.description}
-              </p>
-            )}
+          </div>
+          <div className="grid gap-2">
+            <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-muted-foreground">
+              The event you watched
+            </span>
+            <DeniedRiskEventCard result={latestRiskResult} />
           </div>
           <routes.riskEvents.Link className="w-fit font-mono text-[11px] uppercase">
             Open Risk Events
           </routes.riskEvents.Link>
         </div>
-      </Section>
-    );
-  }
-
-  if (status === "done") {
-    return (
-      <Section title="The prompt was denied" onSwitchJourney={onSwitchJourney}>
-        <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
-          The secrets policy rejected the prompt before the model answered.
-          Review the finding in Risk Events.
-        </p>
       </Section>
     );
   }
@@ -361,7 +424,7 @@ export function SecretBlockJourney({
 
   if (hasHookTrace) {
     return (
-      <Section title="Trigger the policy" onSwitchJourney={onSwitchJourney}>
+      <Section title="Watch the block land" onSwitchJourney={onSwitchJourney}>
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
           Plugin connected. Send the synthetic secret prompt.
         </p>
@@ -383,6 +446,22 @@ export function SecretBlockJourney({
         <p className="font-mono text-[10px] tracking-[0.05em] uppercase text-muted-foreground">
           Expected result: blocked
         </p>
+        {resultsQuery.isError ? (
+          <div className="grid gap-3">
+            <p className="text-destructive text-[13px] leading-[1.6]">
+              Could not check for blocked risk events.
+            </p>
+            <button
+              type="button"
+              onClick={() => void resultsQuery.refetch()}
+              className="border-border w-fit border px-3 py-2 font-mono text-[11px] uppercase"
+            >
+              Retry risk events
+            </button>
+          </div>
+        ) : (
+          <WaitingForRiskEvent />
+        )}
       </Section>
     );
   }
