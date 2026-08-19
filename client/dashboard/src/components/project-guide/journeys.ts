@@ -2,6 +2,15 @@ export type JourneyId = "third-party-mcp" | "secret-block";
 
 export type JourneyStatus = "not-started" | "in-progress" | "done";
 
+/** Catalog entries we surface first in the automatic project-guide chooser. */
+export const AUTOMATIC_CATALOG_SERVER_NAMES = [
+  "Linear",
+  "Notion",
+  "Vercel",
+  "Granola",
+  "Ramp",
+] as const;
+
 export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
   "not-started": "Not started",
   "in-progress": "In progress",
