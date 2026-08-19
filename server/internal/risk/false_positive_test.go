@@ -328,11 +328,12 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 }
 
 // TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction drives the
-// ClickHouse-backed Dismissed tab end to end: suppression-time ordering, cursor
-// pagination, the total count, the store-side redaction the tab now inherits
-// from the Risk Events listing, and the predicate's edges — automated sweep
-// rows and legacy false-positive-only rows are listed, while rule suppression,
-// open findings, dead-letter sentinels and other tenants are not.
+// ClickHouse-backed suppressed listing end to end: suppression-time ordering,
+// cursor pagination, the total count, the store-side redaction it inherits
+// from the Risk Events listing, the reasons filter, and the predicate's edges
+// — rule-suppressed, manual, automated-sweep and legacy false-positive-only
+// rows are all listed, while open findings, dead-letter sentinels and other
+// tenants are not.
 func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
