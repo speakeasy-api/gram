@@ -44,6 +44,7 @@ import (
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
+	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -124,6 +125,7 @@ func UsageCommands() []string {
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
+		"identity resolve",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -1228,6 +1230,13 @@ func ParseEndpoint(
 		hooksMetricsBodyFlag             = hooksMetricsFlags.String("body", "REQUIRED", "")
 		hooksMetricsApikeyTokenFlag      = hooksMetricsFlags.String("apikey-token", "", "")
 		hooksMetricsProjectSlugInputFlag = hooksMetricsFlags.String("project-slug-input", "", "")
+
+		identityFlags = flag.NewFlagSet("identity", flag.ContinueOnError)
+
+		identityResolveFlags            = flag.NewFlagSet("resolve", flag.ExitOnError)
+		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
+		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
+		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -3747,6 +3756,9 @@ func ParseEndpoint(
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
+	identityFlags.Usage = identityUsage
+	identityResolveFlags.Usage = identityResolveUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -4308,6 +4320,8 @@ func ParseEndpoint(
 			svcf = hooksServerNamesFlags
 		case "hooks":
 			svcf = hooksFlags
+		case "identity":
+			svcf = identityFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -5091,6 +5105,13 @@ func ParseEndpoint(
 
 			case "metrics":
 				epf = hooksMetricsFlags
+
+			}
+
+		case "identity":
+			switch epn {
+			case "resolve":
+				epf = identityResolveFlags
 
 			}
 
@@ -7185,6 +7206,13 @@ func ParseEndpoint(
 			case "metrics":
 				endpoint = c.Metrics()
 				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
+			}
+		case "identity":
+			c := identityc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "resolve":
+				endpoint = c.Resolve()
+				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13251,6 +13279,38 @@ func hooksMetricsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// identityUsage displays the usage of the identity command and its subcommands.
+func identityUsage() {
+	fmt.Fprintln(os.Stderr, `Resolves the identifiers Gram records activity under into a single identity.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    resolve: Resolve an identity URN into every identifier the subject's activity is recorded under.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s identity COMMAND --help\n", os.Args[0])
+}
+func identityResolveUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity resolve", os.Args[0])
+	fmt.Fprint(os.Stderr, " -urn STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve an identity URN into every identifier the subject's activity is recorded under.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

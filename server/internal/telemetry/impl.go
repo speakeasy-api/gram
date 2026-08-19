@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,6 +62,7 @@ type Service struct {
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
 	featureFlags          feature.Provider
+	identities            *identity.Resolver
 	// shadowFoldSem bounds concurrent identity-fold shadow queries; see
 	// maxConcurrentShadowCompares.
 	shadowFoldSem chan struct{}
@@ -111,6 +113,7 @@ func NewService(
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
 		featureFlags:          featureFlags,
+		identities:            identity.NewResolver(logger, db),
 		shadowFoldSem:         make(chan struct{}, maxConcurrentShadowCompares),
 	}
 }
@@ -752,109 +755,9 @@ func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys
 // — a gram user id, or an email when the person has no directory row — into the
 // repo.UserIdentity their telemetry rows can be attributed to (that type
 // documents why the two shapes exist).
-//
-// Personal accounts are the reason the linked-account lookup is here: their
-// provider email is usually not the directory email, so their usage only joins
-// to the employee through user_accounts.
-//
-// Ownership comes from the directory, never from telemetry row identity, which
-// is the same rule attachUserAccounts follows (DNO-509).
-//
-// Best effort: a directory lookup failure falls back to the identifier alone,
-// which is the behaviour that predates this expansion.
 func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier string) repo.UserIdentity {
-	identity := repo.UserIdentity{UserIDs: nil, Emails: nil}
-	if identifier == "" {
-		return identity
-	}
-
-	users := usersRepo.New(s.db)
-	if strings.Contains(identifier, "@") {
-		identity.Emails = append(identity.Emails, identifier, conv.NormalizeEmail(identifier))
-
-		// Usage from someone with no directory row still aggregates by email, so
-		// an email that resolves to nobody is not an error.
-		rows, err := users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
-			Emails:         identity.Emails,
-			OrganizationID: orgID,
-		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to resolve employee email to org user", attr.SlogError(err))
-		}
-		if len(rows) == 1 {
-			row := rows[0]
-			// These rows already carry the directory email, so no lookup by id.
-			identity.UserIDs = append(identity.UserIDs, row.ID)
-			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
-		}
-
-		// Directory ownership wins. Only reverse-resolve a provider account when
-		// the email has no directory row, and only when one owner claims it.
-		if err == nil && len(rows) == 0 {
-			accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
-				OrganizationID: orgID,
-				Emails:         identity.Emails,
-			})
-			if err != nil {
-				s.logger.WarnContext(ctx, "failed to resolve employee account email to org user", attr.SlogError(err))
-			}
-			owners := make([]string, 0, len(accounts))
-			for _, account := range accounts {
-				owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
-			}
-			owners = dedupeNonEmpty(owners)
-			if len(owners) == 1 {
-				identity.UserIDs = append(identity.UserIDs, owners[0])
-			}
-		}
-
-		// A linked account email resolves through user_accounts rather than users;
-		// add its owner's directory email before loading the rest of the accounts.
-		if len(identity.UserIDs) > 0 {
-			rows, err = users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
-				Ids:            identity.UserIDs,
-				OrganizationID: orgID,
-			})
-			if err != nil {
-				s.logger.WarnContext(ctx, "failed to resolve employee account owner", attr.SlogError(err))
-			}
-			for _, row := range rows {
-				identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
-			}
-		}
-	} else {
-		identity.UserIDs = append(identity.UserIDs, identifier)
-
-		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
-			Ids:            identity.UserIDs,
-			OrganizationID: orgID,
-		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to resolve employee user id to org user", attr.SlogError(err))
-		}
-		for _, row := range rows {
-			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
-		}
-	}
-
-	if len(identity.UserIDs) > 0 {
-		accounts, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
-			OrganizationID: orgID,
-			UserIds:        identity.UserIDs,
-		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to load linked accounts for employee identity", attr.SlogError(err))
-		}
-		for _, account := range accounts {
-			email := conv.FromPGTextOrEmpty[string](account.Email)
-			identity.Emails = append(identity.Emails, email, conv.NormalizeEmail(email))
-		}
-	}
-
-	identity.Emails = dedupeNonEmpty(identity.Emails)
-	identity.UserIDs = dedupeNonEmpty(identity.UserIDs)
-
-	return identity
+	subject := s.identities.Expand(ctx, orgID, identifier)
+	return repo.UserIdentity{UserIDs: subject.UserIDs, Emails: subject.Emails}
 }
 
 // expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
@@ -897,31 +800,6 @@ func dedupe(values []string) []string {
 		seen[value] = struct{}{}
 		out = append(out, value)
 	}
-	return out
-}
-
-// dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
-// Dropping blanks is the load-bearing half: a directory row with no email would
-// otherwise put "" in the identity, and matching lower(user_email) = ” would
-// sweep in every email-less row in the project — everyone else's hook rows.
-func dedupeNonEmpty(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-
 	return out
 }
 

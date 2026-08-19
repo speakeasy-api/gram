@@ -231,6 +231,7 @@ trackedFiles:
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
+  src/funcs/identityResolve.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
@@ -882,6 +883,8 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
+  src/models/components/identitydirectory.ts: {}
+  src/models/components/identitymodel.ts: {}
   src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
@@ -1873,6 +1876,7 @@ trackedFiles:
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreskillversion.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
@@ -2323,6 +2327,8 @@ trackedFiles:
   src/react-query/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/react-query/hooksSkillFeedback.ts: {}
   src/react-query/hooksUploadSkillContent.ts: {}
+  src/react-query/identity.core.ts: {}
+  src/react-query/identity.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
@@ -2868,6 +2874,7 @@ trackedFiles:
   src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
+  src/sdk/identity.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/keys.ts: {}
@@ -7824,6 +7831,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveIdentity:
+    speakeasy-default-resolve-identity:
+      parameters:
+        query:
+          urn: "user:user_01abc"
+      responses:
+        "200":
+          application/json: {"canonical_urn": "<value>", "directory": {"groups": []}, "display_name": "Bradley.Schoen", "emails": [], "external_user_ids": ["<value 1>", "<value 2>"], "kind": "agent", "user_ids": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   resolveShadowMCPInventoryRequest:
     speakeasy-default-resolve-shadow-MCP-inventory-request:
       requestBody:
