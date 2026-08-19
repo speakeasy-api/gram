@@ -23,6 +23,11 @@ describe("isPartialToolCallAnnotation", () => {
     }
   });
 
+  it("reads a contraction opener through either apostrophe", () => {
+    expect(isPartialToolCallAnnotation("I'm fine")).toBe(false);
+    expect(isPartialToolCallAnnotation("I’m fine")).toBe(false);
+  });
+
   it("holds a lone opener, which may still be growing into a gerund", () => {
     // "I" is prose on its own and also the first character of
     // "Investigating"; only a following word settles which.

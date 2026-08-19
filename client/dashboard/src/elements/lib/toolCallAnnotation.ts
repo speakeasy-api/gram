@@ -124,6 +124,9 @@ const isNonVerbOpener = (word: string | undefined) =>
   !!word &&
   NON_VERB_OPENERS.has(
     word
+      // Models emit typographic apostrophes, so fold them in before the strip
+      // below discards them and leaves "I’m" as "im".
+      .replace(/[’‘]/g, "'")
       .replace(/[^a-zA-Z'-]/g, "")
       .split("'")[0]!
       .toLowerCase(),
