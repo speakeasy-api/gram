@@ -50,7 +50,7 @@ var MethodNames = [3]string{"getProductFeatures", "setProductFeature", "setRemot
 // getProductFeatures method.
 type GetProductFeaturesPayload struct {
 	// Organization whose product features to read.
-	OrganizationID *string
+	OrganizationID string
 	SessionToken   *string
 }
 
@@ -109,7 +109,7 @@ type GetProductFeaturesResult struct {
 // setProductFeature method.
 type SetProductFeaturePayload struct {
 	// Organization whose product feature to update.
-	OrganizationID *string
+	OrganizationID string
 	// Name of the feature to update
 	FeatureName string
 	// Whether the feature should be enabled
@@ -121,7 +121,7 @@ type SetProductFeaturePayload struct {
 // service setRemoteSessionAutoRefreshPolicy method.
 type SetRemoteSessionAutoRefreshPolicyPayload struct {
 	// Organization whose automatic remote-session refresh policy to update.
-	OrganizationID *string
+	OrganizationID string
 	// Organization policy for automatic remote-session refresh
 	Policy       string
 	SessionToken *string

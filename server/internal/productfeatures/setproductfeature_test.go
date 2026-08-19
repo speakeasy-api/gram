@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -143,7 +142,7 @@ func TestProductFeaturesService_SetProductFeature(t *testing.T) {
 		ctxWithoutAuth := t.Context()
 
 		err := ti.service.SetProductFeature(ctxWithoutAuth, &gen.SetProductFeaturePayload{
-			OrganizationID: conv.PtrEmpty("test-organization"),
+			OrganizationID: "test-organization",
 			FeatureName:    "logs",
 			Enabled:        true,
 		})
@@ -169,7 +168,7 @@ func TestProductFeaturesService_SetProductFeature(t *testing.T) {
 		ctxWithoutOrg := contextvalues.SetAuthContext(ctx, authCtx)
 
 		err := ti.service.SetProductFeature(ctxWithoutOrg, &gen.SetProductFeaturePayload{
-			OrganizationID: conv.PtrEmpty(targetOrganizationID),
+			OrganizationID: targetOrganizationID,
 			FeatureName:    "logs",
 			Enabled:        true,
 		})

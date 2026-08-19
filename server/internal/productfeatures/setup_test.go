@@ -48,12 +48,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func requestedOrganizationID(ctx context.Context) *string {
+func requestedOrganizationID(ctx context.Context) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return conv.PtrEmpty("test-organization")
+		return "test-organization"
 	}
-	return conv.PtrEmpty(authCtx.ActiveOrganizationID)
+	return authCtx.ActiveOrganizationID
 }
 
 type testInstance struct {

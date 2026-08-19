@@ -29,7 +29,7 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: GetProductFeaturesRequest | undefined,
+    request: GetProductFeaturesRequest,
     security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetProductFeaturesResponseBody> {

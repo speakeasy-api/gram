@@ -25,7 +25,7 @@ export type SetRemoteSessionAutoRefreshPolicyRequestBody = {
   /**
    * Organization whose automatic remote-session refresh policy to update.
    */
-  organizationId?: string | undefined;
+  organizationId: string;
   /**
    * Organization policy for automatic remote-session refresh
    */
@@ -39,7 +39,7 @@ export const SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy$outboundSchema:
 
 /** @internal */
 export type SetRemoteSessionAutoRefreshPolicyRequestBody$Outbound = {
-  organization_id?: string | undefined;
+  organization_id: string;
   policy: string;
 };
 
@@ -50,7 +50,7 @@ export const SetRemoteSessionAutoRefreshPolicyRequestBody$outboundSchema:
     SetRemoteSessionAutoRefreshPolicyRequestBody
   > = z.pipe(
     z.object({
-      organizationId: z.optional(z.string()),
+      organizationId: z.string(),
       policy: SetRemoteSessionAutoRefreshPolicyRequestBodyPolicy$outboundSchema,
     }),
     z.transform((v) => {

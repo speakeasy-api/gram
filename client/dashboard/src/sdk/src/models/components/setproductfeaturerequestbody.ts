@@ -45,7 +45,7 @@ export type SetProductFeatureRequestBody = {
   /**
    * Organization whose product feature to update.
    */
-  organizationId?: string | undefined;
+  organizationId: string;
 };
 
 /** @internal */
@@ -56,7 +56,7 @@ export const FeatureName$outboundSchema: z.ZodMiniEnum<typeof FeatureName> = z
 export type SetProductFeatureRequestBody$Outbound = {
   enabled: boolean;
   feature_name: string;
-  organization_id?: string | undefined;
+  organization_id: string;
 };
 
 /** @internal */
@@ -67,7 +67,7 @@ export const SetProductFeatureRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     enabled: z.boolean(),
     featureName: FeatureName$outboundSchema,
-    organizationId: z.optional(z.string()),
+    organizationId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

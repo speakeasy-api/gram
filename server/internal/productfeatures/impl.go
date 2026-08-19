@@ -77,16 +77,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) authorizeOrganization(ctx context.Context, requestedOrganizationID *string, scope authz.Scope) (*contextvalues.AuthContext, string, error) {
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
-	organizationID := authCtx.ActiveOrganizationID
-	if requestedOrganizationID != nil {
-		organizationID = *requestedOrganizationID
-	}
 	if organizationID == "" {
 		return nil, "", oops.C(oops.CodeUnauthorized)
 	}

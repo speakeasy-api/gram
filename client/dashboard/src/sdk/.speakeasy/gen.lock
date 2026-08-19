@@ -8361,7 +8361,7 @@ examples:
   setProductFeature:
     speakeasy-default-set-product-feature:
       requestBody:
-        application/json: {"enabled": true, "feature_name": "tool_io_logs"}
+        application/json: {"enabled": true, "feature_name": "tool_io_logs", "organization_id": "<id>"}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -8381,7 +8381,7 @@ examples:
   setRemoteSessionAutoRefreshPolicy:
     speakeasy-default-set-remote-session-auto-refresh-policy:
       requestBody:
-        application/json: {"policy": "enforced"}
+        application/json: {"organization_id": "<id>", "policy": "enforced"}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
