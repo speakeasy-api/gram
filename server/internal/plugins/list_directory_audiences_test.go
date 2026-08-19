@@ -58,16 +58,25 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		RestoreDeleted:        true,
 	})
 	require.NoError(t, err)
-	_, err = directoryRepo.UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	directoryUserTwoWorkOSID := uuid.NewString()
+	directoryUserTwoID, err := directoryRepo.UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		UserID:                conv.ToPGTextEmpty(""),
-		WorkosDirectoryUserID: uuid.NewString(),
-		Email:                 conv.ToPGText("another-member@example.com"),
+		WorkosDirectoryUserID: directoryUserTwoWorkOSID,
+		Email:                 conv.ToPGText(" MEMBER@example.com "),
 		Attributes:            []byte(`{"department":"engineering"}`),
 		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
 		WorkosLastEventID:     conv.ToPGTextEmpty(""),
 		RestoreDeleted:        true,
+	})
+	require.NoError(t, err)
+	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserTwoID,
+		DirectoryGroupID:       groupID,
+		WorkosDirectoryUserID:  directoryUserTwoWorkOSID,
+		WorkosDirectoryGroupID: groupWorkOSID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
 	})
 	require.NoError(t, err)
 	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
@@ -83,7 +92,6 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 	require.NoError(t, err)
 	zero := int64(0)
 	one := int64(1)
-	two := int64(2)
 	require.Equal(t, &gen.PluginAudience{Kind: "everyone", DisplayName: "Everyone", PrincipalUrn: "*"}, result.Audiences[0])
 	require.Contains(t, result.Audiences, &gen.PluginAudience{Kind: "role", DisplayName: "engineering", MemberCount: &zero, PrincipalUrn: roleURN})
 	require.ElementsMatch(t, []*gen.PluginAudience{
@@ -102,7 +110,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		{
 			Kind:         "directory_attribute",
 			DisplayName:  "department: engineering",
-			MemberCount:  &two,
+			MemberCount:  &one,
 			PrincipalUrn: plugins.DirectoryAttributePrincipal("department", "engineering"),
 		},
 		{

@@ -140,11 +140,14 @@ func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizati
 		}
 		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryGroup, Identifier: id.String()}, nil
 	case strings.HasPrefix(raw, directoryAttributePrincipalPrefix+":"):
-		_, err := parseDirectoryAttributePrincipal(raw)
+		attribute, err := parseDirectoryAttributePrincipal(raw)
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", raw)
 		}
-		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryAttribute, Identifier: strings.TrimPrefix(raw, directoryAttributePrincipalPrefix+":")}, nil
+		return pluginAssignmentPrincipal{
+			Type:       pluginAssignmentPrincipalDirectoryAttribute,
+			Identifier: strings.TrimPrefix(DirectoryAttributePrincipal(attribute.Key, attribute.Value), directoryAttributePrincipalPrefix+":"),
+		}, nil
 	default:
 		normalized := raw
 		if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {

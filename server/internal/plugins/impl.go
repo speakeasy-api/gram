@@ -1199,6 +1199,14 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 
 	txRepo := s.repo.WithTx(tx)
 	directoryRepo := workosrepo.New(tx)
+	existingAssignments, err := txRepo.ListPluginAssignments(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list existing assignments").LogError(ctx, s.logger)
+	}
+	existingPrincipalURNs := make(map[string]struct{}, len(existingAssignments))
+	for _, assignment := range existingAssignments {
+		existingPrincipalURNs[assignment.PrincipalUrn] = struct{}{}
+	}
 	for _, principal := range principals {
 		switch principal.Type {
 		case pluginAssignmentPrincipalStandard:
@@ -1213,6 +1221,9 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
+				if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+					continue
+				}
 				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.String())
 			}
 		case pluginAssignmentPrincipalDirectoryAttribute:
@@ -1225,6 +1236,9 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
+				if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+					continue
+				}
 				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.String())
 			}
 		}

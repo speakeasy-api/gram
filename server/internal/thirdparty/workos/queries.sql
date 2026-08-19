@@ -311,7 +311,7 @@ SELECT EXISTS(
 SELECT
   dg.id,
   dg.name,
-  COUNT(DISTINCT du.id)::bigint AS member_count
+  COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count
 FROM directory_groups AS dg
 LEFT JOIN directory_user_group_memberships AS m
   ON m.directory_group_id = dg.id
@@ -331,7 +331,7 @@ ORDER BY dg.name, dg.id;
 SELECT
   attribute.key::text AS attribute_key,
   attribute.value::text AS attribute_value,
-  COUNT(DISTINCT du.id)::bigint AS member_count
+  COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count
 FROM directory_users AS du
 CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS attribute(key, value)
 WHERE du.organization_id = @organization_id
