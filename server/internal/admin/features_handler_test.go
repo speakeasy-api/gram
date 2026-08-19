@@ -12,9 +12,11 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestAttach_MountsOrganizationFeaturesRoute(t *testing.T) {
@@ -38,10 +40,15 @@ func TestHandleGetOrganizationFeatures_ReturnsCuratedFlags(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 
 	orgID := "org_admin_features"
-	_, err := conn.Exec(ctx, `
-    insert into organization_metadata (id, name, slug, gram_account_type, whitelisted)
-    values ($1, 'Admin Features Org', 'admin-features-org', 'enterprise', false)
-  `, orgID)
+	now := time.Now().UTC()
+	err := testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 orgID,
+		Name:               "Admin Features Org",
+		Slug:               "admin-features-org",
+		GramAccountType:    "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now),
+		FreeTrialEndsAt:    conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	})
 	require.NoError(t, err)
 
 	mux := goahttp.NewMuxer()
