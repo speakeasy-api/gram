@@ -54,6 +54,16 @@ func TestGetStripeSubscriptionRequiresOrganizationRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestGetStripeSubscriptionForOrganizationUsesExplicitID(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	configureStripeSubscription(t, ti, false)
+	result, err := ti.service.GetStripeSubscriptionForOrganization(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "active", result.Status)
+}
+
 func TestGetStripeSubscriptionReturnsLiveState(t *testing.T) {
 	t.Parallel()
 

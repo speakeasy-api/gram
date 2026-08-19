@@ -31,10 +31,15 @@ type Client struct {
 	CreateOrganizationEndpoint       goa.Endpoint
 	RearmTrialEndpoint               goa.Endpoint
 	GetOrganizationStatsEndpoint     goa.Endpoint
+	GetInferenceKeysEndpoint         goa.Endpoint
+	GetPaygBillingSummaryEndpoint    goa.Endpoint
+	GetStripeSubscriptionEndpoint    goa.Endpoint
+	CancelStripeSubscriptionEndpoint goa.Endpoint
+	ResumeStripeSubscriptionEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                    login,
 		CallbackEndpoint:                 callback,
@@ -52,6 +57,11 @@ func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpda
 		CreateOrganizationEndpoint:       createOrganization,
 		RearmTrialEndpoint:               rearmTrial,
 		GetOrganizationStatsEndpoint:     getOrganizationStats,
+		GetInferenceKeysEndpoint:         getInferenceKeys,
+		GetPaygBillingSummaryEndpoint:    getPaygBillingSummary,
+		GetStripeSubscriptionEndpoint:    getStripeSubscription,
+		CancelStripeSubscriptionEndpoint: cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint: resumeStripeSubscription,
 	}
 }
 
@@ -410,4 +420,119 @@ func (c *Client) GetOrganizationStats(ctx context.Context, p *GetOrganizationSta
 		return
 	}
 	return ires.(*AdminOrganizationStats), nil
+}
+
+// GetInferenceKeys calls the "getInferenceKeys" endpoint of the "admin"
+// service.
+// GetInferenceKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceKeys(ctx context.Context, p *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error) {
+	var ires any
+	ires, err = c.GetInferenceKeysEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*AdminInferenceKey), nil
+}
+
+// GetPaygBillingSummary calls the "getPaygBillingSummary" endpoint of the
+// "admin" service.
+// GetPaygBillingSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error) {
+	var ires any
+	ires, err = c.GetPaygBillingSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminPaygBillingSummary), nil
+}
+
+// GetStripeSubscription calls the "getStripeSubscription" endpoint of the
+// "admin" service.
+// GetStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetStripeSubscription(ctx context.Context, p *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.GetStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
+}
+
+// CancelStripeSubscription calls the "cancelStripeSubscription" endpoint of
+// the "admin" service.
+// CancelStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CancelStripeSubscription(ctx context.Context, p *CancelStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.CancelStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
+}
+
+// ResumeStripeSubscription calls the "resumeStripeSubscription" endpoint of
+// the "admin" service.
+// ResumeStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResumeStripeSubscription(ctx context.Context, p *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.ResumeStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
 }

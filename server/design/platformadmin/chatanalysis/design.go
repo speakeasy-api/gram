@@ -110,6 +110,7 @@ var _ = Service("adminChatAnalysis", func() {
 			security.SessionPayload()
 			Attribute("organization_id", String, "Organization whose projects to signal.")
 			Required("organization_id")
+			Meta("openapi:typename", "TriggerAnalysisRequestBody")
 		})
 
 		Result(func() {

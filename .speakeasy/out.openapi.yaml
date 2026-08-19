@@ -57855,6 +57855,26 @@ components:
       required:
         - updated_ids
         - missing_ids
+    AdminInferenceKey:
+      type: object
+      properties:
+        credits_used:
+          type: number
+          description: Credits spent this month in USD.
+          format: double
+        disabled:
+          type: boolean
+        key_type:
+          type: string
+        monthly_credits:
+          type: integer
+          format: int64
+      description: Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
+      required:
+        - key_type
+        - credits_used
+        - monthly_credits
+        - disabled
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -58065,6 +58085,37 @@ components:
         - trials_ending_soon
         - disabled
         - disabled_last_7_days
+    AdminPaygBillingSummary:
+      type: object
+      properties:
+        estimated_total_usd:
+          type: string
+        other_inference_spend_usd:
+          type: string
+        period_end:
+          type: string
+          format: date-time
+        period_start:
+          type: string
+          format: date-time
+        recorded_through:
+          type: string
+          format: date
+        tum_cost_usd:
+          type: string
+        tum_tokens:
+          type: integer
+          format: int64
+        tum_unit_price_usd:
+          type: string
+      required:
+        - period_start
+        - period_end
+        - tum_tokens
+        - tum_unit_price_usd
+        - tum_cost_usd
+        - other_inference_spend_usd
+        - estimated_total_usd
     AdminProject:
       type: object
       properties:
@@ -58162,6 +58213,48 @@ components:
         - assistant_count
         - created_at
         - updated_at
+    AdminStripeSubscription:
+      type: object
+      properties:
+        cancel_at:
+          type: string
+          format: date-time
+        cancel_at_period_end:
+          type: boolean
+        canceled_at:
+          type: string
+          format: date-time
+        current_period_end:
+          type: string
+          format: date-time
+        current_period_start:
+          type: string
+          format: date-time
+        payment_failed:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - incomplete
+            - incomplete_expired
+            - trialing
+            - active
+            - past_due
+            - canceled
+            - unpaid
+            - paused
+        trial_end:
+          type: string
+          format: date-time
+        trial_start:
+          type: string
+          format: date-time
+      required:
+        - status
+        - current_period_start
+        - current_period_end
+        - cancel_at_period_end
+        - payment_failed
     AgentMarketplace:
       type: object
       properties:
@@ -59299,6 +59392,13 @@ components:
       required:
         - scope
         - memory_count
+    CancelStripeSubscriptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+      required:
+        - organization_id
     CanonicalToolAttributes:
       type: object
       properties:
@@ -72103,6 +72203,13 @@ components:
       required:
         - id
         - version_id
+    ResumeStripeSubscriptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+      required:
+        - organization_id
     RetryScheduleRequestBody:
       type: object
       properties:
