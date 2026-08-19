@@ -17,6 +17,7 @@
     "/infra/gen/**",
     "/infra/gen/**/*",
     "/pnpm-lock.yaml",
+    "/server/internal/mcp/consent_assets/**",
     "/server/**/fixtures/**",
     "/server/gen/**",
     "/server/**/*_gen.yaml",

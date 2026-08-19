@@ -25,6 +25,7 @@ import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import { ConsentToolFilteringSetting } from "./ConsentToolFilteringSetting";
 import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
@@ -267,8 +268,10 @@ function UserSessionsInner(): JSX.Element {
             as a dropped card when what follows is a surface rather than a
             toolbar. Pulled back locally rather than changing the shared header,
             which every list page is spaced against. */}
-        <div className="-mt-6">
+        <div className="-mt-6 space-y-4">
           <RemoteSessionRefreshPolicySetting />
+
+          <ConsentToolFilteringSetting />
         </div>
 
         <div className="space-y-4">

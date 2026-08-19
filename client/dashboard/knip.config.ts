@@ -2,8 +2,10 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   // Vite entry (index.html → src/main.tsx) is auto-detected.
-  // Emitted programmatically by themeInitPlugin, which Knip cannot infer.
-  entry: ["src/theme-init.ts"],
+  // theme-init.ts is emitted programmatically by themeInitPlugin, and the
+  // consent island entry lives in vite.consent.config.ts, a non-default
+  // config filename — Knip cannot infer either.
+  entry: ["src/theme-init.ts", "src/consent-tools/main.tsx"],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the

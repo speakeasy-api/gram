@@ -389,6 +389,36 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetUserSessionToolSelectionByJTI :one
+-- Serve-path lookup for the consent-screen tool selection, keyed the same way
+-- runtime requests are addressed (issuer + jti). Deliberately narrow: request
+-- handling must not haul refresh-token material around. Project scoping is
+-- intentionally NOT applied here -- the OAuth surface is public and the
+-- issuer_id is the authoritative scope.
+SELECT tool_selection, expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE;
+
+-- name: GetLatestLiveUserSessionToolSelection :one
+-- Reauth prefill: the identified subject's newest live restrictive policy
+-- for the same issuer + client + endpoint resource. Filtering by resource in
+-- SQL keeps a newer session on a sibling endpoint from shadowing this
+-- endpoint's policy. Anonymous subjects never prefill (each authorization
+-- mints a fresh random subject).
+SELECT tool_selection
+FROM user_sessions
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id
+  AND subject_urn = @subject_urn
+  AND tool_selection ->> 'resource' = @resource::text
+  AND deleted IS FALSE
+  AND refresh_expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: GetUserSessionByJTI :one
 -- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
 -- /revoke endpoint to verify a presented access token belongs to the
@@ -604,7 +634,8 @@ INSERT INTO user_sessions (
     jti,
     refresh_token_hash,
     refresh_expires_at,
-    expires_at
+    expires_at,
+    tool_selection
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -614,7 +645,8 @@ VALUES (
     @jti,
     @refresh_token_hash,
     @refresh_expires_at,
-    @expires_at
+    @expires_at,
+    @tool_selection
 )
 RETURNING *;
 

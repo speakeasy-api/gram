@@ -65970,6 +65970,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                consent_tool_filtering_enabled:
+                    type: boolean
+                    description: Whether MCP consent screens offer the tool filtering picker for the organization
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -66032,6 +66035,7 @@ components:
                 - customer_managed_encryption_keys_enabled
                 - remote_session_auto_refresh_enabled
                 - remote_session_auto_refresh_enforced_enabled
+                - consent_tool_filtering_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -75858,6 +75862,7 @@ components:
                         - customer_managed_encryption_keys
                         - remote_session_auto_refresh
                         - remote_session_auto_refresh_enforced
+                        - consent_tool_filtering
                     maxLength: 60
             required:
                 - feature_name

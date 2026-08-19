@@ -70,6 +70,9 @@ type GetProductFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -679,6 +682,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		CustomerManagedEncryptionKeysEnabled:    *body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             *body.ConsentToolFilteringEnabled,
 		DeviceAgent:                             *body.DeviceAgent,
 	}
 
@@ -1185,6 +1189,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.RemoteSessionAutoRefreshEnforcedEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "body"))
+	}
+	if body.ConsentToolFilteringEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

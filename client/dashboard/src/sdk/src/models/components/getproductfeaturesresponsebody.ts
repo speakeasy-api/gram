@@ -18,6 +18,10 @@ export type GetProductFeaturesResponseBody = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
+   * Whether MCP consent screens offer the tool filtering picker for the organization
+   */
+  consentToolFilteringEnabled: boolean;
+  /**
    * Whether the organization can supply its own model provider API keys (BYOK)
    */
   customModelKeysEnabled: boolean;
@@ -87,6 +91,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
+    consent_tool_filtering_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
@@ -108,6 +113,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
+      "consent_tool_filtering_enabled": "consentToolFilteringEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -129,6 +130,20 @@ type consentTemplateData struct {
 	// (connected or expired), so a change can be persisted immediately rather
 	// than only riding the next connect.
 	AutoRefreshHasSessions bool
+	// ShowToolsIsland renders the "Tool access" React island mount on every
+	// non-first-party client-grant page. The island hydrates the picker from
+	// ConsentToolsURL and owns enabling the approve button, which the
+	// template renders disabled; a missing or failed bundle therefore fails
+	// closed.
+	ShowToolsIsland bool
+	// ConsentToolsURL is the state-authorized inventory action the island
+	// POSTs its tools/list request to.
+	ConsentToolsURL string
+	// ConsentToolsScriptURL is the content-hashed island bundle URL.
+	ConsentToolsScriptURL string
+	// ConsentToolsPrefill is the subject's stored selection serialized for
+	// the island bootstrap; empty when there is no restrictive prefill.
+	ConsentToolsPrefill string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -209,6 +224,16 @@ func (p autoRefreshPolicy) IsUserControlled() bool {
 // IsEnforced reports whether the organization requires auto refresh.
 func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
+}
+
+// consentToolFilteringEnabled reports the organization admin's durable opt-in
+// from the consent_tool_filtering product feature managed on MCP Connections.
+// An unavailable checker degrades to off.
+func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
+	if s.platformFeatureChecker == nil {
+		return false
+	}
+	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
 }
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
@@ -315,6 +340,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	clientName := "Gram"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
+	var clientRowID uuid.UUID
 	if !challengeState.FirstParty {
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
@@ -323,6 +349,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
+		clientRowID = client.ID
 		clientName = client.ClientName
 		if client.ClientIDMetadataUri.Valid {
 			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
@@ -376,6 +403,36 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	// The picker island renders only while tool filtering is enabled for the
+	// org (an unavailable checker reads as off): enforcement of stored selections
+	// is always live, but authoring new ones stays dark until every runtime
+	// pod enforces them. Without the island the approve button must not
+	// depend on it for enabling — the template couples the two.
+	showToolsIsland := false
+	if !challengeState.FirstParty {
+		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
+	}
+	if showToolsIsland {
+		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if lerr != nil {
+			return lerr
+		}
+		// The consent transport enumerates the live upstream inventory and is
+		// therefore lockdown-protected like runtime MCP dispatch. On the
+		// platform origin, hide the island so the page does not deadlock on a
+		// relative transport request that must be rejected; the ordinary
+		// unrestricted approval path remains available.
+		if lockedDown {
+			showToolsIsland = false
+		}
+	}
+	prefillAttr := ""
+	if showToolsIsland {
+		prefillAttr = consentPrefillAttr(
+			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
+		)
+	}
+
 	data := consentTemplateData{
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
@@ -395,6 +452,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
+		ShowToolsIsland:         showToolsIsland,
+		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
+		ConsentToolsScriptURL:   consentToolsScriptURL,
+		ConsentToolsPrefill:     prefillAttr,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -409,8 +470,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	ctx := r.Context()
 
 	// Cap form body to defend against memory exhaustion (gosec G120). The
-	// consent form has a few short fields; 16 KiB is generous.
-	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	// tool picker can post consentToolNameLimit names of up to
+	// consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
+	// encoding; 1 MiB fits that worst case with room for the fixed fields
+	// while staying bounded.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
@@ -422,11 +486,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
-	// Atomic GETDEL: a consent POST consumes the authn-challenge state
-	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
-	// and get "not found or expired", so only one grant is ever minted per
-	// authorization request.
-	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	// Preflight on a plain Get: everything that can fail for retryable
+	// reasons (validation, inventory snapshot, client lookup, selection
+	// parsing) runs BEFORE the challenge is consumed, so a transient failure
+	// leaves the page usable. The consuming GetAndDelete below re-validates
+	// against the consumed value, which stays the single-use authority.
+	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
@@ -435,24 +500,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	mcpSlug := endpoint.Slug
 
 	// The guards below (state-confusion ref check, CSRF, and the unknown-action
-	// default) consume the challenge but are deliberately NOT counted as flow
-	// failures: they are attacker-controllable, so emitting `failed` here would
-	// let crafted requests pollute a config's health signal. A legitimate user
-	// never trips them; the rare case lands in the started-without-terminal gap.
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
-	}
-
-	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
-	}
-
-	// First-party challenges have no MCP client to grant to: linking the cards
-	// is terminal, so there is no approve/deny POST. The template omits the
-	// form; reject any crafted submission rather than falling into the
-	// client-grant path with an empty ClientID.
-	if challengeState.FirstParty {
-		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step").LogError(ctx, logger)
+	// default) are deliberately NOT counted as flow failures: they are
+	// attacker-controllable, so emitting `failed` here would let crafted
+	// requests pollute a config's health signal. A legitimate user never
+	// trips them; the rare case lands in the started-without-terminal gap.
+	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+		return err.LogError(ctx, logger)
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so
@@ -478,10 +531,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if action == "deny" {
-		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
-		// with access_denied per RFC 6749 §4.1.2.1, preserving the original
-		// state. The user reached the consent screen and chose "no" — a
-		// decline, not an errant config.
+		// Cancel: consume the challenge, then 303 (POST → GET) the MCP client
+		// back to its redirect_uri with access_denied per RFC 6749 §4.1.2.1,
+		// preserving the original state. The user reached the consent screen
+		// and chose "no" — a decline, not an errant config. A lost consume
+		// race (double submit) reads as expired state.
+		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		}
+		s.evictConsentToolInventory(ctx, stateID)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
 			RedirectURI:      challengeState.RedirectURI,
 			Issuer:           issuer,
@@ -509,7 +567,36 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
-	subject := *challengeState.Subject
+
+	// A restrictive approve binds to the exact inventory snapshot the island
+	// displayed: the island submits its attempt id only after fetching every
+	// page, and only a COMPLETE snapshot satisfies the lookup. A missing,
+	// incomplete, or expired snapshot is retryable — reload the page — and
+	// must not consume the challenge; a store outage is an operational 503.
+	// Approvals without tool_filtering=on (pages rendered before the picker
+	// deployed or with the product feature off) skip the binding: they mint the
+	// unrestricted grant the pre-picker flow always minted, so stripping the
+	// field can only widen a submission to the status quo, never past it.
+	var boundInventory *consentToolInventory
+	if r.PostForm.Get("tool_filtering") == "on" {
+		attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id"))
+		if aerr != nil {
+			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+		}
+		inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt)
+		if gerr != nil {
+			return oops.E(oops.CodeUnavailable, gerr, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !found {
+			return oops.E(oops.CodeConflict, nil, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+		}
+		boundInventory = &inventory
+	}
+
+	toolSelection, err := chosenToolSelection(r.PostForm, boundInventory)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
+	}
 
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
@@ -522,6 +609,20 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
+
+	// Atomic GETDEL: a consent approval consumes the authn-challenge state
+	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
+	// and get "not found or expired", so only one grant is ever minted per
+	// authorization request. The consumed value is the authority — re-run
+	// the guards against it in case the preflighted copy went stale.
+	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+	}
+	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+		return err.LogError(ctx, logger)
+	}
+	subject := *challengeState.Subject
 
 	// Persist the consent record. The unique index on
 	// (principal_urn, user_session_client_id, remote_set_hash) makes this
@@ -553,12 +654,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
 		Subject:                     subject,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		ToolSelection:               toolSelection,
 		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
 	}
+
+	s.evictConsentToolInventory(ctx, stateID)
 
 	clientRedirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      challengeState.RedirectURI,
@@ -575,6 +679,30 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
+	return nil
+}
+
+// validateConsentChallenge runs the consent POST's state guards: endpoint
+// ref, CSRF (constant time), the first-party rejection, and subject
+// resolution. Shared by the preflight Get and the post-consume revalidation
+// so both read the same rules.
+func validateConsentChallenge(endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
+	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	}
+	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token")
+	}
+	// First-party challenges have no MCP client to grant to: linking the
+	// cards is terminal, so there is no approve/deny POST. The template
+	// omits the form; reject any crafted submission rather than falling into
+	// the client-grant path with an empty ClientID.
+	if challengeState.FirstParty {
+		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step")
+	}
+	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved")
+	}
 	return nil
 }
 
