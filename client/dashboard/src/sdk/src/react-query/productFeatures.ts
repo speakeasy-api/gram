@@ -109,7 +109,12 @@ export function useProductFeaturesSuspense(
 
 export function setProductFeaturesData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      organizationId?: string | undefined;
+      gramSession?: string | undefined;
+    },
+  ],
   data: ProductFeaturesQueryData,
 ): ProductFeaturesQueryData | undefined {
   const key = queryKeyProductFeatures(...queryKeyBase);
@@ -120,7 +125,10 @@ export function setProductFeaturesData(
 export function invalidateProductFeatures(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      organizationId?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

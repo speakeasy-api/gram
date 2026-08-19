@@ -31797,6 +31797,13 @@ paths:
       operationId: getProductFeatures
       parameters:
         - allowEmptyValue: true
+          description: Organization whose product features to read.
+          in: query
+          name: organization_id
+          schema:
+            description: Organization whose product features to read.
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -74702,6 +74709,9 @@ components:
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
           maxLength: 60
+        organization_id:
+          type: string
+          description: Organization whose product feature to update.
       required:
         - feature_name
         - enabled
@@ -74723,6 +74733,9 @@ components:
     SetRemoteSessionAutoRefreshPolicyRequestBody:
       type: object
       properties:
+        organization_id:
+          type: string
+          description: Organization whose automatic remote-session refresh policy to update.
         policy:
           type: string
           description: Organization policy for automatic remote-session refresh

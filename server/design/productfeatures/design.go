@@ -17,6 +17,7 @@ var _ = Service("features", func() {
 		Description("Get the current state of all product feature flags.")
 
 		Payload(func() {
+			Attribute("organization_id", String, "Organization whose product features to read.")
 			security.SessionPayload()
 		})
 
@@ -44,6 +45,7 @@ var _ = Service("features", func() {
 
 		HTTP(func() {
 			GET("/rpc/productFeatures.get")
+			Param("organization_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -57,6 +59,7 @@ var _ = Service("features", func() {
 		Description("Enable or disable an organization feature flag.")
 
 		Payload(func() {
+			Attribute("organization_id", String, "Organization whose product feature to update.")
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
 				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering")
@@ -81,6 +84,7 @@ var _ = Service("features", func() {
 		Description("Set the organization policy for automatic remote-session refresh.")
 
 		Payload(func() {
+			Attribute("organization_id", String, "Organization whose automatic remote-session refresh policy to update.")
 			Attribute("policy", String, "Organization policy for automatic remote-session refresh", func() {
 				Enum("disabled", "user_controlled", "enforced")
 			})

@@ -49,7 +49,9 @@ var MethodNames = [3]string{"getProductFeatures", "setProductFeature", "setRemot
 // GetProductFeaturesPayload is the payload type of the features service
 // getProductFeatures method.
 type GetProductFeaturesPayload struct {
-	SessionToken *string
+	// Organization whose product features to read.
+	OrganizationID *string
+	SessionToken   *string
 }
 
 // GetProductFeaturesResult is the result type of the features service
@@ -106,6 +108,8 @@ type GetProductFeaturesResult struct {
 // SetProductFeaturePayload is the payload type of the features service
 // setProductFeature method.
 type SetProductFeaturePayload struct {
+	// Organization whose product feature to update.
+	OrganizationID *string
 	// Name of the feature to update
 	FeatureName string
 	// Whether the feature should be enabled
@@ -116,6 +120,8 @@ type SetProductFeaturePayload struct {
 // SetRemoteSessionAutoRefreshPolicyPayload is the payload type of the features
 // service setRemoteSessionAutoRefreshPolicy method.
 type SetRemoteSessionAutoRefreshPolicyPayload struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID *string
 	// Organization policy for automatic remote-session refresh
 	Policy       string
 	SessionToken *string
