@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -103,7 +104,16 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader)
-	registerSetupResources(reg, setupResources)
+	registerSetupResources(reg, setupResources, time.Now)
+	if registrations == nil || !registrations.budgets.Docs.valid() {
+		registerUnavailableSearchDocsTool(reg)
+	} else {
+		// The search index reads the same pinned corpus the resources are
+		// registered from, so a citation's URI always resolves to a resource
+		// this deployment actually serves.
+		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
+	}
+	registerReadDocTool(reg)
 	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
 	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
