@@ -10835,6 +10835,13 @@ paths:
                   schema:
                     description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
                     type: string
+                - allowEmptyValue: true
+                  description: Opaque, one-time organization support handoff. Never included in OAuth state.
+                  in: query
+                  name: support_handoff
+                  schema:
+                    description: Opaque, one-time organization support handoff. Never included in OAuth state.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -67470,6 +67477,13 @@ components:
                     description: The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.
                 is_admin:
                     type: boolean
+                organization_override:
+                    type: boolean
+                    description: Whether this is a validated, time-bounded organization support session.
+                organization_override_expires_at:
+                    type: string
+                    description: Fixed expiration of the organization support session.
+                    format: date-time
                 organizations:
                     type: array
                     items:
@@ -67493,6 +67507,7 @@ components:
                 - user_id
                 - user_email
                 - is_admin
+                - organization_override
                 - active_organization_id
                 - organizations
                 - gram_account_type

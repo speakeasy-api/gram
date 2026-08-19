@@ -21,6 +21,10 @@ export type AuthLoginRequest = {
    * Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
    */
   email?: string | undefined;
+  /**
+   * Opaque, one-time organization support handoff. Never included in OAuth state.
+   */
+  supportHandoff?: string | undefined;
 };
 
 export type AuthLoginResponse = {
@@ -32,6 +36,7 @@ export type AuthLoginRequest$Outbound = {
   redirect?: string | undefined;
   org_name?: string | undefined;
   email?: string | undefined;
+  support_handoff?: string | undefined;
 };
 
 /** @internal */
@@ -43,10 +48,12 @@ export const AuthLoginRequest$outboundSchema: z.ZodMiniType<
     redirect: z.optional(z.string()),
     orgName: z.optional(z.string()),
     email: z.optional(z.string()),
+    supportHandoff: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       orgName: "org_name",
+      supportHandoff: "support_handoff",
     });
   }),
 );

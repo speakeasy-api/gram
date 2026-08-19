@@ -396,14 +396,12 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
-	if acPre.IsAdmin {
-		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			trace.SpanFromContext(ctx).SetAttributes(
-				attr.OrganizationID(acPre.ActiveOrganizationID),
-				attr.UserID(acPre.UserID),
-			)
-			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
-		}
+	if contextvalues.IsSupportSession(ctx) {
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(acPre.ActiveOrganizationID),
+			attr.UserID(acPre.UserID),
+		)
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -499,10 +497,7 @@ func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
 	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
 		return true
 	}
-	if !ac.IsAdmin {
-		return false
-	}
-	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {
+	if !contextvalues.IsSupportSession(ctx) {
 		return false
 	}
 

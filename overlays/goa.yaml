@@ -29,6 +29,7 @@ actions:
         - user_id
         - user_email
         - is_admin
+        - organization_override
         - active_organization_id
         - organizations
         - gram_account_type
