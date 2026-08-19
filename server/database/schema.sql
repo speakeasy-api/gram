@@ -4380,10 +4380,43 @@ CREATE UNIQUE INDEX IF NOT EXISTS unproxied_mcp_servers_project_id_slug_key
 ON unproxied_mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
+-- Meta MCP servers project a plugin's live MCP server membership through a
+-- single fronting MCP server. Membership remains normalized in plugin_servers.
+CREATE TABLE IF NOT EXISTS meta_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  plugin_id uuid NOT NULL,
+  member_deadline_ms INTEGER NOT NULL DEFAULT 2000,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT meta_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT meta_mcp_servers_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE RESTRICT,
+  CONSTRAINT meta_mcp_servers_member_deadline_ms_check CHECK (member_deadline_ms > 0)
+);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
+ON meta_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_plugin_id_idx
+ON meta_mcp_servers (plugin_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_plugin_id_idx
+ON meta_mcp_servers (project_id, plugin_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_id_key
+ON meta_mcp_servers (project_id, id);
+
 -- MCP Servers: user-facing MCP server configurations that link an MCP
--- backend (a toolset, a remote MCP server, a tunneled MCP server, or an
--- unproxied MCP server) to environment and OAuth settings. Each server is
--- addressable via one or more mcp_endpoints.
+-- backend (a toolset, remote MCP server, tunneled MCP server, unproxied MCP
+-- server, or meta MCP server) to environment and OAuth settings. Each server
+-- is addressable via one or more mcp_endpoints.
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -4396,6 +4429,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   tunneled_mcp_server_id uuid,
   toolset_id uuid,
   unproxied_mcp_server_id uuid,
+  meta_mcp_server_id uuid,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
   -- variations for runtime modifications.
@@ -4415,14 +4449,13 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_unproxied_mcp_server_id_fkey FOREIGN KEY (unproxied_mcp_server_id) REFERENCES unproxied_mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1),
-  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
-  -- time for the server's lifetime, regardless of visibility. Toolset- and
-  -- unproxied-backed servers are exempt (unproxied servers are never
-  -- proxied, so there is no Gram-managed OAuth to attach).
-  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, meta_mcp_server_id) = 1),
+  -- Remote, tunneled, and meta servers carry a Gram-as-AS issuer attached at
+  -- create time for the server's lifetime, regardless of visibility.
+  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL AND meta_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -4445,7 +4478,7 @@ CREATE INDEX IF NOT EXISTS mcp_servers_tunneled_mcp_server_id_idx
 ON mcp_servers (tunneled_mcp_server_id)
 WHERE tunneled_mcp_server_id IS NOT NULL;
 
-COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.';
+COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one backend reference must be set.';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
@@ -4454,6 +4487,14 @@ WHERE toolset_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_meta_mcp_server_id_key
+ON mcp_servers (meta_mcp_server_id)
+WHERE meta_mcp_server_id IS NOT NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_project_id_meta_mcp_server_id_idx
+ON mcp_servers (project_id, meta_mcp_server_id)
+WHERE meta_mcp_server_id IS NOT NULL;
 
 -- Join table linking servers to collections (for catalog publishing)
 CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
