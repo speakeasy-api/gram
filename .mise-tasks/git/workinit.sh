@@ -36,6 +36,7 @@ for item in "${copy_from_main[@]}"; do
   [ -e "$src" ] && rsync -a "$src" .
 done
 
+# Seed the custom linter so lint:server can reuse it when build inputs match.
 gcl="${main_worktree}/server/bin/gcl"
 if [ -x "$gcl" ]; then
   mkdir -p "${current_worktree}/server/bin"
