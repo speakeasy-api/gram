@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { DeviceAgentCloudSetup } from "./device-agent-cloud-setup";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -1283,6 +1284,10 @@ export function DeviceAgentSetup(): React.JSX.Element {
             {OS_ORDER.map((os) => (
               <OsTile key={os} os={os} onClick={() => setSheetOs(os)} />
             ))}
+          </div>
+
+          <div className="border-border mt-4 border-t pt-8">
+            <DeviceAgentCloudSetup />
           </div>
 
           {/* Sheet must live inside Page.Section.Body: Page.Section only
