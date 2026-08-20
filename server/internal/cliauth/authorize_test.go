@@ -15,8 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// A plain org member authorizes and the device agent redeems: the full
-// PKCE exchange mints a per-user key carrying the member's identity.
+// A plain org member completes the full authorize→redeem PKCE exchange.
 func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -42,11 +41,7 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	require.NotEmpty(t, redeemed.ProjectSlug)
 }
 
-// A Speakeasy admin impersonating an org via the dev-tools override — the
-// override targeting the session's active org — is refused enrollment
-// outright, even though impersonation grants every RBAC scope:
-// enrolling would bind the admin's device to that org's policies and route
-// session transcripts there.
+// An admin impersonating the active org via the dev-tools override is refused.
 func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -66,10 +61,8 @@ func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
 	require.ErrorContains(t, err, "impersonating an organization")
 }
 
-// A stale gram_admin_override cookie pointing at some OTHER org must not block
-// an admin enrolling on their own org: the cookie survives switching back, and
-// the refusal only applies when the override targets the active org. The
-// membership backstop still guards genuine parked-impersonation sessions.
+// A stale override cookie pointing at another org must not block an admin's
+// own-org enrollment.
 func TestAuthorize_AdminWithStaleOverrideOnOwnOrgSucceeds(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -89,8 +82,7 @@ func TestAuthorize_AdminWithStaleOverrideOnOwnOrgSucceeds(t *testing.T) {
 	require.NotEmpty(t, authorized.Code)
 }
 
-// A stray admin-override cookie on a NON-admin member's session must not block
-// enrollment: the override only ever takes effect for Speakeasy admins.
+// The override only takes effect for admins; a non-admin member enrolls fine.
 func TestAuthorize_NonAdminWithOverrideValueSucceeds(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -107,9 +99,7 @@ func TestAuthorize_NonAdminWithOverrideValueSucceeds(t *testing.T) {
 	require.NotEmpty(t, authorized.Code)
 }
 
-// A session minted through WorkOS user impersonation is refused enrollment:
-// the impersonating admin would otherwise walk away with a durable per-user
-// key bearing the impersonated user's identity.
+// A WorkOS user-impersonation session is refused.
 func TestAuthorize_ImpersonatedUserSessionBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -133,9 +123,7 @@ func TestAuthorize_ImpersonatedUserSessionBlocked(t *testing.T) {
 	require.ErrorContains(t, err, "impersonating a user")
 }
 
-// An admin session parked on an org the admin is not a member of — an
-// impersonation session that outlived its override cookie — is refused by the
-// membership backstop even with no override present on the request.
+// An admin session on a non-member org is refused even with no override set.
 func TestAuthorize_AdminSessionOnNonMemberOrgBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -163,9 +151,7 @@ func TestAuthorize_AdminSessionOnNonMemberOrgBlocked(t *testing.T) {
 	require.ErrorContains(t, err, "requires membership")
 }
 
-// The shared demo org has no membership rows by design, and any authenticated
-// user may hold a session pointed at it — but a real device must never enroll
-// there: its transcripts would land in an org every prospect can read.
+// The shared demo org has no memberships; devices must never enroll there.
 func TestAuthorize_DemoOrgSessionBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
