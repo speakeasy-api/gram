@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -68,8 +69,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	statuses, err := env.mgr.RemoteSessionStatuses(
 		ctx,
 		env.subject,
-		env.projectID,
-		env.session.UserSessionIssuerID,
+		[]uuid.UUID{env.clientID},
 	)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[env.clientID].Status)

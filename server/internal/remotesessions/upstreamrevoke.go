@@ -145,9 +145,13 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 }
 
 // SoftDeleteSubjectSessions tombstones every upstream grant a subject holds
-// through one user session issuer, inside the caller's transaction, and returns
-// the credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
+// in the given project, inside the caller's transaction, and returns the
+// credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
 // transaction commits.
+//
+// The stored user_session_issuer_id is provenance from INSERT, not a lookup
+// key, so a grant minted by a different issuer in the same project is still
+// tombstoned, including when that issuer has since been soft-deleted.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
 // it commits or rolls back with the revocation that triggered it; the upstream
@@ -158,11 +162,10 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 //
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
-func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, projectID uuid.UUID) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
-		SubjectUrn:          subject,
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           projectID,
+		SubjectUrn: subject,
+		ProjectID:  projectID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)

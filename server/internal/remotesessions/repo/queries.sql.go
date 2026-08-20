@@ -37,12 +37,29 @@ func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Conte
 const claimDueRemoteSessionRefreshCandidates = `-- name: ClaimDueRemoteSessionRefreshCandidates :many
 
 WITH due AS (
-  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  SELECT s.id, s.updated_at, eligible.organization_id, i.token_endpoint
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  JOIN LATERAL (
+    SELECT p.organization_id
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > $1::timestamptz
+      )
+    ORDER BY usi.id
+    LIMIT 1
+  ) AS eligible ON TRUE
   WHERE s.deleted IS FALSE
     AND s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
@@ -55,7 +72,7 @@ WITH due AS (
     AND (
       EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = eligible.organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
           AND orgf.deleted IS FALSE
       )
@@ -63,24 +80,11 @@ WITH due AS (
         s.auto_refresh IS TRUE
         AND EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = eligible.organization_id
             AND orgf.feature_name = 'remote_session_auto_refresh'
             AND orgf.deleted IS FALSE
         )
       )
-    )
-    AND EXISTS (
-      SELECT 1 FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = c.id
-        AND link.user_session_issuer_id = s.user_session_issuer_id
-    )
-    AND EXISTS (
-      SELECT 1 FROM user_sessions AS gs
-      WHERE gs.project_id = usi.project_id
-        AND gs.user_session_issuer_id = s.user_session_issuer_id
-        AND gs.subject_urn = s.subject_urn
-        AND gs.deleted IS FALSE
-        AND gs.refresh_expires_at > $1::timestamptz
     )
   ORDER BY s.updated_at, s.id
   LIMIT $4
@@ -128,6 +132,13 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 //
 // Preferences are read, never rewritten, so restoring the opt-in policy
 // restores each subject's original choice.
+//
+// A live Gram identity provider bound to this client, plus an unexpired user
+// session on that issuer, is what keeps the grant eligible. user_session_issuer_id
+// on the remote_sessions row is provenance from INSERT and is never rewritten
+// on reconnect, so requiring that exact issuer to still be live would skip a
+// grant whose minting provider was replaced while another bound issuer still
+// holds the subject's login.
 func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, arg ClaimDueRemoteSessionRefreshCandidatesParams) ([]ClaimDueRemoteSessionRefreshCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, claimDueRemoteSessionRefreshCandidates,
 		arg.NowTs,
@@ -1124,15 +1135,12 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
 WHERE s.id = $1
-  AND p.organization_id = $2
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
-  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $3::timestamptz)
-  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $3::timestamptz)
-  AND s.updated_at <= $4::timestamptz
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $2::timestamptz)
+  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $2::timestamptz)
+  AND s.updated_at <= $3::timestamptz
   -- The organization's automatic-refresh policy applied to this session's own
   -- preference. This predicate is spelled out again in
   -- ClaimDueRemoteSessionRefreshCandidates; the two must agree, and
@@ -1140,7 +1148,7 @@ WHERE s.id = $1
   AND (
     EXISTS (
       SELECT 1 FROM organization_features AS orgf
-      WHERE orgf.organization_id = p.organization_id
+      WHERE orgf.organization_id = $4
         AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
         AND orgf.deleted IS FALSE
     )
@@ -1148,32 +1156,37 @@ WHERE s.id = $1
       s.auto_refresh IS TRUE
       AND EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = $4
           AND orgf.feature_name = 'remote_session_auto_refresh'
           AND orgf.deleted IS FALSE
       )
     )
   )
   AND EXISTS (
-    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND link.user_session_issuer_id = s.user_session_issuer_id
-  )
-  AND EXISTS (
-    SELECT 1 FROM user_sessions AS gs
-    WHERE gs.project_id = usi.project_id
-      AND gs.user_session_issuer_id = s.user_session_issuer_id
-      AND gs.subject_urn = s.subject_urn
-      AND gs.deleted IS FALSE
-      AND gs.refresh_expires_at > $3::timestamptz
+      AND p.organization_id = $4
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > $2::timestamptz
+      )
   )
 `
 
 type GetDueRemoteSessionRefreshCandidateParams struct {
 	ID              uuid.UUID
-	OrganizationID  string
 	NowTs           pgtype.Timestamptz
 	KeepaliveCutoff pgtype.Timestamptz
+	OrganizationID  string
 }
 
 type GetDueRemoteSessionRefreshCandidateRow struct {
@@ -1186,9 +1199,9 @@ type GetDueRemoteSessionRefreshCandidateRow struct {
 func (q *Queries) GetDueRemoteSessionRefreshCandidate(ctx context.Context, arg GetDueRemoteSessionRefreshCandidateParams) (GetDueRemoteSessionRefreshCandidateRow, error) {
 	row := q.db.QueryRow(ctx, getDueRemoteSessionRefreshCandidate,
 		arg.ID,
-		arg.OrganizationID,
 		arg.NowTs,
 		arg.KeepaliveCutoff,
+		arg.OrganizationID,
 	)
 	var i GetDueRemoteSessionRefreshCandidateRow
 	err := row.Scan(
@@ -3687,18 +3700,14 @@ SELECT
     ELSE 'expired'
   END)::text AS status
 FROM remote_sessions AS s
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.subject_urn = $1
-  AND s.user_session_issuer_id = $2
-  AND usi.project_id = $3
-  AND usi.deleted IS FALSE
+  AND s.remote_session_client_id = ANY($2::uuid[])
   AND s.deleted IS FALSE
 `
 
 type ListRemoteSessionStatusesForSubjectParams struct {
-	SubjectUrn          urn.SessionSubject
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientIds []uuid.UUID
 }
 
 type ListRemoteSessionStatusesForSubjectRow struct {
@@ -3712,12 +3721,20 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 }
 
 // Bulk lookup for the consent renderer: returns each non-deleted
-// remote_session for the given subject under a single user_session_issuer,
-// tagged with whether it is still usable. Folds the N per-card lookups into
-// one round-trip. The partial unique index on (subject_urn,
+// remote_session for the given subject among the supplied clients, tagged
+// with whether it is still usable. Folds the N per-card lookups into one
+// round-trip. The partial unique index on (subject_urn,
 // remote_session_client_id) WHERE deleted IS FALSE means at most one row per
 // (subject, client), so the result doubles as a per-client map without
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+//
+// Scope is the client IDs the caller already resolved (ListClients / posted
+// client_id). Project scoping is intentionally NOT applied: re-joining
+// user_session_issuers would only repeat that check, and that table is
+// soft-deleted — ON DELETE CASCADE never fires, so a live grant minted by a
+// now-deleted issuer would disappear from consent while GetActiveRemoteSession
+// still finds it. user_session_issuer_id on the row is provenance from INSERT,
+// not a lookup key.
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
 // session is usable while the upstream authorization remains valid and its
@@ -3729,7 +3746,7 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 // disagreeing with a green "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.RemoteSessionClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -4226,13 +4243,8 @@ func (q *Queries) SetRemoteSessionAccessExpiresAt(ctx context.Context, arg SetRe
 const setRemoteSessionAutoRefresh = `-- name: SetRemoteSessionAutoRefresh :execrows
 UPDATE remote_sessions AS s
 SET auto_refresh = $1
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
-  AND s.user_session_issuer_id = $4
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $5
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 `
 
@@ -4240,25 +4252,17 @@ type SetRemoteSessionAutoRefreshParams struct {
 	AutoRefresh           bool
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ProjectID             uuid.UUID
 }
 
 // Records the subject's consent-screen auto-refresh choice. Deliberately does
 // NOT touch updated_at: that column doubles as the refresh CAS token-version
 // signal and keepalive clock, and a preference toggle must not perturb either.
-// Scoped through the endpoint's user_session_issuer project so the write
-// cannot cross tenant boundaries. A client may be bound to several
-// user_session_issuers; the issuer predicate pins the write to the binding the
-// consent screen displayed (reads filter by issuer the same way).
+// Scope is the client ID the caller already resolved through the endpoint's
+// current bindings. Project scoping is intentionally NOT applied: re-joining
+// user_session_issuers would only repeat that check, and a live grant minted
+// by a now-soft-deleted issuer must still accept the preference toggle.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
-		arg.AutoRefresh,
-		arg.SubjectUrn,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-	)
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh, arg.AutoRefresh, arg.SubjectUrn, arg.RemoteSessionClientID)
 	if err != nil {
 		return 0, err
 	}
@@ -4291,13 +4295,8 @@ func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSe
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
-  AND s.user_session_issuer_id = $3
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $4
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -4305,8 +4304,6 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ProjectID             uuid.UUID
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
@@ -4316,19 +4313,17 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 }
 
 // Consent-screen disconnect: soft-deletes the subject's own binding for one
-// upstream client. Subject, client and issuer all derived server-side from
-// the challenge state and the endpoint's bindings, never from the form;
-// scoped through the issuer's project so the write cannot cross tenants.
+// upstream client. Subject and client are derived server-side from the
+// challenge state and the endpoint's bindings, never from the form.
 //
 // Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row.
+// (subject_urn, remote_session_client_id) caps that at one row. Project
+// scoping is intentionally NOT applied: the acted-on client is already
+// re-resolved through the endpoint's current bindings, and re-joining
+// user_session_issuers would hide a live grant minted by a now-soft-deleted
+// issuer, skipping RFC 7009.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
-		arg.SubjectUrn,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-	)
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient, arg.SubjectUrn, arg.RemoteSessionClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -4386,18 +4381,15 @@ UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
-  AND s.user_session_issuer_id = $2
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $3
-  AND usi.deleted IS FALSE
+  AND usi.project_id = $2
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
-	SubjectUrn          urn.SessionSubject
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
+	SubjectUrn urn.SessionSubject
+	ProjectID  uuid.UUID
 }
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
@@ -4407,17 +4399,20 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 }
 
 // Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds through one user session issuer and returns their stored
-// credentials. Scoped through the issuer's project so the write cannot
-// cross tenants.
+// subject holds in the stored issuer's project and returns their stored
+// credentials. Join user_session_issuers for that project scope, including a
+// now-soft-deleted issuer: that table is soft-deleted, ON DELETE CASCADE
+// never fires, and a live grant still points at the deleted row. Filtering
+// usi.deleted would skip those grants and silently skip RFC 7009.
 //
 // A subject's grant is shared by every MCP client it authenticates, because
 // remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
-// user-session-client column. Revoking one client's session therefore drops
-// the provider link for all of them, which is the intended blast radius: a
-// revoke that left the upstream tokens alive would not be a revoke.
+// user-session-client column. The stored user_session_issuer_id is provenance
+// from INSERT, not a lookup key, so a revoke through one issuer in the
+// project must still tombstone a row minted by another. A revoke that left
+// the upstream tokens alive would not be a revoke.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer, arg.SubjectUrn, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

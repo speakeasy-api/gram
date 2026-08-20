@@ -450,7 +450,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		}
 		seenSubjects[key] = struct{}{}
 
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID)
+		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, *authCtx.ProjectID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}
