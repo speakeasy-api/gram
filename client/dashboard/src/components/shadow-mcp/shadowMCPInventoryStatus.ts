@@ -243,8 +243,8 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
       // allowed-yet-denied means it is gone).
       if (summary.decision === "denied") {
         return summary.allowedFor !== "none"
-          ? "Denied, but overridden by an allow rule"
-          : "Denied, but its block rule was removed";
+          ? "Denied by review, but overridden by an allow rule"
+          : "Denied by review, but its block rule was removed";
       }
       // Credit the review only while its own grants carry the allow; an
       // approval whose grants were removed leaves the server allowed by
@@ -273,8 +273,8 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
         // grants having been removed (an approval always writes them, so
         // blocked-yet-approved with no block rule means they are gone).
         return summary.blockedFor !== "none"
-          ? "Approved, but overridden by a block rule"
-          : "Approved, but its allow grants were removed";
+          ? "Approved by review, but overridden by a block rule"
+          : "Approved by review, but its allow grants were removed";
       }
       return summary.blockingDefault === "deny"
         ? "Blocked by policy"
@@ -289,8 +289,8 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
         // from an earlier approval still let their people through, or the
         // only enforcement is a policy that never covered everyone.
         return summary.allowedFor !== "none"
-          ? "Denied, but standing grants still allow some users"
-          : "Denied, but enforced only for the policy's audience";
+          ? "Denied by review, but standing grants still allow some users"
+          : "Denied by review, but enforced only for the policy's audience";
       }
       const hasScopedAllow = summary.allowedFor !== "none";
       const hasExplicitBlock = summary.blockedFor !== "none";
@@ -306,10 +306,10 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
       // A decision with nothing to enforce it is dormant, not done — the one
       // state here that should worry an admin, so it says so.
       if (summary.decision === "denied") {
-        return "Denied, but not enforced until a blocking policy exists";
+        return "Denied by review, but not enforced until a blocking policy exists";
       }
       if (summary.decision === "approved") {
-        return "Approved, but not enforced until a blocking policy exists";
+        return "Approved by review, but not enforced until a blocking policy exists";
       }
       return "Not blocking";
     }
