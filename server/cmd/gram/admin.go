@@ -125,9 +125,10 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_SSL_CERT_FILE"},
 		},
 		&cli.StringFlag{
-			Name:    "site-url",
-			Usage:   "The URL of the site",
-			EnvVars: []string{"GRAM_SITE_URL"},
+			Name:     "site-url",
+			Usage:    "The URL of the site",
+			EnvVars:  []string{"GRAM_SITE_URL"},
+			Required: true,
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -290,6 +291,14 @@ func newAdminCommand() *cli.Command {
 		Usage: "Start the Gram admin server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
+			siteURL, err := url.Parse(c.String("site-url"))
+			if err != nil || siteURL.Host == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
+				return fmt.Errorf("invalid site-url: must be an absolute HTTP(S) URL")
+			}
+			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
+				return fmt.Errorf("invalid site-url: HTTPS is required in production")
+			}
+
 			serviceName := "gram-admin"
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
@@ -429,7 +438,7 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, billingOperations))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, billingOperations, siteURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
