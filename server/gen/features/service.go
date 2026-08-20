@@ -99,6 +99,10 @@ type GetProductFeaturesResult struct {
 	// Whether MCP consent screens offer the tool filtering picker for the
 	// organization
 	ConsentToolFilteringEnabled bool
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
