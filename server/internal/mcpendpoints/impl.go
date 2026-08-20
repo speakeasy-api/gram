@@ -135,6 +135,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// the insert's FK share on the domain row must not be requested while
 	// this transaction already holds the backend row a deleter is waiting on.
 	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(customDomainID)); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
 	}
 
@@ -443,6 +446,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 	}
 
