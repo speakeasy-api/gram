@@ -8,14 +8,19 @@ package remotesessions_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -27,14 +32,15 @@ import (
 )
 
 type sharedGrantFixture struct {
-	ti        *testInstance
-	mgr       *remotesessions.ChallengeManager
-	projectID uuid.UUID
-	issuerA   uuid.UUID
-	issuerB   uuid.UUID
-	clientID  uuid.UUID
-	subject   urn.SessionSubject
-	session   repo.RemoteSession
+	ti             *testInstance
+	mgr            *remotesessions.ChallengeManager
+	projectID      uuid.UUID
+	organizationID string
+	issuerA        uuid.UUID
+	issuerB        uuid.UUID
+	clientID       uuid.UUID
+	subject        urn.SessionSubject
+	session        repo.RemoteSession
 }
 
 func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFixture) {
@@ -64,14 +70,15 @@ func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFix
 	session := insertRemoteSession(t, ctx, ti.conn, subject, issuerA.String(), created.ID)
 
 	return ctx, sharedGrantFixture{
-		ti:        ti,
-		mgr:       newDisconnectChallengeManager(t, ti),
-		projectID: *authCtx.ProjectID,
-		issuerA:   issuerA,
-		issuerB:   issuerB,
-		clientID:  uuid.MustParse(created.ID),
-		subject:   subject,
-		session:   session,
+		ti:             ti,
+		mgr:            newDisconnectChallengeManager(t, ti),
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		issuerA:        issuerA,
+		issuerB:        issuerB,
+		clientID:       uuid.MustParse(created.ID),
+		subject:        subject,
+		session:        session,
 	}
 }
 
@@ -102,6 +109,28 @@ func seedSharedGrantThenSoftDeleteMintingIssuer(t *testing.T) (context.Context, 
 	return ctx, fx
 }
 
+func listBoundClientIDs(t *testing.T, ctx context.Context, fx sharedGrantFixture, issuerID uuid.UUID) []uuid.UUID {
+	t.Helper()
+
+	clients, err := fx.mgr.ListClients(ctx, fx.projectID, fx.organizationID, issuerID)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(clients))
+	for _, c := range clients {
+		ids = append(ids, c.ID)
+	}
+	return ids
+}
+
+func requireBoundClient(t *testing.T, ids []uuid.UUID, clientID uuid.UUID) {
+	t.Helper()
+	require.Contains(t, ids, clientID)
+}
+
+func requireUnboundClient(t *testing.T, ids []uuid.UUID, clientID uuid.UUID) {
+	t.Helper()
+	require.NotContains(t, ids, clientID)
+}
+
 func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +138,10 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 
 	require.Equal(t, fx.issuerA, fx.session.UserSessionIssuerID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 
@@ -119,7 +151,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, fx.session.ID, reconnect.ID)
 	require.Equal(t, fx.issuerA, reconnect.UserSessionIssuerID)
 
-	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
+	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, listBoundClientIDs(t, ctx, fx, fx.issuerB))
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -130,6 +162,9 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
 
 	require.False(t, fx.session.AutoRefresh)
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
 	require.NoError(t, err)
@@ -148,6 +183,9 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err)
@@ -177,7 +215,7 @@ func TestSoftDeleteSubjectSessions_FindsGrantMintedByDifferentIssuer(t *testing.
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestRemoteSessionStatuses_DoesNotCrossProjects(t *testing.T) {
+func TestRemoteSessionStatuses_FiltersToSuppliedClientIDs(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -273,7 +311,10 @@ func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testin
 	})
 	require.NoError(t, err)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -282,6 +323,9 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
 	require.NoError(t, err)
@@ -299,6 +343,9 @@ func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *test
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err)
@@ -326,4 +373,227 @@ func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *te
 		RemoteSessionClientID: fx.clientID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func seedOtherProjectClient(
+	t *testing.T,
+	ctx context.Context,
+	fx sharedGrantFixture,
+	slug string,
+) uuid.UUID {
+	t.Helper()
+
+	otherProject := createProject(t, ctx, fx.ti.conn, slug+"-project")
+	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, fx.ti.conn, otherProject, slug+"-usi")
+	otherRemoteIssuer := createRemoteIssuerInProject(t, ctx, fx.ti.conn, otherProject, slug+"-rsi")
+
+	q := repo.New(fx.ti.conn)
+	otherClient, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(otherProject),
+		OrganizationID:        conv.ToPGTextEmpty(fx.organizationID),
+		RemoteSessionIssuerID: otherRemoteIssuer,
+		ClientID:              slug + "-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: otherClient.ID,
+		UserSessionIssuerID:   otherUserIssuer,
+	}))
+	insertRemoteSession(t, ctx, fx.ti.conn, fx.subject, otherUserIssuer.String(), otherClient.ID.String())
+	return otherClient.ID
+}
+
+func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantAcrossIssuers(t)
+	otherClientID := seedOtherProjectClient(t, ctx, fx, "ais-589-list-xproj")
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
+	requireUnboundClient(t, bound, otherClientID)
+
+	// ListClients is the allowlist ServeConsentAction re-resolves posted
+	// client_id against. A UUID from another project is not returned, so a
+	// crafted form posting it never reaches SetRemoteSessionAutoRefresh.
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
+	_, leaked := statuses[otherClientID]
+	require.False(t, leaked)
+
+	for _, clientID := range bound {
+		n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, clientID, true)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+	}
+
+	home, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.NoError(t, err)
+	require.True(t, home.AutoRefresh)
+
+	other, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: otherClientID,
+	})
+	require.NoError(t, err)
+	require.False(t, other.AutoRefresh)
+}
+
+func TestListClients_ResolvesSharedClientAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	boundA := listBoundClientIDs(t, ctx, fx, fx.issuerA)
+	require.Empty(t, boundA)
+
+	boundB := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, boundB, fx.clientID)
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, boundB)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
+}
+
+func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerFunc) (context.Context, sharedGrantFixture) {
+	t.Helper()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tokenServer := httptest.NewServer(handler)
+	t.Cleanup(tokenServer.Close)
+
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	mgr := remotesessions.NewChallengeManager(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		enc,
+		policy,
+		cache.NoopCache,
+		mustURL(t, "http://localhost"),
+	)
+
+	q := repo.New(ti.conn)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              slug + "-rsi",
+		Issuer:                            tokenServer.URL,
+		AuthorizationEndpoint:             conv.ToPGText(tokenServer.URL + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(tokenServer.URL + "/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+	})
+	require.NoError(t, err)
+
+	issuerA := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi-a")
+	issuerB := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi-b")
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuer.ID.String(),
+		UserSessionIssuerIds:  []string{issuerA.String(), issuerB.String()},
+		ClientID:              slug + "-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	clientID := uuid.MustParse(created.ID)
+
+	accessEnc, err := enc.Encrypt([]byte("stale-access"))
+	require.NoError(t, err)
+	refreshEnc, err := enc.Encrypt([]byte("upstream-refresh"))
+	require.NoError(t, err)
+	refreshEncStr := refreshEnc
+	subject := urn.NewUserSubject(slug + "-subject")
+	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:             subject,
+		UserSessionIssuerID:    issuerA,
+		RemoteSessionClientID:  clientID,
+		AccessTokenEncrypted:   accessEnc,
+		AccessExpiresAt:        conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted:  conv.PtrToPGText(&refreshEncStr),
+		AuthorizationExpiresAt: conv.ToPGTimestamptz(time.Now().Add(24 * time.Hour)),
+		RefreshExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)),
+		Scopes:                 []string{},
+		Resource:               pgtype.Text{},
+		AutoRefresh:            true,
+	})
+	require.NoError(t, err)
+
+	return ctx, sharedGrantFixture{
+		ti:             ti,
+		mgr:            mgr,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		issuerA:        issuerA,
+		issuerB:        issuerB,
+		clientID:       clientID,
+		subject:        subject,
+		session:        session,
+	}
+}
+
+func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v1", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		refreshCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"rotated-access","token_type":"Bearer","expires_in":7200,"refresh_token":"rotated-refresh"}`))
+	})
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.clientID, "")
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, "rotated-access", result.AccessToken)
+	require.Equal(t, fx.issuerA, result.Session.UserSessionIssuerID)
+	require.Equal(t, int64(1), refreshCount.Load())
+}
+
+func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v2", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		refreshCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"rotated-after-delete","token_type":"Bearer","expires_in":7200,"refresh_token":"rotated-refresh"}`))
+	})
+	err := testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
+		ID:        fx.issuerA,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+
+	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	requireBoundClient(t, bound, fx.clientID)
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.clientID, "")
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, "rotated-after-delete", result.AccessToken)
+	require.Equal(t, fx.issuerA, result.Session.UserSessionIssuerID)
+	require.Equal(t, int64(1), refreshCount.Load())
 }

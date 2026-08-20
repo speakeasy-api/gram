@@ -989,15 +989,39 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 --
 -- Preferences are read, never rewritten, so restoring the opt-in policy
 -- restores each subject's original choice.
+--
+-- A live Gram identity provider bound to this client, plus an unexpired user
+-- session on that issuer, is what keeps the grant eligible. user_session_issuer_id
+-- on the remote_sessions row is provenance from INSERT and is never rewritten
+-- on reconnect, so requiring that exact issuer to still be live would skip a
+-- grant whose minting provider was replaced while another bound issuer still
+-- holds the subject's login.
 
 -- name: ClaimDueRemoteSessionRefreshCandidates :many
 WITH due AS (
-  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  SELECT s.id, s.updated_at, eligible.organization_id, i.token_endpoint
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  JOIN LATERAL (
+    SELECT p.organization_id
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
+    ORDER BY usi.id
+    LIMIT 1
+  ) AS eligible ON TRUE
   WHERE s.deleted IS FALSE
     AND s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -1010,7 +1034,7 @@ WITH due AS (
     AND (
       EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = eligible.organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
           AND orgf.deleted IS FALSE
       )
@@ -1018,24 +1042,11 @@ WITH due AS (
         s.auto_refresh IS TRUE
         AND EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = eligible.organization_id
             AND orgf.feature_name = 'remote_session_auto_refresh'
             AND orgf.deleted IS FALSE
         )
       )
-    )
-    AND EXISTS (
-      SELECT 1 FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = c.id
-        AND link.user_session_issuer_id = s.user_session_issuer_id
-    )
-    AND EXISTS (
-      SELECT 1 FROM user_sessions AS gs
-      WHERE gs.project_id = usi.project_id
-        AND gs.user_session_issuer_id = s.user_session_issuer_id
-        AND gs.subject_urn = s.subject_urn
-        AND gs.deleted IS FALSE
-        AND gs.refresh_expires_at > @now_ts::timestamptz
     )
   ORDER BY s.updated_at, s.id
   LIMIT @limit_value
@@ -1060,10 +1071,7 @@ SELECT sqlc.embed(s)
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
 WHERE s.id = @id
-  AND p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -1076,7 +1084,7 @@ WHERE s.id = @id
   AND (
     EXISTS (
       SELECT 1 FROM organization_features AS orgf
-      WHERE orgf.organization_id = p.organization_id
+      WHERE orgf.organization_id = @organization_id
         AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
         AND orgf.deleted IS FALSE
     )
@@ -1084,24 +1092,29 @@ WHERE s.id = @id
       s.auto_refresh IS TRUE
       AND EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = @organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh'
           AND orgf.deleted IS FALSE
       )
     )
   )
   AND EXISTS (
-    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND link.user_session_issuer_id = s.user_session_issuer_id
-  )
-  AND EXISTS (
-    SELECT 1 FROM user_sessions AS gs
-    WHERE gs.project_id = usi.project_id
-      AND gs.user_session_issuer_id = s.user_session_issuer_id
-      AND gs.subject_urn = s.subject_urn
-      AND gs.deleted IS FALSE
-      AND gs.refresh_expires_at > @now_ts::timestamptz
+      AND p.organization_id = @organization_id
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
   );
 
 -- Organization administrator surface (AIS-119) — cross-project visibility into
