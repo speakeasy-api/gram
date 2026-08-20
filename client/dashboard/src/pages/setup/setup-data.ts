@@ -1,6 +1,7 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
   AGENT_PROVIDERS,
+  ACTIVE_AGENT_PROVIDER_IDS,
   COMING_SOON_AGENT_PROVIDER_IDS,
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
@@ -239,8 +240,11 @@ function toAgentPlatform(
 }
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
-  ...SETUP_AGENT_PLATFORMS.map(({ id, setupSteps }) =>
-    toAgentPlatform(id, setupSteps),
+  ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
+    toAgentPlatform(
+      id,
+      SETUP_AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps,
+    ),
   ),
   ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
     toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),

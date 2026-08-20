@@ -513,7 +513,7 @@ export function HooksSetupDialog({
                 {p.name}
                 {!p.available && (
                   <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
-                    Soon
+                    Coming soon
                   </span>
                 )}
               </button>

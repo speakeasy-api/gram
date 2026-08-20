@@ -966,7 +966,7 @@ export function InstallInstructionsDialog({
                       <span className="text-sm font-medium">{p.name}</span>
                       {!p.available && (
                         <span className="text-muted-foreground text-[10px] tracking-wide uppercase">
-                          Soon
+                          Coming soon
                         </span>
                       )}
                     </button>
