@@ -244,7 +244,7 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 	// Existing Pulse rows predate source metadata. They remain eligible only for
 	// the exact historic Pulse URL while this reader compatibility release rolls
 	// out; arbitrary legacy URLs cannot enter the shared catalogue.
-	if !row.SourceType.Valid && !row.AuthProfile.Valid && !row.Enabled.Valid && !row.CertificationState.Valid && strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" {
+	if legacyPulseSourceMetadataAbsent(row) && strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" {
 		return CatalogSource{
 			Registry:             Registry{ID: row.ID, URL: row.Url},
 			SourceType:           registrySourceTypePulseV01,
@@ -271,6 +271,19 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 		SourceKey:            row.SourceKey.String,
 		Legacy:               false,
 	}, true
+}
+
+// legacyPulseSourceMetadataAbsent admits only rows that have not started the
+// metadata migration. Partially populated rows must satisfy the full reviewed
+// source contract rather than bypassing enabled/certified admission.
+func legacyPulseSourceMetadataAbsent(row repo.ListMCPRegistriesRow) bool {
+	return !row.SourceType.Valid &&
+		!row.AuthProfile.Valid &&
+		!row.Enabled.Valid &&
+		!row.CertificationState.Valid &&
+		!row.CertificationVersion.Valid &&
+		!row.Priority.Valid &&
+		!row.SourceKey.Valid
 }
 
 func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, bool) {

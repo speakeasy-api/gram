@@ -88,7 +88,7 @@ func TestOfficialRegistryAdapterListServersBoundsPagination(t *testing.T) {
 func TestOfficialRegistryAdapterGetServerDetailsPrefersAllowedStreamableHTTP(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v0.1/servers/example/versions/latest" {
 			http.Error(w, "unexpected detail request", http.StatusBadRequest)
 			return
@@ -109,9 +109,11 @@ func TestOfficialRegistryAdapterGetServerDetailsPrefersAllowedStreamableHTTP(t *
 	}))
 	t.Cleanup(server.Close)
 
-	details, err := newOfficialRegistryAdapter(t).GetServerDetails(
+	adapter := newOfficialRegistryAdapter(t)
+	adapter.httpClient = server.Client()
+	details, err := adapter.GetServerDetails(
 		context.Background(),
-		Registry{ID: uuid.New(), URL: server.URL},
+		Registry{ID: uuid.New(), URL: server.URL + "/"},
 		"example",
 		[]string{"https://example.test/events", "https://example.test/mcp"},
 	)

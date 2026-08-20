@@ -170,9 +170,9 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 	if a == nil || a.httpClient == nil {
 		return nil, fmt.Errorf("official registry adapter is not configured")
 	}
-	base, err := url.Parse(registry.URL)
+	base, err := reviewedRegistryDetailsURL(registry.URL)
 	if err != nil {
-		return nil, fmt.Errorf("parse official registry URL: %w", err)
+		return nil, err
 	}
 	requestURL := base.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)

@@ -546,7 +546,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
@@ -572,7 +572,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
-		URL: server.URL,
+		URL: server.URL + "/",
 	}
 
 	details, err := client.GetServerDetails(ctx, registry, "test-server", []string{})
@@ -594,7 +594,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
@@ -642,7 +642,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
@@ -691,7 +691,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
@@ -742,7 +742,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v0.1/servers/test-server/versions/latest")
 
@@ -783,6 +783,24 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	// Should prefer streamable-http when both are allowed
 	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
 	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
+}
+
+func TestReviewedRegistryDetailsURLRequiresHTTPS(t *testing.T) {
+	t.Parallel()
+
+	for _, rawURL := range []string{
+		"http://registry.example.test",
+		"https://user:password@registry.example.test",
+		"https://registry.example.test#fragment",
+		"registry.example.test",
+	} {
+		_, err := reviewedRegistryDetailsURL(rawURL)
+		require.Error(t, err, rawURL)
+	}
+
+	parsed, err := reviewedRegistryDetailsURL("https://registry.example.test/base/")
+	require.NoError(t, err)
+	require.Equal(t, "https://registry.example.test/base/", parsed.String())
 }
 
 func activeServerEntry(name string) serverEntry {

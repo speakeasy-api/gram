@@ -58,4 +58,27 @@ func TestCatalogSourceFromRowLimitsLegacyCompatibilityToPulse(t *testing.T) {
 		_, ok := catalogSourceFromRow(repo.ListMCPRegistriesRow{ID: uuid.New(), Url: rawURL})
 		require.False(t, ok)
 	}
+
+	for _, mutate := range []func(*repo.ListMCPRegistriesRow){
+		func(row *repo.ListMCPRegistriesRow) {
+			row.SourceType = pgtype.Text{String: registrySourceTypePulseV01, Valid: true}
+		},
+		func(row *repo.ListMCPRegistriesRow) {
+			row.AuthProfile = pgtype.Text{String: registryAuthProfilePulseServerCredentials, Valid: true}
+		},
+		func(row *repo.ListMCPRegistriesRow) { row.Enabled = pgtype.Bool{Bool: false, Valid: true} },
+		func(row *repo.ListMCPRegistriesRow) {
+			row.CertificationState = pgtype.Text{String: "pending", Valid: true}
+		},
+		func(row *repo.ListMCPRegistriesRow) {
+			row.CertificationVersion = pgtype.Text{String: "v1", Valid: true}
+		},
+		func(row *repo.ListMCPRegistriesRow) { row.Priority = pgtype.Int4{Int32: 1, Valid: true} },
+		func(row *repo.ListMCPRegistriesRow) { row.SourceKey = pgtype.Text{String: "partial", Valid: true} },
+	} {
+		row := legacyPulse
+		mutate(&row)
+		_, ok := catalogSourceFromRow(row)
+		require.False(t, ok)
+	}
 }
