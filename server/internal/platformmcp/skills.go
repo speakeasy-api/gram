@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -60,6 +61,7 @@ type SkillsManagement interface {
 	Update(context.Context, *genskills.UpdatePayload) (*types.Skill, error)
 	List(context.Context, *genskills.ListPayload) (*genskills.ListSkillsResult, error)
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
+	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
 }
@@ -68,8 +70,12 @@ type SkillsManagement interface {
 // distributed to in one project. Lane D6 owns the full plugin catalogue
 // surface; this is the resolution half it promises to supply to distribution,
 // expressed as the narrow read it actually needs.
+//
+// The limit is per kind, not per result. A combined cap would let a project
+// with many plugins push every assistant out of the answer, and a target that
+// is missing from the answer is a target distribution refuses as not_found.
 type SkillTargetInventory interface {
-	SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limit int) ([]SkillTarget, error)
+	SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limitPerKind int) ([]SkillTarget, error)
 }
 
 // GrantPreparer loads the acting user's RBAC grants onto the context.
@@ -270,7 +276,7 @@ func (s *SkillsService) ListSkills(ctx context.Context, principal Principal, inp
 		SourceKinds:      nil,
 		Classifications:  nil,
 		Tags:             nil,
-		Sort:             "updated_at",
+		Sort:             "updated",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -322,11 +328,30 @@ func (s *SkillsService) GetSkill(ctx context.Context, principal Principal, input
 	if err != nil {
 		return GetSkillOutput{}, err
 	}
+	// Assistant attachments are counted on the skill; plugin attachments are
+	// not, and a read that called a plugin-distributed skill undistributed
+	// would contradict the distribute_skill call that activated it.
+	distributed := result.AssistantCount > 0
+	if !distributed {
+		plugins, err := s.skills.ListDistributions(ctx, &genskills.ListDistributionsPayload{
+			SkillID:          &input.SkillID,
+			PluginID:         nil,
+			Cursor:           nil,
+			Limit:            1,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		if err != nil {
+			return GetSkillOutput{}, err
+		}
+		distributed = len(plugins.Distributions) > 0
+	}
 	output := GetSkillOutput{
 		ProjectSlug:   project.Slug,
 		Skill:         buildSkillSummary(result.Skill),
 		LatestVersion: nil,
-		Distributed:   result.AssistantCount > 0,
+		Distributed:   distributed,
 	}
 	if result.LatestVersion != nil {
 		version := buildSkillVersionSummary(result.LatestVersion, input.IncludeContent)
@@ -632,6 +657,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 	if err != nil {
 		targets = nil
 	}
+	targets = adviceTargets(targets, maxSkillTargetCandidates)
 	authored := SkillAuthoringResult{
 		ProjectSlug:         project.Slug,
 		Skill:               buildSkillSummary(result.Skill),
@@ -688,7 +714,9 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 	if includeContent {
 		content := version.Content
 		if len(content) > maxSkillContentBytes {
-			content = content[:maxSkillContentBytes]
+			// Cut on a rune boundary. Slicing bytes can land mid-rune and hand
+			// the caller a manifest whose last character is mojibake.
+			content = strings.ToValidUTF8(content[:maxSkillContentBytes], "")
 			summary.ContentTruncated = true
 		}
 		summary.Content = content
@@ -759,10 +787,11 @@ func NewPostgresSkillTargets(db *pgxpool.Pool) *PostgresSkillTargets {
 	return &PostgresSkillTargets{db: db}
 }
 
-func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limit int) ([]SkillTarget, error) {
+func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limitPerKind int) ([]SkillTarget, error) {
 	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil {
 		return nil, ErrSkillsUnavailable
 	}
+	limit := limitPerKind
 	// Clamped to the lookup ceiling before the narrowing conversion, so a caller
 	// cannot ask for a page size that does not fit the query parameter.
 	bounded := int32(min(max(limit, 1), maxSkillTargetLookup)) //nolint:gosec // bounded above by maxSkillTargetLookup
@@ -802,8 +831,34 @@ func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID 
 			IsDefault: false,
 		})
 	}
-	if len(targets) > limit {
-		targets = targets[:limit]
-	}
 	return targets, nil
+}
+
+// adviceTargets trims the targets named back to an authoring caller while
+// keeping both kinds represented. Trimming the concatenation instead would let
+// a project's plugins hide every assistant from the advice, which reads as
+// "there is nowhere to send this" for the target the caller most likely wants.
+func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
+	if limit <= 0 || len(targets) <= limit {
+		return targets
+	}
+	perKind := max(limit/2, 1)
+	kept := make([]SkillTarget, 0, limit)
+	counts := map[SkillTargetKind]int{}
+	for _, target := range targets {
+		if counts[target.Kind] < perKind {
+			kept = append(kept, target)
+			counts[target.Kind]++
+		}
+	}
+	// A project holding only one kind still fills the whole allowance.
+	for _, target := range targets {
+		if len(kept) >= limit {
+			break
+		}
+		if counts[target.Kind] >= perKind && !slices.Contains(kept, target) {
+			kept = append(kept, target)
+		}
+	}
+	return kept
 }

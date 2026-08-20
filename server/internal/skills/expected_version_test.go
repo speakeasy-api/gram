@@ -127,3 +127,81 @@ func TestUpdateSkillAcceptsTheCurrentExpectedVersionRepeatedly(t *testing.T) {
 		require.Equal(t, displayName, updated.DisplayName)
 	}
 }
+
+// A malformed token is a bad request, not a stale one. Recovering from it as a
+// replay would accept a write whose concurrency claim was never valid.
+func TestAddSkillVersionRejectsAMalformedExpectedVersionEvenWhenContentMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "malformed", "First summary.")
+	malformed := "not-a-uuid"
+
+	_, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: created.Skill.ID, Content: created.Version.Content,
+		DerivedFromVersionID: nil, ExpectedLatestVersionID: &malformed,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// A metadata retry whose values already match is the same no-op the equivalent
+// version write gets, even once a concurrent version has made its token stale.
+//
+// The concurrent version repeats the manifest description on purpose: recording
+// a version syncs the registry summary from it, so a version carrying different
+// prose genuinely changes the metadata and is a conflict rather than a replay.
+func TestUpdateSkillTreatsAReplayedEditAsANoOpAfterAConcurrentVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "replayed", "First summary.")
+	summary := "First summary."
+	applied, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: "replayed", DisplayName: "Replayed", Summary: &summary, Tags: nil,
+		ExpectedLatestVersionID: &created.Version.ID,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// A concurrent author records a version, so the caller's token goes stale
+	// through no fault of its own.
+	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: created.Skill.ID, Content: skillManifest("replayed", "First summary.", "second"),
+		DerivedFromVersionID: nil, ExpectedLatestVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	replayed, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: "replayed", DisplayName: "Replayed", Summary: &summary, Tags: nil,
+		ExpectedLatestVersionID: &created.Version.ID,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, applied.DisplayName, replayed.DisplayName)
+}
+
+// A different edit under the same stale token is still a lost update.
+func TestUpdateSkillRejectsADifferentEditUnderAStaleToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "diverged", "First summary.")
+	_, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: created.Skill.ID, Content: skillManifest("diverged", "Second summary.", "second"),
+		DerivedFromVersionID: nil, ExpectedLatestVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: "diverged", DisplayName: "Something Else", Summary: nil, Tags: nil,
+		ExpectedLatestVersionID: &created.Version.ID,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+
+	requireOopsCode(t, err, oops.CodeConflict)
+}

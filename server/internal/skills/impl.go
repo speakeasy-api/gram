@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -636,11 +637,17 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
 	if payload.ExpectedLatestVersionID != nil {
+		// Parsed before the staleness check so a malformed token stays a bad
+		// request. Recovering from it as though it were merely stale would
+		// accept a write whose concurrency claim was never valid.
+		if _, err := uuid.Parse(*payload.ExpectedLatestVersionID); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+		}
 		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
-		if err := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); err != nil {
+		if staleErr := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); staleErr != nil {
 			// A retried write that already landed is stale by its own token,
 			// but it is not a lost update: the version it created is current
 			// and carries exactly this content, so it stays the same no-op an
@@ -650,8 +657,15 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 				SkillID:         skill.ID,
 				CanonicalSha256: parsed.CanonicalSHA256,
 			})
-			if hashErr != nil || matched.ID != state.LatestVersionID {
-				return nil, err
+			switch {
+			case errors.Is(hashErr, pgx.ErrNoRows):
+				// The content is genuinely new, so the stale token is a real
+				// conflict rather than a replay.
+				return nil, staleErr
+			case hashErr != nil:
+				return nil, oops.E(oops.CodeUnexpected, hashErr, "resolve skill version by hash for stale token recovery").LogError(ctx, logger)
+			case matched.ID != state.LatestVersionID:
+				return nil, staleErr
 			}
 		}
 	}
@@ -813,10 +827,15 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
 	}
-	// Metadata edits never create a version, so a retry of a metadata write
-	// that already landed carries the same token and stays valid.
-	if err := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); err != nil {
-		return nil, err
+	if staleErr := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); staleErr != nil {
+		// Metadata edits never create a version, so this token only goes stale
+		// when someone else records one. A retry of an edit that already landed
+		// is then indistinguishable from a lost update by token alone — except
+		// that the values it asks for are already the values in place, which
+		// makes it the same no-op the equivalent version write gets.
+		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
+			return nil, staleErr
+		}
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -854,6 +873,27 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	}
 
 	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+}
+
+// skillMetadataMatches reports whether a skill already carries exactly the
+// metadata a write is asking for, which is what separates a replayed edit from
+// one that would overwrite someone else's.
+func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *string, tags []string) bool {
+	if skill.Name != name || skill.DisplayName != displayName {
+		return false
+	}
+	currentSummary := ""
+	if skill.Summary.Valid {
+		currentSummary = skill.Summary.String
+	}
+	requestedSummary := ""
+	if summary != nil {
+		requestedSummary = *summary
+	}
+	if currentSummary != requestedSummary {
+		return false
+	}
+	return slices.Equal(skillTagsOrEmpty(skill.Tags), skillTagsOrEmpty(tags))
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {

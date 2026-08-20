@@ -3,8 +3,10 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,17 +29,18 @@ const (
 )
 
 type recordingSkillsManagement struct {
-	created         *genskills.CreatePayload
-	addedVersion    *genskills.AddVersionPayload
-	updated         *genskills.UpdatePayload
-	distributed     *genskills.DistributePayload
-	skill           *types.Skill
-	latestVersion   *types.SkillVersion
-	recordResult    *genskills.RecordSkillResult
-	distribution    *types.SkillDistribution
-	err             error
-	assistantCount  int64
-	listVersionsOut *genskills.ListSkillVersionsResult
+	created             *genskills.CreatePayload
+	addedVersion        *genskills.AddVersionPayload
+	updated             *genskills.UpdatePayload
+	distributed         *genskills.DistributePayload
+	skill               *types.Skill
+	latestVersion       *types.SkillVersion
+	recordResult        *genskills.RecordSkillResult
+	distribution        *types.SkillDistribution
+	err                 error
+	assistantCount      int64
+	listVersionsOut     *genskills.ListSkillVersionsResult
+	pluginDistributions []*types.PluginSkillDistribution
 }
 
 func (s *recordingSkillsManagement) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
@@ -91,6 +94,13 @@ func (s *recordingSkillsManagement) ListVersions(_ context.Context, _ *genskills
 		return nil, s.err
 	}
 	return s.listVersionsOut, nil
+}
+
+func (s *recordingSkillsManagement) ListDistributions(_ context.Context, _ *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &genskills.ListSkillDistributionsResult{Distributions: s.pluginDistributions, NextCursor: nil}, nil
 }
 
 func (s *recordingSkillsManagement) Distribute(_ context.Context, payload *genskills.DistributePayload) (*types.SkillDistribution, error) {
@@ -618,4 +628,146 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Truncation cuts bytes, so a manifest whose 64 KiB boundary lands mid-rune
+// would otherwise end in mojibake.
+func TestGetSkillTruncatesContentOnARuneBoundary(t *testing.T) {
+	t.Parallel()
+
+	// One multi-byte rune straddling the ceiling.
+	content := strings.Repeat("a", maxSkillContentBytes-1) + "€" + strings.Repeat("b", 16)
+	skills := &recordingSkillsManagement{skill: testSkill(), latestVersion: testSkillVersion(content)}
+	service := testSkillsService(t, skills)
+
+	result, err := service.GetSkill(t.Context(), testPrincipal(), GetSkillInput{
+		ProjectSlug:    testSkillProjectSlug,
+		SkillID:        testSkillID,
+		IncludeContent: true,
+	})
+
+	require.NoError(t, err)
+	require.True(t, result.LatestVersion.ContentTruncated)
+	require.True(t, utf8.ValidString(result.LatestVersion.Content))
+}
+
+// A skill carried only by a plugin is distributed. Reporting otherwise would
+// contradict the distribute_skill call that put it there.
+func TestGetSkillReportsAPluginOnlyDistributionAsDistributed(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{
+		skill:               testSkill(),
+		latestVersion:       testSkillVersion(""),
+		assistantCount:      0,
+		pluginDistributions: []*types.PluginSkillDistribution{{SkillID: testSkillID}},
+	}
+	service := testSkillsService(t, skills)
+
+	result, err := service.GetSkill(t.Context(), testPrincipal(), GetSkillInput{
+		ProjectSlug: testSkillProjectSlug,
+		SkillID:     testSkillID,
+	})
+
+	require.NoError(t, err)
+	require.True(t, result.Distributed)
+}
+
+// The registry read has to ask for an ordering the skills service actually
+// declares, or it silently falls back to name order.
+func TestListSkillsRequestsAnOrderingTheServiceSupports(t *testing.T) {
+	t.Parallel()
+
+	skills := &sortCapturingSkills{}
+	service := NewSkillsService(
+		skills,
+		stubSkillTargets{targets: testTargets()},
+		stubSkillProjects{},
+		passthroughGrants{},
+		stubSkillsGate{enabled: true},
+		OperationBudget{
+			Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+		},
+	)
+
+	_, err := service.ListSkills(t.Context(), testPrincipal(), ListSkillsInput{ProjectSlug: testSkillProjectSlug})
+
+	require.NoError(t, err)
+	require.Contains(t, []string{"name", "updated"}, skills.sort, "sort must be one of the values the skills design declares")
+	require.Equal(t, "updated", skills.sort)
+}
+
+type sortCapturingSkills struct {
+	recordingSkillsManagement
+	sort string
+}
+
+func (s *sortCapturingSkills) List(_ context.Context, payload *genskills.ListPayload) (*genskills.ListSkillsResult, error) {
+	s.sort = payload.Sort
+	return &genskills.ListSkillsResult{Skills: nil, TotalCount: 0, NextCursor: nil}, nil
+}
+
+// Resolution reads every candidate. Capping the combined list would let a
+// project's plugins hide its assistants, turning an existing target into
+// not_found — the one refusal that must mean "you named something absent".
+func TestDistributeSkillResolvesAnAssistantBehindManyPlugins(t *testing.T) {
+	t.Parallel()
+
+	targets := make([]SkillTarget, 0, maxSkillTargetCandidates+2)
+	for i := range maxSkillTargetCandidates + 1 {
+		targets = append(targets, SkillTarget{Kind: SkillTargetPlugin, ID: uuid.NewString(), Name: fmt.Sprintf("plugin-%d", i), Slug: fmt.Sprintf("plugin-%d", i)})
+	}
+	targets = append(targets, SkillTarget{Kind: SkillTargetAssistant, ID: testAssistantID, Name: "Support"})
+
+	skills := &recordingSkillsManagement{
+		skill:        testSkill(),
+		distribution: &types.SkillDistribution{ID: "d", SkillID: testSkillID, SkillName: "add-mcp", ResolvedVersionID: testSkillVersionID, Channel: "assistant"},
+	}
+	service := NewSkillsService(
+		skills,
+		stubSkillTargets{targets: targets},
+		stubSkillProjects{},
+		passthroughGrants{},
+		stubSkillsGate{enabled: true},
+		OperationBudget{
+			Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+		},
+	)
+
+	result, err := service.DistributeSkill(t.Context(), testPrincipal(), DistributeSkillInput{
+		ProjectSlug: testSkillProjectSlug,
+		SkillID:     testSkillID,
+		Assistant:   "Support",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, testAssistantID, result.Target.ID)
+}
+
+// The advice list is capped, but a caller that can only see plugins would read
+// "there is nowhere else to send this" when an assistant target exists.
+func TestAuthoringAdviceKeepsBothTargetKindsWithinTheCap(t *testing.T) {
+	t.Parallel()
+
+	targets := make([]SkillTarget, 0, maxSkillTargetCandidates+2)
+	for i := range maxSkillTargetCandidates + 1 {
+		targets = append(targets, SkillTarget{Kind: SkillTargetPlugin, ID: uuid.NewString(), Name: fmt.Sprintf("plugin-%d", i)})
+	}
+	targets = append(targets, SkillTarget{Kind: SkillTargetAssistant, ID: testAssistantID, Name: "Support"})
+
+	kept := adviceTargets(targets, maxSkillTargetCandidates)
+
+	require.Len(t, kept, maxSkillTargetCandidates)
+	require.Contains(t, skillTargetKinds(kept), SkillTargetAssistant)
+	require.Contains(t, skillTargetKinds(kept), SkillTargetPlugin)
+}
+
+func skillTargetKinds(targets []SkillTarget) []SkillTargetKind {
+	kinds := make([]SkillTargetKind, 0, len(targets))
+	for _, target := range targets {
+		kinds = append(kinds, target.Kind)
+	}
+	return kinds
 }
