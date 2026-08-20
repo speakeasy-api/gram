@@ -86,7 +86,8 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 // binding a query parameter to a payload attribute.
 var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
-	"token": true,
+	"token":           true,
+	"support_handoff": true,
 
 	// Email address on auth.login, and on agent.getPlugins polls from legacy
 	// agents that still append `?email=` (current agents send a header).

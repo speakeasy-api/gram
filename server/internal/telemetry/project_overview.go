@@ -48,20 +48,23 @@ func fetchProjectOverviewClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.toolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     params.projectID,
-			TimeStart:         params.timeStart,
-			TimeEnd:           params.timeEnd,
-			User:              repo.UserIdentity{UserIDs: nil, Emails: nil},
-			CanonicalUser:     repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
+			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// summaries fast path.
+			ExcludedHookSources: nil,
+			GramProjectID:       params.projectID,
+			TimeStart:           params.timeStart,
+			TimeEnd:             params.timeEnd,
+			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},
+			CanonicalUser:       repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
+			ExternalUserID:      "",
+			APIKeyID:            "",
+			ToolsetSlug:         "",
+			RemoteMCPServerID:   "",
+			MCPServerID:         "",
+			EventSource:         "",
+			HookSource:          "",
+			AccountType:         "",
+			ExternalOrgID:       "",
 		})
 		if queryErr != nil {
 			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving tool call metrics")
@@ -72,20 +75,23 @@ func fetchProjectOverviewClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.toolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			GramProjectID:     params.projectID,
-			TimeStart:         params.comparisonStart,
-			TimeEnd:           params.comparisonEnd,
-			User:              repo.UserIdentity{UserIDs: nil, Emails: nil},
-			CanonicalUser:     repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
-			ExternalUserID:    "",
-			APIKeyID:          "",
-			ToolsetSlug:       "",
-			RemoteMCPServerID: "",
-			MCPServerID:       "",
-			EventSource:       "",
-			HookSource:        "",
-			AccountType:       "",
-			ExternalOrgID:     "",
+			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// summaries fast path.
+			ExcludedHookSources: nil,
+			GramProjectID:       params.projectID,
+			TimeStart:           params.comparisonStart,
+			TimeEnd:             params.comparisonEnd,
+			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},
+			CanonicalUser:       repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
+			ExternalUserID:      "",
+			APIKeyID:            "",
+			ToolsetSlug:         "",
+			RemoteMCPServerID:   "",
+			MCPServerID:         "",
+			EventSource:         "",
+			HookSource:          "",
+			AccountType:         "",
+			ExternalOrgID:       "",
 		})
 		if queryErr != nil {
 			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving comparison tool call metrics")

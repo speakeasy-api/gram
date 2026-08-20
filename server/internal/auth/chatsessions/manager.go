@@ -123,6 +123,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		Whitelisted:           false,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

@@ -510,7 +510,7 @@ export function CreateRoleDialog({
         request: {
           createRoleForm: {
             name,
-            description,
+            description: description.trim() || undefined,
             grants: sdkGrants,
             memberIds:
               selectedMembers.size > 0
@@ -644,7 +644,6 @@ export function CreateRoleDialog({
                   <textarea
                     {...props}
                     rows={2}
-                    required
                     disabled={editingRole?.isSystem}
                     placeholder="Describe what this role can do..."
                     value={description}

@@ -1751,6 +1751,98 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /otel/v1/traces:
+        post:
+            description: Endpoint to receive OTEL traces data from LLM providers and harnesses.
+            operationId: uploadTraces
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+                  in: header
+                  name: Content-Encoding
+                  schema:
+                    description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: traces otel
+            tags:
+                - otel
+            x-speakeasy-name-override: uploadTraces
+            x-speakeasy-react-hook:
+                name: UploadOpenTelemetryTraces
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -10743,6 +10835,13 @@ paths:
                   schema:
                     description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
                     type: string
+                - allowEmptyValue: true
+                  description: Opaque, one-time organization support handoff. Never included in OAuth state.
+                  in: query
+                  name: support_handoff
+                  schema:
+                    description: Opaque, one-time organization support handoff. Never included in OAuth state.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -12139,6 +12238,117 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListChats
+                type: query
+    /rpc/chat.listSessionLinks:
+        get:
+            description: List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.
+            operationId: listChatSessionLinks
+            parameters:
+                - allowEmptyValue: true
+                  description: Chat ids to resolve links for.
+                  in: query
+                  name: chat_ids
+                  required: true
+                  schema:
+                    description: Chat ids to resolve links for.
+                    items:
+                        format: uuid
+                        type: string
+                    maxItems: 100
+                    minItems: 1
+                    type: array
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionLinksResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: listSessionLinks chat
+            tags:
+                - chat
+            x-speakeasy-name-override: listSessionLinks
+            x-speakeasy-react-hook:
+                name: ListChatSessionLinks
                 type: query
     /rpc/chat.listSources:
         get:
@@ -59977,6 +60187,10 @@ components:
                     type: string
                     description: The optional source version this new version was derived from.
                     format: uuid
+                expected_latest_version_id:
+                    type: string
+                    description: The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -62134,6 +62348,54 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+        ChatSessionLink:
+            type: object
+            properties:
+                actor_email:
+                    type: string
+                    description: Email of the person who initiated the move, when known.
+                child_captured:
+                    type: boolean
+                    description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
+                child_chat_id:
+                    type: string
+                    description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
+                    format: uuid
+                child_title:
+                    type: string
+                    description: Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.
+                created_at:
+                    type: string
+                    description: When the move was recorded.
+                    format: date-time
+                device_hostname:
+                    type: string
+                    description: Hostname of the machine the move happened on, when known.
+                kind:
+                    type: string
+                    description: Link kind. Currently always 'move'.
+                parent_captured:
+                    type: boolean
+                    description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
+                parent_chat_id:
+                    type: string
+                    description: Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
+                    format: uuid
+                parent_title:
+                    type: string
+                    description: Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.
+                source_surface:
+                    type: string
+                    description: Harness the session originated in, when known.
+                target_harness:
+                    type: string
+                    description: Harness the session was moved to (e.g. cursor, codex, claude-code).
+            required:
+                - parent_captured
+                - child_captured
+                - kind
+                - target_harness
+                - created_at
         ChatSummary:
             type: object
             properties:
@@ -62986,6 +63248,11 @@ components:
                 client_setup_documentation_url:
                     type: string
                     description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+                code_challenge_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
                 grant_types_supported:
                     type: array
                     items:
@@ -63431,6 +63698,11 @@ components:
                 client_setup_documentation_url:
                     type: string
                     description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+                code_challenge_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
                 grant_types_supported:
                     type: array
                     items:
@@ -63776,7 +64048,7 @@ components:
             properties:
                 description:
                     type: string
-                    description: Description of what this role can do.
+                    description: Optional description of what this role can do.
                 grants:
                     type: array
                     items:
@@ -63792,7 +64064,6 @@ components:
                     description: Display name for the role.
             required:
                 - name
-                - description
                 - grants
         CreateServerForm:
             type: object
@@ -67017,6 +67288,9 @@ components:
                 session_capture_enabled:
                     type: boolean
                     description: Whether Claude Code session capture is enabled
+                session_portability_enabled:
+                    type: boolean
+                    description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
                 skill_capture_metadata_only:
                     type: boolean
                     description: Whether skill capture stores activation metadata without requesting manifest content
@@ -67047,6 +67321,7 @@ components:
                 - remote_session_auto_refresh_enabled
                 - remote_session_auto_refresh_enforced_enabled
                 - consent_tool_filtering_enabled
+                - session_portability_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -68198,6 +68473,13 @@ components:
                     description: The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.
                 is_admin:
                     type: boolean
+                organization_override:
+                    type: boolean
+                    description: Whether this is a validated, time-bounded organization support session.
+                organization_override_expires_at:
+                    type: string
+                    description: Fixed expiration of the organization support session.
+                    format: date-time
                 organizations:
                     type: array
                     items:
@@ -68221,6 +68503,7 @@ components:
                 - user_id
                 - user_email
                 - is_admin
+                - organization_override
                 - active_organization_id
                 - organizations
                 - gram_account_type
@@ -69624,6 +69907,16 @@ components:
             description: Result type for listing remote MCP servers
             required:
                 - remote_mcp_servers
+        ListSessionLinksResult:
+            type: object
+            properties:
+                links:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatSessionLink'
+                    description: Links touching the requested chats, newest first.
+            required:
+                - links
         ListSessionsPayload:
             type: object
             properties:
@@ -73955,6 +74248,11 @@ components:
                 client_setup_documentation_url:
                     type: string
                     description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
+                code_challenge_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.
                 created_at:
                     type: string
                     format: date-time
@@ -74048,6 +74346,11 @@ components:
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
+                code_challenge_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.
                 discovery_warnings:
                     type: array
                     items:
@@ -74240,6 +74543,10 @@ components:
                     type: string
                     description: Harness the session was moved to (e.g. cursor, codex, claude-code).
                     maxLength: 64
+                target_session_id:
+                    type: string
+                    description: Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.
+                    maxLength: 256
             required:
                 - session_id
                 - target_harness
@@ -77061,6 +77368,7 @@ components:
                         - remote_session_auto_refresh
                         - remote_session_auto_refresh_enforced
                         - consent_tool_filtering
+                        - session_portability
                     maxLength: 60
                 organization_id:
                     type: string
@@ -82197,6 +82505,11 @@ components:
                 client_setup_documentation_url:
                     type: string
                     description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+                code_challenge_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.
                 grant_types_supported:
                     type: array
                     items:
@@ -82562,6 +82875,10 @@ components:
                     type: string
                     description: The user-facing skill name.
                     maxLength: 256
+                expected_latest_version_id:
+                    type: string
+                    description: The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -84066,6 +84383,8 @@ tags:
       description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
     - name: organizations
       description: Organization membership, invitations, and directory.
+    - name: otel
+      description: Receives OpenTelemetry signals from LLM providers and harnesses.
     - name: otelForwarding
       description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
     - name: packages

@@ -3,7 +3,22 @@ package sessions
 import (
 	"encoding/base64"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestValidSupportSessionRejectsExpiredSession(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	session := Session{
+		ActiveOrganizationID:  "org_123",
+		SupportOrganizationID: "org_123",
+		SupportExpiresAt:      now.Add(-time.Second),
+	}
+	require.False(t, validSupportSession(session, true, now))
+}
 
 func TestNewSessionID(t *testing.T) {
 	t.Parallel()

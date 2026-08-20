@@ -17,8 +17,8 @@ import (
 type CreateRoleRequestBody struct {
 	// Display name for the role.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Description of what this role can do.
-	Description string `form:"description" json:"description" xml:"description"`
+	// Optional description of what this role can do.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Scope grants to assign.
 	Grants []*RoleGrantRequestBody `form:"grants" json:"grants" xml:"grants"`
 	// Optional member IDs to additionally assign to this role on creation.

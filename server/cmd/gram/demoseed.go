@@ -15,7 +15,7 @@ import (
 func newDemoSeedCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "demo-seed",
-		Usage: "Provision or refresh the shared read-only demo organization (idempotent; intended to run daily)",
+		Usage: "Provision or refresh the shared demo organization (idempotent; intended to run daily)",
 		Flags: append([]cli.Flag{
 			&cli.BoolFlag{
 				Name: "local",

@@ -186,6 +186,18 @@ func NoLogDefer(cb func() error) {
 	_ = cb()
 }
 
+// LogError logs a non-nil error with context and returns it unchanged, making
+// it convenient to use in tail return statements.
+func LogError(ctx context.Context, logger *slog.Logger, err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+
+	logger.ErrorContext(ctx, msg, attr.SlogError(err))
+
+	return err
+}
+
 type pgxLogger struct {
 	logger *slog.Logger
 }

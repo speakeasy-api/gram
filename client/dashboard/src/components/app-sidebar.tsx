@@ -207,7 +207,6 @@ export function AppSidebar({
           <ScopeGatedNavGroup
             label="Secure"
             Icon={(p) => <Icon {...p} name="shield" />}
-            stage="beta"
             items={[
               // Watchdog supersedes Risk Overview and Risk Events: exactly one
               // of the two sets shows, mirroring useProjectNavRoutes.
@@ -229,10 +228,6 @@ export function AppSidebar({
                     },
                   ]),
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-              {
-                item: routes.detectionRules,
-                ...accessFor(routes.detectionRules),
-              },
             ]}
           />
 

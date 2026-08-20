@@ -48,17 +48,23 @@ import { toast } from "sonner";
 export function ApprovalReview({
   requestId,
   title,
-  description,
   usage,
+  summary,
 }: {
   requestId: string;
+  /**
+   * The page's at-a-glance strip, rendered beside this review's header as one
+   * two-column row. Owned by the caller because only it has the traffic
+   * figures; sharing the row keeps the summary and the review's own state on
+   * one line instead of two stacked bands.
+   */
+  summary?: React.ReactNode;
   /**
    * Section title, when this review is a section of a larger page. Given
    * one, the request's status shares its row instead of costing a strip of
    * its own; the review sheet, which has its own title, omits it.
    */
   title?: string;
-  description?: string;
   /**
    * Who is calling the server today. Owned by the caller, which holds the
    * traffic query, and rendered inside the evidence as one more question
@@ -98,6 +104,9 @@ export function ApprovalReview({
   if (detailQuery.error && !detail) {
     return (
       <div className="space-y-4">
+        {/* The summary is the page's own data and is already loaded — it must
+            not disappear because this review's query failed. */}
+        {summary}
         <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
           <p className="text-sm font-medium">The review could not be loaded</p>
           <p className="text-muted-foreground mt-1 max-w-md text-sm">
@@ -121,6 +130,7 @@ export function ApprovalReview({
   if (!detail) {
     return (
       <div className="space-y-4">
+        {summary}
         <SkeletonTable />
         {usage && (
           <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
@@ -130,48 +140,67 @@ export function ApprovalReview({
   }
 
   const unreviewed = detail.request.status === "unreviewed";
+  // Nothing asked, nothing decided: the badge already says "Unreviewed", so
+  // what is left to say is that nobody asked — one clause that rides the
+  // heading row rather than costing a box of its own beneath it.
+  const untouched = unreviewed && detail.decisions.length === 0;
+
+  let reviewBody: React.ReactNode = null;
+  if (!unreviewed) {
+    // Who asked and what we last decided are both short lists read before the
+    // evidence, so they sit side by side rather than pushing the evidence a
+    // screen further down.
+    reviewBody = (
+      <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
+        <Requesters requesters={detail.requesters} />
+        <PriorDecisions decisions={detail.decisions} />
+      </div>
+    );
+  } else if (!untouched) {
+    // Unreviewed now, but decided before. The history is the exception worth
+    // its own list; the header carries the rest.
+    reviewBody = <PriorDecisions decisions={detail.decisions} />;
+  }
+
+  const header = (
+    <ReviewHeader
+      title={title}
+      collectedAt={detail.evidenceCollectedAt}
+      status={detail.request.status}
+      createdAt={unreviewed ? undefined : detail.request.createdAt}
+      versionPinned={detail.request.versionPinned}
+      notice={
+        untouched
+          ? "No one has asked for it — this is its first review."
+          : undefined
+      }
+    />
+  );
+
+  // Given a summary strip, the two share one row: the figures on the left and
+  // what the review makes of them on the right, both boxed and both ending on
+  // the same line.
+  let headerRow = header;
+  if (summary) {
+    headerRow = (
+      <div className="grid items-stretch gap-x-6 gap-y-3 lg:grid-cols-2">
+        {summary}
+        {header}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* An unreviewed dossier is evidence without a review: no status to
-          report, nobody waiting. The requester list and decision history only
-          exist once someone actually asks or decides. */}
-      <ReviewHeader
-        title={title}
-        description={description}
-        status={detail.request.status}
-        createdAt={unreviewed ? undefined : detail.request.createdAt}
-        versionPinned={detail.request.versionPinned}
-      />
+      {headerRow}
       {detail.request.status === "approved" && detail.evidenceDiff?.changed && (
         <EvidenceChangedNotice
           diff={detail.evidenceDiff}
           changedAt={detail.request.evidenceChangedAt}
         />
       )}
-      {unreviewed ? (
-        <>
-          <p className="text-muted-foreground text-sm">
-            No one has asked for this server and no decision has been recorded.
-          </p>
-          <PriorDecisions decisions={detail.decisions} />
-        </>
-      ) : (
-        <>
-          {/* Who asked and what we last decided are both short lists read
-              before the evidence, so they sit side by side rather than
-              pushing the evidence a screen further down. */}
-          <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
-            <Requesters requesters={detail.requesters} />
-            <PriorDecisions decisions={detail.decisions} />
-          </div>
-        </>
-      )}
-      <EvidencePanel
-        document={document}
-        collectedAt={detail.evidenceCollectedAt}
-        usage={usage}
-      />
+      {reviewBody}
+      <EvidencePanel document={document} usage={usage} />
       <ResearchReports reports={detail.researchReports} requestId={requestId} />
     </div>
   );
@@ -235,44 +264,75 @@ export function RefreshEvidenceButton({
  */
 function ReviewHeader({
   title,
-  description,
+  collectedAt,
   status,
   createdAt,
   versionPinned,
+  notice,
 }: {
   title: string | undefined;
-  description: string | undefined;
+  /**
+   * When the evidence was gathered, and the caveat that none of it is
+   * verified. This is the section's subtitle rather than a line of its own:
+   * as a standalone paragraph it stacked with the state notice and the
+   * boilerplate description into a column of unrelated one-liners, and of the
+   * three it is the only one carrying information.
+   */
+  collectedAt: Date | undefined;
   status: string;
   /** Absent for an unreviewed dossier: nobody raised it. */
   createdAt: Date | undefined;
   versionPinned: boolean;
+  /** The review's state, when it is short enough to ride this row. */
+  notice?: string;
 }): JSX.Element {
+  // The badge rides the heading instead of a right-aligned cluster. Pushed
+  // right it floated against the page edge with nothing holding it, squeezed
+  // the subtitle into an orphaned second line, and put a second status
+  // treatment far from the summary strip's. Beside the title it reads as this
+  // section's own state, and the subtitle gets the full width to sit on.
+  // Boxed like every other section on the page, and centred in its own height
+  // so it sits level with the metric strip sharing its row.
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1">
-      {title && (
-        <div className="min-w-0 flex-1">
-          <Text variant="subheading">{title}</Text>
-          {description && (
-            <Text muted small>
-              {description}
-            </Text>
-          )}
-        </div>
-      )}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+    <div className="border-border flex h-full flex-col justify-center gap-1 border px-3 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {/* Serif like the evidence questions rather than a sans subheading,
+            which was smaller and plainer than its own children. Sized with
+            them, not above them: boxed in its own column it reads as their
+            peer, and a step larger crowded the row. */}
+        {title && (
+          <Heading variant="h3" className="text-lg font-thin">
+            {title}
+          </Heading>
+        )}
         <StatusBadge status={status} />
         {createdAt && (
-          <span className="text-muted-foreground">
-            First raised{" "}
-            <HumanizeDateTime date={createdAt} includeTime={false} />
+          <span className="text-muted-foreground text-xs">
+            raised <HumanizeDateTime date={createdAt} includeTime={false} />
           </span>
         )}
-        {!versionPinned && (
-          <span className="text-muted-foreground">
-            No pinned version — what runs may differ from the evidence.
-          </span>
+        {notice && (
+          <span className="text-muted-foreground text-xs">{notice}</span>
         )}
       </div>
+      {/* The provenance caveat belongs to gathered evidence, so it only
+          appears when there is some. A request with nothing gathered says so
+          in its own block below; describing where that evidence came from
+          would be claiming a source for something that does not exist. The
+          unpinned-version caveat is about the request, not the evidence, so
+          it stands on its own. */}
+      {(collectedAt || !versionPinned) && (
+        <Text muted small>
+          {collectedAt && (
+            <>
+              Gathered <HumanizeDateTime date={collectedAt} />. Declared by the
+              server or its registry, or seen in this organization's traffic —
+              nothing is verified behavior.{" "}
+            </>
+          )}
+          {!versionPinned && "No version is pinned, so what runs may differ."}
+        </Text>
+      )}
     </div>
   );
 }
@@ -402,7 +462,7 @@ function FrozenEvidence({
       </button>
       {open && (
         <div className="border-border mt-2 border-l pl-2.5">
-          <EvidencePanel document={document} collectedAt={undefined} />
+          <EvidencePanel document={document} />
         </div>
       )}
     </div>
@@ -451,63 +511,63 @@ function ResearchReports({
   const latest = reports[0];
   const previous = reports.slice(1);
 
+  // Display only — the endpoint enforces the same flag, and it fails closed on
+  // an unreadable flag, so anything but a confirmed enabled renders no button:
+  // a control the server would 403 is the breakage this section exists to
+  // remove. Loading/missing/error resolve to nothing at all.
+  let headerNote: React.ReactNode = null;
+  if (researchFlag.status === "enabled") {
+    // The same org-admin gate as the endpoint behind it: research spends the
+    // org's money, so a non-admin must not see a button whose click comes
+    // back 403.
+    headerNote = (
+      <RequireScope scope="org:admin" resourceId={project.id} level="component">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={running || startResearch.isPending}
+          onClick={() =>
+            startResearch.mutate({
+              request: { id: requestId, gramProject: project.slug },
+            })
+          }
+        >
+          {running && (
+            <Button.LeftIcon>
+              <Loader2 className="animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
+        </Button>
+      </RequireScope>
+    );
+  } else if (researchFlag.status === "disabled") {
+    headerNote = (
+      <span className="text-muted-foreground text-xs">
+        Not included in your plan — contact your Speakeasy representative.
+      </span>
+    );
+  }
+
+  // The same group shell as the evidence questions above it, so its heading,
+  // its hint icon and the top edge of its body line up with theirs instead of
+  // being a hand-rolled section that happens to look similar.
   return (
-    <section className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Heading variant="h3" className="text-lg font-thin">
-          Web research
-        </Heading>
-        {/* Display only — the endpoint enforces the same flag, and it fails
-            closed on an unreadable flag, so anything but a confirmed enabled
-            renders no button: a control the server would 403 is the breakage
-            this section exists to remove. Only a confirmed disabled shows the
-            plan message; loading/missing/error resolve to nothing. */}
-        {researchFlag.status === "disabled" && (
-          <p className="text-muted-foreground max-w-72 text-right text-xs">
-            Web research isn't included in your organization's plan yet —
-            contact your Speakeasy representative to enable it.
-          </p>
-        )}
-        {researchFlag.status === "enabled" && (
-          // The same org-admin gate as the endpoint behind it: research
-          // spends the org's money, so a non-admin must not see a button
-          // whose click comes back 403.
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={running || startResearch.isPending}
-              onClick={() =>
-                startResearch.mutate({
-                  request: { id: requestId, gramProject: project.slug },
-                })
-              }
-            >
-              {running && (
-                <Button.LeftIcon>
-                  <Loader2 className="animate-spin" />
-                </Button.LeftIcon>
-              )}
-              <Button.Text>
-                {running ? "Researching…" : "Run Research"}
-              </Button.Text>
-            </Button>
-          </RequireScope>
-        )}
-      </div>
-      <p className="text-muted-foreground text-xs">
-        Gathered by an agent from public web sources, which may be inaccurate,
-        incomplete, or deliberately seeded. Read them as leads to verify, not as
-        findings — the agent gathers and cites, it never decides.
-      </p>
-      <p className="border-warning border px-2.5 py-1.5 text-xs">
-        <span className="font-medium">
-          A research run spends real AI credits.
-        </span>{" "}
-        The agent makes dozens of model calls, web searches, and page reads —
-        typically several hundred thousand tokens, several minutes per run.
-      </p>
-      {!latest && (
+    <EvidenceGroup
+      question="Web research"
+      hint={RESEARCH_HINT}
+      note={headerNote}
+    >
+      {researchFlag.status === "enabled" && (
+        <p className="border-warning border px-2.5 py-1.5 text-xs">
+          <span className="font-medium">
+            A research run spends real AI credits.
+          </span>{" "}
+          The agent makes dozens of model calls, web searches, and page reads —
+          typically several hundred thousand tokens, several minutes per run.
+        </p>
+      )}
+      {!latest && researchFlag.status === "enabled" && (
         <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
           No research has been run for this server.
         </p>
@@ -545,9 +605,13 @@ function ResearchReports({
           )}
         </>
       )}
-    </section>
+    </EvidenceGroup>
   );
 }
+
+/** Where research findings come from and how far to trust them. */
+const RESEARCH_HINT =
+  "Gathered by an agent from public web sources, which may be inaccurate, incomplete, or deliberately seeded. Read them as leads to verify, not as findings — the agent gathers and cites, it never decides.";
 
 function ResearchReportCard({
   report,

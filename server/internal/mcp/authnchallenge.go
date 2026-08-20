@@ -361,6 +361,7 @@ func (s *Service) contextForSessionSubject(
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

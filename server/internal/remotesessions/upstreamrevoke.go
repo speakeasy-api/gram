@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -68,71 +69,6 @@ const (
 	bulkRevokeConcurrency = 8
 )
 
-// revokeOutcome labels the metric series. Distinguishing "skipped" from
-// "success" matters: an issuer advertising no revocation endpoint is the
-// expected case for a large share of upstreams, and folding it into either
-// success or failure would make the failure rate unreadable.
-type revokeOutcome string
-
-const (
-	revokeOutcomeSuccess revokeOutcome = "success"
-	// revokeOutcomeSkipped means Gram had nothing to send: the issuer advertises
-	// no revocation endpoint, or the session stored no token to revoke.
-	revokeOutcomeSkipped revokeOutcome = "skipped"
-	// revokeOutcomeRejected means the upstream answered and refused. Per RFC 7009
-	// §2.2 an unknown or already-revoked token is a 200, so a non-2xx is a real
-	// rejection (bad client auth, unsupported token type, 503) rather than
-	// "nothing to do".
-	revokeOutcomeRejected revokeOutcome = "rejected"
-	// revokeOutcomeUnreachable means the request never produced an answer —
-	// DNS, TLS, connection, or the timeout above.
-	revokeOutcomeUnreachable revokeOutcome = "unreachable"
-	// revokeOutcomeInternal means Gram could not even build the request: an
-	// unreadable stored token, an unusable client auth configuration. Separated
-	// from the upstream-fault outcomes because it is Gram's bug to fix, not an
-	// upstream's behavior to tolerate.
-	revokeOutcomeInternal revokeOutcome = "internal_error"
-	// revokeOutcomeDropped means a bulk batch ran out of budget before the
-	// session was attempted at all. Its own series so the batch total still adds
-	// up and a rising share is legible as "batches are outgrowing the budget"
-	// rather than hiding inside skipped.
-	revokeOutcomeDropped revokeOutcome = "dropped"
-)
-
-const meterUpstreamRevoke = "gram.remote_session.upstream_revoke"
-
-// revokeMetrics holds the upstream-revoke instrument. Nil-guarded at the call
-// site so a construction failure degrades to no metrics rather than a panic,
-// matching the convention in internal/deviceintegrations/metrics.go.
-type revokeMetrics struct {
-	outcome metric.Int64Counter
-}
-
-func newRevokeMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *revokeMetrics {
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotesessions")
-
-	outcome, err := meter.Int64Counter(
-		meterUpstreamRevoke,
-		metric.WithDescription("RFC 7009 upstream token revocations attempted when a Remote Session is revoked, by outcome."),
-		metric.WithUnit("{revocation}"),
-	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUpstreamRevoke), attr.SlogError(err))
-	}
-
-	return &revokeMetrics{outcome: outcome}
-}
-
-func (m *revokeMetrics) record(ctx context.Context, issuerSlug string, outcome revokeOutcome) {
-	if m == nil || m.outcome == nil {
-		return
-	}
-	m.outcome.Add(ctx, 1, metric.WithAttributes(
-		attr.OAuthProvider(issuerSlug),
-		attr.Outcome(outcome),
-	))
-}
-
 // UpstreamRevoker pushes RFC 7009 revocations to the issuers Gram holds Remote
 // Session tokens against.
 //
@@ -154,7 +90,7 @@ type UpstreamRevoker struct {
 	// documentation warns against.
 	client *guardian.HTTPClient
 
-	metrics *revokeMetrics
+	metrics *remotesessionmetrics.Revoke
 }
 
 func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *UpstreamRevoker {
@@ -165,7 +101,7 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		db:      db,
 		enc:     enc,
 		client:  policy.PooledClient(),
-		metrics: newRevokeMetrics(logger, meterProvider),
+		metrics: remotesessionmetrics.NewRevoke(logger, meterProvider),
 	}
 }
 
@@ -209,9 +145,13 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 }
 
 // SoftDeleteSubjectSessions tombstones every upstream grant a subject holds
-// through one user session issuer, inside the caller's transaction, and returns
-// the credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
+// in the given project, inside the caller's transaction, and returns the
+// credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
 // transaction commits.
+//
+// The stored user_session_issuer_id is provenance from INSERT, not a lookup
+// key, so a grant minted by a different issuer in the same project is still
+// tombstoned, including when that issuer has since been soft-deleted.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
 // it commits or rolls back with the revocation that triggered it; the upstream
@@ -222,11 +162,10 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 //
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
-func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, projectID uuid.UUID) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
-		SubjectUrn:          subject,
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           projectID,
+		SubjectUrn: subject,
+		ProjectID:  projectID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)
@@ -340,7 +279,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 	)
 	span.SetAttributes(attr.RemoteSessionRevokeDroppedCount(dropped))
 	for range dropped {
-		r.metrics.record(ctx, "", revokeOutcomeDropped)
+		r.metrics.Record(ctx, "", remotesessionmetrics.RevokeOutcomeDropped)
 	}
 }
 
@@ -351,20 +290,20 @@ func (r *UpstreamRevoker) revoke(ctx context.Context, cred RevokedCredentials) {
 	ctx, span := r.tracer.Start(ctx, "remote_session.upstream_revoke")
 	defer span.End()
 
-	issuerSlug, outcome := r.revokeOnce(ctx, cred)
+	issuerURL, outcome := r.revokeOnce(ctx, cred)
 
 	// Reported in one place so the span and the metric can never disagree about
 	// how a revocation ended. Without a span the revocation is only visible in a
 	// trace as a bare HTTP POST, which is indistinguishable from a token
 	// exchange whenever an issuer advertises one URL for both endpoints.
-	span.SetAttributes(attr.OAuthProvider(issuerSlug), attr.Outcome(outcome))
-	r.metrics.record(ctx, issuerSlug, outcome)
+	span.SetAttributes(attr.OAuthIssuer(issuerURL), attr.Outcome(outcome))
+	r.metrics.Record(ctx, issuerURL, outcome)
 }
 
 // revokeOnce runs the sequence and reports where it stopped. The returned
-// issuer slug attributes the outcome, and is empty when the revocation failed
+// issuer URL attributes the outcome, and is empty when the revocation failed
 // before any issuer could be identified.
-func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredentials) (issuerSlug string, outcome revokeOutcome) {
+func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredentials) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(cred.RemoteSessionClientID.String()),
 	)
@@ -375,10 +314,10 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		// the row is gone outright — a hard delete racing the revoke. Nothing is
 		// addressable without it and nothing is recoverable.
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", revokeOutcomeSkipped
+			return "", remotesessionmetrics.RevokeOutcomeSkipped
 		}
 		logger.WarnContext(ctx, "upstream revoke: could not load client", attr.SlogError(err))
-		return "", revokeOutcomeInternal
+		return "", remotesessionmetrics.RevokeOutcomeInternal
 	}
 
 	logger = logger.With(
@@ -393,7 +332,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		endpoint = client.RevocationEndpoint.String
 	}
 	if endpoint == "" {
-		return client.IssuerSlug, revokeOutcomeSkipped
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
 	}
 
 	// The endpoint is a URL a customer's identity provider handed us, so it is
@@ -405,7 +344,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		logger.WarnContext(ctx, "upstream revoke: issuer advertises an unusable revocation endpoint",
 			attr.SlogOAuthFailureReason("revocation_endpoint must be an absolute https url, or http on loopback"),
 		)
-		return client.IssuerSlug, revokeOutcomeInternal
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
 	token, hint, ok := r.tokenToRevoke(ctx, cred)
@@ -413,7 +352,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		// Either the session stored no token at all, or what it stored could not
 		// be decrypted. Neither is recoverable and neither is the upstream's
 		// fault; tokenToRevoke has already logged a decryption failure.
-		return client.IssuerSlug, revokeOutcomeSkipped
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
 	}
 
 	var clientSecret string
@@ -421,7 +360,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		clientSecret, err = r.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
 			logger.WarnContext(ctx, "upstream revoke: client secret could not be read", attr.SlogError(err))
-			return client.IssuerSlug, revokeOutcomeInternal
+			return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 		}
 	}
 
@@ -432,7 +371,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: client auth configuration is invalid", attr.SlogError(err))
-		return client.IssuerSlug, revokeOutcomeInternal
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
 	form := url.Values{}
@@ -442,7 +381,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 	req, err := newTokenEndpointRequest(ctx, endpoint, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: could not build request", attr.SlogError(err))
-		return client.IssuerSlug, revokeOutcomeInternal
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
 	resp, err := r.client.Do(req)
@@ -451,7 +390,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 			attr.SlogOAuthGrant(hint),
 			attr.SlogError(err),
 		)
-		return client.IssuerSlug, revokeOutcomeUnreachable
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeUnreachable
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
@@ -469,7 +408,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 			attr.SlogOAuthGrant(hint),
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
 		)
-		return client.IssuerSlug, revokeOutcomeRejected
+		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeRejected
 	}
 
 	// Info rather than Debug: "Gram asked a provider to destroy a token" is a
@@ -481,7 +420,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		attr.SlogOAuthGrant(hint),
 		attr.SlogOAuthIssuer(client.IssuerUrl),
 	)
-	return client.IssuerSlug, revokeOutcomeSuccess
+	return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSuccess
 }
 
 // tokenToRevoke picks which of the session's two credentials to send, returning

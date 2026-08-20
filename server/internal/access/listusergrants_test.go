@@ -33,6 +33,27 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeChatWrite),
 }
 
+// TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
+// dashboard against the set authz.Engine.PrepareContext enforces. Different
+// functions produce them on the same condition, and any drift lets the demo
+// org render pages whose handlers then return 403.
+func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
+	t.Parallel()
+
+	reported := make([]string, 0, len(userVisibleScopeGrants()))
+	for _, grant := range userVisibleScopeGrants() {
+		reported = append(reported, grant.Scope)
+	}
+
+	enforced := make([]string, 0, len(authz.DemoScopeGrants()))
+	for _, grant := range authz.DemoScopeGrants() {
+		enforced = append(enforced, string(grant.Scope))
+	}
+
+	require.ElementsMatch(t, reported, enforced)
+	require.ElementsMatch(t, expectedFullAccessScopes, enforced)
+}
+
 func TestService_ListGrants(t *testing.T) {
 	t.Parallel()
 
@@ -155,11 +176,10 @@ func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// RBAC-enforced org, admin user, admin override set, but NO
-	// organization_users row — mirrors real impersonation.
+	// Validated support context grants full access without a membership row.
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

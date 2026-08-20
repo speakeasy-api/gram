@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -125,7 +126,7 @@ func TestService_CreateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ctx = withRBACGrants(t, ctx)
 
-	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: "Denied"})
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: conv.PtrEmpty("Denied")})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -150,7 +151,7 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
 
-	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: "Allowed"})
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: conv.PtrEmpty("Allowed")})
 	require.NoError(t, err)
 	require.NotEmpty(t, role.ID)
 	require.NotEqual(t, "role_allowed", role.ID)
