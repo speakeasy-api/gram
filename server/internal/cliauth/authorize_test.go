@@ -44,7 +44,7 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 
 // A Speakeasy admin impersonating an org via the dev-tools override — the
 // override targeting the session's active org — is refused enrollment
-// outright, even though impersonation grants every RBAC scope (DNO-938):
+// outright, even though impersonation grants every RBAC scope:
 // enrolling would bind the admin's device to that org's policies and route
 // session transcripts there.
 func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {

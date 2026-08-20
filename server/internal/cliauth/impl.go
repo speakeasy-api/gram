@@ -152,8 +152,8 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	// Enrollment binds a physical device to the session's active org — its
 	// policies, plugins, hooks, and session-transcript reporting — and mints a
 	// durable per-user key there. None of that is ever legitimate under an
-	// assumed identity, so every impersonation shape is refused outright
-	// (DNO-938). RBAC cannot carry this: an impersonating admin holds every
+	// assumed identity, so every impersonation shape is refused outright.
+	// RBAC cannot carry this: an impersonating admin holds every
 	// scope (see authz.Engine), so the org:read gate below would wave them
 	// through.
 	//

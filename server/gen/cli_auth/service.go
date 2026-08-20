@@ -26,7 +26,7 @@ type Service interface {
 	// Requires a member-available session (org:read); NOT org-admin. Refused (403)
 	// under any form of impersonation — an admin org override, a WorkOS
 	// user-impersonation session, or a session whose user is not an actual member
-	// of the active org (DNO-938).
+	// of the active org.
 	Authorize(context.Context, *AuthorizePayload) (res *AuthorizeResult, err error)
 	// Exchange a one-time code plus its PKCE code_verifier for a freshly minted
 	// per-user [agent,hooks] API key. No session or API-key auth: proving
