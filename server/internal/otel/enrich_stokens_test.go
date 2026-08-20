@@ -42,8 +42,8 @@ func TestEnrichSpeakeasyTokensCountsClaudeCodePrompt(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []attribute.KeyValue{
-		attribute.Int("speakeasy.tokens.count", 9),
-		attribute.String("speakeasy.tokens.codec", "o200k_base"),
+		TokensCount(9),
+		TokensCodec("o200k_base"),
 	}, got)
 }
 

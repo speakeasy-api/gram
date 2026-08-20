@@ -60,11 +60,11 @@ func TestEnrichTenancyIncludesAvailableProvenance(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []attribute.KeyValue{
-		attribute.String("speakeasy.organization.id", organizationID),
-		attribute.String("speakeasy.project.id", projectID),
-		attribute.String("speakeasy.organization.slug", organizationSlug),
-		attribute.String("speakeasy.project.slug", projectSlug),
-		attribute.String("speakeasy.api_key.id", apiKeyID),
-		attribute.String("speakeasy.api_key.name", apiKeyName),
+		OrganizationID(organizationID),
+		ProjectID(projectID),
+		OrganizationSlug(organizationSlug),
+		ProjectSlug(projectSlug),
+		APIKeyID(apiKeyID),
+		APIKeyName(apiKeyName),
 	}, attrs)
 }

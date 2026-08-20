@@ -47,7 +47,7 @@ func (e *enrichSpeakeasyTokens) Enrich(ctx context.Context, span *otelv1.Inbound
 	}
 
 	return []attribute.KeyValue{
-		attribute.Int("speakeasy.tokens.count", count),
-		attribute.String("speakeasy.tokens.codec", e.codec.GetName()),
+		TokensCount(count),
+		TokensCodec(e.codec.GetName()),
 	}, nil
 }

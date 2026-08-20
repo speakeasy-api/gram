@@ -28,24 +28,24 @@ func (e *enrichTenancy) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([
 	}
 
 	attrs := []attribute.KeyValue{
-		attribute.String("speakeasy.organization.id", orgID),
-		attribute.String("speakeasy.project.id", projectID),
+		OrganizationID(orgID),
+		ProjectID(projectID),
 	}
 
 	if slug := prov.GetOrganizationSlug(); slug != "" {
-		attrs = append(attrs, attribute.String("speakeasy.organization.slug", slug))
+		attrs = append(attrs, OrganizationSlug(slug))
 	}
 
 	if slug := prov.GetProjectSlug(); slug != "" {
-		attrs = append(attrs, attribute.String("speakeasy.project.slug", slug))
+		attrs = append(attrs, ProjectSlug(slug))
 	}
 
 	if keyID := prov.GetApiKeyId(); keyID != "" {
-		attrs = append(attrs, attribute.String("speakeasy.api_key.id", keyID))
+		attrs = append(attrs, APIKeyID(keyID))
 	}
 
 	if keyName := prov.GetApiKeyName(); keyName != "" {
-		attrs = append(attrs, attribute.String("speakeasy.api_key.name", keyName))
+		attrs = append(attrs, APIKeyName(keyName))
 	}
 
 	return attrs, nil

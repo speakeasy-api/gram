@@ -167,14 +167,14 @@ func TestRewriteInstrumentationScopePreservesOriginalName(t *testing.T) {
 		},
 	}).Build()
 
-	rewriteInstrumentationScope(span)
+	require.NoError(t, rewriteInstrumentationScope(span))
 
 	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
 	require.Equal(t, version, span.GetScope().GetVersion())
 	require.Len(t, span.GetAttributes(), 2)
 	require.Equal(t, existingKey, span.GetAttributes()[0].GetKey())
 	require.Equal(t, existingValue, span.GetAttributes()[0].GetValue().GetStringValue())
-	require.Equal(t, originalInstrumentationScopeAttr, span.GetAttributes()[1].GetKey())
+	require.Equal(t, string(OriginalInstrumentationScopeNameKey), span.GetAttributes()[1].GetKey())
 	require.Equal(t, originalName, span.GetAttributes()[1].GetValue().GetStringValue())
 }
 
@@ -183,7 +183,7 @@ func TestRewriteInstrumentationScopeCreatesMissingScope(t *testing.T) {
 
 	span := (&otelv1.Span_builder{}).Build()
 
-	rewriteInstrumentationScope(span)
+	require.NoError(t, rewriteInstrumentationScope(span))
 
 	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
 	require.Empty(t, span.GetAttributes())
@@ -197,7 +197,7 @@ func TestRewriteInstrumentationScopeLeavesNormalizedScopeUnchanged(t *testing.T)
 		Scope: (&otelv1.Span_InstrumentationScope_builder{Name: &name}).Build(),
 	}).Build()
 
-	rewriteInstrumentationScope(span)
+	require.NoError(t, rewriteInstrumentationScope(span))
 
 	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
 	require.Empty(t, span.GetAttributes())
