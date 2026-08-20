@@ -35,9 +35,10 @@ type remoteMCPSourceInput struct {
 // materialization shared by dashboard and future Platform MCP adapters. Surface
 // policy is closed and selected by server composition, never by a request.
 type RemoteMCPProvisioningService struct {
-	db     *pgxpool.Pool
-	policy *guardian.Policy
-	audit  *audit.Logger
+	db         *pgxpool.Pool
+	policy     *guardian.Policy
+	audit      *audit.Logger
+	iconSetter mcpservers.DefaultServerIconSetter
 }
 
 type DashboardRemoteMCPProvisioningInput struct {
@@ -51,11 +52,11 @@ type RemoteMCPProvisioningResult struct {
 	MCPServer       mcpserversrepo.McpServer
 }
 
-func NewRemoteMCPProvisioningService(db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger) *RemoteMCPProvisioningService {
+func NewRemoteMCPProvisioningService(db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger, iconSetter mcpservers.DefaultServerIconSetter) *RemoteMCPProvisioningService {
 	if auditLogger == nil {
 		auditLogger = audit.NewLogger()
 	}
-	return &RemoteMCPProvisioningService{db: db, policy: policy, audit: auditLogger}
+	return &RemoteMCPProvisioningService{db: db, policy: policy, audit: auditLogger, iconSetter: iconSetter}
 }
 
 // ProvisionDashboardRemoteMCP preserves the dashboard workflow's disabled
@@ -87,20 +88,31 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		return RemoteMCPProvisioningResult{}, err
 	}
 
-	mcpServer, err := mcpservers.CreateRemoteBackedMCPServer(ctx, tx, s.audit, mcpservers.RemoteMCPMaterializationInput{
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         *authCtx.ProjectID,
-		ActorUserID:       authCtx.UserID,
-		ActorEmail:        conv.PtrValOr(authCtx.Email, ""),
-		RemoteMCPServerID: remote.ID,
-		DisplayName:       displayName,
-		InitialVisibility: dashboardRemoteMCPInitialVisibility,
+	if err := mcpservers.VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, *authCtx.ProjectID, remote.ID); err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "verify remote MCP source")
+	}
+	mcpServer, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, s.audit, mcpservers.MCPServerTransactionInput{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             *authCtx.ProjectID,
+		ActorUserID:           authCtx.UserID,
+		ActorEmail:            authCtx.Email,
+		Name:                  displayName,
+		Visibility:            dashboardRemoteMCPInitialVisibility,
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMCPServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
+		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMCPServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "materialize remote-backed MCP server")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "commit dashboard remote MCP provisioning")
+	}
+	if s.iconSetter != nil {
+		s.iconSetter.ScheduleDefaultRemoteServerIcon(ctx, *authCtx.ProjectID, mcpServer.ID, remote.ID)
 	}
 
 	return RemoteMCPProvisioningResult{RemoteMCPServer: remote, MCPServer: mcpServer}, nil

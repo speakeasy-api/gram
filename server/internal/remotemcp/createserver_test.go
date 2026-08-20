@@ -56,6 +56,11 @@ func TestCreateServerAndMcpServer(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	iconCalls := ti.iconSetter.Calls()
+	require.Len(t, iconCalls, 1)
+	require.Equal(t, *authCtx.ProjectID, iconCalls[0].projectID)
+	require.Equal(t, uuid.MustParse(mcpServer.ID), iconCalls[0].mcpServerID)
+	require.Equal(t, uuid.MustParse(remote.ID), iconCalls[0].remoteMCPServerID)
 	storedMcpServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        uuid.MustParse(mcpServer.ID),
 		ProjectID: *authCtx.ProjectID,

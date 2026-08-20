@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -61,6 +62,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	policy *guardian.Policy,
 	auditLogger *audit.Logger,
+	iconSetter mcpservers.DefaultServerIconSetter,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
@@ -73,7 +75,7 @@ func NewService(
 		headers:      NewHeaders(logger, db, enc),
 		policy:       policy,
 		audit:        auditLogger,
-		provisioning: NewRemoteMCPProvisioningService(db, policy, auditLogger),
+		provisioning: NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 	}
 }
 

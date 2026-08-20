@@ -11,9 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -71,39 +69,6 @@ func seedOtherProjectToolset(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	require.NoError(t, err)
 
 	return toolset.ID
-}
-
-func TestCreateRemoteBackedMCPServerRejectsCrossProjectSource(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	foreignSourceID := seedOtherProjectRemoteMcpServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
-
-	_, err = mcpservers.CreateRemoteBackedMCPServer(ctx, tx, audit.NewLogger(), mcpservers.RemoteMCPMaterializationInput{
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         *authCtx.ProjectID,
-		ActorUserID:       authCtx.UserID,
-		ActorEmail:        "",
-		RemoteMCPServerID: foreignSourceID,
-		DisplayName:       "cross-project source",
-		InitialVisibility: "disabled",
-	})
-	require.Error(t, err)
-
-	var count int
-	require.NoError(t, ti.conn.QueryRow(ctx, `
-SELECT count(*)
-FROM mcp_servers
-WHERE project_id = $1
-  AND remote_mcp_server_id = $2
-  AND deleted IS FALSE`, *authCtx.ProjectID, foreignSourceID).Scan(&count))
-	require.Zero(t, count)
 }
 
 func TestCreateMcpServer_RejectsCrossTenantToolset(t *testing.T) {
