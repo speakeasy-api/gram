@@ -12,9 +12,9 @@ import {
 
 export type CreateRoleForm = {
   /**
-   * Description of what this role can do.
+   * Optional description of what this role can do.
    */
-  description: string;
+  description?: string | undefined;
   /**
    * Scope grants to assign.
    */
@@ -31,7 +31,7 @@ export type CreateRoleForm = {
 
 /** @internal */
 export type CreateRoleForm$Outbound = {
-  description: string;
+  description?: string | undefined;
   grants: Array<RoleGrant$Outbound>;
   member_ids?: Array<string> | undefined;
   name: string;
@@ -43,7 +43,7 @@ export const CreateRoleForm$outboundSchema: z.ZodMiniType<
   CreateRoleForm
 > = z.pipe(
   z.object({
-    description: z.string(),
+    description: z.optional(z.string()),
     grants: z.array(RoleGrant$outboundSchema),
     memberIds: z.optional(z.array(z.string())),
     name: z.string(),

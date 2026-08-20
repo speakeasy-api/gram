@@ -59,6 +59,7 @@ import (
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
+	otelc "github.com/speakeasy-api/gram/server/gen/http/otel/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
@@ -110,7 +111,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -134,6 +135,7 @@ func UsageCommands() []string {
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
+		"otel traces",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -654,10 +656,11 @@ func ParseEndpoint(
 		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
-		authLoginRedirectFlag = authLoginFlags.String("redirect", "", "")
-		authLoginOrgNameFlag  = authLoginFlags.String("org-name", "", "")
-		authLoginEmailFlag    = authLoginFlags.String("email", "", "")
+		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag       = authLoginFlags.String("redirect", "", "")
+		authLoginOrgNameFlag        = authLoginFlags.String("org-name", "", "")
+		authLoginEmailFlag          = authLoginFlags.String("email", "", "")
+		authLoginSupportHandoffFlag = authLoginFlags.String("support-handoff", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -786,6 +789,12 @@ func ParseEndpoint(
 		chatListSourcesSessionTokenFlag      = chatListSourcesFlags.String("session-token", "", "")
 		chatListSourcesProjectSlugInputFlag  = chatListSourcesFlags.String("project-slug-input", "", "")
 		chatListSourcesChatSessionsTokenFlag = chatListSourcesFlags.String("chat-sessions-token", "", "")
+
+		chatListSessionLinksFlags                 = flag.NewFlagSet("list-session-links", flag.ExitOnError)
+		chatListSessionLinksChatIdsFlag           = chatListSessionLinksFlags.String("chat-ids", "REQUIRED", "")
+		chatListSessionLinksSessionTokenFlag      = chatListSessionLinksFlags.String("session-token", "", "")
+		chatListSessionLinksProjectSlugInputFlag  = chatListSessionLinksFlags.String("project-slug-input", "", "")
+		chatListSessionLinksChatSessionsTokenFlag = chatListSessionLinksFlags.String("chat-sessions-token", "", "")
 
 		chatSessionsFlags = flag.NewFlagSet("chat-sessions", flag.ContinueOnError)
 
@@ -1585,6 +1594,14 @@ func ParseEndpoint(
 		organizationsGenerateWorkOSAdminPortalLinkFlags            = flag.NewFlagSet("generate-work-os-admin-portal-link", flag.ExitOnError)
 		organizationsGenerateWorkOSAdminPortalLinkBodyFlag         = organizationsGenerateWorkOSAdminPortalLinkFlags.String("body", "REQUIRED", "")
 		organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag = organizationsGenerateWorkOSAdminPortalLinkFlags.String("session-token", "", "")
+
+		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
+
+		otelTracesFlags                = flag.NewFlagSet("traces", flag.ExitOnError)
+		otelTracesApikeyTokenFlag      = otelTracesFlags.String("apikey-token", "", "")
+		otelTracesProjectSlugInputFlag = otelTracesFlags.String("project-slug-input", "", "")
+		otelTracesContentEncodingFlag  = otelTracesFlags.String("content-encoding", "", "")
+		otelTracesStreamFlag           = otelTracesFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		otelForwardingFlags = flag.NewFlagSet("otel-forwarding", flag.ContinueOnError)
 
@@ -3662,6 +3679,7 @@ func ParseEndpoint(
 	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
+	chatListSessionLinksFlags.Usage = chatListSessionLinksUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
@@ -3858,6 +3876,9 @@ func ParseEndpoint(
 	organizationsVerifyOnboardingHooksSetupFlags.Usage = organizationsVerifyOnboardingHooksSetupUsage
 	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
+
+	otelFlags.Usage = otelUsage
+	otelTracesFlags.Usage = otelTracesUsage
 
 	otelForwardingFlags.Usage = otelForwardingUsage
 	otelForwardingGetConfigFlags.Usage = otelForwardingGetConfigUsage
@@ -4361,6 +4382,8 @@ func ParseEndpoint(
 			svcf = modelKeysFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "otel":
+			svcf = otelFlags
 		case "otel-forwarding":
 			svcf = otelForwardingFlags
 		case "packages":
@@ -4817,6 +4840,9 @@ func ParseEndpoint(
 
 			case "list-sources":
 				epf = chatListSourcesFlags
+
+			case "list-session-links":
+				epf = chatListSessionLinksFlags
 
 			}
 
@@ -5359,6 +5385,13 @@ func ParseEndpoint(
 
 			case "generate-work-os-admin-portal-link":
 				epf = organizationsGenerateWorkOSAdminPortalLinkFlags
+
+			}
+
+		case "otel":
+			switch epn {
+			case "traces":
+				epf = otelTracesFlags
 
 			}
 
@@ -6860,7 +6893,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginEmailFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -6929,6 +6962,9 @@ func ParseEndpoint(
 			case "list-sources":
 				endpoint = c.ListSources()
 				data, err = chatc.BuildListSourcesPayload(*chatListSourcesSessionTokenFlag, *chatListSourcesProjectSlugInputFlag, *chatListSourcesChatSessionsTokenFlag)
+			case "list-session-links":
+				endpoint = c.ListSessionLinks()
+				data, err = chatc.BuildListSessionLinksPayload(*chatListSessionLinksChatIdsFlag, *chatListSessionLinksSessionTokenFlag, *chatListSessionLinksProjectSlugInputFlag, *chatListSessionLinksChatSessionsTokenFlag)
 			}
 		case "chat-sessions":
 			c := chatsessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7471,6 +7507,16 @@ func ParseEndpoint(
 			case "generate-work-os-admin-portal-link":
 				endpoint = c.GenerateWorkOSAdminPortalLink()
 				data, err = organizationsc.BuildGenerateWorkOSAdminPortalLinkPayload(*organizationsGenerateWorkOSAdminPortalLinkBodyFlag, *organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag)
+			}
+		case "otel":
+			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "traces":
+				endpoint = c.Traces()
+				data, err = otelc.BuildTracesPayload(*otelTracesApikeyTokenFlag, *otelTracesProjectSlugInputFlag, *otelTracesContentEncodingFlag)
+				if err == nil {
+					data, err = otelc.BuildTracesStreamPayload(data, *otelTracesStreamFlag)
+				}
 			}
 		case "otel-forwarding":
 			c := otelforwardingc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9783,7 +9829,7 @@ func agentReportSessionMovedUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\",\n      \"target_session_id\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
 }
 
 func agentCreateSessionHandoffUsage() {
@@ -10720,6 +10766,7 @@ func authLoginUsage() {
 	fmt.Fprint(os.Stderr, " -redirect STRING")
 	fmt.Fprint(os.Stderr, " -org-name STRING")
 	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -support-handoff STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -10730,10 +10777,11 @@ func authLoginUsage() {
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
 	fmt.Fprintln(os.Stderr, `    -org-name STRING: `)
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -support-handoff STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --email \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --email \"abc123\" --support-handoff \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
@@ -10932,6 +10980,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
+	fmt.Fprintln(os.Stderr, `    list-session-links: List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s chat COMMAND --help\n", os.Args[0])
@@ -11256,6 +11305,30 @@ func chatListSourcesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-sources --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatListSessionLinksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat list-session-links", os.Args[0])
+	fmt.Fprint(os.Stderr, " -chat-ids JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -chat-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-session-links --chat-ids '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 // chatSessionsUsage displays the usage of the chat-sessions command and its
@@ -14939,6 +15012,40 @@ func organizationsGenerateWorkOSAdminPortalLinkUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations generate-work-os-admin-portal-link --body '{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
 }
 
+// otelUsage displays the usage of the otel command and its subcommands.
+func otelUsage() {
+	fmt.Fprintln(os.Stderr, `Receives OpenTelemetry signals from LLM providers and harnesses.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] otel COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    traces: Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s otel COMMAND --help\n", os.Args[0])
+}
+func otelTracesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel traces", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -content-encoding STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-encoding STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel traces --apikey-token \"abc123\" --project-slug-input \"abc123\" --content-encoding \"abc123\" --stream \"goa.png\"")
+}
+
 // otelForwardingUsage displays the usage of the otel-forwarding command and
 // its subcommands.
 func otelForwardingUsage() {
@@ -17252,7 +17359,7 @@ func organizationRemoteSessionIssuersCreateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersListIssuersUsage() {
@@ -17368,7 +17475,7 @@ func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersDeleteIssuerUsage() {
@@ -17600,7 +17707,7 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
@@ -17624,7 +17731,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -17784,7 +17891,7 @@ func adminRemoteSessionsCreateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage() {
@@ -17870,7 +17977,7 @@ func adminRemoteSessionsUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsDeleteGlobalIssuerUsage() {
@@ -19700,7 +19807,7 @@ func skillsAddVersionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsRestoreVersionUsage() {
@@ -19748,7 +19855,7 @@ func skillsUpdateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills update --body '{\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills update --body '{\n      \"display_name\": \"aaa\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsListUsage() {

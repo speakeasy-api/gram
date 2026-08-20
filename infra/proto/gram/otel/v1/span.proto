@@ -90,7 +90,6 @@ message Span {
   // observed, and would need their own submessage if they are ever pinned onto
   // a record.
   message Provenance {
-    // Emitting component, e.g. risk, mcp-gateway, rbac.
     string source = 1;
 
     // Tenancy, stamped by the ingesting edge from authenticated state. Resource
@@ -98,6 +97,10 @@ message Span {
     // them.
     string organization_id = 2;
     string project_id = 3;
+    string organization_slug = 4;
+    string project_slug = 5;
+    string api_key_id = 6;
+    string api_key_name = 7;
   }
 
   // Resource is a copy of opentelemetry.proto.resource.v1.Resource, field
@@ -218,7 +221,8 @@ message Span {
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
-      seconds: 604800 /* 7 days */
+      seconds: 604800
+      /* 7 days */
     }
   };
 }

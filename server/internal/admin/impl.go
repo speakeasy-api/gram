@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -48,23 +50,26 @@ import (
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	verifier       *Verifier
-	loginStates    cache.TypedCacheObject[LoginState]
-	oidc           *OIDCClient
-	sessions       *SessionStore
-	allowedOrigins []string
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	verifier             *Verifier
+	loginStates          cache.TypedCacheObject[LoginState]
+	oidc                 *OIDCClient
+	sessions             *SessionStore
+	allowedOrigins       []string
+	dashboardURL         *url.URL
+	supportHandoffIssuer supportHandoffIssuer
 
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
 
-	openRouter      TrialKeyReviver
-	openRouterUsage OpenRouterUsageReader
-	productFeatures *productfeatures.Client
+	openRouter           TrialKeyReviver
+	openRouterUsage      OpenRouterUsageReader
+	productFeatures      *productfeatures.Client
+	chatAnalysisSignaler analysis.Signaler
 
 	audit *audit.Logger
 
@@ -98,6 +103,14 @@ type AdminOpenRouter interface {
 
 // ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
 var ErrOpenRouterUnavailable = errors.New("no usable OpenRouter configuration")
+
+var ErrChatAnalysisTriggerUnavailable = errors.New("chat analysis triggering is not configured")
+
+type ChatAnalysisTriggerUnavailable struct{}
+
+func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
+	return ErrChatAnalysisTriggerUnavailable
+}
 
 const keyBillingLockWaitTimeout = 5 * time.Second
 
@@ -135,7 +148,9 @@ func NewService(
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	chatAnalysisSignaler analysis.Signaler,
 	billing BillingOperations,
+	dashboardURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -154,18 +169,23 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:          logger,
-		db:              db,
-		oidc:            oidcClient,
-		sessions:        sessionStore,
-		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins:  allowedOrigins,
-		workos:          workosClient,
-		openRouter:      openRouter,
-		openRouterUsage: openRouter,
-		productFeatures: productFeatures,
-		audit:           audit.NewLogger(),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:         logger,
+		db:             db,
+		oidc:           oidcClient,
+		sessions:       sessionStore,
+		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins: allowedOrigins,
+		dashboardURL:   dashboardURL,
+		supportHandoffIssuer: supporthandoff.NewIssuer(
+			supporthandoff.NewStore(adminCache),
+		),
+		workos:               workosClient,
+		openRouter:           openRouter,
+		openRouterUsage:      openRouter,
+		productFeatures:      productFeatures,
+		chatAnalysisSignaler: chatAnalysisSignaler,
+		audit:                audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
@@ -185,12 +205,43 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// See sessionInfo in session_handler.go for why this one route is hand
-	// written rather than generated from the Goa design.
+	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
+	// features_handler.go for why these routes are hand written rather than
+	// generated from the Goa design.
 	mux.Handle(
 		http.MethodGet,
 		"/admin/session.get",
 		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.chatAnalysisSettings",
+		oops.ErrHandle(service.logger, service.handleGetChatAnalysisSettings).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.chatAnalysisSettings",
+		oops.ErrHandle(service.logger, service.handleSetChatAnalysisSettings).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.chatAnalysisTrigger",
+		oops.ErrHandle(service.logger, service.handleTriggerChatAnalysis).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.open-dashboard",
+		oops.ErrHandle(service.logger, service.handleOpenOrganizationInDashboard).ServeHTTP,
 	)
 }
 

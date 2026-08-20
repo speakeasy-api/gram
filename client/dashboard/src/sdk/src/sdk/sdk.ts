@@ -46,6 +46,7 @@ import { OrganizationRemoteSessionClients } from "./organizationremotesessioncli
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
+import { Otel } from "./otel.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { PlatformMcp } from "./platformmcp.js";
@@ -77,6 +78,11 @@ import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
+  private _otel?: Otel;
+  get otel(): Otel {
+    return (this._otel ??= new Otel(this._options));
+  }
+
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));

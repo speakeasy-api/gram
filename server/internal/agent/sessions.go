@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -170,6 +171,39 @@ func (s *Service) ReportSessionMoved(ctx context.Context, payload *gen.ReportSes
 		return oops.E(oops.CodeUnexpected, err, "resolve moved session").LogError(ctx, s.logger)
 	}
 
+	// The continuation's chat id derives the same way the parent's does, so
+	// the lineage edge is complete even before the continuation is captured.
+	childSessionID := strings.TrimSpace(conv.PtrValOr(payload.TargetSessionID, ""))
+	var childChatID uuid.NullUUID
+	if childSessionID != "" {
+		childChatID = uuid.NullUUID{UUID: chat.SessionIDToChatID(childSessionID), Valid: true}
+	}
+	sourceSurface := strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, ""))
+	deviceSerial := normalizeSerial(payload.SerialNumber)
+	deviceHostname := strings.TrimSpace(conv.PtrValOr(payload.Hostname, ""))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record session move").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := repo.New(dbtx).InsertChatSessionLink(ctx, repo.InsertChatSessionLinkParams{
+		ProjectID:       *authCtx.ProjectID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ParentChatID:    chatID,
+		ChildChatID:     childChatID,
+		ParentSessionID: sessionID,
+		ChildSessionID:  conv.PtrToPGText(conv.PtrEmpty(childSessionID)),
+		TargetHarness:   targetHarness,
+		SourceSurface:   conv.PtrToPGText(conv.PtrEmpty(sourceSurface)),
+		ActorEmail:      conv.PtrToPGText(actorDisplay),
+		DeviceSerial:    conv.PtrToPGText(conv.PtrEmpty(deviceSerial)),
+		DeviceHostname:  conv.PtrToPGText(conv.PtrEmpty(deviceHostname)),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record session link").LogError(ctx, s.logger)
+	}
+
 	event := audit.LogChatSessionMoveEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -180,11 +214,16 @@ func (s *Service) ReportSessionMoved(ctx context.Context, payload *gen.ReportSes
 		ChatTitle:        chatTitle,
 		OwnerUserID:      ownerUserID,
 		TargetHarness:    targetHarness,
-		SourceSurface:    strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
-		DeviceSerial:     normalizeSerial(payload.SerialNumber),
-		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
+		TargetSessionID:  childSessionID,
+		SourceSurface:    sourceSurface,
+		DeviceSerial:     deviceSerial,
+		DeviceHostname:   deviceHostname,
 	}
-	if err := s.audit.LogChatSessionMove(ctx, s.db, event); err != nil {
+	if err := s.audit.LogChatSessionMove(ctx, dbtx, event); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record session move").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record session move").LogError(ctx, s.logger)
 	}
 

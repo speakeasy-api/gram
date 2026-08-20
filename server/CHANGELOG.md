@@ -1,5 +1,25 @@
 # server
 
+## 1.16.0
+
+### Minor Changes
+
+- c1eae5f: Bill both customer-facing and platform-initiated inference spend for PAYG organizations.
+- 3f1dcaf: Creating a blocking shadow-MCP policy — or transitioning one into blocking — now replays the project's recorded MCP approval decisions onto it, in the same transaction. Previously, ordering decided what an approval meant: approve a server while no blocking policy exists and there is nothing to write a grant on, create the policy later, and the server was blocked while its review still read approved. The decision record stores its blast radius precisely so a later policy can honor it, and now it does: standing approvals get their bypass audience, standing denials get block rules under allow-by-default, and an allow-by-default policy that cannot express a standing person-scoped approval refuses to be created, naming the servers, instead of silently widening what was recorded.
+- 71931d5: The research agent now persists its per-action trace — every search and page fetch a run made, in order, with the outcome, the injection judge's verdict, and a bounded preview of the untrusted text it saw. The report is a run-level synthesis that drops most of what was read; the trace is what the agent actually did, surfaced on the review page under "what the agent did." No page bodies are stored, only previews, and no new inference is run — the runner already produced this and discarded it.
+- e76b4a2: Session moves now record a lineage edge linking the original session to its continuation. The device agent can pass the continuation's session id in `agent.reportSessionMoved`, a new `chat.listSessionLinks` endpoint resolves the edges touching a set of chats, and the Agent Sessions detail panel shows a "Linked sessions" section — "Moved to Cursor" on the original, "Derived from …" on the continuation, with navigation between the two when both are captured.
+- 3f1dcaf: The Shadow MCP inventory now distinguishes a server blocked for everyone from one blocked only for some. A deny-by-default policy scoped to a subset of users (audience type "targeted") no longer reports every server as "Blocked" project-wide; those servers now carry a new `restricted` access state, rendered as an orange "Restricted — Blocked for some users" badge. A denied review is also named as its own reason: "Blocked by policy & review" when a block policy already stops the server and a review also denied it, or "Blocked by review" when an allow-by-default rule blocks it solely because of the review. Servers blocked for everyone still read "Blocked" / "Blocked by policy" as before.
+- 639fc03: Serve skill authoring and distribution over Platform MCP. An OAuth-authenticated client can list, read, create, and re-version skills in an explicit project, rename them, and distribute one to an exact existing plugin or assistant. Authoring alone changes nothing at runtime, and every authoring result says so and names the targets it can be distributed to. `skills.addVersion` and `skills.update` accept an optional `expected_latest_version_id` so a write against a skill that has moved on is refused as a conflict inside the write's own transaction rather than silently overwriting another author's version. Platform MCP now prepares the acting user's RBAC grants and is enforced by the authorization engine, which previously skipped enforcement for any caller without a browser session.
+- 53fe5d9: The suppressed risk results listing (`risk.listDismissedResults`) now covers every suppressed finding — rule exclusions included, previously absent — and accepts an optional `reasons` filter (`rule` | `manual` | `automated`). Legacy pre-convergence rule rows derive their reason from the exclusion id instead of reading as manual.
+- c125969: Risk results now carry converged suppression fields: `suppressed_at`, `suppressed_reason` (`rule` | `manual` | `automated`), `suppressed_detail`, and `exclusion_id`. The dismissed-findings listing populates them for every row; `false_positive_at` remains as a deprecated mirror of `suppressed_at` while clients migrate.
+
+### Patch Changes
+
+- 820013c: Grant demo organization sessions every user-visible scope so enforcement matches the grant set the dashboard is given.
+- 2fe82c3: Allow product-feature APIs to target an authorized organization while preserving active-organization behavior for existing callers.
+- 1a54192: Add reusable authorization for securely checking a requested organization.
+- a2a67e0: Require an explicit organization for every product-feature API request.
+
 ## 1.15.0
 
 ### Minor Changes

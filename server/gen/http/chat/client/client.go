@@ -65,6 +65,10 @@ type Client struct {
 	// endpoint.
 	ListSourcesDoer goahttp.Doer
 
+	// ListSessionLinks Doer is the HTTP client used to make requests to the
+	// listSessionLinks endpoint.
+	ListSessionLinksDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -97,6 +101,7 @@ func NewClient(
 		SummarizeToolCallDoer:          doer,
 		SubmitFeedbackDoer:             doer,
 		ListSourcesDoer:                doer,
+		ListSessionLinksDoer:           doer,
 		RestoreResponseBody:            restoreBody,
 		scheme:                         scheme,
 		host:                           host,
@@ -388,6 +393,30 @@ func (c *Client) ListSources() goa.Endpoint {
 		resp, err := c.ListSourcesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listSources", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSessionLinks returns an endpoint that makes HTTP requests to the chat
+// service listSessionLinks server.
+func (c *Client) ListSessionLinks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionLinksRequest(c.encoder)
+		decodeResponse = DecodeListSessionLinksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionLinksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionLinksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "listSessionLinks", err)
 		}
 		return decodeResponse(resp)
 	}

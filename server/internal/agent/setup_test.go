@@ -23,13 +23,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 const testServerURL = "https://app.getgram.ai"
@@ -213,7 +213,7 @@ func assignPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pluginI
 func seedDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID string) uuid.UUID {
 	t.Helper()
 	now := time.Now().UTC()
-	id, err := workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	id, err := directoryrepo.New(conn).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         orgID,
 		WorkosDirectoryGroupID: workosID,
 		Name:                   workosID,
@@ -234,7 +234,7 @@ func seedDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 func seedDirectoryUserWithAttributes(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID, email string, attributes []byte) uuid.UUID {
 	t.Helper()
 	now := time.Now().UTC()
-	id, err := workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	id, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        orgID,
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: workosID,
@@ -251,7 +251,7 @@ func seedDirectoryUserWithAttributes(t *testing.T, ctx context.Context, conn *pg
 
 func seedDirectoryGroupMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, directoryUserID, directoryGroupID uuid.UUID, workosUserID, workosGroupID string) {
 	t.Helper()
-	_, err := workosrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+	_, err := directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        directoryUserID,
 		DirectoryGroupID:       directoryGroupID,
 		WorkosDirectoryUserID:  workosUserID,

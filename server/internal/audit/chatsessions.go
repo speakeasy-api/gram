@@ -81,6 +81,10 @@ type LogChatSessionMoveEvent struct {
 
 	// TargetHarness is where the session was moved to (e.g. cursor, codex).
 	TargetHarness string
+	// TargetSessionID is the native session id minted for the continuation,
+	// when the daemon knew it at launch time. Empty for targets whose ids are
+	// minted server-side (Cursor).
+	TargetSessionID string //nolint:glint // native harness session id, not a Gram resource with a URN
 	// SourceSurface is the harness the session originated in, when known.
 	SourceSurface string
 	// DeviceSerial and DeviceHostname attribute the machine the move happened
@@ -93,14 +97,17 @@ type LogChatSessionMoveEvent struct {
 // harness on a device (session portability). Sessions that have not been
 // captured yet are recorded too, so callers never gate reporting on capture.
 // The move itself happens client-side — this entry is the governance record,
-// deliberately free of session content. Like LogChatSessionAccess there is no
-// surrounding mutation to be atomic with, so callers pass the pool directly as
-// dbtx.
+// deliberately free of session content. Callers record the move's lineage edge
+// (chat_session_links) in the same transaction and pass that dbtx here so the
+// edge and the governance record commit together.
 func (l *Logger) LogChatSessionMove(ctx context.Context, dbtx repo.DBTX, event LogChatSessionMoveEvent) error {
 	action := ActionChatSessionMove
 
 	meta := map[string]any{
 		"target_harness": event.TargetHarness,
+	}
+	if event.TargetSessionID != "" {
+		meta["target_session_id"] = event.TargetSessionID
 	}
 	if event.SourceSurface != "" {
 		meta["source_surface"] = event.SourceSurface

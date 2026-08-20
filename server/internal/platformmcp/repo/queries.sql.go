@@ -656,7 +656,7 @@ WHERE EXISTS (
       AND project.organization_id = $1
       AND project.deleted IS FALSE
 )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type CreatePlatformMCPDistributionParams struct {
@@ -692,6 +692,7 @@ func (q *Queries) CreatePlatformMCPDistribution(ctx context.Context, arg CreateP
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -2133,7 +2134,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 }
 
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
-SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
+SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
 FROM platform_mcp_distributions AS distribution
 JOIN projects AS project
   ON project.id = distribution.project_id
@@ -2166,6 +2167,7 @@ func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatfor
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -3467,6 +3469,115 @@ func (q *Queries) ListPlatformMCPConnections(ctx context.Context, organizationID
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectAssistants = `-- name: ListPlatformMCPProjectAssistants :many
+SELECT
+    assistants.id,
+    assistants.name
+FROM assistants
+JOIN projects
+  ON projects.id = assistants.project_id
+WHERE assistants.project_id = $1
+  AND assistants.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND assistants.deleted IS FALSE
+  AND assistants.status = 'active'
+ORDER BY assistants.name ASC
+LIMIT $3
+`
+
+type ListPlatformMCPProjectAssistantsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPProjectAssistantsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) ListPlatformMCPProjectAssistants(ctx context.Context, arg ListPlatformMCPProjectAssistantsParams) ([]ListPlatformMCPProjectAssistantsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectAssistants, arg.ProjectID, arg.OrganizationID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectAssistantsRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectAssistantsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectPlugins = `-- name: ListPlatformMCPProjectPlugins :many
+
+SELECT
+    plugins.id,
+    plugins.name,
+    plugins.slug,
+    COALESCE(plugins.is_default, FALSE) AS is_default
+FROM plugins
+JOIN projects
+  ON projects.id = plugins.project_id
+WHERE plugins.project_id = $1
+  AND plugins.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND plugins.deleted IS FALSE
+ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
+LIMIT $3
+`
+
+type ListPlatformMCPProjectPluginsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPProjectPluginsRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	IsDefault bool
+}
+
+// Skill distribution targets. A skill is distributed to an exact existing
+// plugin or assistant in one project; these reads name what exists so the
+// resolver can refuse a target that does not, rather than falling back to the
+// default plugin.
+func (q *Queries) ListPlatformMCPProjectPlugins(ctx context.Context, arg ListPlatformMCPProjectPluginsParams) ([]ListPlatformMCPProjectPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectPlugins, arg.ProjectID, arg.OrganizationID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectPluginsRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectPluginsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -4875,7 +4986,7 @@ WHERE platform_mcp_distributions.id = $7
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionParams struct {
@@ -4913,6 +5024,7 @@ func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdateP
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -4963,7 +5075,7 @@ WHERE platform_mcp_distributions.id = $2
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionPublicationParams struct {
@@ -4993,6 +5105,7 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,

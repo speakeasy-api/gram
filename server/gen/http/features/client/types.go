@@ -77,6 +77,10 @@ type GetProductFeaturesResponseBody struct {
 	// Whether MCP consent screens offer the tool filtering picker for the
 	// organization
 	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled *bool `form:"session_portability_enabled,omitempty" json:"session_portability_enabled,omitempty" xml:"session_portability_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -689,6 +693,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		RemoteSessionAutoRefreshEnabled:         *body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
 		ConsentToolFilteringEnabled:             *body.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               *body.SessionPortabilityEnabled,
 		DeviceAgent:                             *body.DeviceAgent,
 	}
 
@@ -1198,6 +1203,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.ConsentToolFilteringEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "body"))
+	}
+	if body.SessionPortabilityEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

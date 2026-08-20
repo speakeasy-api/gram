@@ -237,6 +237,16 @@ UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+-- Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+-- update. The production UpdateUserSessionIssuer query COALESCEs every param,
+-- where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+-- keeping that contract out of per-package test helpers is the point of this
+-- narrow query.
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
 -- organization_id so tests can seed a cross-tenant/stale assignment that the

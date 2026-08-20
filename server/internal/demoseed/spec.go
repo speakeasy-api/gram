@@ -54,7 +54,7 @@ type Spec struct {
 	Marker string
 }
 
-// DefaultSpec is the shared read-only demo organization — the tenant the
+// DefaultSpec is the shared demo organization — the tenant the
 // embedded SQL is literally written against, and the one the daily production
 // run provisions. Rewriting a script with this Spec is a no-op.
 //
@@ -89,7 +89,7 @@ func DefaultSpec() Spec {
 // this easy to get wrong — its id is hand-written and never came from WorkOS.
 //
 // Unlike DefaultSpec this tenant is writable: none of the demo carve-outs in
-// authz.Engine or middleware.DemoOrgWriteGuard key off it.
+// authz.Engine keys off it.
 func LocalSpec() Spec {
 	return Spec{
 		OrgID:       orgid.FromWorkOSID(devidentity.DefaultOrgWorkosID),

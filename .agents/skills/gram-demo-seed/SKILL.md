@@ -1,6 +1,6 @@
 ---
 name: gram-demo-seed
-description: Use when editing or extending the demo org seed or the local dev seed — server/internal/demoseed/{postgres,clickhouse}.sql, demoseed.Spec, RunLocalFixtures, demo.ensure_demo_org(), gram demo-seed, mise run seed, mise run seed:demo, seed/demo/ docs, TestDemoSeedSafety, the demo-seed-safety CI job, org_gram_demo_workspace, dec0de00 uuids — or when that CI check fails with "touched another tenant's rows", "reseed is not cleaning up or not idempotent", "still contains the demo identifier", or a demo seed pre/postflight exception.
+description: Use when adding a new feature or changing an existing one that surfaces data in the dashboard — the demo org (app.getgram.ai/explore-demo) must show it — and when editing or extending the demo org seed or the local dev seed — server/internal/demoseed/{postgres,clickhouse}.sql, demoseed.Spec, RunLocalFixtures, demo.ensure_demo_org(), gram demo-seed, mise run seed, mise run seed:demo, seed/demo/ docs, TestDemoSeedSafety, the demo-seed-safety CI job, org_gram_demo_workspace, dec0de00 uuids — or when that CI check fails with "touched another tenant's rows", "reseed is not cleaning up or not idempotent", "still contains the demo identifier", or a demo seed pre/postflight exception.
 ---
 
 # Extending the demo org seed
@@ -14,6 +14,19 @@ demo-scoped data and reinserts it fresh**, so the seed must stay idempotent and
 perfectly scoped. `TestDemoSeedSafety` (its own required CI check,
 `demo-seed-safety`) enforces that mechanically — this skill explains the system
 and what the test will reject.
+
+## When the seed must change
+
+The demo org (`app.getgram.ai/explore-demo`) is how customers explore Gram before
+their own org is set up, and the same seed provisions every developer's local
+org. So a feature that ships without seed data shows an empty page to both.
+
+**Any new feature, or change to an existing one, that introduces or reshapes
+data a page renders must land with the matching seed change in the same
+PR.** Rule of thumb: if the change adds a table, a column a page reads, a new
+entity kind, or a new telemetry dimension, the seed needs a row for it. Then
+verify the affected pages per `seed/demo/verify.md` and update
+`seed/demo/PAGES.md`.
 
 ## Quick reference
 

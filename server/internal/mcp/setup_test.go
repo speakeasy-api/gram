@@ -101,7 +101,8 @@ type testInstance struct {
 	audit               *audit.Logger
 	tunnelRoutes        route.Store
 	// features is the injectable flag provider wired into the service; tests
-	// enable flag-gated behavior (e.g. inbound CIMD) with SetFlag.
+	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
+	// variant) with SetFlagVariant.
 	features *feature.InMemory
 }
 
@@ -256,7 +257,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "",
-				platformmcp.NewPostgresReader(conn), nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.NewPostgresReader(conn), nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),

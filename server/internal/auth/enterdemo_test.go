@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -112,5 +113,46 @@ func TestService_EnterDemo(t *testing.T) {
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	})
+
+	t.Run("entering demo ends support session", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "support-demo-admin"
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+		session := sessions.Session{
+			SessionID:             uuid.NewString(),
+			UserID:                userInfo.UserID,
+			ActiveOrganizationID:  userInfo.Organizations[0].ID,
+			SupportOrganizationID: userInfo.Organizations[0].ID,
+			SupportExpiresAt:      time.Now().Add(time.Hour),
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+		ctx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
+		require.NoError(t, err)
+
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   constants.DemoOrganizationID,
+			Name: "Acme Demo Org",
+			Slug: "acme-demo",
+		}, ""))
+
+		result, err := instance.service.EnterDemo(ctx, &gen.EnterDemoPayload{})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.Equal(t, constants.DemoOrganizationID, stored.ActiveOrganizationID)
+		require.Empty(t, stored.SupportOrganizationID)
+		require.True(t, stored.SupportExpiresAt.IsZero())
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err)
+		require.False(t, contextvalues.IsSupportSession(ctx))
 	})
 }

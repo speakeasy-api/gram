@@ -161,7 +161,7 @@ func requireAttrsSurvived(t *testing.T, attrs []*otlpcommon.KeyValue) {
 	require.True(t, kvs[0].GetValue().GetBoolValue())
 }
 
-func TestSpanUnmarshalsAsOTLP(t *testing.T) {
+func TestGramSpansUnmarshalAsOTLP(t *testing.T) {
 	t.Parallel()
 
 	src := (&otelv1.Span_builder{
@@ -211,44 +211,52 @@ func TestSpanUnmarshalsAsOTLP(t *testing.T) {
 	}).Build()
 
 	raw, err := proto.Marshal(src)
-	require.NoError(t, err, "marshal gram span")
+	require.NoError(t, err, "marshal canonical gram span")
 
-	var got otlptrace.Span
-	require.NoError(t, proto.Unmarshal(raw, &got), "unmarshal as OTLP span")
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
+		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal canonical gram span", test.name)
 
-	require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId())
-	require.Equal(t, []byte("01234567"), got.GetSpanId())
-	require.Equal(t, []byte("76543210"), got.GetParentSpanId())
-	require.Equal(t, "vendor=v", got.GetTraceState())
-	require.Equal(t, "GET /x", got.GetName())
-	require.Equal(t, otlptrace.Span_SPAN_KIND_SERVER, got.GetKind())
-	require.Equal(t, uint64(1700000000000000001), got.GetStartTimeUnixNano())
-	require.Equal(t, uint64(1700000000000000999), got.GetEndTimeUnixNano())
-	require.Equal(t, uint32(256), got.GetFlags())
-	require.Equal(t, uint32(1), got.GetDroppedAttributesCount())
-	require.Equal(t, uint32(2), got.GetDroppedEventsCount())
-	require.Equal(t, uint32(3), got.GetDroppedLinksCount())
+		copyRaw, err := proto.Marshal(gramSpan)
+		require.NoError(t, err, "%s: marshal gram span", test.name)
 
-	require.Equal(t, otlptrace.Status_STATUS_CODE_ERROR, got.GetStatus().GetCode())
-	require.Equal(t, "nope", got.GetStatus().GetMessage())
+		var got otlptrace.Span
+		require.NoError(t, proto.Unmarshal(copyRaw, &got), "%s: unmarshal as OTLP span", test.name)
 
-	require.Len(t, got.GetAttributes(), 1)
-	require.Equal(t, "http.response.status_code", got.GetAttributes()[0].GetKey())
-	require.Equal(t, int64(503), got.GetAttributes()[0].GetValue().GetIntValue())
+		require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId())
+		require.Equal(t, []byte("01234567"), got.GetSpanId())
+		require.Equal(t, []byte("76543210"), got.GetParentSpanId())
+		require.Equal(t, "vendor=v", got.GetTraceState())
+		require.Equal(t, "GET /x", got.GetName())
+		require.Equal(t, otlptrace.Span_SPAN_KIND_SERVER, got.GetKind())
+		require.Equal(t, uint64(1700000000000000001), got.GetStartTimeUnixNano())
+		require.Equal(t, uint64(1700000000000000999), got.GetEndTimeUnixNano())
+		require.Equal(t, uint32(256), got.GetFlags())
+		require.Equal(t, uint32(1), got.GetDroppedAttributesCount())
+		require.Equal(t, uint32(2), got.GetDroppedEventsCount())
+		require.Equal(t, uint32(3), got.GetDroppedLinksCount())
 
-	require.Len(t, got.GetEvents(), 1)
-	require.Equal(t, "exception", got.GetEvents()[0].GetName())
-	require.Equal(t, uint64(1700000000000000500), got.GetEvents()[0].GetTimeUnixNano())
+		require.Equal(t, otlptrace.Status_STATUS_CODE_ERROR, got.GetStatus().GetCode())
+		require.Equal(t, "nope", got.GetStatus().GetMessage())
 
-	require.Len(t, got.GetLinks(), 1)
-	require.Equal(t, []byte("fedcba9876543210"), got.GetLinks()[0].GetTraceId())
-	require.Equal(t, "other=o", got.GetLinks()[0].GetTraceState())
-	require.Equal(t, uint32(1), got.GetLinks()[0].GetFlags())
+		require.Len(t, got.GetAttributes(), 1)
+		require.Equal(t, "http.response.status_code", got.GetAttributes()[0].GetKey())
+		require.Equal(t, int64(503), got.GetAttributes()[0].GetValue().GetIntValue())
+
+		require.Len(t, got.GetEvents(), 1)
+		require.Equal(t, "exception", got.GetEvents()[0].GetName())
+		require.Equal(t, uint64(1700000000000000500), got.GetEvents()[0].GetTimeUnixNano())
+
+		require.Len(t, got.GetLinks(), 1)
+		require.Equal(t, []byte("fedcba9876543210"), got.GetLinks()[0].GetTraceId())
+		require.Equal(t, "other=o", got.GetLinks()[0].GetTraceState())
+		require.Equal(t, uint32(1), got.GetLinks()[0].GetFlags())
+	}
 }
 
-// TestOTLPSpanUnmarshalsAsGram covers the reverse direction: bytes from an
-// upstream OTLP producer parse into the gram message.
-func TestOTLPSpanUnmarshalsAsGram(t *testing.T) {
+// TestOTLPSpanUnmarshalsAsGramCopies covers the reverse direction: bytes from
+// an upstream OTLP producer parse into both Gram span messages.
+func TestOTLPSpanUnmarshalsAsGramCopies(t *testing.T) {
 	t.Parallel()
 
 	src := &otlptrace.Span{
@@ -271,23 +279,31 @@ func TestOTLPSpanUnmarshalsAsGram(t *testing.T) {
 	raw, err := proto.Marshal(src)
 	require.NoError(t, err, "marshal OTLP span")
 
-	var got otelv1.Span
-	require.NoError(t, proto.Unmarshal(raw, &got), "unmarshal as gram span")
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
+		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal as gram span", test.name)
 
-	require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId())
-	require.Equal(t, []byte("01234567"), got.GetSpanId())
-	require.Equal(t, []byte("76543210"), got.GetParentSpanId())
-	require.Equal(t, "vendor=v", got.GetTraceState())
-	require.Equal(t, "GET /x", got.GetName())
-	require.Equal(t, otelv1.Span_SPAN_KIND_CLIENT, got.GetKind())
-	require.Equal(t, uint64(1700000000000000001), got.GetStartTimeUnixNano())
-	require.Equal(t, uint64(1700000000000000999), got.GetEndTimeUnixNano())
-	require.Equal(t, uint32(256), got.GetFlags())
-	require.Equal(t, otelv1.Span_STATUS_CODE_OK, got.GetStatus().GetCode())
+		copyRaw, err := proto.Marshal(gramSpan)
+		require.NoError(t, err, "%s: re-marshal gram span", test.name)
 
-	require.Len(t, got.GetAttributes(), 1)
-	require.Equal(t, "http.response.status_code", got.GetAttributes()[0].GetKey())
-	require.Equal(t, int64(200), got.GetAttributes()[0].GetValue().GetIntValue())
+		var got otlptrace.Span
+		require.NoError(t, proto.Unmarshal(copyRaw, &got), "%s: unmarshal round-tripped bytes as OTLP span", test.name)
+
+		require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId(), test.name)
+		require.Equal(t, []byte("01234567"), got.GetSpanId(), test.name)
+		require.Equal(t, []byte("76543210"), got.GetParentSpanId(), test.name)
+		require.Equal(t, "vendor=v", got.GetTraceState(), test.name)
+		require.Equal(t, "GET /x", got.GetName(), test.name)
+		require.Equal(t, otlptrace.Span_SPAN_KIND_CLIENT, got.GetKind(), test.name)
+		require.Equal(t, uint64(1700000000000000001), got.GetStartTimeUnixNano(), test.name)
+		require.Equal(t, uint64(1700000000000000999), got.GetEndTimeUnixNano(), test.name)
+		require.Equal(t, uint32(256), got.GetFlags(), test.name)
+		require.Equal(t, otlptrace.Status_STATUS_CODE_OK, got.GetStatus().GetCode(), test.name)
+
+		require.Len(t, got.GetAttributes(), 1, test.name)
+		require.Equal(t, "http.response.status_code", got.GetAttributes()[0].GetKey(), test.name)
+		require.Equal(t, int64(200), got.GetAttributes()[0].GetValue().GetIntValue(), test.name)
+	}
 }
 
 // TestOTLPLogRecordUnmarshalsAsGram covers the reverse direction for logs.
@@ -324,8 +340,9 @@ func TestOTLPLogRecordUnmarshalsAsGram(t *testing.T) {
 }
 
 // TestGramSpanFieldsSurviveOTLPRoundTrip confirms Gram-only fields at 1000+ are
-// preserved as unknown fields when a message passes through an OTLP parser, so
-// a relay that decodes and re-encodes does not silently drop tenancy.
+// preserved for both Gram span messages when a message passes through an OTLP
+// parser, so a relay that decodes and re-encodes does not silently drop
+// tenancy.
 func TestGramSpanFieldsSurviveOTLPRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -338,19 +355,35 @@ func TestGramSpanFieldsSurviveOTLPRoundTrip(t *testing.T) {
 	}).Build()
 
 	raw, err := proto.Marshal(src)
-	require.NoError(t, err, "marshal gram span")
+	require.NoError(t, err, "marshal canonical gram span")
 
-	var viaOTLP otlptrace.Span
-	require.NoError(t, proto.Unmarshal(raw, &viaOTLP), "unmarshal as OTLP span")
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
+		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal canonical gram span", test.name)
 
-	reencoded, err := proto.Marshal(&viaOTLP)
-	require.NoError(t, err, "re-marshal OTLP span")
+		copyRaw, err := proto.Marshal(gramSpan)
+		require.NoError(t, err, "%s: marshal gram span", test.name)
 
-	var back otelv1.Span
-	require.NoError(t, proto.Unmarshal(reencoded, &back), "unmarshal round-tripped bytes as gram span")
+		var viaOTLP otlptrace.Span
+		require.NoError(t, proto.Unmarshal(copyRaw, &viaOTLP), "%s: unmarshal as OTLP span", test.name)
 
-	require.Equal(t, "proj", back.GetProvenance().GetProjectId(), "provenance.project_id lost in OTLP round trip")
-	require.Equal(t, "scope", back.GetScope().GetName(), "scope.name lost in OTLP round trip")
+		reencoded, err := proto.Marshal(&viaOTLP)
+		require.NoError(t, err, "%s: re-marshal OTLP span", test.name)
+
+		back := test.newSpan()
+		require.NoError(t, proto.Unmarshal(reencoded, back), "%s: unmarshal round-tripped bytes as gram span", test.name)
+
+		switch got := back.(type) {
+		case *otelv1.Span:
+			require.Equal(t, "proj", got.GetProvenance().GetProjectId(), "Span: provenance.project_id lost in OTLP round trip")
+			require.Equal(t, "scope", got.GetScope().GetName(), "Span: scope.name lost in OTLP round trip")
+		case *otelv1.InboundSpan:
+			require.Equal(t, "proj", got.GetProvenance().GetProjectId(), "InboundSpan: provenance.project_id lost in OTLP round trip")
+			require.Equal(t, "scope", got.GetScope().GetName(), "InboundSpan: scope.name lost in OTLP round trip")
+		default:
+			require.Failf(t, "unexpected gram span type", "%T", got)
+		}
+	}
 }
 
 // TestGramLogRecordFieldsSurviveOTLPRoundTrip is the log-side counterpart, and

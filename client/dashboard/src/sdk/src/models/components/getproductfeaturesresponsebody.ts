@@ -66,6 +66,10 @@ export type GetProductFeaturesResponseBody = {
    */
   sessionCaptureEnabled: boolean;
   /**
+   * Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent
+   */
+  sessionPortabilityEnabled: boolean;
+  /**
    * Whether skill capture stores activation metadata without requesting manifest content
    */
   skillCaptureMetadataOnly: boolean;
@@ -103,6 +107,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    session_portability_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
@@ -127,6 +132,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
         "remoteSessionAutoRefreshEnforcedEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "session_portability_enabled": "sessionPortabilityEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",

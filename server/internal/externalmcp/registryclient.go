@@ -30,6 +30,15 @@ type RegistryBackend interface {
 	Authorize(req *http.Request) error
 }
 
+// RegistryReader is the narrow, normalized registry contract consumed by both
+// dashboard and Platform MCP catalogue projections. RegistryClient remains the
+// Pulse-compatible transport implementation; CatalogService selects an adapter
+// before delegating to it.
+type RegistryReader interface {
+	ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error)
+	GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error)
+}
+
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
 	policy       *guardian.Policy
@@ -698,6 +707,20 @@ func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) err
 	return nil
 }
 
+// reviewedRegistryDetailsURL validates the operator-owned source before a
+// detail fetch. Unlike local development fixtures, reviewed catalogue sources
+// are production trust inputs and must never be fetched over plaintext HTTP.
+func reviewedRegistryDetailsURL(rawURL string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return nil, fmt.Errorf("parse reviewed registry URL: %w", err)
+	}
+	if parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
+		return nil, fmt.Errorf("reviewed registry URL must be an absolute HTTPS URL without userinfo or fragment")
+	}
+	return parsed, nil
+}
+
 // ServerDetails contains detailed information about an MCP server including connection info.
 // Headers and variables are copied from the selected server-owned remote. Callers
 // must still validate configuration values against these declarations; they must
@@ -716,9 +739,9 @@ type ServerDetails struct {
 // GetServerDetails fetches server details including the remote URL from the registry.
 // If allowedRemoteURLs is provided and non-empty, only remotes with matching URLs are considered.
 func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error) {
-	u, err := url.Parse(registry.URL)
+	u, err := reviewedRegistryDetailsURL(registry.URL)
 	if err != nil {
-		return nil, oops.Permanent(fmt.Errorf("parse external mcp registry url: %w", err))
+		return nil, oops.Permanent(err)
 	}
 	u = u.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
 

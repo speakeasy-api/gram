@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +54,15 @@ type rfc8414Document struct {
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+
+	// CodeChallengeMethodsSupported stays nil when the document omits the
+	// field, and only here: persistence collapses it to an empty array
+	// ("captured; the upstream advertises nothing", RFC 8414's stated meaning
+	// for absence) while the column's NULL is reserved for rows discovery has
+	// not captured at all. The nil/empty split survives just long enough for
+	// collectDiscoveryWarnings to word the two cases differently.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+
 	// ClientIDMetadataDocumentSupported comes from the OAuth CIMD draft
 	// (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414: whether
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
@@ -281,6 +291,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
@@ -457,6 +468,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
@@ -858,6 +870,13 @@ type DiscoveredIssuerMetadata struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+
+	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
+	// that omits the field yields an empty slice — the persisted
+	// "captured; the upstream advertises nothing" state — rather than the nil
+	// that the nullable column would store as "never captured".
+	CodeChallengeMethodsSupported []string
+
 	ClientIDMetadataDocumentSupported bool
 }
 
@@ -879,6 +898,14 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
 		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
 		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+
+		// An empty advertised list must survive as empty here, because nil and
+		// empty persist differently for this field (NULL "never captured" vs
+		// {} "captured, advertises nothing"). The plain append copy used by
+		// the sibling fields collapses an empty slice to nil, so it gets an
+		// orEmptySlice on top.
+		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 	}, nil
 }
@@ -1140,6 +1167,17 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
+	// but MCP requires clients to refuse authorization servers that do not
+	// advertise PKCE support, so a future change may enforce it. The
+	// absent and empty cases read differently because only the wording here
+	// can distinguish them — persistence collapses both to an empty array.
+	switch {
+	case doc.CodeChallengeMethodsSupported == nil:
+		warnings = append(warnings, "code_challenge_methods_supported missing from discovery document; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
+	case !slices.Contains(doc.CodeChallengeMethodsSupported, "S256"):
+		warnings = append(warnings, "discovery document does not list S256 in code_challenge_methods_supported; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
 	}
 	return warnings
 }

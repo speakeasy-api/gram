@@ -69,9 +69,9 @@ func (m Mode) Enforces() bool {
 // every spec-valid document), so nothing regresses, while every decision
 // ModePresets would have made is recorded. The exit condition is:
 //
-//  1. Wait for the AIS-212 flag flip, which is what first exposes CIMD to
-//     the whole customer base and therefore produces the only meaningful
-//     sample.
+//  1. CIMD is exposed to the whole customer base (the gram-user-session-cimd
+//     rollout flag reached 100% and was then removed, AIS-210), so
+//     cimd.admission.decisions carries a meaningful sample.
 //  2. Watch cimd.admission.decisions for outcome denied_not_listed with
 //     mode reporting. Each one names a client the catalog is missing; add a
 //     catalog entry, or have the operator add a custom URL.
