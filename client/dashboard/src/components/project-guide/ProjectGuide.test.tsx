@@ -34,6 +34,9 @@ const setSearchParams = vi.hoisted(() => vi.fn());
 const mcpOperations = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
+const secretOperations = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
 
 vi.mock("./useProjectGuideProgress", () => ({
   useProjectGuideProgress: () => ({
@@ -45,6 +48,15 @@ vi.mock("./useProjectGuideProgress", () => ({
 vi.mock("./useMcpGuideOperations", () => ({
   MCP_GUIDE_CLIENTS: ["claude", "cursor", "codex"],
   useMcpGuideOperations: () => mcpOperations.current,
+}));
+
+vi.mock("./useSecretGuideOperations", () => ({
+  SECRET_GUIDE_CLIENTS: {
+    claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
+    cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
+    codex: { label: "Codex", directory: "~/.codex/plugins/" },
+  },
+  useSecretGuideOperations: () => secretOperations.current,
 }));
 
 vi.mock("react-router", () => ({
@@ -144,6 +156,27 @@ function resetMcpOperations(): void {
   };
 }
 
+function resetSecretOperations(): void {
+  secretOperations.current = {
+    client: "claude",
+    downloadedFilename: "gram-observability.zip",
+    handleSignal: vi.fn(),
+    installCommand: "unzip gram-observability.zip -d ~/.claude/plugins/",
+    markPromptCopied: vi.fn(),
+    policyError: false,
+    policyPending: false,
+    prompt:
+      "This is a security test using a dummy secret. Inspect AKIAIOSFODNN7EXAMPLE.",
+    promptCopied: true,
+    retryBaseline: vi.fn(),
+    retryPolicy: vi.fn(),
+    riskEventsHref: "/projects/request-project/security/events",
+    setClient: vi.fn(),
+    telemetryBaselineReady: true,
+    telemetryError: false,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -154,9 +187,11 @@ afterEach(() => {
     "secret-block": "not-started",
   };
   resetMcpOperations();
+  resetSecretOperations();
 });
 
 resetMcpOperations();
+resetSecretOperations();
 
 describe("ProjectGuide", () => {
   it("renders the approved opening with both selectable journeys", () => {
@@ -697,6 +732,153 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("button", { name: "Start the other journey" }),
     ).toBeTruthy();
+  });
+
+  it("renders the real blocked-secret install, prompt checkpoint, event, and Risk Events link", async () => {
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Secrets policy already live · block on match",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 1) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Observability plugin downloaded · gram-observability.zip",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "event",
+            scope: signal.scope,
+            event: {
+              kind: "Denied · risk event",
+              tone: "deny",
+              title: "request denied by secrets policy",
+              rows: [
+                { key: "rule", value: "secrets.aws_access_key_id" },
+                { key: "match", value: "synthetic credential" },
+              ],
+              note: "The prompt was blocked before the model answered.",
+            },
+          });
+        }
+      },
+    );
+    secretOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+
+    expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create secrets policy" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.tagName === "PRE" &&
+            element.textContent?.includes("unzip gram-observability.zip"),
+          ),
+        ),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.tagName === "PRE" &&
+            element.textContent?.includes("dummy secret"),
+          ),
+        ),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    expect(
+      screen.getByRole("heading", { name: "The prompt was denied." }),
+    ).toBeTruthy();
+    expect(screen.getByText("secrets.aws_access_key_id")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open Risk Events" })
+        .getAttribute("href"),
+    ).toBe("/projects/request-project/security/events");
+  });
+
+  it("times out and retries the blocked-secret listener without accepting history", () => {
+    vi.useFakeTimers();
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result:
+              signal.scope.step === 0
+                ? "Secrets policy live"
+                : "Observability plugin downloaded",
+          });
+        }
+      },
+    );
+    secretOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create secrets policy" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "No event seen in 60s. Check the client, then listen again.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(handleSignal).toHaveBeenLastCalledWith(
+      {
+        type: "retry",
+        scope: {
+          path: "secret-block",
+          step: 4,
+          attempt: 1,
+          runId: 3,
+        },
+      },
+      expect.any(Function),
+    );
   });
 
   it("times out without a new governed call and retries the same listening step", () => {

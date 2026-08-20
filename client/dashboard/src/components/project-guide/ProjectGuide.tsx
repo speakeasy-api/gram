@@ -23,6 +23,11 @@ import {
   type McpGuideClient,
   useMcpGuideOperations,
 } from "@/components/project-guide/useMcpGuideOperations";
+import {
+  SECRET_GUIDE_CLIENTS,
+  type SecretGuideClient,
+  useSecretGuideOperations,
+} from "@/components/project-guide/useSecretGuideOperations";
 import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStatus";
 import {
   getProjectGuideCurrentStep,
@@ -47,11 +52,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
+type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
 
-/**
- * Fixture-backed project-home guide. Real journey operations are deliberately
- * not connected here; the existing progress result only selects display state.
- */
 export function ProjectGuide({
   onOperationSignal,
 }: {
@@ -63,17 +65,21 @@ export function ProjectGuide({
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const mcpOperations = useMcpGuideOperations();
+  const secretOperations = useSecretGuideOperations();
   const operationSignalRef = useRef(onOperationSignal);
   const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
+  const secretOperationSignalRef = useRef(secretOperations.handleSignal);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
     () => undefined,
   );
   operationSignalRef.current = onOperationSignal;
   mcpOperationSignalRef.current = mcpOperations.handleSignal;
+  secretOperationSignalRef.current = secretOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
     input: {
       onSignal: (signal) => {
         mcpOperationSignalRef.current(signal, reportRef.current);
+        secretOperationSignalRef.current(signal, reportRef.current);
         operationSignalRef.current?.(signal, reportRef.current);
       },
     },
@@ -156,6 +162,7 @@ export function ProjectGuide({
         currentStep,
         send,
         mcpOperations,
+        secretOperations,
       )
     : undefined;
   const secondaryAction = selectedJourney
@@ -268,6 +275,7 @@ export function ProjectGuide({
                         checkpoint={snapshot.context.checkpoint?.label}
                         error={snapshot.context.error}
                         mcpOperations={mcpOperations}
+                        secretOperations={secretOperations}
                       />
                     }
                     output={
@@ -319,6 +327,7 @@ function primaryActionFor(
   currentStep: number,
   send: (event: ProjectGuideEvent) => void,
   mcpOperations: McpGuideOperations,
+  secretOperations: SecretGuideOperations,
 ): ProjectGuideRunAction {
   switch (displayState) {
     case "ready":
@@ -329,6 +338,14 @@ function primaryActionFor(
             !mcpOperations.selectedServer ||
             mcpOperations.projectStatePending ||
             mcpOperations.projectStateError,
+          onClick: () => send({ type: "START" }),
+        };
+      }
+      if (journey.id === "secret-block" && currentStep === 0) {
+        return {
+          label: "Create secrets policy",
+          disabled:
+            secretOperations.policyPending || secretOperations.policyError,
           onClick: () => send({ type: "START" }),
         };
       }
@@ -365,6 +382,31 @@ function primaryActionFor(
             }),
         };
       }
+      if (journey.id === "secret-block" && currentStep === 2) {
+        return {
+          label: "I've installed and restarted it",
+          disabled: !secretOperations.installCommand,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Observability plugin installed and agent restarted",
+            }),
+        };
+      }
+      if (journey.id === "secret-block" && currentStep === 3) {
+        return {
+          label: "Sent it",
+          disabled:
+            !secretOperations.promptCopied ||
+            !secretOperations.telemetryBaselineReady ||
+            secretOperations.telemetryError,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Dummy-secret prompt sent from the restarted agent",
+            }),
+        };
+      }
       return {
         label: "I've completed this step",
         onClick: () =>
@@ -389,7 +431,10 @@ function primaryActionFor(
           href: mcpOperations.toolLogsHref,
         };
       }
-      return { label: journey.completion.primaryAction, disabled: true };
+      return {
+        label: journey.completion.primaryAction,
+        href: secretOperations.riskEventsHref,
+      };
     case "opening":
     case "exited":
       return { label: "Start the journey", disabled: true };
@@ -402,12 +447,14 @@ function ProjectGuideStepContent({
   checkpoint,
   error,
   mcpOperations,
+  secretOperations,
 }: {
   journey: JourneyMeta;
   step: number;
   checkpoint?: string;
   error: string | null;
   mcpOperations: McpGuideOperations;
+  secretOperations: SecretGuideOperations;
 }): JSX.Element {
   if (journey.id === "third-party-mcp") {
     return (
@@ -422,10 +469,11 @@ function ProjectGuideStepContent({
   }
 
   return (
-    <div className="grid gap-2 pt-3">
+    <div className="grid gap-3 pt-3">
       <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
         {journey.stepBlurbs[step]}
       </p>
+      <SecretStepBody step={step} operations={secretOperations} />
       {checkpoint && (
         <p className="font-mono text-[10px] text-[#121212]/50">
           Your turn · {checkpoint}
@@ -438,6 +486,162 @@ function ProjectGuideStepContent({
       )}
     </div>
   );
+}
+
+function SecretClientTabs({
+  operations,
+  children,
+}: {
+  operations: SecretGuideOperations;
+  children: (client: SecretGuideClient) => React.ReactNode;
+}): JSX.Element {
+  const clients = Object.keys(SECRET_GUIDE_CLIENTS) as SecretGuideClient[];
+  return (
+    <Tabs
+      value={operations.client}
+      onValueChange={(value) =>
+        operations.setClient(value as SecretGuideClient)
+      }
+    >
+      <PageTabsList aria-label="Agent client">
+        {clients.map((client) => (
+          <PageTabsTrigger key={client} value={client}>
+            {SECRET_GUIDE_CLIENTS[client].label}
+          </PageTabsTrigger>
+        ))}
+      </PageTabsList>
+      {clients.map((client) => (
+        <TabsContent key={client} value={client}>
+          {children(client)}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
+function SecretStepBody({
+  step,
+  operations,
+}: {
+  step: number;
+  operations: SecretGuideOperations;
+}): JSX.Element | null {
+  switch (step) {
+    case 0:
+      if (operations.policyPending) {
+        return (
+          <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+            Checking existing policies
+          </span>
+        );
+      }
+      if (operations.policyError) {
+        return (
+          <div className="grid gap-2">
+            <p role="alert" className="text-destructive text-[12px]">
+              Could not read this project's risk policies.
+            </p>
+            <button
+              type="button"
+              onClick={operations.retryPolicy}
+              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+            >
+              Retry policy check
+            </button>
+          </div>
+        );
+      }
+      return (
+        <SecretClientTabs operations={operations}>
+          {(client) => (
+            <p className="text-[12px] text-[#121212]/55">
+              The next step downloads the existing observability ZIP for{" "}
+              {SECRET_GUIDE_CLIENTS[client].label}.
+            </p>
+          )}
+        </SecretClientTabs>
+      );
+    case 1:
+      return (
+        <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+          Downloading {SECRET_GUIDE_CLIENTS[operations.client].label} ZIP
+        </span>
+      );
+    case 2:
+      if (!operations.installCommand) {
+        return (
+          <p role="alert" className="text-destructive text-[12px]">
+            The observability ZIP is not ready. Retry the download step.
+          </p>
+        );
+      }
+      return (
+        <div className="grid gap-2">
+          <CodeSnippet
+            code={operations.installCommand}
+            language="bash"
+            copyable
+          />
+          <span className="font-mono text-[10px] text-[#121212]/50">
+            Install the ZIP, restart{" "}
+            {SECRET_GUIDE_CLIENTS[operations.client].label}, then confirm below.
+          </span>
+        </div>
+      );
+    case 3:
+      if (operations.telemetryError) {
+        return (
+          <div className="grid gap-2">
+            <p role="alert" className="text-destructive text-[12px]">
+              Could not capture the hook and risk-event baseline.
+            </p>
+            <button
+              type="button"
+              onClick={operations.retryBaseline}
+              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+            >
+              Retry baseline
+            </button>
+          </div>
+        );
+      }
+      if (!operations.telemetryBaselineReady) {
+        return (
+          <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+            Capturing the pre-prompt event baseline
+          </span>
+        );
+      }
+      return (
+        <div className="grid gap-2">
+          <span className="font-mono text-[10px] text-[#121212]/50">
+            Copy into {SECRET_GUIDE_CLIENTS[operations.client].label}
+          </span>
+          <CodeSnippet
+            code={operations.prompt}
+            language="text"
+            copyable
+            onSelectOrCopy={operations.markPromptCopied}
+          />
+        </div>
+      );
+    case 4:
+      return (
+        <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
+          <span>
+            Waiting for a new blocked hook and matching secrets risk event.
+          </span>
+          <Link
+            to={operations.riskEventsHref}
+            className="text-information-default w-fit underline underline-offset-2"
+          >
+            Open Risk Events
+          </Link>
+        </div>
+      );
+    default:
+      return null;
+  }
 }
 
 function ProjectGuideMcpStepContent({
