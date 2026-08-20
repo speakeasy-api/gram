@@ -42,7 +42,7 @@ FROM remote_mcp_servers
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-FOR KEY SHARE`, input.RemoteMCPServerID, input.ProjectID).Scan(&sourceExists)
+FOR UPDATE`, input.RemoteMCPServerID, input.ProjectID).Scan(&sourceExists)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("verify remote MCP source ownership: %w", err)
 	}
