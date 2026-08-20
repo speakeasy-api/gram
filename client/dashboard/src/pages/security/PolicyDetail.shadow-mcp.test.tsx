@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
+import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   saveDisabledRenders: [] as boolean[],
@@ -184,6 +185,9 @@ function inventoryServer(
     urlHost: "github.example.com",
     userCount: 1,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ??
+      testAccessSummary(overrides.access ?? "allowed"),
   };
 }
 

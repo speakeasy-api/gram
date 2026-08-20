@@ -57,6 +57,24 @@ const (
 
 	shadowMCPTargetKindServerURL    = "server_url"
 	shadowMCPTargetKindStdioCommand = "stdio_command"
+
+	shadowMCPAccessStateAllowed    = "allowed"
+	shadowMCPAccessStateRestricted = "restricted"
+	shadowMCPAccessStateBlocked    = "blocked"
+	shadowMCPAccessStateUnenforced = "unenforced"
+
+	shadowMCPAccessReachEveryone = "everyone"
+	shadowMCPAccessReachSelected = "selected"
+	shadowMCPAccessReachSome     = "some"
+	shadowMCPAccessReachNone     = "none"
+
+	shadowMCPAccessDefaultDeny  = "deny"
+	shadowMCPAccessDefaultAllow = "allow"
+	shadowMCPAccessDefaultNone  = "none"
+
+	shadowMCPAccessCoverageFull    = "full"
+	shadowMCPAccessCoveragePartial = "partial"
+	shadowMCPAccessCoverageNone    = "none"
 )
 
 func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -169,11 +187,13 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		}
 	}
 
+	// Every request-only target key joins the policy-state universe, stdio
+	// included: their reviews come back through the same approvals join, and
+	// a page whose only rows are stdio must still load the policy set — the
+	// posture of one row must not depend on which other rows share the page.
 	policyURLs := shadowMCPInventoryCanonicalURLs(inventoryRows)
 	for _, request := range requestOnly {
-		if request.TargetKind == shadowMCPTargetKindServerURL {
-			policyURLs = append(policyURLs, request.TargetKey)
-		}
+		policyURLs = append(policyURLs, request.TargetKey)
 	}
 
 	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, policyURLs)
@@ -247,19 +267,21 @@ func (s *Service) shadowMCPRequestOnlyTargets(ctx context.Context, chRepo *telem
 func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequestTargetsRow, policyState shadowMCPInventoryPolicyState) *gen.ShadowMCPInventoryServer {
 	targetKind := shadowMCPTargetKindStdioCommand
 	urlHost := ""
-	rowState := shadowMCPInventoryRowState{
-		Access:           shadowMCPInventoryAccessNone,
-		RequestCount:     0,
-		LatestRequest:    nil,
-		ApprovalRequest:  nil,
-		AllowedPolicyIDs: nil,
-		BlockedPolicyIDs: nil,
-	}
+	// forURL works for stdio keys too: their per-URL grant lookups come back
+	// empty, leaving the posture-only verdict (what the enabled policies do
+	// to a target no rule names), which is what an unresolved local command
+	// actually faces.
+	rowState := policyState.forURL(request.TargetKey)
 	if request.TargetKind == shadowMCPTargetKindServerURL {
 		targetKind = shadowMCPTargetKindServerURL
 		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
 		urlHost = inventoryURL.URLHost
-		rowState = policyState.forURL(request.TargetKey)
+	} else {
+		// Wire parity: the legacy access field for stdio rows has always
+		// read none; the summary carries the honest posture.
+		rowState.Access = shadowMCPInventoryAccessNone
+		rowState.RequestCount = 0
+		rowState.LatestRequest = nil
 	}
 	// The review is authoritative for its own row whether or not the batched
 	// join saw it (the join only covers server_url targets).
@@ -268,6 +290,19 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		Status:            request.Status,
 		RequesterCount:    int(request.RequesterCount),
 		EvidenceChangedAt: conv.PtrEmpty(conv.FromPGTimestamptz(request.EvidenceChangedAt)),
+	}
+	// Same authority for the verdict's decision, for callers whose batched
+	// join did not include this key.
+	if rowState.Summary.Decision == nil &&
+		(request.Status == shadowMCPInventoryBypassStatusApproved || request.Status == shadowMCPInventoryBypassStatusDenied) {
+		rowState.Summary.Decision = conv.PtrEmpty(request.Status)
+	}
+	// Decisions on stdio targets are recorded without writing enforcement —
+	// the grant writer only acts on server_url targets — so whatever the
+	// posture, no mechanism carries the decision. Coverage must say so
+	// rather than let "partial" claim a delivery that does not exist.
+	if request.TargetKind != shadowMCPTargetKindServerURL {
+		rowState.Summary.DecisionCoverage = shadowMCPAccessCoverageNone
 	}
 
 	row := telemetryrepo.ShadowMCPInventoryURLRow{
@@ -965,6 +1000,7 @@ func (s *Service) shadowMCPInventoryURLState(ctx context.Context, organizationID
 func buildShadowMCPInventoryURLState(rowState shadowMCPInventoryRowState) *gen.ShadowMCPInventoryURLState {
 	return &gen.ShadowMCPInventoryURLState{
 		Access:           rowState.Access,
+		AccessSummary:    rowState.Summary,
 		RequestCount:     rowState.RequestCount,
 		LatestRequest:    rowState.LatestRequest,
 		ApprovalRequest:  rowState.ApprovalRequest,
@@ -1003,12 +1039,28 @@ type shadowMCPInventoryPolicyState struct {
 	// targeted allow_all policies is restricted, not blocked.
 	everyoneBlockedURLs map[string]struct{}
 
+	// blockAllPolicyAudiences maps each deny-by-default policy to its
+	// audience principal URNs (the evaluate grants). A bypass grant only
+	// frees the users the policy would have blocked, so whether a URL is
+	// allowed for everyone is a per-policy set question: do its bypass
+	// principals cover this policy's audience? Matching the literal
+	// all-users principal is not enough — approving a targeted policy's URL
+	// writes the audience's own principals, which covers everyone the
+	// policy ever blocked — and any-policy aggregation is too much, since a
+	// grant on one policy says nothing about another still blocking.
+	blockAllPolicyAudiences map[string][]string
+
+	// bypassPrincipalsByURL holds, per URL and per deny-by-default policy,
+	// the principal URNs its bypass grants name.
+	bypassPrincipalsByURL map[string]map[string]map[string]struct{}
+
 	requestsByURL  map[string]shadowMCPInventoryRequestState
 	approvalsByURL map[string]*gen.ShadowMCPInventoryApprovalRequest
 }
 
 type shadowMCPInventoryRowState struct {
 	Access           string
+	Summary          *gen.ShadowMCPAccessSummary
 	RequestCount     int
 	LatestRequest    *gen.ShadowMCPInventoryRequestSummary
 	ApprovalRequest  *gen.ShadowMCPInventoryApprovalRequest
@@ -1030,6 +1082,8 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		allowedPolicyIDs:          map[string][]string{},
 		blockedPolicyIDs:          map[string][]string{},
 		everyoneBlockedURLs:       map[string]struct{}{},
+		blockAllPolicyAudiences:   map[string][]string{},
+		bypassPrincipalsByURL:     map[string]map[string]map[string]struct{}{},
 		requestsByURL:             map[string]shadowMCPInventoryRequestState{},
 		approvalsByURL:            map[string]*gen.ShadowMCPInventoryApprovalRequest{},
 	}
@@ -1112,6 +1166,20 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			state.hasEveryoneBlockAllPolicy = true
 		}
 
+		audienceGrants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID,
+		})
+		if err != nil {
+			return state, fmt.Errorf("listing audience grants for shadow mcp policy: %w", err)
+		}
+		audience := make([]string, 0, len(audienceGrants))
+		for _, grant := range audienceGrants {
+			audience = append(audience, grant.PrincipalUrn)
+		}
+		state.blockAllPolicyAudiences[policyID] = audience
+
 		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyBypass,
@@ -1126,6 +1194,17 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 				continue
 			}
 			state.allowedPolicyIDs[serverURL] = append(state.allowedPolicyIDs[serverURL], policyID)
+			byPolicy := state.bypassPrincipalsByURL[serverURL]
+			if byPolicy == nil {
+				byPolicy = map[string]map[string]struct{}{}
+				state.bypassPrincipalsByURL[serverURL] = byPolicy
+			}
+			principals := byPolicy[policyID]
+			if principals == nil {
+				principals = map[string]struct{}{}
+				byPolicy[policyID] = principals
+			}
+			principals[grant.PrincipalUrn] = struct{}{}
 		}
 	}
 	if len(blockingPolicyIDs) == 0 {
@@ -1195,9 +1274,16 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 	blockedForEveryone := s.hasEveryoneBlockAllPolicy || blockedForEveryoneList
 	blockedForSome := s.hasBlockAllPolicy || onBlockedList
 	access := shadowMCPInventoryAccessNone
+	allowedForEveryone := s.bypassCoversEveryBlockAllAudience(canonicalURL)
 	switch {
-	case len(allowedPolicyIDs) > 0:
+	case len(allowedPolicyIDs) > 0 && allowedForEveryone:
 		access = shadowMCPInventoryAccessAllowed
+	case len(allowedPolicyIDs) > 0:
+		// Bypass grants exist but leave part of some policy's audience
+		// blocked: a scoped approval lets its people through while the
+		// policy still blocks the rest. The same in-between state as a
+		// targeted block, so it reads as restricted rather than allowed.
+		access = shadowMCPInventoryAccessRestricted
 	case blockedForEveryone:
 		access = shadowMCPInventoryAccessBlocked
 	case blockedForSome:
@@ -1210,11 +1296,126 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 
 	return shadowMCPInventoryRowState{
 		Access:           access,
+		Summary:          s.summaryForURL(canonicalURL, access),
 		RequestCount:     requestState.Count,
 		LatestRequest:    requestState.Latest,
 		ApprovalRequest:  s.approvalsByURL[canonicalURL],
 		AllowedPolicyIDs: allowedPolicyIDs,
 		BlockedPolicyIDs: s.blockedPolicyIDs[canonicalURL],
+	}
+}
+
+// bypassCoversEveryBlockAllAudience reports whether the URL's bypass grants
+// free everyone each deny-by-default policy would otherwise block. Per
+// policy: a grant set containing the all-users principal, or covering every
+// audience principal, means nobody that policy blocked is still blocked.
+// Users outside a targeted policy's audience were never blocked, so covering
+// the audience is covering everyone. Every deny-by-default policy must be
+// covered — a grant on one says nothing about another still blocking.
+//
+// The one reach this cannot see is a role principal whose membership happens
+// to be the whole organization: that still reads as a subset, since grants
+// are compared as principal sets, not expanded memberships.
+func (s shadowMCPInventoryPolicyState) bypassCoversEveryBlockAllAudience(canonicalURL string) bool {
+	if len(s.blockAllPolicyAudiences) == 0 {
+		return false
+	}
+	byPolicy := s.bypassPrincipalsByURL[canonicalURL]
+	allUsers := authz.AllUsersPrincipal().String()
+	for policyID, audience := range s.blockAllPolicyAudiences {
+		principals := byPolicy[policyID]
+		if _, ok := principals[allUsers]; ok {
+			continue
+		}
+		if len(audience) == 0 {
+			// No audience grants at all is unexpected for an enabled policy;
+			// treat it as uncovered rather than trivially covered.
+			return false
+		}
+		for _, urn := range audience {
+			if _, ok := principals[urn]; !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// summaryForURL compresses the policy and grant state for one URL into the
+// typed verdict the client renders from. The server owns this computation
+// because it is the only place holding all the inputs: clients that
+// re-derived enforcement from policy lists and review status each told a
+// slightly different lie.
+func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access string) *gen.ShadowMCPAccessSummary {
+	// The legacy access value and the summary state are the same partition
+	// under different names: none meant "no blocking policy", which unenforced
+	// says outright.
+	state := access
+	if access == shadowMCPInventoryAccessNone {
+		state = shadowMCPAccessStateUnenforced
+	}
+
+	allowedFor := shadowMCPAccessReachNone
+	if len(s.allowedPolicyIDs[canonicalURL]) > 0 {
+		allowedFor = shadowMCPAccessReachSelected
+		if s.bypassCoversEveryBlockAllAudience(canonicalURL) {
+			allowedFor = shadowMCPAccessReachEveryone
+		}
+	}
+
+	// Explicit blocks only: the deny-by-default posture is blockingDefault's
+	// to report, so "Blocked by policy" and "Blocked by rule" stay separable.
+	blockedFor := shadowMCPAccessReachNone
+	if _, everyone := s.everyoneBlockedURLs[canonicalURL]; everyone {
+		blockedFor = shadowMCPAccessReachEveryone
+	} else if len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
+		blockedFor = shadowMCPAccessReachSome
+	}
+
+	blockingDefault := shadowMCPAccessDefaultNone
+	switch {
+	case s.hasEveryoneBlockAllPolicy:
+		blockingDefault = shadowMCPAccessDefaultDeny
+	case s.hasBlockingPolicy:
+		blockingDefault = shadowMCPAccessDefaultAllow
+	}
+
+	var decision *string
+	coverage := shadowMCPAccessCoverageNone
+	if approval := s.approvalsByURL[canonicalURL]; approval != nil {
+		switch approval.Status {
+		case shadowMCPInventoryBypassStatusApproved, shadowMCPInventoryBypassStatusDenied:
+			decision = conv.PtrEmpty(approval.Status)
+		}
+	}
+	// Coverage is how much of the recorded decision enforcement delivers.
+	// An approval is fully carried while the grants it wrote survive (its
+	// blast radius may be scoped — that is the decision as recorded, not a
+	// shortfall) unless an explicit block overrides them; a denial is fully
+	// carried only when the result is a project-wide block, and partially
+	// when only a targeted policy enforces it. With no blocking policy there
+	// is nothing to carry a decision at all.
+	if decision != nil && s.hasBlockingPolicy {
+		coverage = shadowMCPAccessCoveragePartial
+		switch *decision {
+		case shadowMCPInventoryBypassStatusApproved:
+			if allowedFor != shadowMCPAccessReachNone && state != shadowMCPAccessStateBlocked {
+				coverage = shadowMCPAccessCoverageFull
+			}
+		case shadowMCPInventoryBypassStatusDenied:
+			if state == shadowMCPAccessStateBlocked {
+				coverage = shadowMCPAccessCoverageFull
+			}
+		}
+	}
+
+	return &gen.ShadowMCPAccessSummary{
+		State:            state,
+		AllowedFor:       allowedFor,
+		BlockedFor:       blockedFor,
+		BlockingDefault:  blockingDefault,
+		Decision:         decision,
+		DecisionCoverage: coverage,
 	}
 }
 
@@ -1259,6 +1460,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		UserCount:          shadowMCPInventoryCount(usage.UserCount),
 		TopUsers:           topUsers,
 		Access:             rowState.Access,
+		AccessSummary:      rowState.Summary,
 		RequestCount:       rowState.RequestCount,
 		LatestRequest:      rowState.LatestRequest,
 		ApprovalRequest:    rowState.ApprovalRequest,

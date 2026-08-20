@@ -1,4 +1,5 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { ShadowMCPAccessSummary } from "@gram/client/models/components/shadowmcpaccesssummary.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { type BadgeProps } from "@/components/ui/Badge";
 
@@ -14,8 +15,69 @@ export type ShadowMCPInventoryStatus =
   | "blocked"
   | "restricted"
   | "observed"
-  | "pending"
-  | "unavailable";
+  | "pending";
+
+/**
+ * The slice of a server row the status helpers read: the server-computed
+ * verdict plus the open-request count. Everything the badge and its subtext
+ * say comes from these two fields — the client never re-derives enforcement
+ * from policy lists or review status, which is how the inventory used to
+ * over-report both access and control.
+ */
+type ShadowMCPInventoryAccess = Pick<
+  ShadowMCPInventoryServer,
+  "access" | "accessSummary" | "requestCount"
+>;
+
+/**
+ * The verdict to render from. accessSummary is optional for one release so a
+ * dashboard deployed ahead of a rolled-back server keeps working: absent, we
+ * synthesize a coarse summary from the legacy access string — right badge,
+ * generic wording — instead of failing the page.
+ */
+export function shadowMCPAccessSummaryOf(
+  server: ShadowMCPInventoryAccess,
+): ShadowMCPAccessSummary {
+  if (server.accessSummary) return server.accessSummary;
+  switch (server.access) {
+    case "allowed":
+      return {
+        state: "allowed",
+        allowedFor: "everyone",
+        blockedFor: "none",
+        blockingDefault: "deny",
+        decision: undefined,
+        decisionCoverage: "none",
+      };
+    case "blocked":
+      return {
+        state: "blocked",
+        allowedFor: "none",
+        blockedFor: "none",
+        blockingDefault: "deny",
+        decision: undefined,
+        decisionCoverage: "none",
+      };
+    case "restricted":
+      return {
+        state: "restricted",
+        allowedFor: "none",
+        blockedFor: "some",
+        blockingDefault: "allow",
+        decision: undefined,
+        decisionCoverage: "none",
+      };
+    default:
+      return {
+        state: "unenforced",
+        allowedFor: "none",
+        blockedFor: "none",
+        blockingDefault: "none",
+        decision: undefined,
+        decisionCoverage: "none",
+      };
+  }
+}
 
 export type ShadowMCPPolicyDisposition = "block_all" | "allow_all";
 
@@ -30,9 +92,10 @@ export type ShadowMCPPolicy = Pick<
 
 /**
  * The effective disposition of the project's enabled blocking shadow MCP
- * policies, or null when none exist. With legacy multi-policy data,
- * deny-by-default wins: allow_all only applies when every blocking policy
- * declares it.
+ * policies, or null when none exist. Feeds the Decide Access sheet's form
+ * wording and write path — row rendering reads the server-computed access
+ * summary instead. With legacy multi-policy data, deny-by-default wins:
+ * allow_all only applies when every blocking policy declares it.
  */
 export function shadowMCPBlockingPolicyDisposition(
   policies: Pick<RiskPolicy, "shadowMcpDisposition">[],
@@ -56,6 +119,11 @@ export function eligibleShadowMCPAllowRulePolicies(
   );
 }
 
+/**
+ * The page-level posture banner (Blocking / Flagging / No Policy). This is
+ * about the policy set, not any one server — per-row state comes from the
+ * server-computed access summary instead.
+ */
 export function shadowMCPPolicyState(
   policies: RiskPolicy[] | undefined,
 ): ShadowMCPPolicyState {
@@ -81,22 +149,21 @@ export function shadowMCPPolicyState(
 }
 
 export function shadowMCPInventoryStatus(
-  server: ShadowMCPInventoryServer,
-  policyState: ShadowMCPPolicyState,
+  server: ShadowMCPInventoryAccess,
 ): ShadowMCPInventoryStatus {
+  // Open requests outrank the steady state: a server someone is waiting on
+  // surfaces for triage even when it is already allowed.
   if (server.requestCount > 0) return "pending";
-  if (server.access === "allowed") return "allowed";
-  if (server.access === "blocked") return "blocked";
-  if (server.access === "restricted") {
-    // A denied review is a definitive block decision, so it outranks a
-    // targeted policy's partial "restricted" (blocked for some users).
-    return server.approvalRequest?.status === "denied"
-      ? "blocked"
-      : "restricted";
+  switch (shadowMCPAccessSummaryOf(server).state) {
+    case "allowed":
+      return "allowed";
+    case "blocked":
+      return "blocked";
+    case "restricted":
+      return "restricted";
+    case "unenforced":
+      return "observed";
   }
-  if (policyState === "unavailable") return "unavailable";
-  if (policyState === "blocking") return "blocked";
-  return "observed";
 }
 
 export function shadowMCPInventoryStatusLabel(
@@ -113,8 +180,6 @@ export function shadowMCPInventoryStatusLabel(
       return "Observed";
     case "pending":
       return "Pending";
-    case "unavailable":
-      return "Unknown";
   }
 }
 
@@ -131,56 +196,91 @@ export function shadowMCPInventoryStatusBadgeVariant(
     case "observed":
       return "neutral";
     case "pending":
-      return "warning";
-    case "unavailable":
-      return "neutral";
+      // Blue, not orange: pending means "awaiting a decision", the same
+      // vocabulary as the review's own badge, and orange stays reserved for
+      // the partial-access family.
+      return "information";
   }
 }
 
 export function shadowMCPInventoryStatusDescription(
-  server: ShadowMCPInventoryServer,
-  policyState: ShadowMCPPolicyState,
-  disposition: ShadowMCPPolicyDisposition | null = null,
+  server: ShadowMCPInventoryAccess,
 ): string {
   if (server.requestCount > 0) {
     return `${server.requestCount} access ${server.requestCount === 1 ? "request" : "requests"} pending`;
   }
-  if (server.access === "allowed") {
-    return disposition === "allow_all"
-      ? "Allowed by default"
-      : "Allowed by URL rule";
-  }
-  if (server.access === "blocked") {
-    // A denied review is a distinct reason from the policy default. Under
-    // allow_all the block *is* the review's doing; under block_all the policy
-    // already blocks it and the deny compounds that.
-    if (server.approvalRequest?.status === "denied") {
-      return disposition === "allow_all"
-        ? "Blocked by review"
-        : "Blocked by policy & review";
+  return describeShadowMCPAccess(shadowMCPAccessSummaryOf(server));
+}
+
+/**
+ * One line naming the mechanism behind the verdict. A pure lookup on the
+ * server-computed summary: state says the shape, the mechanism fields say
+ * why, and a decision is credited only as far as enforcement carries it —
+ * a denial no policy can enforce reads as dormant, never as a block.
+ */
+function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
+  switch (summary.state) {
+    case "allowed": {
+      // A denial the current rules no longer carry must not vanish under a
+      // green badge: the decision stands recorded even though nothing
+      // enforces it.
+      if (summary.decision === "denied") {
+        return "Allowed — a recorded denial is not enforced";
+      }
+      if (summary.decision === "approved") return "Allowed by review";
+      if (summary.allowedFor === "everyone") return "Allowed by URL rule";
+      return "Allowed by default";
     }
-    return disposition === "allow_all"
-      ? "Blocked by rule"
-      : "Blocked by policy";
-  }
-  if (server.access === "restricted") {
-    // A denied review outranks the targeted policy: the deny is a definitive
-    // block, so the row reads as blocked rather than "for some users". Credit
-    // it the same disposition-aware way as the blocked branch — under allow_all
-    // the deny is the whole block, so it is not "by policy". Absent a deny, the
-    // targeted policy blocks the server for its audience only.
-    if (server.approvalRequest?.status === "denied") {
-      return disposition === "allow_all"
-        ? "Blocked by review"
-        : "Blocked by policy & review";
+    case "blocked": {
+      if (summary.decision === "denied") {
+        // Under deny-by-default the policy already blocked it and the denial
+        // compounds that; under allow-by-default the denial is the whole
+        // block.
+        return summary.blockingDefault === "deny"
+          ? "Blocked by policy & review"
+          : "Blocked by review";
+      }
+      if (summary.decision === "approved") {
+        // The symmetric contradiction: an approval an explicit block
+        // overrides.
+        return "Blocked — a recorded approval is not enforced";
+      }
+      return summary.blockingDefault === "deny"
+        ? "Blocked by policy"
+        : "Blocked by rule";
     }
-    return "Blocked for some users";
+    case "restricted": {
+      // A denial only a targeted policy carries is not a project-wide block,
+      // and saying "Blocked" here would over-report control the same way
+      // "Allowed" used to over-report access.
+      if (summary.decision === "denied") {
+        // Two ways a denial leaves the row only restricted: standing grants
+        // from an earlier approval still let their people through, or the
+        // only enforcement is a policy that never covered everyone.
+        return summary.allowedFor !== "none"
+          ? "Denied — standing grants still allow some users"
+          : "Denied — enforced for the policy's audience only";
+      }
+      const hasScopedAllow = summary.allowedFor !== "none";
+      const hasExplicitBlock = summary.blockedFor !== "none";
+      if (hasScopedAllow && hasExplicitBlock) {
+        return "Allowed for some, blocked for others";
+      }
+      if (hasScopedAllow) {
+        return "Allowed for selected users";
+      }
+      return "Blocked for some users";
+    }
+    case "unenforced": {
+      // A decision with nothing to enforce it is dormant, not done — the one
+      // state here that should worry an admin, so it says so.
+      if (summary.decision === "denied") {
+        return "Denied — not enforced until a blocking policy exists";
+      }
+      if (summary.decision === "approved") {
+        return "Approved — enforced once a blocking policy exists";
+      }
+      return "Not blocking";
+    }
   }
-  if (policyState === "unavailable") return "Policy status unavailable";
-  if (policyState === "blocking") {
-    return server.approvalRequest?.status === "denied"
-      ? "Blocked by policy & review"
-      : "Blocked by policy";
-  }
-  return "Not blocking";
 }

@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ShadowMCPAccessSummary,
+  ShadowMCPAccessSummary$inboundSchema,
+} from "./shadowmcpaccesssummary.js";
+import {
   ShadowMCPInventoryApprovalRequest,
   ShadowMCPInventoryApprovalRequest$inboundSchema,
 } from "./shadowmcpinventoryapprovalrequest.js";
@@ -17,12 +21,18 @@ import {
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
 
+/**
+ * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
+ */
 export const Access = {
   None: "none",
   Allowed: "allowed",
   Blocked: "blocked",
   Restricted: "restricted",
 } as const;
+/**
+ * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
+ */
 export type Access = ClosedEnum<typeof Access>;
 
 /**
@@ -38,7 +48,14 @@ export const TargetKind = {
 export type TargetKind = ClosedEnum<typeof TargetKind>;
 
 export type ShadowMCPInventoryServer = {
+  /**
+   * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
+   */
   access: Access;
+  /**
+   * The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.
+   */
+  accessSummary?: ShadowMCPAccessSummary | undefined;
   allowedPolicyIds: Array<string>;
   /**
    * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
@@ -82,6 +99,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     access: Access$inboundSchema,
+    access_summary: z.optional(ShadowMCPAccessSummary$inboundSchema),
     allowed_policy_ids: z.array(z.string()),
     approval_request: z.optional(
       ShadowMCPInventoryApprovalRequest$inboundSchema,
@@ -111,6 +129,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "access_summary": "accessSummary",
       "allowed_policy_ids": "allowedPolicyIds",
       "approval_request": "approvalRequest",
       "blocked_policy_ids": "blockedPolicyIds",
