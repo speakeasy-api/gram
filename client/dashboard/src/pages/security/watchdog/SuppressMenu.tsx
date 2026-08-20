@@ -36,7 +36,7 @@ export function SuppressMenu({
     // menu portaled there would render but never receive clicks.
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant={variant} size={size} disabled={busy}>
+        <Button variant={variant} size={size} disabled={busy} aria-busy={busy}>
           {busy && (
             <Button.LeftIcon>
               <Loader2 className="size-4 animate-spin" />
