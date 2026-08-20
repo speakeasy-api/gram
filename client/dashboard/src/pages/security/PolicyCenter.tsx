@@ -566,7 +566,7 @@ const POLICY_CENTER_TABS = [
  *  client-side rule catalog so the other tabs pay no extra queries for it.
  *  Rule-activity questions route through the finding-level tools. */
 const DETECTION_RULES_INSIGHTS_CONTEXT = [
-  "Page: Control Center, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
+  "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
   `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
   "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
   "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
@@ -805,7 +805,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    `Page: Control Center, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
+    `Page: Guardrails, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -1015,7 +1015,7 @@ function PolicyCenterContent() {
 
   return (
     <TabbedPage
-      title="Control Center"
+      title="Guardrails"
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}

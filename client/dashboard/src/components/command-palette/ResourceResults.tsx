@@ -253,7 +253,7 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
   return (
-    <CommandGroup heading="Control Center">
+    <CommandGroup heading="Guardrails">
       {policies.map((policy) => (
         <ResultItem
           key={policy.id}
@@ -309,7 +309,7 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
           icon="scan-search"
           onSelect={() => {
             // No per-rule route; deep-link opens the rule's sheet by id on
-            // the Control Center's Detection Rules tab.
+            // the Guardrails page's Detection Rules tab.
             void navigate(
               `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
             );

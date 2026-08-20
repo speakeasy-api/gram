@@ -83,7 +83,7 @@ type SelectedRule =
   | { kind: "custom"; rule: CustomDetectionRule };
 
 /**
- * Legacy route target: Detection Rules now lives as a Control Center tab, so
+ * Legacy route target: Detection Rules now lives as a Guardrails tab, so
  * the old standalone page redirects there, carrying the `?rule=` deep link
  * along so existing bookmarks and palette links keep resolving.
  */
@@ -101,7 +101,7 @@ export default function DetectionRules(): JSX.Element {
 }
 
 /**
- * The Detection Rules tab body, rendered inside the Control Center's
+ * The Detection Rules tab body, rendered inside the Guardrails page's
  * TabbedPage — no page frame of its own. The create sheet is controlled by
  * the parent so the page-level primary action can open it.
  */

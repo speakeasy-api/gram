@@ -41,7 +41,7 @@ const routes = {
   orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
-  policyCenter: route("Control Center", "risk-policies"),
+  policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
