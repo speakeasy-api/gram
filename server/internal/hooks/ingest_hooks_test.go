@@ -167,27 +167,6 @@ func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
 	require.Contains(t, err.Error(), "unsupported hook schema_version")
 }
 
-func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	payload := canonicalIngestPayload("assistant", "tool.requested", "reserved-adapter")
-	toolName := "bun_run"
-	toolCallID := "call-reserved"
-	payload.Data = &gen.HookIngestData{
-		ToolCall: &gen.HookToolCallData{
-			ID:    &toolCallID,
-			Name:  &toolName,
-			Input: map[string]any{},
-		},
-	}
-
-	result, err := ti.service.Ingest(ctx, payload)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Contains(t, err.Error(), "source.adapter is reserved")
-}
-
 func TestIngestAuthenticated_RejectsReservedAssistantAdapterByDefault(t *testing.T) {
 	t.Parallel()
 

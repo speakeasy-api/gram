@@ -168,7 +168,8 @@ mod tests {
     use super::*;
     use crate::gram_client::GramBootstrapClient;
     use crate::http_layer::build_bootstrap_client;
-    use agentkit_core::ToolCallId;
+    use agentkit_core::{MetadataMap, SessionId, TurnId};
+    use agentkit_tools_core::{AllowAllPermissions, OwnedToolContext};
     use axum::Json;
     use axum::extract::State;
     use axum::routing::post;
@@ -282,10 +283,19 @@ mod tests {
     }
 
     fn tool_request(name: &str, call_id: &str) -> ToolRequest {
-        ToolRequest {
-            tool_name: ToolName::new(name),
-            call_id: ToolCallId::new(call_id),
-            input: json!({"code": "1"}),
+        ToolRequest::new(call_id, name, json!({"code": "1"}), "s", "t")
+    }
+
+    fn owned_tool_context() -> OwnedToolContext {
+        OwnedToolContext {
+            session_id: SessionId::new("s"),
+            turn_id: TurnId::new("t"),
+            metadata: MetadataMap::new(),
+            permissions: Arc::new(AllowAllPermissions),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
         }
     }
 
@@ -310,7 +320,8 @@ mod tests {
             Arc::new(DashSet::new()),
         );
         let tool = source.get(&ToolName::new("bun_run")).expect("tool");
-        let mut ctx = unused_tool_context();
+        let owned = owned_tool_context();
+        let mut ctx = owned.borrowed();
         let result = tool
             .invoke(tool_request("bun_run", "call_deny"), &mut ctx)
             .await
@@ -344,7 +355,8 @@ mod tests {
             Arc::new(DashSet::new()),
         );
         let tool = source.get(&ToolName::new("bun_run")).expect("tool");
-        let mut ctx = unused_tool_context();
+        let owned = owned_tool_context();
+        let mut ctx = owned.borrowed();
         let result = tool
             .invoke(tool_request("bun_run", "call_allow"), &mut ctx)
             .await
@@ -378,7 +390,8 @@ mod tests {
             Arc::new(DashSet::new()),
         );
         let tool = source.get(&ToolName::new("bun_run")).expect("tool");
-        let mut ctx = unused_tool_context();
+        let owned = owned_tool_context();
+        let mut ctx = owned.borrowed();
         let result = tool
             .invoke(tool_request("bun_run", "call_5xx"), &mut ctx)
             .await
@@ -415,7 +428,8 @@ mod tests {
             Arc::clone(&consulted),
         );
         let tool = source.get(&ToolName::new("bun_run")).expect("tool");
-        let mut ctx = unused_tool_context();
+        let owned = owned_tool_context();
+        let mut ctx = owned.borrowed();
         tool.invoke(tool_request("bun_run", "call_dup"), &mut ctx)
             .await
             .unwrap();
@@ -425,9 +439,5 @@ mod tests {
         assert_eq!(hits.load(Ordering::SeqCst), 1);
         assert_eq!(invocations.load(Ordering::SeqCst), 2);
         let _ = shutdown.send(());
-    }
-
-    fn unused_tool_context() -> ToolContext<'static> {
-        ToolContext::default()
     }
 }

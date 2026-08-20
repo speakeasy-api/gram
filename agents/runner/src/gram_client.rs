@@ -27,6 +27,9 @@ const RECORD_COMPACTION_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct GramBootstrapClient {
     base_url: String,
     http: ClientWithMiddleware,
+    /// Consult is fail-open and on the tool-call hot path, so it must not
+    /// inherit the bootstrap client's 5xx retry budget.
+    consult_http: reqwest::Client,
 }
 
 #[derive(Debug, Error)]
@@ -104,7 +107,11 @@ pub struct CreateMcpAuthFlowResponse {
 
 impl GramBootstrapClient {
     pub fn new(base_url: String, http: ClientWithMiddleware) -> Self {
-        Self { base_url, http }
+        Self {
+            base_url,
+            http,
+            consult_http: reqwest::Client::new(),
+        }
     }
 
     /// Fetches the bootstrap blob for a thread. Caller is responsible for
@@ -238,7 +245,7 @@ impl GramBootstrapClient {
         let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
 
         let resp = self
-            .http
+            .consult_http
             .post(&url)
             .timeout(CONSULT_TIMEOUT)
             .bearer_auth(&bearer)
@@ -249,7 +256,8 @@ impl GramBootstrapClient {
                 tool_call_id,
             })
             .send()
-            .await?;
+            .await
+            .map_err(|err| GramClientError::Send(reqwest_middleware::Error::from(err)))?;
 
         let status = resp.status();
         let body = resp.text().await?;
