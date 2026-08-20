@@ -1,6 +1,7 @@
 package tunnelrouting
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -137,6 +138,37 @@ func TestHTTPClientFailsOverToAnotherGateway(t *testing.T) {
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, int64(2), requests.Load())
+}
+
+func TestHTTPClientNoLiveSessionUnpublishFailureStillFailsOver(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	gatewayA := httptest.NewServer(handler)
+	defer gatewayA.Close()
+	gatewayB := httptest.NewServer(handler)
+	defer gatewayB.Close()
+
+	routeTable := route.NewRouteTable()
+	require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", gatewayA.URL, time.Minute))
+	require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", gatewayB.URL, time.Minute))
+	routes := &unpublishErrorStore{Store: routeTable, err: errors.New("route store unavailable"), calls: 0}
+
+	req := tokenRequest(t, "https://as.customer.internal/oauth/token")
+	resp, err := newTestHTTPClient(t, routes).Do(req, "tunnel-1")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, int64(2), requests.Load())
+	require.Equal(t, 1, routes.calls)
 }
 
 func TestHTTPClientSubstreamFailedIsNeverReplayed(t *testing.T) {

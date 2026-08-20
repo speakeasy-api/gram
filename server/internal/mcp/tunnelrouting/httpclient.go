@@ -103,23 +103,27 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 	}
 
 	exclude := map[string]struct{}{}
+	var unpublishErr error
 	for range maxForwardAttempts {
 		addr, ok := SelectRoute("", candidates, exclude)
 		if !ok {
+			if unpublishErr != nil {
+				return nil, errors.Join(ErrNoTunnelRoute, unpublishErr)
+			}
 			return nil, ErrNoTunnelRoute
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, fmt.Errorf("build tunnel route URL: %w", err)
+			return nil, errors.Join(fmt.Errorf("build tunnel route URL: %w", err), unpublishErr)
 		}
 		forward, err := buildForward(req, body, gatewayURL, tunnelID, c.forwardToken)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, unpublishErr)
 		}
 
 		resp, err := c.client.Do(forward)
 		if err != nil {
-			return nil, fmt.Errorf("forward request via tunnel: %w", err)
+			return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
 		}
 
 		if resp.StatusCode != http.StatusBadGateway {
@@ -129,7 +133,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		case wire.TunnelErrorNoLiveSession:
 			drainAndClose(resp)
 			if err := c.routes.Unpublish(ctx, tunnelID, addr); err != nil {
-				return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
+				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w", err))
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy:
@@ -140,7 +144,10 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		}
 	}
 
-	return nil, fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute)
+	return nil, errors.Join(
+		fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute),
+		unpublishErr,
+	)
 }
 
 // buildForward clones req onto the gateway address, keeping only the path and

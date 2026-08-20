@@ -1,8 +1,10 @@
 package tunnelrouting
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -56,6 +58,24 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 	candidates, err := routes.Candidates(ctx, "tunnel-1")
 	require.NoError(t, err)
 	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
+}
+
+func TestRetryerNoLiveSessionUnpublishFailureStillFailsOver(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routeTable := route.NewRouteTable()
+	require.NoError(t, routeTable.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routeTable.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+	routes := &unpublishErrorStore{Store: routeTable, err: errors.New("route store unavailable"), calls: 0}
+
+	resp := tunnelErrorResponse(wire.TunnelErrorNoLiveSession)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.NotNil(t, retry)
+	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
+	require.Equal(t, 1, routes.calls)
 }
 
 func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
@@ -242,4 +262,15 @@ func headerValue(t *testing.T, headers []proxy.ConfiguredHeader, name string) st
 func expectedAffinity(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "auth:" + hex.EncodeToString(sum[:])
+}
+
+type unpublishErrorStore struct {
+	route.Store
+	err   error
+	calls int
+}
+
+func (s *unpublishErrorStore) Unpublish(context.Context, string, string) error {
+	s.calls++
+	return s.err
 }
