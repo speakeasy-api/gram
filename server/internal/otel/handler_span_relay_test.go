@@ -16,6 +16,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -125,6 +126,12 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	provenance.SetApiKeyId("internal-api-key-id")
 	provenance.SetApiKeyName("internal-api-key-name")
 
+	futureOTLPField := protowire.AppendTag(nil, 17, protowire.BytesType)
+	futureOTLPField = protowire.AppendString(futureOTLPField, "future-otlp-value")
+	futureGramField := protowire.AppendTag(nil, 1006, protowire.BytesType)
+	futureGramField = protowire.AppendString(futureGramField, "internal-future-value")
+	span.ProtoReflect().SetUnknown(append(futureOTLPField, futureGramField...))
+
 	request, err := newRelayExportRequest([]*otelv1.Span{span})
 	require.NoError(t, err)
 	require.Len(t, request.GetResourceSpans(), 1)
@@ -132,7 +139,7 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	require.Len(t, request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans(), 1)
 
 	converted := request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans()[0]
-	require.Empty(t, converted.ProtoReflect().GetUnknown())
+	require.Equal(t, futureOTLPField, []byte(converted.ProtoReflect().GetUnknown()))
 
 	encoded, err := proto.Marshal(request)
 	require.NoError(t, err)
@@ -143,6 +150,7 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 		"internal-project-slug",
 		"internal-api-key-id",
 		"internal-api-key-name",
+		"internal-future-value",
 	} {
 		require.NotContains(t, string(encoded), internalValue)
 	}

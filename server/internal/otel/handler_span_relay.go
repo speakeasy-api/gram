@@ -15,6 +15,7 @@ import (
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,6 +30,8 @@ const (
 	meterSpanRelaySpansFailed  = "gram.otel_relay.spans_failed"
 
 	spanRelayExportConcurrency = 32
+
+	gramSpanPrivateFieldStart protowire.Number = 1000
 )
 
 type SpanRelayHandler struct {
@@ -267,6 +270,23 @@ func groupSpansByProvenance(messages []spanRelayMessage) ([]spanProvenanceGroup,
 	return groups, invalid
 }
 
+func removeGramSpanFields(span *tracev1.Span) error {
+	unknown := span.ProtoReflect().GetUnknown()
+	retained := unknown[:0]
+	for len(unknown) > 0 {
+		fieldNumber, _, fieldLength := protowire.ConsumeField(unknown)
+		if fieldLength < 0 {
+			return fmt.Errorf("consume transcoded span field: %w", protowire.ParseError(fieldLength))
+		}
+		if fieldNumber < gramSpanPrivateFieldStart {
+			retained = append(retained, unknown[:fieldLength]...)
+		}
+		unknown = unknown[fieldLength:]
+	}
+	span.ProtoReflect().SetUnknown(retained)
+	return nil
+}
+
 func newRelayExportRequest(spans []*otelv1.Span) (*collectortracev1.ExportTraceServiceRequest, error) {
 	type scopeGroupKey struct {
 		scope     string
@@ -355,9 +375,11 @@ func newRelayExportRequest(spans []*otelv1.Span) (*collectortracev1.ExportTraceS
 		if err := transcodeOTLPMessage(span, converted); err != nil {
 			return nil, fmt.Errorf("convert span: %w", err)
 		}
-		// Gram's 1001+ fields become OTLP unknown fields during transcoding.
-		// Resource and scope are rebuilt above; authenticated provenance must not leave Gram.
-		converted.ProtoReflect().SetUnknown(nil)
+		// Resource and scope are rebuilt above. Strip Gram's private extension
+		// range while retaining unknown OTLP fields for wire compatibility.
+		if err := removeGramSpanFields(converted); err != nil {
+			return nil, err
+		}
 		scopeSpans := group.resourceSpans.ScopeSpans[scopeIndex]
 		scopeSpans.Spans = append(scopeSpans.Spans, converted)
 	}
