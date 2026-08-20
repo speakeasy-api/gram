@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -327,11 +328,12 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 }
 
 // TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction drives the
-// ClickHouse-backed Dismissed tab end to end: suppression-time ordering, cursor
-// pagination, the total count, the store-side redaction the tab now inherits
-// from the Risk Events listing, and the predicate's edges — automated sweep
-// rows and legacy false-positive-only rows are listed, while rule suppression,
-// open findings, dead-letter sentinels and other tenants are not.
+// ClickHouse-backed suppressed listing end to end: suppression-time ordering,
+// cursor pagination, the total count, the store-side redaction it inherits
+// from the Risk Events listing, the reasons filter, and the predicate's edges
+// — rule-suppressed, manual, automated-sweep and legacy false-positive-only
+// rows are all listed, while open findings, dead-letter sentinels and other
+// tenants are not.
 func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -387,8 +389,8 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	legacy := finding("secret.aws_secret_key", "wJal********************EY", base.Add(3*time.Hour))
 	legacy.FalsePositiveAt = &legacyAt
 
-	// Not listed: rule suppression belongs to the exclusions surface, an open
-	// finding was never dismissed, and a dead-letter sentinel is not a finding.
+	// Rule-suppressed findings are part of the suppressed listing too — the
+	// newest suppression in this fixture set.
 	ruleAt := base.Add(10 * time.Hour)
 	exclusionID := uuid.Must(uuid.NewV7())
 	ruleSuppressed := finding("secret.db_password", "hunt****ter", base.Add(4*time.Hour))
@@ -396,6 +398,8 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	ruleSuppressed.ExclusionID = &exclusionID
 	ruleSuppressed.ExcludedReason = chrepo.ExcludedReasonRule
 
+	// Not listed: an open finding was never suppressed, and a dead-letter
+	// sentinel is not a finding.
 	open := finding("secret.stripe_api_key", "sk_l**********ve", base.Add(5*time.Hour))
 
 	deadLetter := finding("", "", base.Add(6*time.Hour))
@@ -422,18 +426,30 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 		return out
 	}
 
-	pageSize := 2
-	page1, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: &pageSize})
+	pageSize := 3
+	page1, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: &pageSize, Reasons: nil})
 	require.NoError(t, err)
-	require.Equal(t, int64(4), page1.TotalCount)
-	require.Len(t, page1.Results, 2)
-	require.Equal(t, manual.ID.String(), page1.Results[0].ID, "newest suppression first")
-	require.Contains(t, []string{tiedA.ID.String(), tiedB.ID.String()}, page1.Results[1].ID)
+	require.Equal(t, int64(5), page1.TotalCount)
+	require.Len(t, page1.Results, 3)
+	require.Equal(t, ruleSuppressed.ID.String(), page1.Results[0].ID, "newest suppression first — the rule-suppressed row")
+	require.Equal(t, manual.ID.String(), page1.Results[1].ID)
+	require.Contains(t, []string{tiedA.ID.String(), tiedB.ID.String()}, page1.Results[2].ID)
 	require.NotNil(t, page1.NextCursor)
 
-	// Store-side redaction: the Dismissed tab serves match_redacted like the
-	// Risk Events listing, never the raw match.
-	first := page1.Results[0]
+	// The rule-suppressed row carries its provenance: reason rule, the
+	// exclusion id, no detail.
+	ruleRow := page1.Results[0]
+	require.NotNil(t, ruleRow.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonRule, *ruleRow.SuppressedReason)
+	require.NotNil(t, ruleRow.ExclusionID)
+	require.Equal(t, exclusionID.String(), *ruleRow.ExclusionID)
+	require.Nil(t, ruleRow.SuppressedDetail)
+	require.NotNil(t, ruleRow.SuppressedAt)
+	require.Equal(t, ruleAt.Format(time.RFC3339), *ruleRow.SuppressedAt)
+
+	// Store-side redaction: the suppressed listing serves match_redacted like
+	// the Risk Events listing, never the raw match.
+	first := page1.Results[1]
 	require.Nil(t, first.Match)
 	require.Nil(t, first.Spans)
 	require.NotNil(t, first.MatchRedacted)
@@ -442,28 +458,129 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	require.NotNil(t, first.FalsePositiveAt)
 	require.Equal(t, manualAt.Format(time.RFC3339), *first.FalsePositiveAt)
 
+	// The suppressed_* fields carry the converged suppression state;
+	// false_positive_at above is their deprecated mirror.
+	require.NotNil(t, first.SuppressedAt)
+	require.Equal(t, *first.FalsePositiveAt, *first.SuppressedAt)
+	require.NotNil(t, first.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonManual, *first.SuppressedReason)
+	require.NotNil(t, first.SuppressedDetail)
+	require.Equal(t, "noise", *first.SuppressedDetail)
+	require.Nil(t, first.ExclusionID, "manual suppression carries no exclusion id")
+
 	// Postgres display enrichment, same as the Risk Events listing.
 	require.NotNil(t, first.ChatTitle)
 	require.Equal(t, "test chat", *first.ChatTitle)
 	require.NotNil(t, first.UserID)
 	require.Equal(t, "alice@example.com", *first.UserID)
 
-	page2, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: &pageSize, Cursor: page1.NextCursor})
+	page2, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: &pageSize, Cursor: page1.NextCursor, Reasons: nil})
 	require.NoError(t, err)
 	require.Len(t, page2.Results, 2)
 	require.Equal(t, legacy.ID.String(), page2.Results[1].ID, "the legacy false-positive-only row is the fallback disjunct's job")
 	require.Nil(t, page2.NextCursor)
-	require.Equal(t, int64(4), page2.TotalCount)
+	require.Equal(t, int64(5), page2.TotalCount)
 	require.NotNil(t, page2.Results[1].FalsePositiveAt)
 	require.Equal(t, legacyAt.Format(time.RFC3339), *page2.Results[1].FalsePositiveAt)
+	// A legacy row carries no excluded_reason; the API maps it to manual so
+	// the reason enum stays closed while the TTL retires such rows.
+	require.NotNil(t, page2.Results[1].SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonManual, *page2.Results[1].SuppressedReason)
+	require.NotNil(t, page2.Results[1].SuppressedAt)
+	require.Equal(t, legacyAt.Format(time.RFC3339), *page2.Results[1].SuppressedAt)
+	require.Nil(t, page2.Results[1].SuppressedDetail)
+
+	// The automated dismissal keeps its reason and catalog detail wherever the
+	// tied pair landed.
+	var automated *types.RiskResult
+	for _, r := range append(page1.Results, page2.Results...) {
+		if r.ID == tiedA.ID.String() {
+			automated = r
+		}
+	}
+	require.NotNil(t, automated)
+	require.NotNil(t, automated.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonAutomated, *automated.SuppressedReason)
+	require.NotNil(t, automated.SuppressedDetail)
+	require.Equal(t, "known test fixture", *automated.SuppressedDetail)
 
 	// The tied pair is split across the boundary exactly once: no repeat, no
 	// skip. Which of the two lands on which page is ClickHouse's UUID ordering
 	// to decide; the cursor only has to agree with it.
 	require.ElementsMatch(t,
-		[]string{manual.ID.String(), tiedA.ID.String(), tiedB.ID.String(), legacy.ID.String()},
+		[]string{ruleSuppressed.ID.String(), manual.ID.String(), tiedA.ID.String(), tiedB.ID.String(), legacy.ID.String()},
 		append(ids(page1), ids(page2)...),
 	)
+
+	// The reasons filter narrows on the derived reason, and its counts follow.
+	ruleOnly, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: []string{chrepo.ExcludedReasonRule}})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), ruleOnly.TotalCount)
+	require.Len(t, ruleOnly.Results, 1)
+	require.Equal(t, ruleSuppressed.ID.String(), ruleOnly.Results[0].ID)
+
+	// The legacy false-positive-only row derives manual, so it joins the
+	// manual dismissals under the filter.
+	manualOnly, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: []string{chrepo.ExcludedReasonManual}})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), manualOnly.TotalCount)
+	require.ElementsMatch(t,
+		[]string{manual.ID.String(), tiedB.ID.String(), legacy.ID.String()},
+		ids(manualOnly),
+	)
+}
+
+// TestListDismissedRiskResults_ClickHouseLegacyRuleRowDerivesRule pins the
+// derived reason on pre-convergence rule exclusions: a row annotated at ingest
+// or reconcile time before the suppression convergence carries excluded_at and
+// exclusion_id but no excluded_reason, and both the listing's reason field and
+// the reasons filter must classify it as rule, not manual.
+func TestListDismissedRiskResults_ClickHouseLegacyRuleRowDerivesRule(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Legacy Rule Row")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	excludedAt := base.Add(time.Hour)
+	exclusionID := uuid.Must(uuid.NewV7())
+	legacyRule := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base, base, "gitleaks", "secret.github_pat", "alice@example.com", "AKIA**************LE", "", "")
+	legacyRule.ExcludedAt = &excludedAt
+	legacyRule.ExclusionID = &exclusionID
+	// Deliberately no ExcludedReason: this is the pre-convergence shape.
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyRule}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	listed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Results, 1)
+	row := listed.Results[0]
+	require.NotNil(t, row.SuppressedReason)
+	require.Equal(t, chrepo.ExcludedReasonRule, *row.SuppressedReason)
+	require.NotNil(t, row.ExclusionID)
+	require.Equal(t, exclusionID.String(), *row.ExclusionID)
+
+	// The SQL-side derived reason agrees with the Go-side mapping.
+	ruleOnly, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: []string{chrepo.ExcludedReasonRule}})
+	require.NoError(t, err)
+	require.Len(t, ruleOnly.Results, 1)
+
+	manualOnly, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: []string{chrepo.ExcludedReasonManual}})
+	require.NoError(t, err)
+	require.Empty(t, manualOnly.Results)
+	require.Zero(t, manualOnly.TotalCount)
 }
 
 // TestListDismissedRiskResults_ClickHouseResolvesLatestCopy pins the

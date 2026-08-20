@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -84,12 +85,13 @@ func (s *Service) GetPaygBillingSummaryForOrganization(ctx context.Context, orga
 
 	completedBefore := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	costs, err := s.repo.GetPaygBillingSummaryCosts(ctx, repo.GetPaygBillingSummaryCostsParams{
-		TumTokens:       tumTokens,
-		TumUnitPriceUsd: TUMUnitPriceUSD,
-		OrganizationID:  organizationID,
-		PeriodStart:     finiteTimestamptz(periodStart),
-		PeriodEnd:       finiteTimestamptz(periodEnd),
-		CompletedBefore: finiteTimestamptz(completedBefore),
+		TumTokens:        tumTokens,
+		TumUnitPriceUsd:  TUMUnitPriceUSD,
+		OrganizationID:   organizationID,
+		BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+		PeriodStart:      finiteTimestamptz(periodStart),
+		PeriodEnd:        finiteTimestamptz(periodEnd),
+		CompletedBefore:  finiteTimestamptz(completedBefore),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get pay as you go billing summary costs").LogError(ctx, s.logger)
