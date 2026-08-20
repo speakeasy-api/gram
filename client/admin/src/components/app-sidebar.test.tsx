@@ -135,14 +135,6 @@ function navLink(label: string): HTMLElement {
   });
 }
 
-// The whole destination, spelled out. `__GRAM_APP_URL__` is the origin
-// vitest.config.ts substitutes. A test that merely looks for "features" in the
-// href passes on a link to the operator's own organization, which is the
-// mistake this row exists to avoid.
-function featuresLink(slug: string): string {
-  return `https://app.gram.test/rpc/auth.login?redirect=%2F${slug}%2Fplatform-admin%2Ffeatures`;
-}
-
 // The items in the order they are read, named by the label each one opens with.
 function navOrder(): string[] {
   return within(sidebar())
@@ -483,14 +475,14 @@ describe("AppSidebar", () => {
     ["the projects view", "/projects"],
     ["the members view", "/members"],
   ]) {
-    it(`sends Features to the record's feature switches in Gram from ${view}`, async () => {
+    it(`sends Features to the record's admin page from ${view}`, async () => {
       await renderRouteTree(routeTree, {
         initialPath: `/organizations/${ORG.slug}${path}`,
       });
       await screen.findByRole("link", { name: "All organizations" });
 
       expect(navLink("Features").getAttribute("href")).toBe(
-        featuresLink(ORG.slug),
+        `/organizations/${ORG.slug}/features`,
       );
     });
   }
@@ -507,42 +499,33 @@ describe("AppSidebar", () => {
     expect(navOrder()).toEqual(RECORD_NAV);
   });
 
-  it("builds Features from the slug even when the record was opened by id", async () => {
+  it("keeps Features on the record id when the record was opened by id", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.id}`,
     });
     await screen.findByRole("link", { name: "All organizations" });
 
-    // Deliberately the one item that does not keep the address the operator
-    // arrived on. Every other item would send the record to a second cache
-    // entry; this one is read back by the server as the organization, and an
-    // id there lands the operator nowhere.
     expect(navLink("Members").getAttribute("href")).toBe(
       `/organizations/${ORG.id}/members`,
     );
     expect(navLink("Features").getAttribute("href")).toBe(
-      featuresLink(ORG.slug),
+      `/organizations/${ORG.id}/features`,
     );
   });
 
-  it("says Features leaves the app, and names no referrer", async () => {
+  it("keeps Features in the admin app", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
     await screen.findByRole("link", { name: "All organizations" });
 
     const link = navLink("Features");
-    // The operator is working through a record and this is the one item that
-    // leaves the admin app. Taking the tab loses the record.
-    expect(link.getAttribute("target")).toBe("_blank");
-    // The admin address names the organization being looked at.
-    expect(link.getAttribute("rel")).toContain("noreferrer");
-    // A sighted operator reads the glyph; this is the other half of the same
-    // warning, and without it the row is "Features" and nothing more.
-    expect(link.textContent).toContain("opens in the Gram dashboard");
+    expect(link.getAttribute("target")).toBeNull();
+    expect(link.getAttribute("rel")).toBeNull();
+    expect(link.textContent).toBe("Features");
   });
 
-  it("renders no Features row for a record with no slug", async () => {
+  it("renders Features for a record with no slug", async () => {
     mocks.getOrganization.mockResolvedValue(anOrganization({ slug: "" }));
 
     await renderRouteTree(routeTree, {
@@ -550,12 +533,8 @@ describe("AppSidebar", () => {
     });
     await screen.findByRole("link", { name: "All organizations" });
 
-    // By words as well as by role. An anchor rendered with no href is the shape
-    // this mistake takes, and such an anchor has no link role at all: an
-    // absence asserted by role alone passes with the dead control on screen.
-    expect(within(sidebar()).queryByText(/^Features/)).toBeNull();
-    expect(
-      within(sidebar()).queryByRole("link", { name: /^Features/ }),
-    ).toBeNull();
+    expect(navLink("Features").getAttribute("href")).toBe(
+      `/organizations/${ORG.id}/features`,
+    );
   });
 });

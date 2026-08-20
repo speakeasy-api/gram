@@ -187,10 +187,15 @@ type GetConfigurationPayload struct {
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
 	ApikeyToken *string
-	// Email address of the enrolled user. Authoritative when authenticating with
-	// an org-scoped agent install key (the MDM zero-touch path); ignored for a
-	// per-user key, whose owner is the enrolled user.
-	Email string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key (the MDM
+	// zero-touch path); ignored for a per-user key, whose owner is the enrolled
+	// user.
+	Email *string
+	// Deprecated: the vouched email as the `?email=` query parameter, sent by
+	// agents predating the Gram-User-Email header. Used only when the header is
+	// absent.
+	LegacyEmail *string
 	// Hardware serial number of the machine the agent runs on, when it can be
 	// read. Lets device coverage attest this specific machine rather than its
 	// assigned user.

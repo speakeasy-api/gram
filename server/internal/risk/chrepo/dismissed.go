@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -16,9 +17,12 @@ import (
 type ListDismissedRiskFindingsParams struct {
 	OrganizationID string
 	ProjectID      string
-	CursorTime     *time.Time
-	CursorID       uuid.NullUUID
-	Limit          uint64
+	// Reasons narrows the listing to rows whose derived suppression reason
+	// (suppressedReasonExpr) is in the set. Empty means all reasons.
+	Reasons    []string
+	CursorTime *time.Time
+	CursorID   uuid.NullUUID
+	Limit      uint64
 }
 
 // DismissedRiskFindingRow is one row of the Dismissed listing: the Risk Events
@@ -32,30 +36,46 @@ type DismissedRiskFindingRow struct {
 	// back to the legacy false_positive_at on rows the suppression backfill
 	// did not reach.
 	SuppressedAt time.Time
+
+	// SuppressedReason is the row's excluded_reason — manual or automated on
+	// this listing (rule rows are gated out), empty on a legacy row carrying
+	// only false_positive_at. SuppressedDetail is the free-form context (user
+	// dismissal note or sweep catalog reason). ExclusionID rides along for
+	// shape parity with the API type; nil on every row this listing serves.
+	SuppressedReason string
+	SuppressedDetail string
+	ExclusionID      *uuid.UUID
 }
 
-// dismissedStateCond selects the findings the Dismissed tab lists: user and
-// automated dismissals. Rule-suppressed findings are deliberately absent —
-// the tab shows what a person dismissed and can restore, and rule suppression
-// is managed from the exclusions surface instead.
-//
-// The second disjunct is the safety margin for rows the suppression backfill
-// did not reach: a pre-convergence dismissal carries only false_positive_at
-// and no excluded_reason at all. Both disjuncts guarantee suppressedAtExpr
-// resolves non-null — excluded_reason is only ever written alongside
-// excluded_at — which is what makes it usable as a total sort and cursor key.
-const dismissedStateCond = "(excluded_reason IN ('" + ExcludedReasonManual + "', '" + ExcludedReasonAutomated + "')" +
-	" OR (excluded_reason = '' AND false_positive_at IS NOT NULL))"
+// dismissedStateCond selects the findings the suppressed listing serves:
+// every finding whose latest copy is suppressed, whatever the mechanism — an
+// exclusion rule, a manual dismissal, the automated sweep, or a legacy
+// pre-convergence row carrying only false_positive_at. Either disjunct
+// guarantees suppressedAtExpr resolves non-null, which is what makes it
+// usable as a total sort and cursor key.
+const dismissedStateCond = "(excluded_at IS NOT NULL OR false_positive_at IS NOT NULL)"
+
+// suppressedReasonExpr derives the effective suppression reason for filtering
+// and display. Rows written since the suppression convergence carry
+// excluded_reason directly. Legacy rows don't: an ingest- or reconcile-time
+// rule exclusion from before the convergence has excluded_at and exclusion_id
+// but no reason, and a pre-convergence dismissal has only false_positive_at —
+// so exclusion_id decides between rule and manual for them. Keep in lockstep
+// with the Go-side mapping in ListDismissedRiskResults.
+const suppressedReasonExpr = "multiIf(excluded_reason != '', excluded_reason," +
+	" exclusion_id IS NOT NULL, '" + ExcludedReasonRule + "'," +
+	" '" + ExcludedReasonManual + "')"
 
 // suppressedAtExpr is the effective suppression time: the converged
 // excluded_at, or the legacy false_positive_at for a row that predates the
 // backfill.
 const suppressedAtExpr = "coalesce(excluded_at, false_positive_at)"
 
-// dismissedStateColumns are the suppression columns dismissedStateCond and
-// suppressedAtExpr read off each id's latest copy. They ride along in the
-// dedup subquery's projection only; callers never select them.
-var dismissedStateColumns = []string{"dead_letter_reason", "excluded_reason", "excluded_at", "false_positive_at"}
+// dismissedStateColumns are the suppression columns dismissedStateCond,
+// suppressedAtExpr, and the listing's suppression projection read off each
+// id's latest copy. They ride along in the dedup subquery's projection; the
+// list query additionally selects the reason/detail/exclusion columns.
+var dismissedStateColumns = []string{"dead_letter_reason", "excluded_reason", "excluded_at", "false_positive_at", "excluded_detail", "exclusion_id"}
 
 // dismissedRiskFindingsLatest builds the row source both the list and the count
 // read from: every id in the tenant resolved to its most-recently-inserted
@@ -77,10 +97,24 @@ func dismissedRiskFindingsLatest(p ListDismissedRiskFindingsParams, innerColumns
 		OrderBy("inserted_at DESC").
 		Suffix("LIMIT 1 BY id")
 
-	return sq.Select(outerColumns...).
+	sb := sq.Select(outerColumns...).
 		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
 		Where(dismissedStateCond)
+	if len(p.Reasons) > 0 {
+		sb = sb.Where(squirrel.Expr(suppressedReasonExpr+" IN ("+
+			strings.TrimSuffix(strings.Repeat("?,", len(p.Reasons)), ",")+")", toAnySlice(p.Reasons)...))
+	}
+	return sb
+}
+
+// toAnySlice widens a string slice for squirrel's variadic Expr args.
+func toAnySlice(values []string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }
 
 // ListDismissedRiskFindings returns one page of dismissed findings, newest
@@ -91,7 +125,8 @@ func dismissedRiskFindingsLatest(p ListDismissedRiskFindingsParams, innerColumns
 // suppression time — the pre-dismissal copy has none at all — so a cursor
 // applied first could drop the copy that carries the state this listing reads.
 func (q *Queries) ListDismissedRiskFindings(ctx context.Context, p ListDismissedRiskFindingsParams) ([]DismissedRiskFindingRow, error) {
-	outerColumns := append(slices.Clone(riskFindingListColumns), suppressedAtExpr+" AS suppressed_at")
+	outerColumns := append(slices.Clone(riskFindingListColumns),
+		suppressedAtExpr+" AS suppressed_at", "excluded_reason", "excluded_detail", "exclusion_id")
 	sb := dismissedRiskFindingsLatest(p, riskFindingListColumns, outerColumns...)
 
 	if p.CursorTime != nil && p.CursorID.Valid {
@@ -120,7 +155,7 @@ func (q *Queries) ListDismissedRiskFindings(ctx context.Context, p ListDismissed
 	var out []DismissedRiskFindingRow
 	for rows.Next() {
 		var row DismissedRiskFindingRow
-		if err := rows.Scan(append(row.scanTargets(), &row.SuppressedAt)...); err != nil {
+		if err := rows.Scan(append(row.scanTargets(), &row.SuppressedAt, &row.SuppressedReason, &row.SuppressedDetail, &row.ExclusionID)...); err != nil {
 			return nil, fmt.Errorf("scan dismissed risk findings list row: %w", err)
 		}
 		out = append(out, row)

@@ -1330,6 +1330,8 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
+	case "resources/templates/list":
+		return handleResourcesTemplatesList(ctx, s.logger, req)
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:

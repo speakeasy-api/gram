@@ -5,9 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
+
+/**
+ * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
+ */
+export const SuppressedReason = {
+  Rule: "rule",
+  Manual: "manual",
+  Automated: "automated",
+} as const;
+/**
+ * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
+ */
+export type SuppressedReason = ClosedEnum<typeof SuppressedReason>;
 
 export type RiskResult = {
   /**
@@ -47,7 +61,11 @@ export type RiskResult = {
    */
   endPos?: number | undefined;
   /**
-   * When this result was manually marked as a false positive. Null when not dismissed.
+   * The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.
+   */
+  exclusionId?: string | undefined;
+  /**
+   * Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.
    */
   falsePositiveAt?: Date | undefined;
   /**
@@ -87,6 +105,18 @@ export type RiskResult = {
    */
   startPos?: number | undefined;
   /**
+   * When this result was suppressed (hidden from open-finding listings). Null when not suppressed.
+   */
+  suppressedAt?: Date | undefined;
+  /**
+   * Free-form suppression context: the user-supplied dismissal reason for manual suppressions, the catalog reason for automated ones. Null when absent.
+   */
+  suppressedDetail?: string | undefined;
+  /**
+   * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
+   */
+  suppressedReason?: SuppressedReason | undefined;
+  /**
    * Tags from the detection rule.
    */
   tags?: Array<string> | undefined;
@@ -95,6 +125,11 @@ export type RiskResult = {
    */
   userId?: string | undefined;
 };
+
+/** @internal */
+export const SuppressedReason$inboundSchema: z.ZodMiniEnum<
+  typeof SuppressedReason
+> = z.enum(SuppressedReason);
 
 /** @internal */
 export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
@@ -112,6 +147,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       ),
       description: z.optional(z.string()),
       end_pos: z.optional(z.int()),
+      exclusion_id: z.optional(z.string()),
       false_positive_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -124,6 +160,11 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       source: z.string(),
       spans: z.optional(z.array(RiskSpan$inboundSchema)),
       start_pos: z.optional(z.int()),
+      suppressed_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      suppressed_detail: z.optional(z.string()),
+      suppressed_reason: z.optional(SuppressedReason$inboundSchema),
       tags: z.optional(z.array(z.string())),
       user_id: z.optional(z.string()),
     }),
@@ -136,12 +177,16 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_pos": "endPos",
+        "exclusion_id": "exclusionId",
         "false_positive_at": "falsePositiveAt",
         "match_redacted": "matchRedacted",
         "policy_id": "policyId",
         "policy_version": "policyVersion",
         "rule_id": "ruleId",
         "start_pos": "startPos",
+        "suppressed_at": "suppressedAt",
+        "suppressed_detail": "suppressedDetail",
+        "suppressed_reason": "suppressedReason",
         "user_id": "userId",
       });
     }),

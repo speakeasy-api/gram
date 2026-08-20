@@ -495,6 +495,29 @@ export type AdminInferenceKey = {
   disabled: boolean;
 };
 
+export type AdminOrganizationFeatures = {
+  consent_tool_filtering_enabled: boolean;
+  hooks_browser_login_enabled: boolean;
+  hooks_fail_open_enabled: boolean;
+  platform_mcp_enabled: boolean;
+  remote_session_auto_refresh_policy:
+    | "disabled"
+    | "user_controlled"
+    | "enforced";
+  session_capture_enabled: boolean;
+  skill_capture_metadata_only: boolean;
+  skills_enabled: boolean;
+};
+
+export function getOrganizationFeatures(
+  organizationID: string,
+): Promise<AdminOrganizationFeatures> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationFeatures>(
+    `/admin/organization.features?${qs}`,
+  );
+}
+
 export function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {

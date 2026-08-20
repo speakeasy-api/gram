@@ -15,17 +15,41 @@ WITH inputs AS (
   SELECT
       sqlc.arg(tum_tokens)::bigint AS tum_tokens
     , sqlc.arg(tum_unit_price_usd)::text::numeric(20, 8) AS tum_unit_price_usd
-), completed_spend AS (
-  SELECT
-      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
-    , MAX(day)::date AS recorded_through
+), applicable_keys AS (
+  SELECT key_type
+  FROM openrouter_api_keys
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
+    AND created_at < LEAST(sqlc.arg(period_end)::timestamptz, sqlc.arg(completed_before)::timestamptz)
+    AND (deleted_at IS NULL OR deleted_at >= sqlc.arg(period_start)::timestamptz)
+), billable_spend AS (
+  SELECT key_type, day, spend_usd
   FROM openrouter_spend_daily
   WHERE organization_id = sqlc.arg(organization_id)::text
-    AND key_type = 'chat'
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
     AND day >= (sqlc.arg(period_start)::timestamptz AT TIME ZONE 'UTC')::date
     AND day < (sqlc.arg(period_end)::timestamptz AT TIME ZONE 'UTC')::date
     AND day < (sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
+), recorded_spend AS (
+  SELECT CASE
+    WHEN COUNT(*) FILTER (WHERE recorded_through IS NULL) > 0 THEN NULL
+    ELSE MIN(recorded_through)::date
+  END AS recorded_through
+  FROM (
+    SELECT applicable_keys.key_type, MAX(billable_spend.day)::date AS recorded_through
+    FROM applicable_keys
+    LEFT JOIN billable_spend USING (key_type)
+    GROUP BY applicable_keys.key_type
+  ) key_watermarks
+), completed_spend AS (
+  SELECT
+      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
+    , recorded_spend.recorded_through
+  FROM recorded_spend
+  LEFT JOIN billable_spend ON billable_spend.day <= recorded_spend.recorded_through
+  GROUP BY recorded_spend.recorded_through
 )
+
 SELECT
     inputs.tum_unit_price_usd::text AS tum_unit_price_usd
   , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
@@ -321,7 +345,7 @@ VALUES (@organization_id, @stripe_customer_id, @stripe_subscription_id);
 -- name: UpsertOpenRouterDailySpendFixture :exec
 -- Test-only fixture for billing-summary reads.
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
-VALUES (@organization_id, 'chat', @day, @spend_usd)
+VALUES (@organization_id, @key_type, @day, @spend_usd)
 ON CONFLICT (organization_id, key_type, day) DO UPDATE
 SET spend_usd = EXCLUDED.spend_usd,
     updated_at = clock_timestamp();
@@ -748,3 +772,16 @@ SELECT *
 FROM stripe_invoices
 WHERE organization_id = @organization_id
 ORDER BY service_period_start, stripe_invoice_id;
+
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeysCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;

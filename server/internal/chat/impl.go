@@ -860,10 +860,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 }
 
 // chatAccess selects which scope a non-owner needs to reach a chat. Reads and
-// mutations are deliberately separate scopes: a session reviewer holding
-// chat:read can open every transcript in the project, but deleting or otherwise
-// mutating someone else's session is destructive and needs chat:write. Owners
-// bypass both.
+// destructive mutations are deliberately separate scopes: a session reviewer
+// holding chat:read can open every transcript in the project and pin one as a
+// shared bookmark, but deleting or otherwise mutating someone else's session
+// is destructive and needs chat:write. Owners bypass both.
 type chatAccess int
 
 const (
@@ -2146,7 +2146,10 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessWrite); err != nil {
+	// Pinning is a shared project bookmark, not a destructive mutation of the
+	// transcript, so anyone who can read the chat can pin it. Rename, feedback,
+	// and delete still require chat:write.
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead); err != nil {
 		return err
 	}
 
