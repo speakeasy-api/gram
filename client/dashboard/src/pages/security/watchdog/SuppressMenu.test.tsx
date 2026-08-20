@@ -8,8 +8,8 @@ afterEach(cleanup);
 describe("SuppressMenu", () => {
   it("opens and fires the two actions", async () => {
     const user = userEvent.setup();
-    const onSuppressOnce = vi.fn();
-    const onCreateRule = vi.fn();
+    const onSuppressOnce = vi.fn<() => void>();
+    const onCreateRule = vi.fn<() => void>();
 
     render(
       <SuppressMenu
@@ -37,8 +37,8 @@ describe("SuppressMenu", () => {
       <SuppressMenu
         variant="secondary"
         busy
-        onSuppressOnce={vi.fn()}
-        onCreateRule={vi.fn()}
+        onSuppressOnce={vi.fn<() => void>()}
+        onCreateRule={vi.fn<() => void>()}
       />,
     );
     const trigger = screen.getByRole("button", { name: "Suppress" });
