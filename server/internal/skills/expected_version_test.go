@@ -244,3 +244,22 @@ func TestUpdateSkillReplayRecordsNoSecondUpdateEvent(t *testing.T) {
 	require.Equal(t, before, after, "a replay records no second update event")
 	require.Equal(t, applied.UpdatedAt, replayed.UpdatedAt, "a replay does not advance updated_at")
 }
+
+// A malformed token is a bad request on the metadata path too. Replay recovery
+// must never rescue a concurrency claim that was never valid.
+func TestUpdateSkillRejectsAMalformedExpectedVersionEvenWhenMetadataMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "malformed-metadata", "First summary.")
+	malformed := "not-a-uuid"
+	summary := "First summary."
+
+	_, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: created.Skill.Name, DisplayName: created.Skill.DisplayName, Summary: &summary, Tags: nil,
+		ExpectedLatestVersionID: &malformed,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

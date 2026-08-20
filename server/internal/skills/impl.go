@@ -286,26 +286,37 @@ func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, proje
 	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
 }
 
-// requireExpectedLatestVersion enforces a caller's optimistic concurrency
-// token. It runs inside the transaction that performs the write, so a skill
-// that moves on between the caller's read and its write is a conflict rather
-// than a silent overwrite of someone else's version.
+// parseExpectedLatestVersion validates a caller's optimistic concurrency token.
+//
+// Parsing is deliberately separate from comparing. Both write paths recover
+// from a stale token when the write turns out to be a replay, and a combined
+// check would let those recovery paths swallow a malformed token as though it
+// were merely stale — accepting a write whose concurrency claim was never
+// valid in the first place.
 //
 // The token names the version the caller believed was current, not a counter:
 // version IDs are what every skill read already returns, so a caller has one
 // without a second lookup.
-func requireExpectedLatestVersion(expected *string, latestVersionID uuid.UUID) error {
+func parseExpectedLatestVersion(expected *string) (uuid.NullUUID, error) {
 	if expected == nil {
-		return nil
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	expectedID, err := uuid.Parse(*expected)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
 	}
-	if expectedID != latestVersionID {
-		return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
-	}
-	return nil
+	return uuid.NullUUID{UUID: expectedID, Valid: true}, nil
+}
+
+// expectedLatestVersionStale reports whether the skill has moved on since the
+// caller read it. It runs inside the transaction that performs the write, so a
+// concurrent version is a conflict rather than a silent overwrite.
+func expectedLatestVersionStale(expected uuid.NullUUID, latestVersionID uuid.UUID) bool {
+	return expected.Valid && expected.UUID != latestVersionID
+}
+
+func errSkillVersionConflict() error {
+	return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
 }
 
 type distributionTarget struct {
@@ -636,18 +647,16 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
-	if payload.ExpectedLatestVersionID != nil {
-		// Parsed before the staleness check so a malformed token stays a bad
-		// request. Recovering from it as though it were merely stale would
-		// accept a write whose concurrency claim was never valid.
-		if _, err := uuid.Parse(*payload.ExpectedLatestVersionID); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
-		}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if expectedLatest.Valid {
 		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
-		if staleErr := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); staleErr != nil {
+		if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
 			// A retried write that already landed is stale by its own token,
 			// but it is not a lost update: the version it created is current
 			// and carries exactly this content, so it stays the same no-op an
@@ -661,11 +670,11 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 			case errors.Is(hashErr, pgx.ErrNoRows):
 				// The content is genuinely new, so the stale token is a real
 				// conflict rather than a replay.
-				return nil, staleErr
+				return nil, errSkillVersionConflict()
 			case hashErr != nil:
 				return nil, oops.E(oops.CodeUnexpected, hashErr, "resolve skill version by hash for stale token recovery").LogError(ctx, logger)
 			case matched.ID != state.LatestVersionID:
-				return nil, staleErr
+				return nil, errSkillVersionConflict()
 			}
 		}
 	}
@@ -809,6 +818,10 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, err
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -827,14 +840,14 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
 	}
-	if staleErr := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); staleErr != nil {
+	if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
 		// Metadata edits never create a version, so this token only goes stale
 		// when someone else records one. A retry of an edit that already landed
 		// is then indistinguishable from a lost update by token alone — except
 		// that the values it asks for are already the values in place, which
 		// makes it the same no-op the equivalent version write gets.
 		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
-			return nil, staleErr
+			return nil, errSkillVersionConflict()
 		}
 		// Returned before the write so a replay neither advances updated_at nor
 		// records a second update event for an edit that already happened.
