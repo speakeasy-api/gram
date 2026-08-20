@@ -1,35 +1,52 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
-
-	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"goa.design/goa/v3/security"
 )
 
-// adminOrganizationFeatures is the response body of GET /admin/organization.features.
+// adminOrganizationFeaturesResponse is the response body of GET /admin/organization.features.
 //
 // Like sessionInfo, this endpoint is deliberately not a Goa method so the
 // standalone admin UI contract stays out of the shared OpenAPI document and the
 // generated public SDKs.
-type adminOrganizationFeatures struct {
-	ConsentToolFilteringEnabled    bool   `json:"consent_tool_filtering_enabled"`
-	HooksBrowserLoginEnabled       bool   `json:"hooks_browser_login_enabled"`
-	HooksFailOpenEnabled           bool   `json:"hooks_fail_open_enabled"`
-	PlatformMcpEnabled             bool   `json:"platform_mcp_enabled"`
-	RemoteSessionAutoRefreshPolicy string `json:"remote_session_auto_refresh_policy"`
-	SessionCaptureEnabled          bool   `json:"session_capture_enabled"`
-	SkillCaptureMetadataOnly       bool   `json:"skill_capture_metadata_only"`
-	SkillsEnabled                  bool   `json:"skills_enabled"`
+type adminOrganizationFeaturesResponse struct {
+	AuthzChallengeLoggingEnabled         bool `json:"authz_challenge_logging_enabled"`
+	CustomerManagedEncryptionKeysEnabled bool `json:"customer_managed_encryption_keys_enabled"`
+	CustomModelKeysEnabled               bool `json:"custom_model_keys_enabled"`
+	PlatformMcpEnabled                   bool `json:"platform_mcp_enabled"`
+	RemoteSessionAutoRefreshEnabled      bool `json:"remote_session_auto_refresh_enabled"`
+	SsoEnabled                           bool `json:"sso_enabled"`
+	ScimEnabled                          bool `json:"scim_enabled"`
 }
 
-func (s *Service) handleGetOrganizationFeatures(w http.ResponseWriter, r *http.Request) error {
+type setAdminOrganizationFeatureRequest struct {
+	OrganizationID string `json:"organization_id"`
+	FeatureName    string `json:"feature_name"`
+	Enabled        *bool  `json:"enabled"`
+}
+
+var adminOrganizationFeatures = map[string]productfeatures.Feature{
+	string(productfeatures.FeatureAuthzChallengeLogging):         productfeatures.FeatureAuthzChallengeLogging,
+	string(productfeatures.FeatureCustomerManagedEncryptionKeys): productfeatures.FeatureCustomerManagedEncryptionKeys,
+	string(productfeatures.FeatureCustomModelKeys):               productfeatures.FeatureCustomModelKeys,
+	string(productfeatures.FeaturePlatformMCP):                   productfeatures.FeaturePlatformMCP,
+	string(productfeatures.FeatureRemoteSessionAutoRefresh):      productfeatures.FeatureRemoteSessionAutoRefresh,
+	string(productfeatures.FeatureSSO):                           productfeatures.FeatureSSO,
+	string(productfeatures.FeatureSCIM):                          productfeatures.FeatureSCIM,
+}
+
+func (s *Service) authorizeAdminRequest(r *http.Request) (context.Context, error) {
 	scheme := security.APIKeyScheme{
 		Name:           constants.AdminAuthSecurityScheme,
 		Scopes:         []string{},
@@ -38,19 +55,19 @@ func (s *Service) handleGetOrganizationFeatures(w http.ResponseWriter, r *http.R
 
 	ctx, err := s.verifier.Authorize(r.Context(), "", &scheme)
 	if err != nil {
-		return fmt.Errorf("admin auth: %w", err)
+		return nil, fmt.Errorf("admin auth: %w", err)
 	}
+	return ctx, nil
+}
 
-	organizationID := r.URL.Query().Get("organization_id")
+func (s *Service) canonicalAdminOrganizationForRequest(ctx context.Context, organizationID string) (string, error) {
 	if organizationID == "" {
-		return oops.C(oops.CodeBadRequest)
+		return "", oops.C(oops.CodeBadRequest)
 	}
+	return s.canonicalAdminOrganizationID(ctx, organizationID)
+}
 
-	organizationID, err = s.canonicalAdminOrganizationID(ctx, organizationID)
-	if err != nil {
-		return err
-	}
-
+func (s *Service) readAdminOrganizationFeatures(ctx context.Context, organizationID string) adminOrganizationFeaturesResponse {
 	readFeature := func(feature productfeatures.Feature) bool {
 		enabled, err := s.productFeatures.IsFeatureEnabled(ctx, organizationID, feature)
 		if err != nil {
@@ -66,26 +83,73 @@ func (s *Service) handleGetOrganizationFeatures(w http.ResponseWriter, r *http.R
 		return enabled
 	}
 
-	remoteSessionAutoRefreshPolicy := "disabled"
-	if readFeature(productfeatures.FeatureRemoteSessionAutoRefreshEnforced) {
-		remoteSessionAutoRefreshPolicy = "enforced"
-	} else if readFeature(productfeatures.FeatureRemoteSessionAutoRefresh) {
-		remoteSessionAutoRefreshPolicy = "user_controlled"
+	return adminOrganizationFeaturesResponse{
+		AuthzChallengeLoggingEnabled:         readFeature(productfeatures.FeatureAuthzChallengeLogging),
+		CustomerManagedEncryptionKeysEnabled: readFeature(productfeatures.FeatureCustomerManagedEncryptionKeys),
+		CustomModelKeysEnabled:               readFeature(productfeatures.FeatureCustomModelKeys),
+		PlatformMcpEnabled:                   readFeature(productfeatures.FeaturePlatformMCP),
+		RemoteSessionAutoRefreshEnabled:      readFeature(productfeatures.FeatureRemoteSessionAutoRefresh),
+		SsoEnabled:                           readFeature(productfeatures.FeatureSSO),
+		ScimEnabled:                          readFeature(productfeatures.FeatureSCIM),
 	}
+}
 
+func (s *Service) writeAdminOrganizationFeatures(w http.ResponseWriter, ctx context.Context, organizationID string) error {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(adminOrganizationFeatures{
-		ConsentToolFilteringEnabled:    readFeature(productfeatures.FeatureConsentToolFiltering),
-		HooksBrowserLoginEnabled:       readFeature(productfeatures.FeatureHooksBrowserLogin),
-		HooksFailOpenEnabled:           readFeature(productfeatures.FeatureHooksFailOpen),
-		PlatformMcpEnabled:             readFeature(productfeatures.FeaturePlatformMCP),
-		RemoteSessionAutoRefreshPolicy: remoteSessionAutoRefreshPolicy,
-		SessionCaptureEnabled:          readFeature(productfeatures.FeatureSessionCapture),
-		SkillCaptureMetadataOnly:       readFeature(productfeatures.FeatureSkillCaptureMetadataOnly),
-		SkillsEnabled:                  true,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(s.readAdminOrganizationFeatures(ctx, organizationID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode organization features").LogError(ctx, s.logger)
 	}
-
 	return nil
+}
+
+func (s *Service) handleGetOrganizationFeatures(w http.ResponseWriter, r *http.Request) error {
+	ctx, err := s.authorizeAdminRequest(r)
+	if err != nil {
+		return err
+	}
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, r.URL.Query().Get("organization_id"))
+	if err != nil {
+		return err
+	}
+	return s.writeAdminOrganizationFeatures(w, ctx, organizationID)
+}
+
+func (s *Service) handleSetOrganizationFeature(w http.ResponseWriter, r *http.Request) error {
+	ctx, err := s.authorizeAdminRequest(r)
+	if err != nil {
+		return err
+	}
+
+	var body setAdminOrganizationFeatureRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "decode organization feature request")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return oops.E(oops.CodeBadRequest, err, "decode organization feature request")
+	}
+
+	feature, ok := adminOrganizationFeatures[body.FeatureName]
+	if !ok || body.Enabled == nil {
+		return oops.C(oops.CodeBadRequest)
+	}
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, body.OrganizationID)
+	if err != nil {
+		return err
+	}
+
+	var setErr error
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		setErr = s.productFeatures.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, *body.Enabled)
+	} else {
+		setErr = s.productFeatures.SetFeatureEnabled(ctx, organizationID, feature, *body.Enabled)
+	}
+	if setErr != nil {
+		return oops.E(oops.CodeUnexpected, setErr, "set organization feature").LogError(ctx, s.logger,
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(string(feature)),
+		)
+	}
+	return s.writeAdminOrganizationFeatures(w, ctx, organizationID)
 }

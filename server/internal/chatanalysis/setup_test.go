@@ -54,6 +54,7 @@ type testInstance struct {
 type captureSignaler struct {
 	mu       sync.Mutex
 	projects []uuid.UUID
+	errors   map[uuid.UUID]error
 }
 
 var _ analysis.Signaler = (*captureSignaler)(nil)
@@ -62,7 +63,7 @@ func (c *captureSignaler) Signal(_ context.Context, projectID uuid.UUID) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.projects = append(c.projects, projectID)
-	return nil
+	return c.errors[projectID]
 }
 
 func (c *captureSignaler) Signaled() []uuid.UUID {
@@ -89,7 +90,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	signaler := &captureSignaler{}
+	signaler := &captureSignaler{projects: nil, errors: nil}
 
 	return ctx, &testInstance{
 		service:  chatanalysis.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), signaler),

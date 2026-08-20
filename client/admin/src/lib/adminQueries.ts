@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationChatAnalysisSettings,
   getOrganizationFeatures,
   getOrganizationStats,
   getInferenceKeys,
@@ -24,6 +25,7 @@ import {
   omitUnset,
   type AdminInferenceKey,
   type AdminOrganization,
+  type AdminOrganizationChatAnalysisSettings,
   type AdminOrganizationFeatures,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
@@ -99,6 +101,21 @@ export function organizationFeaturesQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-features", organizationID] as const,
     queryFn: () => getOrganizationFeatures(organizationID),
+  });
+}
+
+export function organizationChatAnalysisSettingsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationChatAnalysisSettings,
+  readonly ["gram-admin-organization-chat-analysis-settings", string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-organization-chat-analysis-settings",
+      organizationID,
+    ] as const,
+    queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
   });
 }
 
