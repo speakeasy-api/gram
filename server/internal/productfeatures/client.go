@@ -175,11 +175,24 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 	})
 }
 
-// UpdateFeatureCache stores the given enabled state for the feature directly
-// into the cache. Call this after writing the feature flag to the database
-// from a code path that bypasses this client, so the cache stays consistent.
-func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool) {
-	c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+// UpdateFeatureCache reloads the durable feature state and refreshes the cache
+// under the same lock used by cache fills and writes. Call this after writing
+// the feature flag from a code path that bypasses this client.
+func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, _ bool) {
+	if err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
+		enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: organizationID, FeatureName: string(feature),
+		})
+		if err != nil {
+			return fmt.Errorf("reload feature cache state: %w", err)
+		}
+		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		return nil
+	}); err != nil {
+		c.logger.WarnContext(ctx, "failed to refresh feature flag cache",
+			attr.SlogError(err), attr.SlogOrganizationID(organizationID), attr.SlogProductFeatureName(string(feature)),
+		)
+	}
 }
 
 func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
@@ -217,16 +230,25 @@ func (c *Client) withFeatureCacheLock(ctx context.Context, organizationID string
 }
 
 func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature, fn func(*pgxpool.Conn) error) error {
+	conn, release, err := c.acquireFeatureCacheLocks(ctx, organizationID, features)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return fn(conn)
+}
+
+func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
 	conn, err := c.db.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("acquire feature cache lock connection: %w", err)
+		return nil, nil, fmt.Errorf("acquire feature cache lock connection: %w", err)
 	}
 
 	queries := repo.New(conn)
 	features = slices.Clone(features)
 	slices.Sort(features)
 	acquired := make([]repo.AcquireFeatureCacheLockParams, 0, len(features))
-	defer func() {
+	release := func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		for i := len(acquired) - 1; i >= 0; i-- {
@@ -243,17 +265,18 @@ func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID strin
 			}
 		}
 		conn.Release()
-	}()
+	}
 
 	for _, feature := range features {
 		params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
 		if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
-			return fmt.Errorf("acquire feature cache lock: %w", err)
+			release()
+			return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
 		}
 		acquired = append(acquired, params)
 	}
 
-	return fn(conn)
+	return conn, release, nil
 }
 
 func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
