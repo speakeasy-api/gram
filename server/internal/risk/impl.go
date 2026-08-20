@@ -691,13 +691,13 @@ func (s *Service) ReleaseSessionQuarantine(ctx context.Context, payload *gen.Rel
 		riskPolicyID = row.RiskPolicyID.UUID.String()
 	}
 	if err := s.audit.LogSessionQuarantineRelease(ctx, dbtx, audit.LogSessionQuarantineEvent{
-		OrganizationID:      row.OrganizationID,
-		ProjectID:           row.ProjectID,
-		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:    authCtx.Email,
-		ActorSlug:           nil,
-		SessionQuarantineID: row.ID,
-		RiskPolicyName:      row.RiskPolicyName,
+		OrganizationID:       row.OrganizationID,
+		ProjectID:            row.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorSlug:            nil,
+		SessionQuarantineURN: urn.NewSessionQuarantine(row.ID),
+		RiskPolicyName:       row.RiskPolicyName,
 		Metadata: audit.SessionQuarantineMetadata{
 			SessionID:      row.SessionID,
 			RiskPolicyID:   riskPolicyID,

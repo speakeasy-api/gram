@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -103,13 +104,13 @@ func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event
 
 	if created {
 		if err := s.audit.LogSessionQuarantineOpen(ctx, dbtx, audit.LogSessionQuarantineEvent{
-			OrganizationID:      row.OrganizationID,
-			ProjectID:           row.ProjectID,
-			Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, ev.Context.User.ID),
-			ActorDisplayName:    &ev.Context.User.Email,
-			ActorSlug:           nil,
-			SessionQuarantineID: row.ID,
-			RiskPolicyName:      row.RiskPolicyName,
+			OrganizationID:       row.OrganizationID,
+			ProjectID:            row.ProjectID,
+			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, ev.Context.User.ID),
+			ActorDisplayName:     &ev.Context.User.Email,
+			ActorSlug:            nil,
+			SessionQuarantineURN: urn.NewSessionQuarantine(row.ID),
+			RiskPolicyName:       row.RiskPolicyName,
 			Metadata: audit.SessionQuarantineMetadata{
 				SessionID:      row.SessionID,
 				RiskPolicyID:   scanResult.PolicyID,
@@ -143,7 +144,21 @@ func quarantineTriggerUserReason(scanResult *risk.ScanResult, fallback string) s
 	if scanResult == nil {
 		return fallback
 	}
-	return renderWarnBody(scanResult)
+	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
+		return renderWarnBody(scanResult)
+	}
+
+	match := truncateForWarn(scanResult.MatchedValue)
+	entity := scanResult.Entity
+	if entity == "" {
+		entity = scanResult.RuleID
+	}
+	if match != "" {
+		return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content %q identified as %s. This session has been quarantined; contact your org admin to release it.",
+			scanResult.PolicyName, match, entity)
+	}
+	return fmt.Sprintf("Your request matched policy %q: potentially harmful or sensitive content identified as %s. This session has been quarantined; contact your org admin to release it.",
+		scanResult.PolicyName, entity)
 }
 
 func quarantineAuditReason(kind string, scanResult *risk.ScanResult) string {
