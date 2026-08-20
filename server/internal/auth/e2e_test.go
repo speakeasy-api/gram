@@ -382,8 +382,9 @@ func TestE2E_Callback_NewOrganizationSyncsMemberRoleWithoutAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 
-// TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning is the staging/prod
-// login path: memberships still sync, but RBAC stays on the WorkOS event worker.
+// TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning covers processes
+// that sync memberships without a seeder (for example the worker). Memberships
+// still sync; role assignments are left alone.
 func TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning(t *testing.T) {
 	t.Parallel()
 
