@@ -103,6 +103,40 @@ func TestRegistrationServiceRegistersDirectRemoteWithFreshInspection(t *testing.
 	require.Equal(t, registrationID.String(), result.Registration)
 }
 
+func TestRegistrationServiceRejectsOversizedDirectRemoteDisplayNameBeforePersistence(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
+		ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: string(make([]byte, directRemoteDisplayNameMaxBytes+1)), IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrRegistrationInvalid)
+	require.Equal(t, 1, inspector.calls)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
+func TestRegistrationServiceRejectsDirectRemoteDisplayNameWithNewlineBeforePersistence(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
+		ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "External\r\nMCP", IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrRegistrationInvalid)
+	require.Equal(t, 1, inspector.calls)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
 func TestRegistrationServiceRejectsDirectRemoteBeforePersistence(t *testing.T) {
 	t.Parallel()
 

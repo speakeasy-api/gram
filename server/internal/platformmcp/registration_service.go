@@ -14,6 +14,8 @@ import (
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
 
+const directRemoteDisplayNameMaxBytes = 256
+
 type CatalogRegistrationGateChecker interface {
 	Enabled(ctx context.Context, organizationID, projectSlug string) (bool, error)
 	EnabledOrganization(ctx context.Context, organizationID string) (bool, error)
@@ -393,6 +395,10 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if inspection.CanonicalURL == "" || inspection.Transport != "streamable-http" || inspection.Trust != "user_supplied_unreviewed" {
 		return RegisterRemoteMCPResult{}, ErrDirectRemoteRejected
 	}
+	displayName := strings.TrimSpace(input.DisplayName)
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.ContainsAny(displayName, "\r\n") {
+		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
+	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote registration project: %w", err)
@@ -400,7 +406,6 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
 	}
-	displayName := strings.TrimSpace(input.DisplayName)
 	if displayName == "" {
 		displayName = inspection.CanonicalURL
 	}

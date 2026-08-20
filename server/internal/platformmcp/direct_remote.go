@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -26,6 +25,7 @@ const (
 	directRemoteProbeMaxBytes     = 256 << 10
 	directRemoteProbeMaxRequests  = 8
 	directRemoteOAuthServerLimit  = 2
+	directRemoteSessionIDMaxBytes = 512
 	directRemoteToolNameLimit     = 50
 	directRemoteProviderKey       = "direct-remote-url-v1"
 	directRemoteSourceKind        = "remote_url"
@@ -186,8 +186,11 @@ func directRemoteRequest(ctx context.Context, client *http.Client, rawURL, metho
 		return directRemoteRPCResponse{}, "", "", 0, fmt.Errorf("build direct MCP probe: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
+		if len(sessionID) > directRemoteSessionIDMaxBytes {
+			return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		}
 		req.Header.Set("Mcp-Session-Id", sessionID)
 	}
 	resp, err := client.Do(req)
@@ -223,7 +226,11 @@ func directRemoteRequest(ctx context.Context, client *http.Client, rawURL, metho
 	if err := json.Unmarshal(payload, &result); err != nil {
 		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
 	}
-	return result, finalURL, resp.Header.Get("Mcp-Session-Id"), resp.StatusCode, nil
+	sessionID = resp.Header.Get("Mcp-Session-Id")
+	if len(sessionID) > directRemoteSessionIDMaxBytes {
+		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+	}
+	return result, finalURL, sessionID, resp.StatusCode, nil
 }
 
 func directRemoteNotification(ctx context.Context, client *http.Client, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (string, int, error) {
@@ -238,8 +245,11 @@ func directRemoteNotification(ctx context.Context, client *http.Client, rawURL, 
 	if err != nil {
 		return "", 0, fmt.Errorf("build direct MCP probe notification: %w", err)
 	}
+	if len(sessionID) > directRemoteSessionIDMaxBytes {
+		return "", 0, ErrDirectRemoteRejected
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Mcp-Session-Id", sessionID)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -268,6 +278,7 @@ func directRemoteNotification(ctx context.Context, client *http.Client, rawURL, 
 // URLs are derived from the canonical resource or a discovered issuer, rechecked
 // with Guardian before egress, and charged to the inspection response budget.
 func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client *http.Client, resourceURL string, budget *directRemoteResponseBudget) string {
+	available := false
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL, budget)
 		if err != nil || status != http.StatusOK {
@@ -296,8 +307,11 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 			if endpoint, _ := authorizationMetadata["registration_endpoint"].(string); endpoint != "" {
 				return "available_dcr"
 			}
-			return "available"
+			available = true
 		}
+	}
+	if available {
+		return "available"
 	}
 	return "incomplete"
 }
@@ -413,11 +427,6 @@ func canonicalDirectRemoteURL(rawURL string) (string, error) {
 	parsed.Fragment = ""
 	if parsed.Path == "" {
 		parsed.Path = "/"
-	}
-	// A default port has no canonical wire representation. Reject malformed
-	// ports above, then normalize an explicitly supplied :443 away.
-	if port == "443" {
-		parsed.Host = strings.TrimSuffix(parsed.Host, ":"+strconv.Itoa(443))
 	}
 	canonical := parsed.String()
 	if len(canonical) > directRemoteURLMaxBytes {
