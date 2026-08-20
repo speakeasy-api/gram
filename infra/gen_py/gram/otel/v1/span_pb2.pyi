@@ -33,14 +33,22 @@ class Span(_message.Message):
     STATUS_CODE_OK: Span.StatusCode
     STATUS_CODE_ERROR: Span.StatusCode
     class Provenance(_message.Message):
-        __slots__ = ("source", "organization_id", "project_id")
+        __slots__ = ("source", "organization_id", "project_id", "organization_slug", "project_slug", "api_key_id", "api_key_name")
         SOURCE_FIELD_NUMBER: _ClassVar[int]
         ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
         PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+        ORGANIZATION_SLUG_FIELD_NUMBER: _ClassVar[int]
+        PROJECT_SLUG_FIELD_NUMBER: _ClassVar[int]
+        API_KEY_ID_FIELD_NUMBER: _ClassVar[int]
+        API_KEY_NAME_FIELD_NUMBER: _ClassVar[int]
         source: str
         organization_id: str
         project_id: str
-        def __init__(self, source: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ...) -> None: ...
+        organization_slug: str
+        project_slug: str
+        api_key_id: str
+        api_key_name: str
+        def __init__(self, source: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_slug: _Optional[str] = ..., project_slug: _Optional[str] = ..., api_key_id: _Optional[str] = ..., api_key_name: _Optional[str] = ...) -> None: ...
     class Resource(_message.Message):
         __slots__ = ("attributes", "dropped_attributes_count")
         ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]

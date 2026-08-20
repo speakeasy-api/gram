@@ -225,19 +225,10 @@ OTLP_GRPC_PORT = "4317"
 OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
-## Tags every span, metric and log this worktree emits with the worktree it came
-## from, so the single shared LGTM stack (compose.shared.yml) can host all of
-## them at once without their signals being indistinguishable. `git:workinit`
-## overwrites this in mise.local.toml with the worktree's COMPOSE_PROJECT_NAME;
-## the value here is what the main working tree uses. Filter on it in Grafana
-## with `worktree="gram-infra-abcd"`.
-##
-## Read by the OTel SDK itself (resource.Default picks up the env detector), so
-## nothing in the Go setup needs to know about it.
-OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
 
 ################################
 ## Local development settings ##

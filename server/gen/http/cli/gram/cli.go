@@ -59,6 +59,7 @@ import (
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
+	otelc "github.com/speakeasy-api/gram/server/gen/http/otel/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
@@ -134,6 +135,7 @@ func UsageCommands() []string {
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
+		"otel traces",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -1591,6 +1593,14 @@ func ParseEndpoint(
 		organizationsGenerateWorkOSAdminPortalLinkFlags            = flag.NewFlagSet("generate-work-os-admin-portal-link", flag.ExitOnError)
 		organizationsGenerateWorkOSAdminPortalLinkBodyFlag         = organizationsGenerateWorkOSAdminPortalLinkFlags.String("body", "REQUIRED", "")
 		organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag = organizationsGenerateWorkOSAdminPortalLinkFlags.String("session-token", "", "")
+
+		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
+
+		otelTracesFlags                = flag.NewFlagSet("traces", flag.ExitOnError)
+		otelTracesApikeyTokenFlag      = otelTracesFlags.String("apikey-token", "", "")
+		otelTracesProjectSlugInputFlag = otelTracesFlags.String("project-slug-input", "", "")
+		otelTracesContentEncodingFlag  = otelTracesFlags.String("content-encoding", "", "")
+		otelTracesStreamFlag           = otelTracesFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		otelForwardingFlags = flag.NewFlagSet("otel-forwarding", flag.ContinueOnError)
 
@@ -3866,6 +3876,9 @@ func ParseEndpoint(
 	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
 
+	otelFlags.Usage = otelUsage
+	otelTracesFlags.Usage = otelTracesUsage
+
 	otelForwardingFlags.Usage = otelForwardingUsage
 	otelForwardingGetConfigFlags.Usage = otelForwardingGetConfigUsage
 	otelForwardingUpsertConfigFlags.Usage = otelForwardingUpsertConfigUsage
@@ -4368,6 +4381,8 @@ func ParseEndpoint(
 			svcf = modelKeysFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "otel":
+			svcf = otelFlags
 		case "otel-forwarding":
 			svcf = otelForwardingFlags
 		case "packages":
@@ -5369,6 +5384,13 @@ func ParseEndpoint(
 
 			case "generate-work-os-admin-portal-link":
 				epf = organizationsGenerateWorkOSAdminPortalLinkFlags
+
+			}
+
+		case "otel":
+			switch epn {
+			case "traces":
+				epf = otelTracesFlags
 
 			}
 
@@ -7484,6 +7506,16 @@ func ParseEndpoint(
 			case "generate-work-os-admin-portal-link":
 				endpoint = c.GenerateWorkOSAdminPortalLink()
 				data, err = organizationsc.BuildGenerateWorkOSAdminPortalLinkPayload(*organizationsGenerateWorkOSAdminPortalLinkBodyFlag, *organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag)
+			}
+		case "otel":
+			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "traces":
+				endpoint = c.Traces()
+				data, err = otelc.BuildTracesPayload(*otelTracesApikeyTokenFlag, *otelTracesProjectSlugInputFlag, *otelTracesContentEncodingFlag)
+				if err == nil {
+					data, err = otelc.BuildTracesStreamPayload(data, *otelTracesStreamFlag)
+				}
 			}
 		case "otel-forwarding":
 			c := otelforwardingc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14975,6 +15007,40 @@ func organizationsGenerateWorkOSAdminPortalLinkUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations generate-work-os-admin-portal-link --body '{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+// otelUsage displays the usage of the otel command and its subcommands.
+func otelUsage() {
+	fmt.Fprintln(os.Stderr, `Receives OpenTelemetry signals from LLM providers and harnesses.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] otel COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    traces: Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s otel COMMAND --help\n", os.Args[0])
+}
+func otelTracesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel traces", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -content-encoding STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-encoding STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel traces --apikey-token \"abc123\" --project-slug-input \"abc123\" --content-encoding \"abc123\" --stream \"goa.png\"")
 }
 
 // otelForwardingUsage displays the usage of the otel-forwarding command and
