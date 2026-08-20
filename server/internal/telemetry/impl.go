@@ -455,8 +455,17 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		canonicalOrg = params.organizationID
 	}
 
+	// Gram-hosted inference is excluded only for internal (employee)
+	// grouping. External users are the opposite case: their hosted-chat
+	// completions ARE their usage — and their only token-bearing rows, so
+	// excluding them would zero the external surfaces entirely.
+	var excludedHookSources []string
+	if groupBy == "user_id" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	searchParams := repo.SearchUsersParams{
-		ExcludedHookSources:  billing.GramHostedHookSourceNames(),
+		ExcludedHookSources:  excludedHookSources,
 		GramProjectID:        params.projectID,
 		TimeStart:            params.timeStart,
 		TimeEnd:              params.timeEnd,
@@ -1337,11 +1346,18 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// judges and friends) as their usage. An external user is the opposite
+	// case: their hosted-chat completions ARE their usage — and their only
+	// token-bearing rows, so the exclusion would zero their page.
+	var excludedHookSources []string
+	if userID != "" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
-		// A per-user page never counts Gram-hosted inference (risk-analysis
-		// judges and friends) as the employee's usage.
-		ExcludedHookSources: billing.GramHostedHookSourceNames(),
+		ExcludedHookSources: excludedHookSources,
 		GramProjectID:       authCtx.ProjectID.String(),
 		TimeStart:           timeStart,
 		TimeEnd:             timeEnd,
@@ -1885,14 +1901,17 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
-	// Per-user views exclude Gram-hosted inference (risk-analysis judges and
-	// friends): those completions log under the session owner's identity but
-	// are the platform's spend, not the employee's usage — counting them made
-	// one employee's page show 60M+ judge tokens as their own. Org-wide views
-	// keep the current semantics (the summaries fast path cannot express the
-	// exclusion; changing org totals is a separate decision).
+	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// judges and friends): those completions log under the session owner's
+	// identity but are the platform's spend, not the employee's usage —
+	// counting them made one employee's page show 60M+ judge tokens as their
+	// own. External-user scope keeps them: an external user's hosted-chat
+	// completions ARE their usage, and their only token-bearing rows.
+	// Org-wide views also keep the current semantics (the summaries fast path
+	// cannot express the exclusion; changing org totals is a separate
+	// decision).
 	var excludedHookSources []string
-	if userID != "" || externalUserID != "" {
+	if userID != "" {
 		excludedHookSources = billing.GramHostedHookSourceNames()
 	}
 

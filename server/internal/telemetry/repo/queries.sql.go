@@ -2385,7 +2385,8 @@ type GetTimeSeriesMetricsParams struct {
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
 	// here: raw-log hook, tool-call, and import rows are legitimately
-	// untagged.
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -2468,7 +2469,10 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if len(arg.ExcludedHookSources) > 0 {
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
@@ -2517,7 +2521,8 @@ type GetToolMetricsBreakdownParams struct {
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
 	// here: raw-log hook, tool-call, and import rows are legitimately
-	// untagged.
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -2579,7 +2584,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if len(arg.ExcludedHookSources) > 0 {
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
@@ -2632,7 +2640,8 @@ type GetOverviewSummaryParams struct {
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
 	// here: raw-log hook, tool-call, and import rows are legitimately
-	// untagged.
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -2779,7 +2788,10 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if len(arg.ExcludedHookSources) > 0 {
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
@@ -3199,6 +3211,9 @@ type SearchUsersParams struct {
 	// inference logged under an employee's identity never counts as their
 	// usage. Aligns the raw-logs path with the agent-metrics summaries path,
 	// which never ingests those rows. Never include the empty string here.
+	// Ignored when HookSource is set (an explicit source filter overrides
+	// the exclusion) and under external_user_id grouping (an external user's
+	// Gram-hosted completions ARE their usage).
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -3350,7 +3365,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
-	if len(arg.ExcludedHookSources) > 0 {
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result. External
+	// grouping never applies it either: an external user's Gram-hosted
+	// completions ARE their usage, and their only token-bearing rows.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" && arg.GroupBy != "external_user_id" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
@@ -3416,7 +3436,8 @@ type GetUserMetricsSummaryParams struct {
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
 	// here: raw-log hook, tool-call, and import rows are legitimately
-	// untagged.
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -3506,7 +3527,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
-	if len(arg.ExcludedHookSources) > 0 {
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
