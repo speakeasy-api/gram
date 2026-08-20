@@ -405,6 +405,13 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
+			var (
+				findingsPub gcp.Publisher[*riskv1.Finding]
+				spanPub     gcp.Publisher[*otelv1.Span]
+			)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, spanPub)
+			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
 			if err != nil {
@@ -421,15 +428,10 @@ func newStreamsCommand() *cli.Command {
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
-			findingsPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
+			findingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := findingsPub.Stop(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
@@ -510,15 +512,10 @@ func newStreamsCommand() *cli.Command {
 				return errors.Join(handlerErrors...)
 			})
 
-			spanPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
+			spanPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := spanPub.Stop(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
 
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
@@ -576,6 +573,30 @@ func newStreamsCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+type publisherStopper interface {
+	Stop(context.Context) error
+}
+
+func shutdownPubSubPublishers(
+	ctx context.Context,
+	closeClient func(context.Context) error,
+	publishers ...publisherStopper,
+) error {
+	var errs []error
+	for _, publisher := range publishers {
+		if publisher == nil {
+			continue
+		}
+		if err := publisher.Stop(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := closeClient(ctx); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 type receiverGroup struct {
