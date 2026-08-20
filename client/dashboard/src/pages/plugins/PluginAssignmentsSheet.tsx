@@ -225,7 +225,6 @@ function AssignmentsEditor({
             ...options,
             {
               heading: "Legacy assignments",
-              icon: principalIcon("user"),
               options: legacyOptions,
             },
           ]
