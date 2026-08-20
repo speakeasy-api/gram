@@ -3,6 +3,7 @@ package auth_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestService_Login(t *testing.T) {
@@ -411,6 +413,165 @@ func TestService_LoginRejectsOrgNameWithTooFewLetters(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "organization name must contain at least 2 letters or numbers")
+}
+
+func TestService_LoginSignupExistingWorkOSUserUsesSignIn(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	email := "someone@example.com"
+	orgName := "Acme Inc"
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+		usersByEmail: map[string]*workos.User{
+			email: {ID: "user_existing", Email: email},
+		},
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName: &orgName,
+		Email:   &email,
+	})
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(result.Location)
+	require.NoError(t, err)
+	q := parsed.Query()
+	require.Equal(t, email, q.Get("login_hint"))
+	require.False(t, q.Has("screen_hint"), "existing WorkOS users must land on sign-in, not hosted sign-up")
+	require.Equal(t, 1, fetcher.getUserByEmailCalls)
+}
+
+func TestService_LoginSignupNewWorkOSUserUsesSignUp(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	email := "new@example.com"
+	orgName := "Acme Inc"
+	fetcher := &mockWorkOSFetcher{
+		members:      map[string][]workos.Member{},
+		orgs:         map[string]*workos.Organization{},
+		usersByEmail: map[string]*workos.User{},
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName: &orgName,
+		Email:   &email,
+	})
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(result.Location)
+	require.NoError(t, err)
+	q := parsed.Query()
+	require.Equal(t, email, q.Get("login_hint"))
+	require.Equal(t, "sign-up", q.Get("screen_hint"))
+	require.Equal(t, 1, fetcher.getUserByEmailCalls)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var intent struct {
+		OrgName string
+	}
+	require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+	require.Equal(t, "Acme Inc", intent.OrgName)
+}
+
+func TestService_LoginSignupLookupFailureFailsOpenToSignUp(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	email := "someone@example.com"
+	orgName := "Acme Inc"
+	fetcher := &mockWorkOSFetcher{
+		members:           map[string][]workos.Member{},
+		orgs:              map[string]*workos.Organization{},
+		getUserByEmailErr: errors.New("workos unavailable"),
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName: &orgName,
+		Email:   &email,
+	})
+	require.NoError(t, err, "a WorkOS lookup failure must not block signup")
+
+	parsed, err := url.Parse(result.Location)
+	require.NoError(t, err)
+	q := parsed.Query()
+	require.Equal(t, email, q.Get("login_hint"))
+	require.Equal(t, "sign-up", q.Get("screen_hint"))
+	require.Equal(t, 1, fetcher.getUserByEmailCalls)
+}
+
+func TestService_LoginSignupExistingUserPreservesSignupIntent(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	email := "someone@example.com"
+	orgName := "Acme Inc"
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+		usersByEmail: map[string]*workos.User{
+			email: {ID: "user_existing", Email: email},
+		},
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName: &orgName,
+		Email:   &email,
+	})
+	require.NoError(t, err)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var intent struct {
+		OrgName string
+	}
+	require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+	require.Equal(t, "Acme Inc", intent.OrgName)
+}
+
+func TestService_LoginOrdinaryDoesNotLookupWorkOSUser(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 0, fetcher.getUserByEmailCalls, "ordinary login must not look up WorkOS users")
+}
+
+func TestService_LoginEmailWithoutOrgNameDoesNotLookupWorkOSUser(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	email := "someone@example.com"
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+		usersByEmail: map[string]*workos.User{
+			email: {ID: "user_existing", Email: email},
+		},
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, fetcher)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{Email: &email})
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(result.Location)
+	require.NoError(t, err)
+	require.Equal(t, email, parsed.Query().Get("login_hint"))
+	require.False(t, parsed.Query().Has("screen_hint"))
+	require.Equal(t, 0, fetcher.getUserByEmailCalls, "email without org_name is not a signup")
 }
 
 // nonceFromLocation pulls the nonce out of the state param on an authorization
