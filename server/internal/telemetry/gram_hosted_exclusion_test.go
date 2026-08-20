@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // insertGramHostedCompletionLog writes a completion row the way Gram-hosted
@@ -69,6 +70,73 @@ func insertGramHostedCompletionLog(t *testing.T, ctx context.Context, projectID 
 func insertGramHostedJudgeLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, email string, inputTokens, outputTokens int, cost float64) {
 	t.Helper()
 	insertGramHostedCompletionLog(t, ctx, projectID, timestamp, "risk-analysis", email, "", uuid.Nil.String(), inputTokens, outputTokens, cost)
+}
+
+// insertGramHostedJudgeLogWithUserID writes a judge completion attributed by
+// user_id with no email - the shape that could surface a phantom identity in
+// the enrollment directory's email-less supplement.
+func insertGramHostedJudgeLogWithUserID(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, userID string, inputTokens, outputTokens int) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.event.source":          string(tm.EventSourceChatCompletion),
+		"gram.hook.source":           "risk-analysis",
+		"user.id":                    userID,
+		"gen_ai.usage.input_tokens":  inputTokens,
+		"gen_ai.usage.output_tokens": outputTokens,
+		"gen_ai.usage.total_tokens":  inputTokens + outputTokens,
+		"gen_ai.response.model":      "judge-model",
+		"gen_ai.conversation.id":     "00000000-0000-0000-0000-000000000000",
+		"gen_ai.response.id":         uuid.New().String(),
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	require.NoError(t, conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "chat:completion", "gram-server"))
+}
+
+// The enrollment directory's email-less supplement scans raw telemetry_logs;
+// a gram-hosted completion carrying a user_id but no email must not surface
+// a phantom identity there (tokens were never at risk - the summaries MV
+// excludes gram-hosted rows by provenance - but presence is presence).
+func TestEnrollmentDirectory_ExcludesGramHostedPhantomIdentities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	phantomID := "judge-only-" + uuid.NewString()
+
+	now := time.Now().UTC()
+	insertGramHostedJudgeLogWithUserID(t, ctx, projectID, now.Add(-10*time.Minute), phantomID, 5000, 5000)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter:   &gen.SearchUsersFilter{From: now.Add(-time.Hour).Format(time.RFC3339), To: now.Add(time.Hour).Format(time.RFC3339)},
+		UserType: "internal",
+		Source:   "agent_metrics",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	for _, u := range res.Users {
+		require.NotEqual(t, phantomID, u.UserID, "judge-only identity must not appear in the enrollment directory")
+	}
 }
 
 // The per-user surfaces must never count Gram-hosted inference as the

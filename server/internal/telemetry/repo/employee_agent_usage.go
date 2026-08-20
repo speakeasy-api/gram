@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"fmt"
+
+	"github.com/Masterminds/squirrel"
 )
 
 // SearchEmployeeAgentUsageParams parameterizes the MV-backed employee usage read.
@@ -114,6 +116,11 @@ type ListEmaillessIdentitiesParams struct {
 	TimeStart     int64 // inclusive window start, unix nanoseconds
 	TimeEnd       int64 // inclusive window end, unix nanoseconds
 	Limit         int
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface, so a platform-side completion carrying a user_id
+	// but no email cannot surface a phantom identity in the enrollment
+	// directory. Never include the empty string here.
+	ExcludedHookSources []string
 }
 
 // ListEmaillessIdentities returns telemetry identities that carry a user_id but
@@ -143,8 +150,11 @@ func (q *Queries) ListEmaillessIdentities(ctx context.Context, arg ListEmailless
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("user_id != ''").
-		GroupBy("user_id").
+		Where("user_id != ''")
+	if len(arg.ExcludedHookSources) > 0 {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
+	}
+	sb = sb.GroupBy("user_id").
 		// Keep only user_ids that never co-occur with an email in the window;
 		// those that do are folded into an email key by SearchEmployeeAgentUsage.
 		Having("max(user_email != '') = 0"). //nolint:glint // fold-neutral emptiness check partitioning email-less identities

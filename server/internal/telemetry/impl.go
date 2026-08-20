@@ -580,10 +580,11 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	})
 	g.Go(func() error {
 		items, err := s.chRepo.ListEmaillessIdentities(gctx, repo.ListEmaillessIdentitiesParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			ExcludedHookSources: billing.GramHostedHookSourceNames(),
+			GramProjectID:       params.projectID,
+			TimeStart:           params.timeStart,
+			TimeEnd:             params.timeEnd,
+			Limit:               agentMetricsDirectoryCap,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error listing email-less identities")
