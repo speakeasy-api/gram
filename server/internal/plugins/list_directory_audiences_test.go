@@ -10,8 +10,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 )
 
 func TestPluginsService_ListAudiences(t *testing.T) {
@@ -22,10 +22,10 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 	require.True(t, ok)
 
 	now := time.Now().UTC()
-	directoryRepo := workosrepo.New(ti.conn)
+	directoryRepo := directoryrepo.New(ti.conn)
 	roleURN := createTestRolePrincipal(t, ctx, ti, "engineering")
 	groupWorkOSID := uuid.NewString()
-	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDirectoryGroupID: groupWorkOSID,
 		Name:                   "Engineering",
@@ -35,7 +35,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		WorkosLastEventID:      conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	emptyGroupID, err := directoryRepo.UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	emptyGroupID, err := directoryRepo.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDirectoryGroupID: uuid.NewString(),
 		Name:                   "Empty",
@@ -46,7 +46,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 	})
 	require.NoError(t, err)
 	directoryUserWorkOSID := uuid.NewString()
-	directoryUserID, err := directoryRepo.UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	directoryUserID, err := directoryRepo.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: directoryUserWorkOSID,
@@ -59,7 +59,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 	})
 	require.NoError(t, err)
 	directoryUserTwoWorkOSID := uuid.NewString()
-	directoryUserTwoID, err := directoryRepo.UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	directoryUserTwoID, err := directoryRepo.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: directoryUserTwoWorkOSID,
@@ -71,7 +71,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		RestoreDeleted:        true,
 	})
 	require.NoError(t, err)
-	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        directoryUserTwoID,
 		DirectoryGroupID:       groupID,
 		WorkosDirectoryUserID:  directoryUserTwoWorkOSID,
@@ -79,7 +79,7 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
 	})
 	require.NoError(t, err)
-	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+	_, err = directoryRepo.OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        directoryUserID,
 		DirectoryGroupID:       groupID,
 		WorkosDirectoryUserID:  directoryUserWorkOSID,
@@ -99,25 +99,25 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 			Kind:         "directory_group",
 			DisplayName:  "Empty",
 			MemberCount:  &zero,
-			PrincipalUrn: plugins.DirectoryGroupPrincipal(emptyGroupID),
+			PrincipalUrn: directory.GroupPrincipal(emptyGroupID),
 		},
 		{
 			Kind:         "directory_group",
 			DisplayName:  "Engineering",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryGroupPrincipal(groupID),
+			PrincipalUrn: directory.GroupPrincipal(groupID),
 		},
 		{
 			Kind:         "directory_attribute",
 			DisplayName:  "department: engineering",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryAttributePrincipal("department", "engineering"),
+			PrincipalUrn: directory.AttributePrincipal("department", "engineering"),
 		},
 		{
 			Kind:         "directory_attribute",
 			DisplayName:  "title: developer",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryAttributePrincipal("title", "developer"),
+			PrincipalUrn: directory.AttributePrincipal("title", "developer"),
 		},
 	}, result.Audiences[2:])
 }

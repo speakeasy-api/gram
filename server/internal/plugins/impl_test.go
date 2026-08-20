@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -35,7 +37,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -787,8 +788,8 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 
 	now := time.Now().UTC()
 	groupWorkOSID := uuid.NewString()
-	directoryRepo := workosrepo.New(ti.conn)
-	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	directoryRepo := directoryrepo.New(ti.conn)
+	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDirectoryGroupID: groupWorkOSID,
 		Name:                   "Unavailable",
@@ -799,14 +800,14 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryGroupPrincipal(groupID)
+	principal := directory.GroupPrincipal(groupID)
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},
 	})
 	require.NoError(t, err)
 
-	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, workosrepo.DeleteDirectoryGroupByWorkOSIDParams{
+	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
 		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
 		WorkosLastEventID:      conv.ToPGTextEmpty(""),
 		WorkosDirectoryGroupID: groupWorkOSID,
@@ -836,7 +837,7 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
-	_, err = workosrepo.New(ti.conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	_, err = directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: uuid.NewString(),
@@ -854,7 +855,7 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 		PrincipalUrns: []string{"directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, plugins.DirectoryAttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
+	require.Equal(t, directory.AttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
@@ -875,7 +876,7 @@ func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePr
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryAttributePrincipal("department", "engineering")
+	principal := directory.AttributePrincipal("department", "engineering")
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},
