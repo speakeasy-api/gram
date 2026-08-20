@@ -83,7 +83,7 @@ export const COMING_SOON_AGENT_PROVIDER_IDS = [
 
 export const ACTIVE_AGENT_PROVIDER_IDS = {
   hooks: ["claude", "cursor", "codex"],
-  plugins: ["claude-cowork", "cursor", "codex", "opencode"],
+  plugins: ["claude", "claude-cowork", "cursor", "codex", "opencode"],
   setup: ["claude", "claude-cowork", "codex", "cursor", "opencode"],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 

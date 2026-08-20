@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AGENT_PROVIDERS } from "./agent-providers";
+import { ACTIVE_AGENT_PROVIDER_IDS, AGENT_PROVIDERS } from "./agent-providers";
 import { agentProviderIconKind } from "./agent-provider-icon-kind";
 import { AgentProviderIcon, CopilotIcon } from "./AgentProviderIcon";
 
@@ -21,6 +21,16 @@ describe("CopilotIcon", () => {
 });
 
 describe("AgentProviderIcon", () => {
+  it("keeps Claude Code available for plugins", () => {
+    expect(ACTIVE_AGENT_PROVIDER_IDS.plugins).toEqual([
+      "claude",
+      "claude-cowork",
+      "cursor",
+      "codex",
+      "opencode",
+    ]);
+  });
+
   it("includes LiteLLM in the shared provider catalog", () => {
     expect(AGENT_PROVIDERS.litellm).toMatchObject({
       name: "LiteLLM",
