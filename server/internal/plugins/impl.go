@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -56,7 +57,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1101,16 +1101,16 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, err
 	}
 
-	directoryRepo := workosrepo.New(s.db)
+	directoryService := directory.NewService(s.db)
 	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles for plugin assignments").LogError(ctx, s.logger)
 	}
-	groups, err := directoryRepo.ListActiveDirectoryGroups(ctx, ac.ActiveOrganizationID)
+	groups, err := directoryService.ListActiveGroups(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory groups for plugin assignments").LogError(ctx, s.logger)
 	}
-	attributes, err := directoryRepo.ListActiveDirectoryAttributeValues(ctx, ac.ActiveOrganizationID)
+	attributes, err := directoryService.ListActiveAttributeValues(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values for plugin assignments").LogError(ctx, s.logger)
 	}
@@ -1143,9 +1143,9 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 	for _, attribute := range attributes {
 		result.Audiences = append(result.Audiences, &gen.PluginAudience{
 			Kind:         "directory_attribute",
-			DisplayName:  fmt.Sprintf("%s: %s", attribute.AttributeKey, attribute.AttributeValue),
+			DisplayName:  fmt.Sprintf("%s: %s", attribute.Key, attribute.Value),
 			MemberCount:  &attribute.MemberCount,
-			PrincipalUrn: DirectoryAttributePrincipal(attribute.AttributeKey, attribute.AttributeValue),
+			PrincipalUrn: DirectoryAttributePrincipal(attribute.Key, attribute.Value),
 		})
 	}
 
@@ -1198,7 +1198,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := s.repo.WithTx(tx)
-	directoryRepo := workosrepo.New(tx)
+	directoryService := directory.NewService(tx)
 	existingAssignments, err := txRepo.ListPluginAssignments(ctx, pluginID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list existing assignments").LogError(ctx, s.logger)
@@ -1222,7 +1222,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.String())
 			}
-			exists, err := directoryRepo.DirectoryGroupExists(ctx, workosrepo.DirectoryGroupExistsParams{ID: groupID, OrganizationID: ac.ActiveOrganizationID})
+			exists, err := directoryService.GroupExists(ctx, ac.ActiveOrganizationID, groupID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
 			}
@@ -1237,7 +1237,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.String())
 			}
-			exists, err := directoryRepo.DirectoryAttributeValueExists(ctx, workosrepo.DirectoryAttributeValueExistsParams{OrganizationID: ac.ActiveOrganizationID, AttributeKey: []byte(attribute.Key), AttributeValue: []byte(attribute.Value)})
+			exists, err := directoryService.AttributeValueExists(ctx, ac.ActiveOrganizationID, attribute)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
 			}

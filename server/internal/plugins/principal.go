@@ -5,15 +5,15 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -24,11 +24,7 @@ const (
 
 var ErrParsingDirectoryPrincipal = errors.New("parse directory principal")
 
-type DirectoryAttribute struct {
-	Key string
-
-	Value string
-}
+type DirectoryAttribute = directory.AttributeValue
 
 type pluginAssignmentPrincipalType uint8
 
@@ -97,34 +93,20 @@ func parseDirectoryAttributePrincipal(principal string) (DirectoryAttribute, err
 	return DirectoryAttribute{Key: string(decodedKey), Value: string(decodedValue)}, nil
 }
 
-func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db workosrepo.DBTX, organizationID string, emails []string) (map[string][]string, error) {
-	normalized := make([]string, 0, len(emails))
-	for _, email := range emails {
-		email = conv.NormalizeEmail(email)
-		if email == "" || slices.Contains(normalized, email) {
-			continue
+func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db database.DBTX, organizationID string, emails []string) (map[string][]string, error) {
+	associations, err := directory.NewService(db).ResolveUserAssociationsByEmails(ctx, organizationID, emails)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory user associations: %w", err)
+	}
+
+	principals := make(map[string][]string, len(associations))
+	for email, association := range associations {
+		for _, groupID := range association.GroupIDs {
+			principals[email] = append(principals[email], DirectoryGroupPrincipal(groupID))
 		}
-		normalized = append(normalized, email)
-	}
-	if len(normalized) == 0 {
-		return map[string][]string{}, nil
-	}
-
-	rows, err := workosrepo.New(db).ListActiveDirectoryGroupIDsByEmails(ctx, workosrepo.ListActiveDirectoryGroupIDsByEmailsParams{OrganizationID: organizationID, Emails: normalized})
-	if err != nil {
-		return nil, fmt.Errorf("list active directory groups: %w", err)
-	}
-	attributes, err := workosrepo.New(db).ListActiveDirectoryUserAttributesByEmails(ctx, workosrepo.ListActiveDirectoryUserAttributesByEmailsParams{OrganizationID: organizationID, Emails: normalized})
-	if err != nil {
-		return nil, fmt.Errorf("list active directory user attributes: %w", err)
-	}
-
-	principals := make(map[string][]string, len(normalized))
-	for _, row := range rows {
-		principals[row.Email] = append(principals[row.Email], DirectoryGroupPrincipal(row.DirectoryGroupID))
-	}
-	for _, attribute := range attributes {
-		principals[attribute.Email] = append(principals[attribute.Email], DirectoryAttributePrincipal(attribute.AttributeKey, attribute.AttributeValue))
+		for _, attribute := range association.Attributes {
+			principals[email] = append(principals[email], DirectoryAttributePrincipal(attribute.Key, attribute.Value))
+		}
 	}
 	return principals, nil
 }

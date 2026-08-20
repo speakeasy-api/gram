@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -219,4 +220,87 @@ func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 	require.Equal(t, directory.UserAttributes{JobTitle: "Platform Engineer"}, profile.Attributes())
 	require.NotNil(t, profile.Groups)
 	require.Empty(t, profile.Groups)
+}
+
+func TestServiceDirectoryAssociations(t *testing.T) {
+	t.Parallel()
+
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_associations"
+	const email = "member@example.com"
+	seedOrganization(t, conn, organizationID)
+	syncedAt := time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC)
+	user := seedDirectoryUser(
+		t,
+		conn,
+		organizationID,
+		"user_directory_associations",
+		"directory_user_associations",
+		email,
+		[]byte(`{"department":"engineering","unused":null}`),
+		syncedAt,
+	)
+	seedDirectoryUser(
+		t,
+		conn,
+		organizationID,
+		"user_directory_non_object_attributes",
+		"directory_user_non_object_attributes",
+		email,
+		[]byte(`[]`),
+		syncedAt.Add(time.Minute),
+	)
+	group := seedDirectoryGroup(t, conn, organizationID, "directory_group_associations", "Engineering", syncedAt)
+	addUserToGroup(t, conn, user, "directory_group_associations", group, syncedAt)
+
+	associations, err := service.ResolveUserAssociationsByEmails(ctx, organizationID, []string{
+		" MEMBER@example.com ",
+		email,
+		"",
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]directory.UserAssociations{
+		email: {
+			GroupIDs: []uuid.UUID{group.ID},
+			Attributes: []directory.AttributeValue{
+				{Key: "department", Value: "engineering"},
+			},
+		},
+	}, associations)
+
+	groups, err := service.ListActiveGroups(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, []directory.GroupSummary{
+		{ID: group.ID, Name: "Engineering", MemberCount: 1},
+	}, groups)
+
+	attributes, err := service.ListActiveAttributeValues(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, []directory.AttributeValueSummary{
+		{AttributeValue: directory.AttributeValue{Key: "department", Value: "engineering"}, MemberCount: 1},
+	}, attributes)
+
+	exists, err := service.GroupExists(ctx, organizationID, group.ID)
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	exists, err = service.AttributeValueExists(ctx, organizationID, directory.AttributeValue{Key: "department", Value: "engineering"})
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	exists, err = service.AttributeValueExists(ctx, organizationID, directory.AttributeValue{Key: "unused", Value: "null"})
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
+func TestServiceResolveUserAssociationsByEmailsWithNoEmails(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newTestService(t)
+	associations, err := service.ResolveUserAssociationsByEmails(t.Context(), "org_directory_empty_emails", []string{"", "  "})
+	require.NoError(t, err)
+	require.Empty(t, associations)
+	require.NotNil(t, associations)
 }
