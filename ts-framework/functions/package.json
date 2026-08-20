@@ -60,7 +60,7 @@
     "@logtape/pretty": "^2.3.0",
     "@stricli/core": "^1.3.0",
     "archiver": "^8.0.0",
-    "esbuild": "^0.27.7",
+    "esbuild": "^0.28.1",
     "zod": "^4",
     "zx": "8.8.5-lite"
   },
