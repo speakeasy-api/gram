@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
 const queryHooks = vi.hoisted(() => ({
@@ -13,7 +14,14 @@ const queryHooks = vi.hoisted(() => ({
 }));
 const workflowHook = vi.hoisted(() => vi.fn());
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
-const refetchActivity = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const refetchActivity = vi.hoisted(() =>
+  vi.fn<
+    () => Promise<{
+      data: { activity: McpServerActivity[] } | undefined;
+      isError: boolean;
+    }>
+  >(() => Promise.resolve({ data: { activity: [] }, isError: false })),
+);
 const startInstall = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const resetInstall = vi.hoisted(() => vi.fn());
 
@@ -103,6 +111,10 @@ function queryResult<T>(data: T) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  refetchActivity.mockResolvedValue({
+    data: { activity: [] },
+    isError: false,
+  });
   requestProject.slug = "request-project";
   queryHooks.catalog.mockReturnValue(
     queryResult({
@@ -270,6 +282,52 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("does not configure or start installation while project state is pending or unreadable", async () => {
+    queryHooks.servers.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isFetching: true,
+      isPending: true,
+      refetch: vi.fn(),
+    });
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result, rerender } = renderHook(() => useMcpGuideOperations());
+
+    act(() => result.current.selectServer(SERVER));
+    expect(workflowHook).toHaveBeenLastCalledWith({
+      servers: [],
+      projectSlug: "request-project",
+      autoSelectRemotes: true,
+    });
+
+    act(() =>
+      result.current.handleSignal(
+        { type: "start", scope: SERVER_SCOPE },
+        report,
+      ),
+    );
+    expect(startInstall).not.toHaveBeenCalled();
+
+    queryHooks.servers.mockReturnValue({
+      data: undefined,
+      isError: true,
+      isFetching: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+    rerender();
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "error",
+        scope: SERVER_SCOPE,
+        message:
+          "Could not read this project's existing MCP servers. Retry the project check before installing.",
+      }),
+    );
+    expect(startInstall).not.toHaveBeenCalled();
+  });
+
   it("resumes an existing catalog server and requires Default plugin plus endpoint readiness", async () => {
     setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
@@ -335,31 +393,67 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.promptCopied).toBe(true);
   });
 
-  it("captures the selected hosted server baseline before the prompt and ignores historical activity", async () => {
+  it("awaits a fresh selected-server baseline before exposing prompt readiness", async () => {
     setExistingServer({ calls: 4 });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result, rerender } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
     const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    let resolveFreshRead!: (value: {
+      data: { activity: McpServerActivity[] };
+      isError: boolean;
+    }) => void;
+    refetchActivity.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFreshRead = resolve;
+      }),
+    );
 
     act(() => {
       result.current.handleSignal(
         { type: "checkpoint", scope: promptScope },
         report,
       );
+    });
+
+    expect(refetchActivity).toHaveBeenCalledOnce();
+    expect(result.current.activityBaselineReady).toBe(false);
+
+    await act(async () => {
+      resolveFreshRead({
+        data: {
+          activity: [
+            {
+              lastToolCallAt: new Date("2026-08-19T12:01:00Z"),
+              recentToolCalls: 5,
+              targetId: "linear-governed",
+              targetLabel: "Linear",
+              targetType: "hosted_mcp_server",
+              totalToolCalls: 5,
+            },
+          ],
+        },
+        isError: false,
+      });
+    });
+
+    await waitFor(() =>
+      expect(result.current.activityBaselineReady).toBe(true),
+    );
+
+    setExistingServer({ calls: 5 });
+    rerender();
+    act(() => {
       result.current.handleSignal(
         { type: "start", scope: listenScope },
         report,
       );
     });
-    rerender();
-
-    expect(result.current.activityBaselineReady).toBe(true);
     expect(report).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "event" }),
     );
 
-    setExistingServer({ calls: 5 });
+    setExistingServer({ calls: 6 });
     rerender();
 
     await waitFor(() =>
@@ -372,7 +466,7 @@ describe("useMcpGuideOperations", () => {
           title: "Linear",
           rows: [
             { key: "server", value: "Linear" },
-            { key: "calls", value: "5 recorded" },
+            { key: "calls", value: "6 recorded" },
           ],
           note: "The new call is recorded in Tool Logs.",
         },
@@ -380,49 +474,51 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
-  it("reports unreadable activity as an error and retries without resetting the prompt baseline", async () => {
+  it("captures a fresh baseline after a failed baseline read is retried", async () => {
     setExistingServer({ calls: 2 });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
-    const { result, rerender } = renderHook(() => useMcpGuideOperations());
+    const { result } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    refetchActivity.mockResolvedValueOnce({
+      data: undefined,
+      isError: true,
+    });
 
     act(() => {
       result.current.handleSignal(
         { type: "checkpoint", scope: promptScope },
         report,
       );
-      result.current.handleSignal(
-        { type: "start", scope: listenScope },
-        report,
-      );
     });
 
-    queryHooks.activity.mockReturnValue({
-      data: undefined,
-      isError: true,
-      isFetching: false,
-      isPending: false,
-      refetch: refetchActivity,
+    await waitFor(() => {
+      expect(result.current.activityError).toBe(true);
+      expect(result.current.activityBaselineReady).toBe(false);
     });
-    rerender();
 
-    await waitFor(() =>
-      expect(report).toHaveBeenCalledWith({
-        type: "error",
-        scope: listenScope,
-        message:
-          "Could not check for the new governed call. Retry after checking the client connection.",
-      }),
-    );
+    refetchActivity.mockResolvedValueOnce({
+      data: {
+        activity: [
+          {
+            lastToolCallAt: new Date("2026-08-19T12:02:00Z"),
+            recentToolCalls: 3,
+            targetId: "linear-governed",
+            targetLabel: "Linear",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 3,
+          },
+        ],
+      },
+      isError: false,
+    });
 
-    const retryScope = { ...listenScope, attempt: 1 };
-    act(() =>
-      result.current.handleSignal({ type: "retry", scope: retryScope }, report),
-    );
+    act(() => result.current.retryActivity());
 
-    expect(refetchActivity).toHaveBeenCalled();
-    expect(result.current.activityBaselineReady).toBe(true);
+    await waitFor(() => {
+      expect(refetchActivity).toHaveBeenCalledTimes(2);
+      expect(result.current.activityError).toBe(false);
+      expect(result.current.activityBaselineReady).toBe(true);
+    });
   });
 
   it("does not treat undefined catalog or project data as empty or ready", () => {

@@ -180,6 +180,7 @@ export function useMcpGuideOperations(): {
   retryCatalog: () => void;
   selectServer: (server: PulseMCPServer) => void;
   selectedServer: PulseMCPServer | undefined;
+  serverName: string | undefined;
   setClient: (client: McpGuideClient) => void;
   snippets: Record<McpGuideClient, McpGuideSnippet> | undefined;
   toolLogsHref: string;
@@ -203,6 +204,7 @@ export function useMcpGuideOperations(): {
   const installStartedFor = useRef<string | undefined>(undefined);
   const progressReportedFor = useRef(new Set<string>());
   const [suppressActivityError, setSuppressActivityError] = useState(false);
+  const [baselineCaptureError, setBaselineCaptureError] = useState(false);
 
   const catalog = useListMCPCatalog();
   const serversQuery = useMcpServers({ gramProject }, undefined, {
@@ -286,8 +288,10 @@ export function useMcpGuideOperations(): {
 
   const workflowServers = useMemo(
     () =>
-      selectedServer && !mcpServer ? [filterToHttpRemotes(selectedServer)] : [],
-    [mcpServer, selectedServer],
+      selectedServer && projectDataDefined && !mcpServer
+        ? [filterToHttpRemotes(selectedServer)]
+        : [],
+    [mcpServer, projectDataDefined, selectedServer],
   );
   const workflow = useRemoteMcpInstallWorkflow({
     servers: workflowServers,
@@ -307,11 +311,12 @@ export function useMcpGuideOperations(): {
       throwOnError: false,
     },
   );
-  const activityError =
+  const queryActivityError =
     activityQuery.isError ||
     (Boolean(endpointUrl) &&
       !activityQuery.isPending &&
       activityQuery.data === undefined);
+  const activityError = baselineCaptureError || queryActivityError;
   const serverActivity = activityFor(activityQuery.data?.activity, mcpServer);
 
   const snippets =
@@ -332,10 +337,36 @@ export function useMcpGuideOperations(): {
     [],
   );
 
+  const captureActivityBaseline = useCallback(async (): Promise<void> => {
+    activityBaselineRef.current = undefined;
+    setActivityBaseline(undefined);
+    setBaselineCaptureError(false);
+    setSuppressActivityError(true);
+    try {
+      const result = await activityQuery.refetch();
+      if (result.isError || !result.data) {
+        setBaselineCaptureError(true);
+        return;
+      }
+      const current = activityFor(result.data.activity, mcpServer);
+      const baseline = { totalToolCalls: current?.totalToolCalls ?? 0 };
+      activityBaselineRef.current = baseline;
+      setActivityBaseline(baseline);
+    } catch {
+      setBaselineCaptureError(true);
+    } finally {
+      setSuppressActivityError(false);
+    }
+  }, [activityQuery, mcpServer]);
+
   const retryActivity = useCallback(() => {
+    if (!activityBaselineRef.current) {
+      void captureActivityBaseline();
+      return;
+    }
     setSuppressActivityError(true);
     void activityQuery.refetch().finally(() => setSuppressActivityError(false));
-  }, [activityQuery]);
+  }, [activityQuery, captureActivityBaseline]);
 
   const handleSignal = useCallback(
     (
@@ -361,14 +392,7 @@ export function useMcpGuideOperations(): {
         return;
       }
       if (signal.type === "checkpoint") {
-        if (signal.scope.step === 2 && !activityError && activityQuery.data) {
-          const current = activityFor(activityQuery.data.activity, mcpServer);
-          const baseline = {
-            totalToolCalls: current?.totalToolCalls ?? 0,
-          };
-          activityBaselineRef.current = baseline;
-          setActivityBaseline(baseline);
-        }
+        if (signal.scope.step === 2) void captureActivityBaseline();
         return;
       }
 
@@ -378,14 +402,7 @@ export function useMcpGuideOperations(): {
         if (signal.scope.step === 4) retryActivity();
       }
     },
-    [
-      activityError,
-      activityQuery.data,
-      mcpServer,
-      retryActivity,
-      updateActiveOperation,
-      workflow,
-    ],
+    [captureActivityBaseline, retryActivity, updateActiveOperation, workflow],
   );
 
   useEffect(() => {
@@ -400,6 +417,26 @@ export function useMcpGuideOperations(): {
         message: catalogError
           ? "Could not load the automatic catalog servers. Retry the catalog check."
           : "Choose a catalog server before starting the journey.",
+      });
+      return;
+    }
+    if (projectStatePending) return;
+    if (projectStateError || !projectDataDefined) {
+      updateActiveOperation(undefined);
+      operation.report({
+        type: "error",
+        scope: operation.scope,
+        message:
+          "Could not read this project's existing MCP servers. Retry the project check before installing.",
+      });
+      return;
+    }
+    if (mcpServer) {
+      updateActiveOperation(undefined);
+      operation.report({
+        type: "success",
+        scope: operation.scope,
+        result: `${resolvedName ?? serverName(selectedServer)} is already installed as a governed MCP server`,
       });
       return;
     }
@@ -444,6 +481,11 @@ export function useMcpGuideOperations(): {
   }, [
     activeOperation,
     catalogError,
+    mcpServer,
+    projectDataDefined,
+    projectStateError,
+    projectStatePending,
+    resolvedName,
     selectedServer,
     updateActiveOperation,
     workflow,
@@ -579,8 +621,10 @@ export function useMcpGuideOperations(): {
       setPromptCopied(false);
       activityBaselineRef.current = undefined;
       setActivityBaseline(undefined);
+      setBaselineCaptureError(false);
     },
     selectedServer,
+    serverName: resolvedName,
     setClient: (nextClient) => {
       setClient(nextClient);
       setConfigCopied(false);

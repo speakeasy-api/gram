@@ -115,6 +115,7 @@ function resetMcpOperations(): void {
       remoteMcpServerId: "remote-id",
     },
     mcpServerHref: "/projects/request-project/mcp/linear-governed",
+    serverName: "Linear",
     projectStateError: false,
     projectStatePending: false,
     prompt:
@@ -558,6 +559,7 @@ describe("ProjectGuide", () => {
       "third-party-mcp": "done",
       "secret-block": "not-started",
     };
+    mcpOperations.current.serverName = "Other";
     render(<ProjectGuide />);
 
     fireEvent.click(
@@ -566,13 +568,42 @@ describe("ProjectGuide", () => {
 
     expect(
       screen.getByText(
-        "Your client now reaches linear through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
+        "Your client now reaches Other through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
       ),
     ).toBeTruthy();
+    expect(screen.queryByText(/reaches linear through/i)).toBeNull();
     expect(screen.getByRole("link", { name: "Open tool logs" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Start the other journey" }),
     ).toBeTruthy();
+  });
+
+  it("keeps installation disabled while existing project state is pending or unreadable", () => {
+    mcpOperations.current.projectStatePending = true;
+    const view = render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Install selected server",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
+    mcpOperations.current.projectStatePending = false;
+    mcpOperations.current.projectStateError = true;
+    view.rerender(<ProjectGuide />);
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Install selected server",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it("renders the real MCP selection, connection, prompt, observed call, and links", async () => {

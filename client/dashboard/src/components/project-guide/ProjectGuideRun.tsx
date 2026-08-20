@@ -23,6 +23,7 @@ export type ProjectGuideRunProps = {
   journey: JourneyMeta;
   status: JourneyStatus;
   regionId: string;
+  completionBody?: string;
   displayState?: ProjectGuideDisplayState;
   completedSteps?: number[];
   currentStep?: number;
@@ -59,6 +60,7 @@ export function ProjectGuideRun({
   journey,
   status,
   regionId,
+  completionBody,
   displayState: suppliedDisplayState,
   completedSteps: suppliedCompletedSteps,
   currentStep: suppliedCurrentStep,
@@ -139,6 +141,7 @@ export function ProjectGuideRun({
       <section id={regionId} role="region" aria-label={journey.title}>
         <CompletionSummary
           journey={journey}
+          body={completionBody}
           eventCard={resolvedEventCard}
           primaryAction={resolvedPrimaryAction}
           secondaryAction={resolvedSecondaryAction}
@@ -344,11 +347,13 @@ export function ProjectGuideObservedEvent({
 
 function CompletionSummary({
   journey,
+  body,
   eventCard,
   primaryAction,
   secondaryAction,
 }: {
   journey: JourneyMeta;
+  body?: string;
   eventCard: ReactNode;
   primaryAction: ProjectGuideRunAction;
   secondaryAction?: ProjectGuideRunAction;
@@ -372,7 +377,7 @@ function CompletionSummary({
         {journey.completion.heading}
       </h2>
       <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[#121212]/62">
-        {journey.completion.body}
+        {body ?? journey.completion.body}
       </p>
       {eventCard}
       <div className="flex flex-wrap gap-3">

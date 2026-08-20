@@ -112,7 +112,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     completion: {
       eyebrow: "Journey A complete",
       heading: "The path is governed.",
-      body: "Your client now reaches linear through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
+      body: "Your client now reaches the selected server through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
       primaryAction: "Open tool logs",
     },
     steps: THIRD_PARTY_MCP_STEPS,

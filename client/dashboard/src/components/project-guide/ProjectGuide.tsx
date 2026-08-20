@@ -253,6 +253,11 @@ export function ProjectGuide({
                     journey={journey}
                     status={status}
                     regionId={projectGuideContentId(journey.id)}
+                    completionBody={
+                      journey.id === "third-party-mcp"
+                        ? mcpCompletionBody(mcpOperations.serverName)
+                        : undefined
+                    }
                     displayState={displayState}
                     completedSteps={completedSteps}
                     currentStep={currentStep}
@@ -320,7 +325,10 @@ function primaryActionFor(
       if (journey.id === "third-party-mcp" && currentStep === 0) {
         return {
           label: "Install selected server",
-          disabled: !mcpOperations.selectedServer,
+          disabled:
+            !mcpOperations.selectedServer ||
+            mcpOperations.projectStatePending ||
+            mcpOperations.projectStateError,
           onClick: () => send({ type: "START" }),
         };
       }
@@ -691,6 +699,31 @@ function McpSafePrompt({
     );
   }
 
+  if (operations.activityError) {
+    return (
+      <div className="grid gap-2">
+        <p role="alert" className="text-destructive text-[12px]">
+          Could not capture the current activity baseline.
+        </p>
+        <button
+          type="button"
+          onClick={operations.retryActivity}
+          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+        >
+          Retry activity check
+        </button>
+      </div>
+    );
+  }
+
+  if (!operations.activityBaselineReady) {
+    return (
+      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+        Capturing current activity baseline
+      </span>
+    );
+  }
+
   return (
     <div className="grid gap-2">
       <CodeSnippet
@@ -699,27 +732,12 @@ function McpSafePrompt({
         copyable
         onSelectOrCopy={operations.markPromptCopied}
       />
-      {operations.activityError && (
-        <div className="grid gap-2">
-          <p role="alert" className="text-destructive text-[12px]">
-            Could not capture the current activity baseline.
-          </p>
-          <button
-            type="button"
-            onClick={operations.retryActivity}
-            className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-          >
-            Retry activity check
-          </button>
-        </div>
-      )}
-      {!operations.activityError && !operations.activityBaselineReady && (
-        <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-          Checking current activity
-        </span>
-      )}
     </div>
   );
+}
+
+function mcpCompletionBody(name: string | undefined): string {
+  return `Your client now reaches ${name ?? "the selected server"} through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.`;
 }
 
 function ProjectGuideOutput({
