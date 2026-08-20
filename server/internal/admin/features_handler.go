@@ -3,7 +3,9 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -124,18 +126,27 @@ func (s *Service) handleSetOrganizationFeature(w http.ResponseWriter, r *http.Re
 	if err := decoder.Decode(&body); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "decode organization feature request")
 	}
-
-	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, body.OrganizationID)
-	if err != nil {
-		return err
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return oops.E(oops.CodeBadRequest, err, "decode organization feature request")
 	}
+
 	feature, ok := adminOrganizationFeatures[body.FeatureName]
 	if !ok || body.Enabled == nil {
 		return oops.C(oops.CodeBadRequest)
 	}
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, body.OrganizationID)
+	if err != nil {
+		return err
+	}
 
-	if err := s.productFeatures.SetFeatureEnabled(ctx, organizationID, feature, *body.Enabled); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "set organization feature").LogError(ctx, s.logger,
+	var setErr error
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		setErr = s.productFeatures.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, *body.Enabled)
+	} else {
+		setErr = s.productFeatures.SetFeatureEnabled(ctx, organizationID, feature, *body.Enabled)
+	}
+	if setErr != nil {
+		return oops.E(oops.CodeUnexpected, setErr, "set organization feature").LogError(ctx, s.logger,
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -58,20 +59,9 @@ func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *test
 	require.Equal(t, adminOrganizationFeaturesResponse{}, result)
 
 	for _, feature := range adminOrganizationFeatures {
-		body, err := json.Marshal(setAdminOrganizationFeatureRequest{
-			OrganizationID: orgID,
-			FeatureName:    string(feature),
-			Enabled:        ptrTo(true),
-		})
-		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(body))
-		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code)
+		result = setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
 	}
 
-	result = getAdminOrganizationFeatures(t, handler, sessionID, orgID)
 	require.True(t, result.AuthzChallengeLoggingEnabled)
 	require.True(t, result.CustomerManagedEncryptionKeysEnabled)
 	require.True(t, result.CustomModelKeysEnabled)
@@ -79,6 +69,23 @@ func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *test
 	require.True(t, result.RemoteSessionAutoRefreshEnabled)
 	require.True(t, result.SsoEnabled)
 	require.True(t, result.ScimEnabled)
+
+	// The binary standalone-admin control must also clear the legacy enforced
+	// state so the displayed value and runtime policy cannot disagree.
+	_, err := featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: orgID, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
+	})
+	require.NoError(t, err)
+	svc.productFeatures.UpdateFeatureCache(ctx, orgID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced, true)
+
+	for _, feature := range adminOrganizationFeatures {
+		result = setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, false)
+	}
+	require.Equal(t, adminOrganizationFeaturesResponse{}, result)
+
+	enforced, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+	require.NoError(t, err)
+	require.False(t, enforced)
 }
 
 func TestSetOrganizationFeature_RejectsFeatureOutsidePlatformAdminList(t *testing.T) {
@@ -106,6 +113,30 @@ func TestSetOrganizationFeature_RejectsFeatureOutsidePlatformAdminList(t *testin
 	enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureHooksFailOpen)
 	require.NoError(t, err)
 	require.False(t, enabled)
+}
+
+func setAdminOrganizationFeature(
+	t *testing.T,
+	handler http.Handler,
+	sessionID string,
+	orgID string,
+	feature productfeatures.Feature,
+	enabled bool,
+) adminOrganizationFeaturesResponse {
+	t.Helper()
+	body, err := json.Marshal(setAdminOrganizationFeatureRequest{
+		OrganizationID: orgID, FeatureName: string(feature), Enabled: &enabled,
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(body))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var result adminOrganizationFeaturesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	return result
 }
 
 func getAdminOrganizationFeatures(t *testing.T, handler http.Handler, sessionID, orgID string) adminOrganizationFeaturesResponse {
