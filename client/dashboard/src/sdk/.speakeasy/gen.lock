@@ -371,6 +371,7 @@ trackedFiles:
   src/funcs/projectsSetOrganizationWhitelist.ts: {}
   src/funcs/projectsUpsertAllowedOrigin.ts: {}
   src/funcs/remoteMcpCreateServer.ts: {}
+  src/funcs/remoteMcpCreateServerAndMcpServer.ts: {}
   src/funcs/remoteMcpCreateServerHeader.ts: {}
   src/funcs/remoteMcpDeleteServer.ts: {}
   src/funcs/remoteMcpDeleteServerHeader.ts: {}
@@ -729,6 +730,7 @@ trackedFiles:
   src/models/components/createriskpolicybypassrequestrequestbody.ts: {}
   src/models/components/createriskpolicyrequestbody.ts: {}
   src/models/components/createroleform.ts: {}
+  src/models/components/createserverandmcpserverresult.ts: {}
   src/models/components/createserverform.ts: {}
   src/models/components/createserverheaderform.ts: {}
   src/models/components/createsessionhandoffrequestbody.ts: {}
@@ -1512,6 +1514,7 @@ trackedFiles:
   src/models/operations/createportalsession.ts: {}
   src/models/operations/createproject.ts: {}
   src/models/operations/createremotemcpserver.ts: {}
+  src/models/operations/createremotemcpserverandmcpserver.ts: {}
   src/models/operations/createremotemcpserverheader.ts: {}
   src/models/operations/createremotesessionclient.ts: {}
   src/models/operations/createremotesessionissuer.ts: {}
@@ -2528,6 +2531,7 @@ trackedFiles:
   src/react-query/refreshUserSessionClientCIMD.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
+  src/react-query/remoteMcpCreateServerAndMcpServer.ts: {}
   src/react-query/remoteMcpServerHeaders.core.ts: {}
   src/react-query/remoteMcpServerHeaders.ts: {}
   src/react-query/remoteMcpServers.core.ts: {}
@@ -3636,6 +3640,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createRemoteMcpServerAndMcpServer:
+    speakeasy-default-create-remote-mcp-server-and-mcp-server:
+      requestBody:
+        application/json: {"transport_type": "<value>", "url": "https://unpleasant-bench.com"}
+      responses:
+        "200":
+          application/json: {"mcp_server": {"created_at": "2026-05-23T21:48:59.403Z", "id": "25ee9f94-758c-401d-9595-6747b911fca0", "project_id": "3a1d14ec-f61e-4e6b-ba2e-e06b6e4f3033", "updated_at": "2024-05-07T21:35:35.086Z", "visibility": "private"}, "remote_mcp_server": {"created_at": "2025-12-16T20:32:19.033Z", "id": "986e7642-b0ae-4937-b0fd-ebeaf2f720bd", "project_id": "7bded525-efa5-4960-ba80-d868eedd6744", "transport_type": "<value>", "updated_at": "2024-12-03T19:43:06.675Z", "url": "https://joyful-equal.info"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createRemoteMcpServerHeader:
     speakeasy-default-create-remote-mcp-server-header:
       requestBody:
