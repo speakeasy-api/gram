@@ -138,6 +138,13 @@ beforeEach(() => {
 });
 
 describe("useSecretGuideOperations", () => {
+  it("starts without a selected client", () => {
+    const { result: hook } = renderHook(() => useSecretGuideOperations());
+
+    expect(hook.current.clientSelected).toBe(false);
+    expect(hook.current.client).toBe("claude");
+  });
+
   it("resumes a matching policy and scopes every generated query to the project", async () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
@@ -252,6 +259,7 @@ describe("useSecretGuideOperations", () => {
     const { result: hook } = renderHook(() => useSecretGuideOperations());
     const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
 
+    act(() => hook.current.setClient("claude"));
     act(() => hook.current.handleSignal({ type: "start", scope }, report));
 
     await waitFor(() =>
@@ -279,6 +287,17 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
+  it("waits without reporting or downloading when Step 2 has no client", async () => {
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result: hook } = renderHook(() => useSecretGuideOperations());
+    const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
+
+    act(() => hook.current.handleSignal({ type: "start", scope }, report));
+
+    await waitFor(() => expect(authFetch).not.toHaveBeenCalled());
+    expect(report).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       client: "cursor" as const,
@@ -292,6 +311,13 @@ describe("useSecretGuideOperations", () => {
       filename: "observability-codex.zip",
       commandPart: 'bash "$HOME/gram-observability-codex/install.sh"',
       instructions: /registers the marketplace.*approves the hooks/i,
+    },
+    {
+      client: "opencode" as const,
+      filename: "observability-opencode.zip",
+      commandPart:
+        'unzip -oq "$HOME/Downloads"/observability-opencode.zip -d .opencode',
+      instructions: /discovers the extracted plugin in \.opencode/i,
     },
   ])(
     "activates the generated $client archive through its existing install contract",
@@ -319,6 +345,10 @@ describe("useSecretGuideOperations", () => {
       );
       expect(hook.current.installCommand).toContain(commandPart);
       expect(hook.current.installInstructions).toMatch(instructions);
+      expect(authFetch).toHaveBeenCalledWith(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,
+        {},
+      );
     },
   );
 
@@ -364,6 +394,7 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const view = renderHook(() => useSecretGuideOperations());
 
+    act(() => view.result.current.setClient("claude"));
     act(() =>
       view.result.current.handleSignal(
         { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },
@@ -442,6 +473,7 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const view = renderHook(() => useSecretGuideOperations());
 
+    act(() => view.result.current.setClient("claude"));
     act(() =>
       view.result.current.handleSignal(
         { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },

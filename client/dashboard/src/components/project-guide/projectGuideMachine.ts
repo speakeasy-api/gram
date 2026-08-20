@@ -368,6 +368,7 @@ export type ProjectGuideEvent =
   | { type: "SWITCH"; path: JourneyId; resumeStep: number }
   | { type: "BACK" }
   | { type: "START" }
+  | { type: "SELECT_AGENT"; client: string }
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "USER_CHECKPOINT_COMPLETE"; result: string }
@@ -391,6 +392,7 @@ export type ProjectGuideMachineContext = {
   runId: number;
   pausedFrom: "running" | "waiting";
   errorFrom: "running" | "waiting";
+  selectedClient: string | null;
   nextOutputId: number;
   listenTimeoutSeconds: number;
   onSignal?: (signal: ProjectGuideOperationSignal) => void;
@@ -434,6 +436,7 @@ function initialCoordinatorContext(
     runId: 0,
     pausedFrom: "running",
     errorFrom: "running",
+    selectedClient: null,
     nextOutputId: 0,
     listenTimeoutSeconds: input.listenTimeoutSeconds ?? 60,
     onSignal: input.onSignal,
@@ -448,7 +451,21 @@ export function getProjectGuideCurrentStep(
 }
 
 function stepMode(context: ProjectGuideMachineContext, offset = 0): StepMode {
-  return STEP_MODES[getProjectGuideCurrentStep(context) + offset] ?? "listen";
+  const step = getProjectGuideCurrentStep(context) + offset;
+  return context.activePath
+    ? stepModeForPath(context.activePath, step, context.selectedClient)
+    : (STEP_MODES[step] ?? "listen");
+}
+
+function stepModeForPath(
+  path: JourneyId,
+  step: number,
+  selectedClient: string | null = null,
+): StepMode {
+  if (path === "secret-block" && step === 1 && selectedClient === null) {
+    return "checkpoint";
+  }
+  return STEP_MODES[step] ?? "listen";
 }
 
 function stepLabel(context: ProjectGuideMachineContext, offset = 0): string {
@@ -558,6 +575,18 @@ export const projectGuideMachine = setup({
       selectedPathIsComplete(context, event),
     currentOperation: ({ context }) => stepMode(context) === "operation",
     currentCheckpoint: ({ context }) => stepMode(context) === "checkpoint",
+    resumeAtCheckpoint: ({ context, event }) => {
+      if (event.type !== "OPEN" && event.type !== "SWITCH") return false;
+      const step = Math.max(
+        context.completedByPath[event.path].length,
+        event.resumeStep,
+      );
+      return stepModeForPath(event.path, step) === "checkpoint";
+    },
+    selectedSecretAgent: ({ context }) =>
+      context.activePath === "secret-block" &&
+      getProjectGuideCurrentStep(context) === 1 &&
+      context.selectedClient !== null,
     finalStep: ({ context }) =>
       currentPathIsComplete(context) ||
       Boolean(
@@ -620,8 +649,12 @@ export const projectGuideMachine = setup({
         error: null,
         observedEvent: null,
         attempt: 0,
+        selectedClient: null,
       };
     }),
+    selectAgent: assign(({ event }) =>
+      event.type === "SELECT_AGENT" ? { selectedClient: event.client } : {},
+    ),
     recordStart: assign(({ context }) => {
       const mode = stepMode(context);
       return {
@@ -686,7 +719,7 @@ export const projectGuideMachine = setup({
         },
         ...appendOutput(context, entries),
         checkpoint:
-          STEP_MODES[nextStep] === "checkpoint"
+          stepMode(context, 1) === "checkpoint"
             ? { step: nextStep, label: nextLabel ?? "Checkpoint" }
             : null,
         elapsedListeningSeconds: 0,
@@ -694,8 +727,8 @@ export const projectGuideMachine = setup({
         error: null,
         attempt: 0,
         runId:
-          STEP_MODES[nextStep] === "operation" ||
-          STEP_MODES[nextStep] === "listen"
+          stepMode(context, 1) === "operation" ||
+          stepMode(context, 1) === "listen"
             ? context.runId + 1
             : context.runId,
       };
@@ -848,10 +881,16 @@ export const projectGuideMachine = setup({
   initial: "opening",
   context: ({ input }) => initialCoordinatorContext(input),
   on: {
+    SELECT_AGENT: { actions: "selectAgent" },
     SWITCH: [
       {
         guard: "selectedPathComplete",
         target: "#projectGuideCoordinator.complete",
+        actions: ["signalAbort", "openPath"],
+      },
+      {
+        guard: "resumeAtCheckpoint",
+        target: "#projectGuideCoordinator.checkpoint",
         actions: ["signalAbort", "openPath"],
       },
       {
@@ -883,6 +922,11 @@ export const projectGuideMachine = setup({
           {
             guard: "selectedPathComplete",
             target: "complete",
+            actions: "openPath",
+          },
+          {
+            guard: "resumeAtCheckpoint",
+            target: "checkpoint",
             actions: "openPath",
           },
           { target: "ready", actions: "openPath" },
@@ -950,6 +994,11 @@ export const projectGuideMachine = setup({
     },
     checkpoint: {
       on: {
+        START: {
+          guard: "selectedSecretAgent",
+          target: "running",
+          actions: ["recordStart", "signalStart"],
+        },
         USER_CHECKPOINT_COMPLETE: [
           {
             guard: "finalStep",

@@ -24,7 +24,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export type SecretGuideClient = "claude" | "cursor" | "codex";
+export type SecretGuideClient = "claude" | "cursor" | "codex" | "opencode";
 
 export const SECRET_GUIDE_CLIENTS: Record<
   SecretGuideClient,
@@ -44,6 +44,11 @@ export const SECRET_GUIDE_CLIENTS: Record<
     hookSource: "codex",
     installDirectory: "gram-observability-codex",
     label: "Codex",
+  },
+  opencode: {
+    hookSource: "opencode",
+    installDirectory: ".opencode",
+    label: "OpenCode",
   },
 };
 
@@ -104,6 +109,13 @@ function installDetails(
   if (!filename) return undefined;
   const archive = downloadedArchivePath(filename);
   const directoryName = SECRET_GUIDE_CLIENTS[client].installDirectory;
+  if (client === "opencode") {
+    return {
+      command: `mkdir -p ${directoryName} && unzip -oq ${archive} -d ${directoryName}`,
+      instructions:
+        "Run this from your project directory. OpenCode discovers the extracted plugin in .opencode/ when it starts.",
+    };
+  }
   const directory = `"$HOME/${directoryName}"`;
   const extract = `mkdir -p ${directory} && unzip -oq ${archive} -d ${directory}`;
 
@@ -216,6 +228,7 @@ function telemetryEvidence(
 
 export function useSecretGuideOperations(): {
   client: SecretGuideClient;
+  clientSelected: boolean;
   downloadedFilename: string | undefined;
   handleSignal: (
     signal: ProjectGuideOperationSignal,
@@ -240,7 +253,7 @@ export function useSecretGuideOperations(): {
   const { fetch: authFetch } = useFetcher();
   const routes = useRoutes();
   const queryClient = useQueryClient();
-  const [client, setClientState] = useState<SecretGuideClient>("claude");
+  const [client, setClientState] = useState<SecretGuideClient>();
   const [downloadedFilename, setDownloadedFilename] = useState<string>();
   const [promptCopied, setPromptCopied] = useState(false);
   const [createdPolicy, setCreatedPolicy] = useState<RiskPolicy>();
@@ -330,9 +343,10 @@ export function useSecretGuideOperations(): {
         setBaselineError(true);
         return;
       }
+      const baselineClient = client ?? "claude";
       const nextBaseline = {
         capturedAtMs,
-        client,
+        client: baselineClient,
         syntheticSecretRedaction: expectedRedaction,
         traceIds: new Set(traces.data.traces.map((trace) => trace.traceId)),
         resultIds: new Set(results.data.results.map((result) => result.id)),
@@ -471,6 +485,10 @@ export function useSecretGuideOperations(): {
   useEffect(() => {
     const operation = activeOperation;
     if (!operation || operation.paused || operation.scope.step !== 1) return;
+    if (!client) {
+      updateActiveOperation(undefined);
+      return;
+    }
     if (downloadedFilename) {
       updateActiveOperation(undefined);
       operation.report({
@@ -585,10 +603,12 @@ export function useSecretGuideOperations(): {
     updateActiveOperation,
   ]);
 
-  const install = installDetails(client, downloadedFilename);
+  const resolvedClient = client ?? "claude";
+  const install = installDetails(resolvedClient, downloadedFilename);
 
   return {
-    client,
+    client: resolvedClient,
+    clientSelected: client !== undefined,
     downloadedFilename,
     handleSignal,
     installCommand: install?.command,

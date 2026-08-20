@@ -28,6 +28,13 @@ function openMcp(service: ReturnType<typeof coordinator>["service"]): void {
   service.send({ type: "OPEN", path: "third-party-mcp", resumeStep: 0 });
 }
 
+function openSecret(
+  service: ReturnType<typeof coordinator>["service"],
+  resumeStep = 0,
+): void {
+  service.send({ type: "OPEN", path: "secret-block", resumeStep });
+}
+
 function latestScope(
   signals: ProjectGuideOperationSignal[],
 ): ProjectGuideOperationScope {
@@ -205,6 +212,54 @@ describe("project guide coordinator contract", () => {
     });
   });
 
+  it("waits for an agent before starting Secret Step 2", () => {
+    const { service, signals } = coordinator();
+    openSecret(service);
+    service.send({ type: "START" });
+
+    report(service, {
+      type: "success",
+      scope: latestScope(signals),
+      result: "Secrets policy created",
+    });
+
+    expect(service.getSnapshot().value).toBe("checkpoint");
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
+    expect(service.getSnapshot().context.checkpoint).toEqual({
+      step: 1,
+      label: "Download the observability plugin",
+    });
+    expect(service.getSnapshot().context.error).toBeNull();
+    expect(signals).toHaveLength(1);
+
+    service.send({ type: "START" });
+    expect(service.getSnapshot().value).toBe("checkpoint");
+    expect(signals).toHaveLength(1);
+
+    service.send({ type: "SELECT_AGENT", client: "cursor" });
+    service.send({ type: "START" });
+
+    expect(service.getSnapshot().value).toBe("running");
+    expect(service.getSnapshot().context.checkpoint).toBeNull();
+    expect(signals.at(-1)).toEqual({
+      type: "start",
+      scope: { path: "secret-block", step: 1, attempt: 0, runId: 2 },
+    });
+
+    report(service, {
+      type: "success",
+      scope: latestScope(signals),
+      result: "Observability plugin downloaded",
+    });
+
+    expect(service.getSnapshot().value).toBe("checkpoint");
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(2);
+    expect(service.getSnapshot().context.checkpoint).toEqual({
+      step: 2,
+      label: "Add it to your agent",
+    });
+  });
+
   it("retries an operation error without losing completed progress", () => {
     const { service, signals } = coordinator();
     openMcp(service);
@@ -265,7 +320,7 @@ describe("project guide coordinator contract", () => {
     service.send({ type: "START" });
     service.send({ type: "SWITCH", path: "secret-block", resumeStep: 1 });
 
-    expect(service.getSnapshot().value).toBe("ready");
+    expect(service.getSnapshot().value).toBe("checkpoint");
     expect(service.getSnapshot().context.activePath).toBe("secret-block");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
     expect(signals.at(-1)).toMatchObject({

@@ -126,8 +126,8 @@ export function ProjectGuideRun({
         onClick: onSwitchJourney,
       }
     : undefined;
-  const isReadyAction =
-    displayState === "ready" &&
+  const isStartAction =
+    (displayState === "ready" || displayState === "checkpoint") &&
     resolvedPrimaryAction.label === "Start the journey";
 
   const activityLogRef = useRef<HTMLDivElement>(null);
@@ -199,7 +199,7 @@ export function ProjectGuideRun({
                 <li
                   key={step}
                   aria-current={current ? "step" : undefined}
-                  className="border-l-2 border-b border-[#F0EFED] py-3 pl-4"
+                  className="min-w-0 border-l-2 border-b border-[#F0EFED] py-3 pl-4"
                   style={{
                     borderLeftColor: complete
                       ? fixture.accent
@@ -292,12 +292,12 @@ export function ProjectGuideRun({
               aria-label={resolvedPrimaryAction.label}
               className={cn(
                 "mt-auto flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
-                isReadyAction && !resolvedPrimaryAction.disabled
+                isStartAction && !resolvedPrimaryAction.disabled
                   ? "bg-[#121212] text-[#FAFAFA]"
                   : "cursor-default bg-[#EDECEA] text-[#121212]/40",
               )}
             >
-              {isReadyAction && !resolvedPrimaryAction.disabled && (
+              {isStartAction && !resolvedPrimaryAction.disabled && (
                 <span
                   aria-hidden="true"
                   className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"

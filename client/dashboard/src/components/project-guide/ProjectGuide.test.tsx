@@ -56,6 +56,7 @@ vi.mock("./useSecretGuideOperations", () => ({
     claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
     cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
     codex: { label: "Codex", directory: "~/.codex/plugins/" },
+    opencode: { label: "OpenCode", directory: ".opencode/" },
   },
   useSecretGuideOperations: () => secretOperations.current,
 }));
@@ -160,6 +161,7 @@ function resetMcpOperations(): void {
 function resetSecretOperations(): void {
   secretOperations.current = {
     client: "claude",
+    clientSelected: true,
     downloadedFilename: "gram-observability.zip",
     handleSignal: vi.fn(),
     installCommand:
@@ -175,7 +177,9 @@ function resetSecretOperations(): void {
     retryBaseline: vi.fn(),
     retryPolicy: vi.fn(),
     riskEventsHref: "/projects/request-project/security/events",
-    setClient: vi.fn(),
+    setClient: vi.fn((client: "claude" | "cursor" | "codex" | "opencode") => {
+      secretOperations.current.client = client;
+    }),
     telemetryBaselineReady: true,
     telemetryError: false,
   };
@@ -383,6 +387,80 @@ describe("ProjectGuide", () => {
       screen.getByRole("heading", { name: "The path is governed." }),
     ).toBeTruthy();
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
+  });
+
+  it("waits for an agent selection before showing Secret Step 2 as running", () => {
+    let downloadReport: ((report: ProjectGuideOperationReport) => void) | null =
+      null;
+    let downloadScope: ProjectGuideOperationScope | null = null;
+    secretOperations.current.clientSelected = false;
+    secretOperations.current.downloadedFilename = undefined;
+    secretOperations.current.setClient = vi.fn(
+      (client: "claude" | "cursor" | "codex" | "opencode") => {
+        secretOperations.current.client = client;
+        secretOperations.current.clientSelected = true;
+      },
+    );
+
+    render(
+      <ProjectGuide
+        onOperationSignal={(signal, report) => {
+          if (signal.scope.step === 0) {
+            report({
+              type: "success",
+              scope: signal.scope,
+              result: "Secrets policy created",
+            });
+          }
+          if (signal.scope.step === 1) {
+            downloadReport = report;
+            downloadScope = signal.scope;
+          }
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+
+    const startButton = screen.getByRole("button", {
+      name: "Start the journey",
+    });
+    expect((startButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cursor" }));
+    fireEvent.click(startButton);
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "running",
+    );
+    expect(screen.queryByText(/Your turn/)).toBeNull();
+    expect(downloadReport).not.toBeNull();
+
+    const scope = downloadScope;
+    if (!scope) throw new Error("expected download scope");
+    act(() => {
+      downloadReport?.({
+        type: "success",
+        scope,
+        result: "Observability plugin downloaded",
+      });
+    });
+
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "checkpoint",
+    );
+    expect(
+      screen.getByText(
+        "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Your turn · Add it to your agent/)).toBeNull();
   });
 
   it("renders an adapter error and retries through the same operation port", () => {
@@ -673,6 +751,100 @@ describe("ProjectGuide", () => {
     ).toBe(true);
   });
 
+  it("shows the secret policy phases instead of client tabs on step one", () => {
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+
+    expect(screen.getByText("What the wizard does")).toBeTruthy();
+    expect(
+      screen.getByText("Detect · enable the Secrets category"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Scope · user prompts, the recommended surface"),
+    ).toBeTruthy();
+    expect(screen.getByText("Action · deny the request")).toBeTruthy();
+    expect(screen.getAllByText("not run")).toHaveLength(3);
+    expect(screen.queryByRole("tab", { name: "Claude Code" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Cursor" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Codex" })).toBeNull();
+    expect(
+      screen.queryByText(
+        /The next step downloads the existing observability ZIP/,
+      ),
+    ).toBeNull();
+  });
+
+  it("lets Step 2 select the agent before downloading its plugin", () => {
+    statusByJourney.current["secret-block"] = "in-progress";
+    secretOperations.current.downloadedFilename = undefined;
+    secretOperations.current.clientSelected = false;
+    const handleSignal = vi.fn();
+    secretOperations.current.handleSignal = handleSignal;
+    const view = render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+
+    expect(
+      screen.getByRole("group", { name: "Choose your agent" }),
+    ).toBeTruthy();
+    const picker = screen.getByRole("group", { name: "Choose your agent" });
+    const options = picker.querySelector('[class*="overflow-x-auto"]');
+    expect(options?.className).toContain("flex");
+    expect(options?.className).toContain("overflow-x-auto");
+    const action = screen.getByRole("button", { name: "Start the journey" });
+    expect((action as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(handleSignal).not.toHaveBeenCalled();
+    for (const agent of ["Claude Code", "Cursor", "Codex", "OpenCode"]) {
+      expect(
+        screen
+          .getByRole("button", { name: agent })
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+    }
+    expect(screen.getByText("What you get")).toBeTruthy();
+    expect(screen.getByText("Build the plugin for this project")).toBeTruthy();
+    expect(screen.getByText("Sign the bundle")).toBeTruthy();
+    expect(screen.getAllByText("not run")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenCode" }));
+    expect(secretOperations.current.setClient).toHaveBeenCalledWith("opencode");
+    secretOperations.current.clientSelected = true;
+    secretOperations.current.client = "opencode";
+    view.rerender(<ProjectGuide />);
+    expect(
+      screen
+        .getByRole("button", { name: "OpenCode" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Start the journey",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+
+    fireEvent.click(action);
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "running",
+    );
+    expect(handleSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "start",
+        scope: expect.objectContaining({ path: "secret-block", step: 1 }),
+      }),
+      expect.any(Function),
+    );
+  });
+
   it("renders the real MCP selection, connection, prompt, observed call, and links", async () => {
     const handleSignal = vi.fn(
       (
@@ -811,26 +983,49 @@ describe("ProjectGuide", () => {
       }),
     );
 
-    expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(screen.getByText("What the wizard does")).toBeTruthy();
+    expect(
+      screen.getByText("Detect · enable the Secrets category"),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
-    await waitFor(() =>
-      expect(
-        screen.getByText((_, element) =>
-          Boolean(
-            element?.tagName === "PRE" &&
-            element.textContent?.includes("claude --plugin-dir"),
-          ),
+    let installPre: HTMLElement | undefined;
+    await waitFor(() => {
+      installPre = screen.getByText((_, element) =>
+        Boolean(
+          element?.tagName === "PRE" &&
+          element.textContent?.includes("claude --plugin-dir"),
         ),
-      ).toBeTruthy(),
+      );
+      expect(installPre).toBeTruthy();
+    });
+    expect(installPre?.className).toContain("min-w-0");
+    expect(installPre?.className).toContain("max-w-full");
+    expect(installPre?.className).toContain("overflow-x-auto");
+    expect(installPre?.className).toContain("whitespace-nowrap");
+    expect(installPre?.closest(".snippet-inner")?.className).toContain(
+      "min-w-0",
+    );
+    const currentStepItem = installPre?.closest("li");
+    expect(currentStepItem?.className).toContain("min-w-0");
+    expect(
+      currentStepItem?.querySelector(":scope > div.grid.min-w-0"),
+    ).toBeTruthy();
+    expect(installPre?.closest(".snippet")?.parentElement?.className).toContain(
+      "min-w-0",
     );
     expect(
       screen.getByText(
-        /launches Claude Code with the extracted plugin active/i,
+        "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        /launches Claude Code with the extracted plugin active/i,
+      ),
+    ).toBeNull();
+    expect(screen.queryByText(/Your turn · Add it to your agent/)).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "I've installed and restarted it" }),
     );
@@ -885,6 +1080,7 @@ describe("ProjectGuide", () => {
         name: /Block a leaked credential mid-prompt/,
       }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(
       screen.getByRole("button", { name: "I've installed and restarted it" }),

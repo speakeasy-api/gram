@@ -247,10 +247,16 @@ export function ProjectGuide({
                       <ProjectGuideStepContent
                         journey={journey}
                         step={currentStep}
+                        displayState={displayState}
+                        operationProgress={snapshot.context.operationProgress}
                         checkpoint={snapshot.context.checkpoint?.label}
                         error={snapshot.context.error}
                         mcpOperations={mcpOperations}
                         secretOperations={secretOperations}
+                        onSelectAgent={(client) => {
+                          secretOperations.setClient(client);
+                          send({ type: "SELECT_AGENT", client });
+                        }}
                       />
                     }
                     output={
@@ -314,8 +320,10 @@ function primaryActionFor(
               mcpOperations.projectStatePending ||
               mcpOperations.projectStateError)) ||
           (journey.id === "secret-block" &&
-            currentStep === 0 &&
-            (secretOperations.policyPending || secretOperations.policyError)),
+            ((currentStep === 0 &&
+              (secretOperations.policyPending ||
+                secretOperations.policyError)) ||
+              (currentStep === 1 && !secretOperations.clientSelected))),
         onClick: () => send({ type: "START" }),
       };
     case "running":
@@ -356,6 +364,16 @@ function primaryActionFor(
               type: "USER_CHECKPOINT_COMPLETE",
               result: "Observability plugin installed and agent restarted",
             }),
+        };
+      }
+      if (journey.id === "secret-block" && currentStep === 1) {
+        return {
+          label: "Start the journey",
+          disabled: !secretOperations.clientSelected,
+          onClick: () => {
+            send({ type: "SELECT_AGENT", client: secretOperations.client });
+            send({ type: "START" });
+          },
         };
       }
       if (journey.id === "secret-block" && currentStep === 3) {
@@ -409,17 +427,23 @@ function primaryActionFor(
 function ProjectGuideStepContent({
   journey,
   step,
+  displayState,
+  operationProgress,
   checkpoint,
   error,
   mcpOperations,
   secretOperations,
+  onSelectAgent,
 }: {
   journey: JourneyMeta;
   step: number;
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
   checkpoint?: string;
   error: string | null;
   mcpOperations: McpGuideOperations;
   secretOperations: SecretGuideOperations;
+  onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element {
   if (journey.id === "third-party-mcp") {
     return (
@@ -434,12 +458,19 @@ function ProjectGuideStepContent({
   }
 
   return (
-    <div className="grid gap-3 pt-3">
+    <div className="grid min-w-0 gap-3 pt-3">
       <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
         {journey.stepBlurbs[step]}
       </p>
-      <SecretStepBody step={step} operations={secretOperations} />
-      {checkpoint && (
+      <SecretStepBody
+        step={step}
+        displayState={displayState}
+        operationProgress={operationProgress}
+        error={error}
+        operations={secretOperations}
+        onSelectAgent={onSelectAgent}
+      />
+      {checkpoint && !(journey.id === "secret-block" && step === 2) && (
         <p className="font-mono text-[10px] text-[#121212]/50">
           Your turn · {checkpoint}
         </p>
@@ -453,84 +484,194 @@ function ProjectGuideStepContent({
   );
 }
 
-function SecretClientTabs({
-  operations,
-  children,
+const SECRET_POLICY_PHASES = [
+  "Detect · enable the Secrets category",
+  "Scope · user prompts, the recommended surface",
+  "Action · deny the request",
+] as const;
+
+const SECRET_PLUGIN_PHASES = [
+  "Build the plugin for this project",
+  "Sign the bundle",
+] as const;
+
+type SecretPolicyPhaseStatus =
+  | "not run"
+  | "queued"
+  | "running"
+  | "ok"
+  | "failed";
+
+function secretPolicyPhaseStatuses(
+  displayState: ProjectGuideDisplayState,
+  operationProgress: number | null,
+  hasError: boolean,
+): SecretPolicyPhaseStatus[] {
+  if (hasError) return ["failed", "queued", "queued"];
+  if (displayState !== "running" && displayState !== "paused") {
+    return ["not run", "not run", "not run"];
+  }
+
+  const progress = operationProgress ?? 0;
+  const currentPhase = Math.min(
+    SECRET_POLICY_PHASES.length - 1,
+    Math.floor(progress * SECRET_POLICY_PHASES.length),
+  );
+  return SECRET_POLICY_PHASES.map((_, index) => {
+    if (progress >= 1 || index < currentPhase) return "ok";
+    if (index === currentPhase) return "running";
+    return "queued";
+  });
+}
+
+function secretPluginPhaseStatuses(
+  displayState: ProjectGuideDisplayState,
+  operationProgress: number | null,
+  hasError: boolean,
+): SecretPolicyPhaseStatus[] {
+  if (hasError) return ["failed", "queued"];
+  if (displayState !== "running" && displayState !== "paused") {
+    return ["not run", "not run"];
+  }
+
+  const progress = operationProgress ?? 0;
+  if (progress >= 1) return ["ok", "ok"];
+  return progress >= 0.75 ? ["ok", "running"] : ["running", "queued"];
+}
+
+function SecretPolicyPhases({
+  displayState,
+  operationProgress,
+  hasError,
 }: {
-  operations: SecretGuideOperations;
-  children: (client: SecretGuideClient) => React.ReactNode;
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  hasError: boolean;
 }): JSX.Element {
-  const clients = Object.keys(SECRET_GUIDE_CLIENTS) as SecretGuideClient[];
+  const statuses = secretPolicyPhaseStatuses(
+    displayState,
+    operationProgress,
+    hasError,
+  );
+
   return (
-    <Tabs
-      value={operations.client}
-      onValueChange={(value) =>
-        operations.setClient(value as SecretGuideClient)
-      }
-    >
-      <PageTabsList aria-label="Agent client">
-        {clients.map((client) => (
-          <PageTabsTrigger key={client} value={client}>
-            {SECRET_GUIDE_CLIENTS[client].label}
-          </PageTabsTrigger>
-        ))}
-      </PageTabsList>
-      {clients.map((client) => (
-        <TabsContent key={client} value={client}>
-          {children(client)}
-        </TabsContent>
-      ))}
-    </Tabs>
+    <SecretPhaseChecklist
+      title="What the wizard does"
+      labels={SECRET_POLICY_PHASES}
+      statuses={statuses}
+    />
+  );
+}
+
+function SecretPhaseChecklist({
+  title,
+  labels,
+  statuses,
+}: {
+  title: string;
+  labels: readonly string[];
+  statuses: readonly SecretPolicyPhaseStatus[];
+}): JSX.Element {
+  return (
+    <div className="grid gap-2 pt-2">
+      <span className="font-mono text-[10px] tracking-[0.09em] text-[#121212]/40 uppercase">
+        {title}
+      </span>
+      <div>
+        {labels.map((label, index) => {
+          const status = statuses[index] ?? "not run";
+          const statusClassName = {
+            "not run": "border-[#C4C4C4] text-[#121212]/30",
+            queued: "border-[#C4C4C4] text-[#121212]/40",
+            running: "animate-pulse border-[#121212] text-[#121212]",
+            ok: "border-[#5A8250] text-[#5A8250]",
+            failed: "border-[#C83228] text-[#C83228]",
+          }[status];
+
+          return (
+            <div
+              key={label}
+              className="flex items-center gap-2 border-t border-[#121212]/10 py-3 last:border-b"
+            >
+              <span
+                aria-hidden="true"
+                className={cn("size-[11px] shrink-0 border", statusClassName)}
+              />
+              <span className="text-[12.5px] text-[#121212]/62">{label}</span>
+              <span className="flex-1 border-t border-[#121212]/10" />
+              <span
+                className={cn(
+                  "font-mono text-[9.5px] uppercase",
+                  statusClassName,
+                )}
+              >
+                {status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 function SecretStepBody({
   step,
+  displayState,
+  operationProgress,
+  error,
   operations,
+  onSelectAgent,
 }: {
   step: number;
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  error: string | null;
   operations: SecretGuideOperations;
+  onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element | null {
   switch (step) {
     case 0:
-      if (operations.policyPending) {
-        return (
-          <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-            Checking existing policies
-          </span>
-        );
-      }
-      if (operations.policyError) {
-        return (
-          <div className="grid gap-2">
-            <p role="alert" className="text-destructive text-[12px]">
-              Could not read this project's risk policies.
-            </p>
-            <button
-              type="button"
-              onClick={operations.retryPolicy}
-              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-            >
-              Retry policy check
-            </button>
-          </div>
-        );
-      }
       return (
-        <SecretClientTabs operations={operations}>
-          {(client) => (
-            <p className="text-[12px] text-[#121212]/55">
-              The next step downloads the existing observability ZIP for{" "}
-              {SECRET_GUIDE_CLIENTS[client].label}.
-            </p>
+        <div className="grid gap-3">
+          <SecretPolicyPhases
+            displayState={displayState}
+            operationProgress={operationProgress}
+            hasError={Boolean(error) || operations.policyError}
+          />
+          {operations.policyError && (
+            <div className="grid gap-2">
+              <p role="alert" className="text-destructive text-[12px]">
+                Could not read this project's risk policies.
+              </p>
+              <button
+                type="button"
+                onClick={operations.retryPolicy}
+                className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+              >
+                Retry policy check
+              </button>
+            </div>
           )}
-        </SecretClientTabs>
+        </div>
       );
     case 1:
       return (
-        <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-          Downloading {SECRET_GUIDE_CLIENTS[operations.client].label} ZIP
-        </span>
+        <div className="grid gap-3">
+          <SecretAgentPicker
+            client={operations.clientSelected ? operations.client : undefined}
+            disabled={
+              (displayState !== "ready" && displayState !== "checkpoint") ||
+              Boolean(operations.downloadedFilename)
+            }
+            onSelect={onSelectAgent}
+          />
+          <SecretPluginPhases
+            displayState={displayState}
+            operationProgress={operationProgress}
+            hasError={Boolean(error)}
+          />
+        </div>
       );
     case 2:
       if (!operations.installCommand) {
@@ -541,15 +682,14 @@ function SecretStepBody({
         );
       }
       return (
-        <div className="grid gap-2">
+        <div className="min-w-0">
           <CodeSnippet
             code={operations.installCommand}
             language="bash"
             copyable
+            className="min-w-0 max-w-full"
+            snippetClassName="min-w-0 max-w-full overflow-x-auto whitespace-nowrap"
           />
-          <span className="font-mono text-[10px] text-[#121212]/50">
-            {operations.installInstructions}
-          </span>
         </div>
       );
     case 3:
@@ -606,6 +746,73 @@ function SecretStepBody({
     default:
       return null;
   }
+}
+
+function SecretAgentPicker({
+  client,
+  disabled,
+  onSelect,
+}: {
+  client: SecretGuideClient | undefined;
+  disabled: boolean;
+  onSelect: (client: SecretGuideClient) => void;
+}): JSX.Element {
+  return (
+    <fieldset className="grid gap-2 pt-2">
+      <legend className="font-mono text-[10px] tracking-[0.09em] text-[#121212]/40 uppercase">
+        Choose your agent
+      </legend>
+      <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+        {(Object.keys(SECRET_GUIDE_CLIENTS) as SecretGuideClient[]).map(
+          (option) => {
+            const selected = client !== undefined && option === client;
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={selected}
+                disabled={disabled}
+                onClick={() => onSelect(option)}
+                className={cn(
+                  "shrink-0 border px-3 py-2 text-left text-[12px] whitespace-nowrap transition-colors",
+                  selected
+                    ? "border-[#121212] bg-[#121212] text-[#FAFAFA]"
+                    : "border-[#121212]/15 text-[#121212]/60 hover:border-[#121212]/45 hover:text-[#121212]",
+                  disabled && !selected && "cursor-default opacity-50",
+                )}
+              >
+                {SECRET_GUIDE_CLIENTS[option].label}
+              </button>
+            );
+          },
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
+function SecretPluginPhases({
+  displayState,
+  operationProgress,
+  hasError,
+}: {
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  hasError: boolean;
+}): JSX.Element {
+  const statuses = secretPluginPhaseStatuses(
+    displayState,
+    operationProgress,
+    hasError,
+  );
+
+  return (
+    <SecretPhaseChecklist
+      title="What you get"
+      labels={SECRET_PLUGIN_PHASES}
+      statuses={statuses}
+    />
+  );
 }
 
 function ProjectGuideMcpStepContent({

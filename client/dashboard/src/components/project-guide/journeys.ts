@@ -99,7 +99,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     stepBlurbs: [
       "A policy goes live that looks for secrets — API keys, tokens, private keys — in the prompts people send. It denies anything that matches, for everyone in the org.",
       "Speakeasy builds the observability plugin for this project and signs it. You get a package to download — the next step installs it in your client.",
-      "The plugin goes into the agent's plugin directory. On the next restart it connects to this project and starts streaming what the agent does.",
+      "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
       "This key is synthetic and inert. It exists so the rule has something real-shaped to catch. The call should not survive the machine.",
       "The policy denies the request and a finding lands in Risk Events. It carries the rule that fired, the matched span, the severity, and who sent it.",
     ],
