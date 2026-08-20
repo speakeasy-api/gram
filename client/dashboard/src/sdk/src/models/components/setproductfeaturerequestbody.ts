@@ -27,6 +27,7 @@ export const FeatureName = {
   RemoteSessionAutoRefresh: "remote_session_auto_refresh",
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
   ConsentToolFiltering: "consent_tool_filtering",
+  SessionPortability: "session_portability",
 } as const;
 /**
  * Name of the feature to update

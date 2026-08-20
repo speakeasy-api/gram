@@ -149,6 +149,13 @@ const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
     kind: "managed-elsewhere",
     where: "Organization settings → Logs",
   },
+  [FeatureName.SessionPortability]: {
+    kind: "toggle",
+    label: "Session Portability",
+    description:
+      "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
+    enabledKey: "sessionPortabilityEnabled",
+  },
   [FeatureName.HooksBrowserLogin]: {
     kind: "managed-elsewhere",
     where: "Organization settings → Logs",

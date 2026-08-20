@@ -67,6 +67,7 @@ func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *test
 	require.True(t, result.CustomModelKeysEnabled)
 	require.True(t, result.PlatformMcpEnabled)
 	require.True(t, result.RemoteSessionAutoRefreshEnabled)
+	require.True(t, result.SessionPortabilityEnabled)
 	require.True(t, result.SsoEnabled)
 	require.True(t, result.ScimEnabled)
 

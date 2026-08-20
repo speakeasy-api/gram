@@ -65143,6 +65143,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        session_portability_enabled:
+          type: boolean
+          description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
         skill_capture_metadata_only:
           type: boolean
           description: Whether skill capture stores activation metadata without requesting manifest content
@@ -65173,6 +65176,7 @@ components:
         - remote_session_auto_refresh_enabled
         - remote_session_auto_refresh_enforced_enabled
         - consent_tool_filtering_enabled
+        - session_portability_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -75138,6 +75142,7 @@ components:
             - remote_session_auto_refresh
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
+            - session_portability
           maxLength: 60
         organization_id:
           type: string
