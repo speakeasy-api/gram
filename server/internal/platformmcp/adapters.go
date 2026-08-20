@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -284,13 +285,15 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	logger          *slog.Logger
 	reader          *readmodel.Reader
 	inventory       *platformrepo.Queries
 	inventoryCursor *inventoryCursorCodec
 }
 
-func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
+func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		logger:          logger.With(attr.SlogComponent("platformmcp")),
 		reader:          readmodel.New(db),
 		inventory:       platformrepo.New(db),
 		inventoryCursor: nil,
@@ -341,7 +344,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		return FindMCPOutput{}, ErrInventoryCursorInvalid
 	}
 
-	projectID := uuid.NullUUID{}
+	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	var cursorProject ResolvedProject
 	if input.ProjectID != "" || input.ProjectSlug != "" || query == "" {
 		cursorProject, err = r.resolveInventoryProject(ctx, principal.OrganizationID, input)
@@ -352,7 +355,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	}
 
 	limit := boundedLimit(input.Limit)
-	afterID := uuid.NullUUID{}
+	afterID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if query == "" && input.Cursor != "" {
 		cursor, err := r.inventoryCursor.Decode(input.Cursor, principal, cursorProject.ID, query)
 		if err != nil {
@@ -371,7 +374,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		LimitValue: int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "list platform MCP inventory", "error", err)
+		r.logger.ErrorContext(ctx, "list platform MCP inventory", attr.SlogError(err))
 		return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 	}
 	registrationIDs := inventoryRegistrationIDs(rows)
@@ -382,7 +385,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 			ProjectID:      projectID, RegistrationIds: registrationIDs,
 		})
 		if err != nil {
-			slog.ErrorContext(ctx, "list platform MCP inventory distributions", "error", err)
+			r.logger.ErrorContext(ctx, "list platform MCP inventory distributions", attr.SlogError(err))
 			return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 		}
 		byRegistration = inventoryDistributions(distributions)

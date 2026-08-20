@@ -257,7 +257,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "",
-				platformmcp.NewPostgresReader(conn), nil, nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.NewPostgresReader(logger, conn), nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),

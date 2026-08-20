@@ -1,4 +1,3 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -9,6 +8,7 @@ import (
 )
 
 func registerFindMCPTool(reg *Registrar, reader Reader, cursorKeyMaterial string) {
+	//nolint:exhaustruct // MCP SDK manifest intentionally relies on documented optional zero values.
 	addTool(reg, &mcp.Tool{
 		Name:        "find_mcp",
 		Title:       "Find MCP",

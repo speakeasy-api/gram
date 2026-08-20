@@ -51,7 +51,12 @@ func (t *FindMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 		return err
 	}
 	input := platformmcp.FindMCPInput{
-		Query: assistantInput.Query, Cursor: assistantInput.Cursor, Limit: assistantInput.Limit, Readiness: assistantInput.Readiness,
+		ProjectID:   "",
+		ProjectSlug: "",
+		Query:       assistantInput.Query,
+		Cursor:      assistantInput.Cursor,
+		Limit:       assistantInput.Limit,
+		Readiness:   assistantInput.Readiness,
 	}
 	principal, err := principalFromContext(ctx)
 	if err != nil {
