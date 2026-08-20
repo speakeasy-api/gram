@@ -162,6 +162,7 @@ type Activities struct {
 	outboxGC                        *outbox_relay.GC
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
+	sessionQuarantineReassert       *activities.SessionQuarantineReassert
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
@@ -422,6 +423,7 @@ func NewActivities(
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		sessionQuarantineReassert:       activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
 		demoteExpiredTrials: activities.NewDemoteExpiredTrials(
 			logger,
@@ -956,6 +958,13 @@ func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("list spend rule orgs: %w", err)
 	}
 	return orgs, nil
+}
+
+func (a *Activities) ReassertSessionQuarantines(ctx context.Context) error {
+	if err := a.sessionQuarantineReassert.Do(ctx); err != nil {
+		return fmt.Errorf("reassert session quarantines: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules.EvaluateOrgArgs) error {

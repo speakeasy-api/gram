@@ -1346,14 +1346,77 @@ ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
--- Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
--- allowed after acknowledgement). flag is non-enforcing and excluded.
+-- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
+-- allowed after acknowledgement), and quarantine (hard deny + session circuit).
+-- flag is non-enforcing and excluded.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action IN ('block', 'warn')
+  AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE;
+
+-- name: GetSessionQuarantineFailClosed :one
+SELECT session_quarantine_fail_closed
+FROM organization_metadata
+WHERE id = @organization_id;
+
+-- name: SetSessionQuarantineFailClosed :exec
+UPDATE organization_metadata
+SET session_quarantine_fail_closed = @fail_closed
+WHERE id = @organization_id;
+
+-- name: CreateSessionQuarantine :one
+INSERT INTO session_quarantines (
+    organization_id
+  , project_id
+  , session_id
+  , risk_policy_id
+  , risk_policy_name
+  , user_id
+  , reason
+) VALUES (
+    @organization_id
+  , @project_id
+  , @session_id
+  , @risk_policy_id
+  , @risk_policy_name
+  , @user_id
+  , @reason
+)
+ON CONFLICT (session_id) WHERE released_at IS NULL DO NOTHING
+RETURNING *;
+
+-- name: GetActiveSessionQuarantineBySession :one
+SELECT *
+FROM session_quarantines
+WHERE session_id = @session_id
+  AND released_at IS NULL;
+
+-- name: ListActiveSessionQuarantines :many
+SELECT *
+FROM session_quarantines
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListAllActiveSessionQuarantines :many
+SELECT *
+FROM session_quarantines
+WHERE released_at IS NULL
+ORDER BY created_at DESC, id DESC;
+
+-- name: ReleaseSessionQuarantine :one
+UPDATE session_quarantines
+SET released_at = clock_timestamp()
+  , released_by = @released_by
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+RETURNING *;
 
 -- name: GetProjectFlagGroups :one
 -- Resolves the org and project slugs used to build PostHog flag-evaluation

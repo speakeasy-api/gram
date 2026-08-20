@@ -49,6 +49,7 @@ const (
 	subjectTypeRiskExclusion               subjectType = "risk_exclusion"
 	subjectTypeRiskPolicy                  subjectType = "risk_policy"
 	subjectTypeRiskResult                  subjectType = "risk_result"
+	subjectTypeSessionQuarantine           subjectType = "session_quarantine"
 	subjectTypeSkill                       subjectType = "skill"
 	subjectTypeSkillEfficacySettings       subjectType = "skill_efficacy_settings"
 	subjectTypeSpendRule                   subjectType = "spend_rule"

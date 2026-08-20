@@ -23,6 +23,7 @@ export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
+  Quarantine: "quarantine",
 } as const;
 /**
  * Policy action: flag, warn (challenge), or block.

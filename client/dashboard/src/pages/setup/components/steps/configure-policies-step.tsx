@@ -837,6 +837,7 @@ const ACTION_PILL_VARIANT: Record<
   "destructive" | "warning" | "neutral"
 > = {
   block: "destructive",
+  quarantine: "destructive",
   warn: "warning",
   flag: "neutral",
   off: "neutral",
@@ -844,6 +845,7 @@ const ACTION_PILL_VARIANT: Record<
 
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   block: "Block",
+  quarantine: "Quarantine",
   warn: "Warn",
   flag: "Flag",
   off: "Off",
