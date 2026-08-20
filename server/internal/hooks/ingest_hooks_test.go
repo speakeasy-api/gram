@@ -251,6 +251,30 @@ func TestIngestAuthenticated_AllowsReservedAssistantAdapter(t *testing.T) {
 	require.Empty(t, messages)
 }
 
+func TestIngestAssistantToolCall_AllowsReservedAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := canonicalIngestPayload("assistant", "tool.requested", uuid.NewString())
+	toolName := "bun_run"
+	toolCallID := "call-assistant-method"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"code": "1"},
+		},
+	}
+
+	result, err := ti.service.IngestAssistantToolCall(t.Context(), authCtx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+}
+
 // A keyless request on the optional-auth ingest endpoint is acknowledged
 // without processing: hook senders must stay non-blocking for machines that
 // never signed in, and without credentials there is no org to attribute the

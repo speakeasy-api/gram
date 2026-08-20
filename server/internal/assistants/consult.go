@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -32,9 +31,9 @@ const (
 // subject hosted assistant tool calls to the same risk-policy and spend-gate
 // enforcement as hook-ingested agent traffic.
 type HookIngester interface {
-	// IngestAuthenticatedDetailed applies canonical hook evaluation for a
-	// caller that has already authenticated the organization and project.
-	IngestAuthenticatedDetailed(context.Context, *contextvalues.AuthContext, *hooksgen.IngestPayload, hooks.AuthenticatedIngestOptions) (*hooks.AuthenticatedIngestResult, error)
+	// IngestAssistantToolCall applies canonical hook evaluation for a hosted
+	// assistant tool call, including the reserved assistant adapter.
+	IngestAssistantToolCall(context.Context, *contextvalues.AuthContext, *hooksgen.IngestPayload) (*hooksgen.IngestHookResult, error)
 }
 
 type consultToolCallRequest struct {
@@ -168,14 +167,7 @@ func (s *ServiceCore) ConsultToolCall(ctx context.Context, projectID, principalA
 		Raw: nil,
 	}
 
-	outcome, err := s.hookIngester.IngestAuthenticatedDetailed(ctx, authCtx, payload, hooks.AuthenticatedIngestOptions{
-		AllowWarnAcknowledgement:     true,
-		AllowSessionIdentityFallback: false,
-		SourceAttributes:             nil,
-		OutputToolCalls:              nil,
-		OriginatingClient:            "assistant",
-		AllowReservedAdapter:         true,
-	})
+	outcome, err := s.hookIngester.IngestAssistantToolCall(ctx, authCtx, payload)
 	if err != nil {
 		s.logger.WarnContext(ctx, "assistant tool-call consult ingest failed; allowing",
 			attr.SlogEvent("assistant_tool_consult_ingest_error"),
@@ -186,8 +178,8 @@ func (s *ServiceCore) ConsultToolCall(ctx context.Context, projectID, principalA
 		)
 		return consultAllowResult(), nil
 	}
-	if outcome != nil && outcome.Result != nil && strings.EqualFold(strings.TrimSpace(outcome.Result.Decision), consultDecisionDeny) {
-		return consultDenyResult(strings.TrimSpace(conv.PtrValOr(outcome.Result.Message, ""))), nil
+	if outcome != nil && strings.EqualFold(strings.TrimSpace(outcome.Decision), consultDecisionDeny) {
+		return consultDenyResult(strings.TrimSpace(conv.PtrValOr(outcome.Message, ""))), nil
 	}
 	return consultAllowResult(), nil
 }

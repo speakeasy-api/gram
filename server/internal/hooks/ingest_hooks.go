@@ -140,6 +140,25 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	return s.ingest(ctx, &payloadCopy)
 }
 
+// IngestAssistantToolCall is the trusted in-process entry used by hosted
+// assistant tool-call consult. It claims the reserved assistant adapter,
+// keeps warn-acknowledgement, and does not fall back to session identity
+// from untrusted client fields.
+func (s *Service) IngestAssistantToolCall(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
+	result, err := s.IngestAuthenticatedDetailed(ctx, authCtx, payload, AuthenticatedIngestOptions{
+		AllowWarnAcknowledgement:     true,
+		AllowSessionIdentityFallback: false,
+		SourceAttributes:             nil,
+		OutputToolCalls:              nil,
+		OriginatingClient:            "assistant",
+		AllowReservedAdapter:         true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Result, nil
+}
+
 // Ingest is the feature-first hook endpoint; this path only accepts the
 // canonical Gram contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without

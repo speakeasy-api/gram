@@ -12,7 +12,6 @@ import (
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -21,17 +20,16 @@ import (
 type capturedConsultCall struct {
 	auth    *contextvalues.AuthContext
 	payload *hooksgen.IngestPayload
-	options hooks.AuthenticatedIngestOptions
 }
 
 type captureConsultIngester struct {
-	result *hooks.AuthenticatedIngestResult
+	result *hooksgen.IngestHookResult
 	err    error
 	calls  []capturedConsultCall
 }
 
-func (c *captureConsultIngester) IngestAuthenticatedDetailed(_ context.Context, authCtx *contextvalues.AuthContext, payload *hooksgen.IngestPayload, options hooks.AuthenticatedIngestOptions) (*hooks.AuthenticatedIngestResult, error) {
-	c.calls = append(c.calls, capturedConsultCall{auth: authCtx, payload: payload, options: options})
+func (c *captureConsultIngester) IngestAssistantToolCall(_ context.Context, authCtx *contextvalues.AuthContext, payload *hooksgen.IngestPayload) (*hooksgen.IngestHookResult, error) {
+	c.calls = append(c.calls, capturedConsultCall{auth: authCtx, payload: payload})
 	return c.result, c.err
 }
 
@@ -78,9 +76,7 @@ func TestConsultToolCallAllowsAndDeniesViaIngester(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 	ingester := &captureConsultIngester{
-		result: &hooks.AuthenticatedIngestResult{
-			Result: &hooksgen.IngestHookResult{Decision: consultDecisionAllow},
-		},
+		result: &hooksgen.IngestHookResult{Decision: consultDecisionAllow},
 	}
 	core.SetHookIngester(ingester)
 	ctx := contextvalues.SetAuthContext(t.Context(), consultAuthContext(projectID))
@@ -96,15 +92,10 @@ func TestConsultToolCallAllowsAndDeniesViaIngester(t *testing.T) {
 	require.Equal(t, chatID.String(), *call.payload.Session.ID)
 	require.Equal(t, "assistant:"+threadID.String()+":call_1", *call.payload.IdempotencyKey)
 	require.Equal(t, "bun_run", *call.payload.Data.ToolCall.Name)
-	require.True(t, call.options.AllowReservedAdapter)
-	require.True(t, call.options.AllowWarnAcknowledgement)
-	require.False(t, call.options.AllowSessionIdentityFallback)
 	require.Nil(t, call.payload.Data.Mcp)
 
 	denyMessage := "Speakeasy blocked this tool call"
-	ingester.result = &hooks.AuthenticatedIngestResult{
-		Result: &hooksgen.IngestHookResult{Decision: consultDecisionDeny, Message: &denyMessage},
-	}
+	ingester.result = &hooksgen.IngestHookResult{Decision: consultDecisionDeny, Message: &denyMessage}
 	req.ToolCallID = "call_2"
 	result, err = core.ConsultToolCall(ctx, projectID, assistantID, req)
 	require.NoError(t, err)
@@ -139,7 +130,7 @@ func TestConsultToolCallRejectsAssistantMismatch(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 	core.SetHookIngester(&captureConsultIngester{
-		result: &hooks.AuthenticatedIngestResult{Result: &hooksgen.IngestHookResult{Decision: consultDecisionAllow}},
+		result: &hooksgen.IngestHookResult{Decision: consultDecisionAllow},
 	})
 	ctx := contextvalues.SetAuthContext(t.Context(), consultAuthContext(projectID))
 
@@ -160,9 +151,7 @@ func TestConsultToolCallUsesDefaultDenyMessage(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 	core.SetHookIngester(&captureConsultIngester{
-		result: &hooks.AuthenticatedIngestResult{
-			Result: &hooksgen.IngestHookResult{Decision: consultDecisionDeny, Message: conv.PtrEmpty("")},
-		},
+		result: &hooksgen.IngestHookResult{Decision: consultDecisionDeny, Message: conv.PtrEmpty("")},
 	})
 	ctx := contextvalues.SetAuthContext(t.Context(), consultAuthContext(projectID))
 
