@@ -1016,7 +1016,6 @@ function PolicyCenterContent() {
   return (
     <TabbedPage
       title="Control Center"
-      stage="beta"
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
