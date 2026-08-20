@@ -15,7 +15,7 @@ func TestNewEnrichSpeakeasyTokens(t *testing.T) {
 
 	require.Equal(t, "enrich-speakeasy-tokens", enricher.Name())
 	require.NotNil(t, enricher.codec)
-	require.Equal(t, "o200k_base", enricher.codec.GetName())
+	require.Equal(t, "o200k_base", enricher.codec.Name())
 }
 
 func TestEnrichSpeakeasyTokensCountsClaudeCodePrompt(t *testing.T) {
@@ -64,6 +64,49 @@ func TestEnrichSpeakeasyTokensSkipsEmptyClaudeCodePrompt(t *testing.T) {
 					StringValue: &prompt,
 				}).Build(),
 			}).Build(),
+		},
+	}).Build()
+
+	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+
+	require.NoError(t, err)
+	require.Nil(t, got)
+}
+
+func TestEnrichSpeakeasyTokensTalliesInputAndOutputMessages(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanStringAttribute("gen_ai.input.messages", `[{"role":"user","parts":[{"type":"text","content":"hello"}]}]`),
+			spanStringAttribute("gen_ai.output.messages", `[{"role":"assistant","parts":[{"type":"text","content":"done"}],"finish_reason":"stop"}]`),
+		},
+	}).Build()
+
+	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+
+	require.NoError(t, err)
+	require.Equal(t, []attribute.KeyValue{
+		TokensCount(2),
+		TokensCodec("o200k_base"),
+	}, got)
+}
+
+func spanStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
+	return (&otelv1.InboundSpan_KeyValue_builder{
+		Key: &key,
+		Value: (&otelv1.InboundSpan_AnyValue_builder{
+			StringValue: &value,
+		}).Build(),
+	}).Build()
+}
+
+func TestEnrichSpeakeasyTokensSkipsMalformedSemconvContent(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanStringAttribute("gen_ai.input.messages", "plain text prompt"),
 		},
 	}).Build()
 

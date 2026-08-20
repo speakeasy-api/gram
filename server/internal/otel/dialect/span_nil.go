@@ -1,6 +1,9 @@
 package dialect
 
-import otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+import (
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/genaiconv"
+)
 
 type NilSpan struct{}
 
@@ -8,7 +11,11 @@ func (e NilSpan) AppliesTo(span *otelv1.InboundSpan) bool {
 	return false
 }
 
-func (e NilSpan) Content(span *otelv1.InboundSpan) (key string, val []string, err error) {
+func (e NilSpan) InputContent(span *otelv1.InboundSpan) (key string, val genaiconv.InputMessages, err error) {
+	return
+}
+
+func (e NilSpan) OutputContent(span *otelv1.InboundSpan) (key string, val genaiconv.OutputMessages, err error) {
 	return
 }
 
