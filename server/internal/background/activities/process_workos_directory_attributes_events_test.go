@@ -276,7 +276,7 @@ func TestProcessWorkOSOrganizationEvents_RemoveMissingDirectoryMembershipNoops(t
 	require.Equal(t, 0, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
 }
 
-func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesMemberships(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesAndPreventsReopeningMemberships(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -334,6 +334,15 @@ func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesMemberships(t
 
 	_, _, _, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
 	require.True(t, deleted)
+	require.Equal(t, 0, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
+
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_0002", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, "directory.group.delete@example.com")},
+	}})
+	res, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_0001", res.SinceEventID)
+	require.Equal(t, "event_0002", res.LastEventID)
 	require.Equal(t, 0, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
 }
 

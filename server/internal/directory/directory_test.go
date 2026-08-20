@@ -222,6 +222,32 @@ func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 	require.Empty(t, profile.Groups)
 }
 
+func TestServiceGetUserProfileTreatsNonObjectAttributesAsEmpty(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_non_object_attributes"
+	const userID = "user_directory_non_object_attributes"
+	seedOrganization(t, conn, organizationID)
+	seedDirectoryUser(
+		t,
+		conn,
+		organizationID,
+		userID,
+		"directory_user_non_object_attributes",
+		"non-object-attributes@example.com",
+		[]byte(`["department_name","job_title"]`),
+		time.Date(2026, time.May, 2, 0, 0, 0, 0, time.UTC),
+	)
+
+	profile, err := service.GetUserProfile(ctx, organizationID, userID)
+	require.NoError(t, err)
+	require.NotNil(t, profile.RawAttributes)
+	require.Empty(t, profile.RawAttributes)
+	require.True(t, profile.Attributes().IsZero())
+}
+
 func TestServiceDirectoryAssociations(t *testing.T) {
 	t.Parallel()
 

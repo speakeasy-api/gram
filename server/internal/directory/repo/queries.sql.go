@@ -236,6 +236,9 @@ const getDirectoryGroupIDByWorkOSID = `-- name: GetDirectoryGroupIDByWorkOSID :o
 SELECT id
 FROM directory_groups
 WHERE workos_directory_group_id = $1
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE
 `
 
 func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (uuid.UUID, error) {

@@ -1,6 +1,7 @@
 package directory
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,8 +45,13 @@ func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID str
 	}
 
 	attributes := make(map[string]any)
-	if err := json.Unmarshal(row.Attributes, &attributes); err != nil {
-		return nil, fmt.Errorf("decode directory user attributes: %w", err)
+	rawAttributes := bytes.TrimSpace(row.Attributes)
+	if len(rawAttributes) > 0 && rawAttributes[0] == '{' {
+		if err := json.Unmarshal(rawAttributes, &attributes); err != nil {
+			return nil, fmt.Errorf("decode directory user attributes: %w", err)
+		}
+	} else if !json.Valid(rawAttributes) {
+		return nil, errors.New("decode directory user attributes: invalid JSON")
 	}
 
 	groups := make([]Group, 0)

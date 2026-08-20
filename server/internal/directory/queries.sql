@@ -41,7 +41,10 @@ WHERE workos_directory_group_id = @workos_directory_group_id;
 -- name: GetDirectoryGroupIDByWorkOSID :one
 SELECT id
 FROM directory_groups
-WHERE workos_directory_group_id = @workos_directory_group_id;
+WHERE workos_directory_group_id = @workos_directory_group_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
 
 -- name: GetDirectoryGroupForMembershipByWorkOSID :one
 SELECT id, organization_id
