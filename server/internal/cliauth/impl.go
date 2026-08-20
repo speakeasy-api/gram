@@ -78,6 +78,7 @@ type Service struct {
 	db          *pgxpool.Pool
 	auth        *auth.Auth
 	authz       *authz.Engine
+	sessions    *sessions.Manager
 	pkce        *oauth.PKCEService
 	redis       *redis.Client
 	projectRepo *projectsrepo.Queries
@@ -110,6 +111,7 @@ func NewService(
 		db:          db,
 		auth:        auth.New(logger, db, sessionManager, authzEngine),
 		authz:       authzEngine,
+		sessions:    sessionManager,
 		pkce:        oauth.NewPKCEService(logger),
 		redis:       redisClient,
 		projectRepo: projectsrepo.New(db),
@@ -144,6 +146,44 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	}
 	if authCtx.Email == nil || *authCtx.Email == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no resolved email").LogError(ctx, s.logger)
+	}
+
+	// Enrollment binds a physical device to the session's active org — its
+	// policies, plugins, hooks, and session-transcript reporting — and mints a
+	// durable per-user key there. None of that is ever legitimate under an
+	// assumed identity, so every impersonation shape is refused outright
+	// (DNO-938). RBAC cannot carry this: an impersonating admin holds every
+	// scope (see authz.Engine), so the org:read gate below would wave them
+	// through.
+	//
+	// Shape 1: Speakeasy admin impersonating a customer org via the dev-tools
+	// override. Same refusal as chat-transcript access in chat.LoadChat.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating an organization").LogError(ctx, s.logger)
+	}
+
+	// Shape 2: WorkOS user impersonation. The session was minted by an admin
+	// impersonating this user through the IDP; enrolling would hand the
+	// impersonator's device a real key bearing the user's identity.
+	if authCtx.SessionID != nil && *authCtx.SessionID != "" {
+		session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+		if err != nil {
+			// The session authenticated this same request, so a lookup failure
+			// here is infrastructure trouble, not a bad credential. Fail closed.
+			return nil, oops.E(oops.CodeUnexpected, err, "load session").LogError(ctx, s.logger)
+		}
+		if session.ImpersonatorEmail != "" {
+			return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
+		}
+	}
+
+	// Shape 3 (backstop): a session parked on an org the user is not actually
+	// a member of — an admin session that outlived its override cookie, or
+	// anyone pointed at the shared demo org (which has no membership rows by
+	// design, yet grants org:read to every session). Enrollment requires real
+	// membership in the org the device would report to.
+	if _, _, member := s.sessions.HasAccessToOrganization(ctx, authCtx.ActiveOrganizationID, authCtx.UserID); !member {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
 	}
 
 	// Member-available gate: any org member (org:read) may enroll their own
