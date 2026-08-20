@@ -228,10 +228,6 @@ export function AppSidebar({
                     },
                   ]),
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-              {
-                item: routes.detectionRules,
-                ...accessFor(routes.detectionRules),
-              },
             ]}
           />
 

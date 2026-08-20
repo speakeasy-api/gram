@@ -97,6 +97,7 @@ import {
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
+import { DetectionRulesTab } from "./DetectionRules";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -554,7 +555,34 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
 // Watchdog page's Suppressed section. `tab` is parsed as a string literal
 // union, so a stale `?tab=dismissed` link falls back to "policies" rather
 // than rendering an empty page.
-const POLICY_CENTER_TABS = ["policies", "exclusions"] as const;
+const POLICY_CENTER_TABS = [
+  "policies",
+  "detection-rules",
+  "exclusions",
+] as const;
+
+/** The page-level primary action follows the active tab: each tab creates its
+ *  own kind of resource. */
+function policyCenterHeaderAction(
+  activeTab: (typeof POLICY_CENTER_TABS)[number],
+  actions: {
+    newPolicy: () => void;
+    newDetectionRule: () => void;
+    newExclusion: () => void;
+  },
+): { label: string; onClick: () => void } {
+  switch (activeTab) {
+    case "policies":
+      return { label: "New Policy", onClick: actions.newPolicy };
+    case "detection-rules":
+      return {
+        label: "Custom Detection Rule",
+        onClick: actions.newDetectionRule,
+      };
+    case "exclusions":
+      return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
+  }
+}
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -600,6 +628,9 @@ function PolicyCenterContent() {
   );
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
+  // The Detection Rules tab's create sheet is owned here so the page-level
+  // primary action can open it.
+  const [ruleCreateOpen, setRuleCreateOpen] = useState(false);
 
   // Deep-link support: `?policy=<id>` redirects to that policy's detail page.
   // The command palette uses this since policies have no per-item list route.
@@ -913,13 +944,11 @@ function PolicyCenterContent() {
     },
   ];
 
-  const headerAction =
-    activeTab === "policies"
-      ? { label: "New Policy", onClick: () => routes.policyCenter.new.goTo() }
-      : {
-          label: "Set up Exclusion Rule",
-          onClick: () => setExclusionSheet({ mode: "create" }),
-        };
+  const headerAction = policyCenterHeaderAction(activeTab, {
+    newPolicy: () => routes.policyCenter.new.goTo(),
+    newDetectionRule: () => setRuleCreateOpen(true),
+    newExclusion: () => setExclusionSheet({ mode: "create" }),
+  });
   const policyDeleteRuleListItems = policyToDelete
     ? getPolicyDeleteRuleListItems(
         getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
@@ -970,16 +999,21 @@ function PolicyCenterContent() {
 
   return (
     <TabbedPage
-      title="Policies"
+      title="Control Center"
       stage="beta"
-      description="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+      description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
       tabs={[
         { value: "policies", label: "Policies", href: "?tab=policies" },
         {
+          value: "detection-rules",
+          label: "Detection Rules",
+          href: "?tab=detection-rules",
+        },
+        {
           value: "exclusions",
-          label: "Exclusion rules",
+          label: "Exclusion Rules",
           href: "?tab=exclusions",
         },
       ]}
@@ -991,6 +1025,12 @@ function PolicyCenterContent() {
         subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
       />
       {activeTab === "policies" && policiesBody}
+      {activeTab === "detection-rules" && (
+        <DetectionRulesTab
+          createOpen={ruleCreateOpen}
+          onCreateOpenChange={setRuleCreateOpen}
+        />
+      )}
       {activeTab === "exclusions" && (
         <ExclusionsTab
           policies={data?.policies ?? []}

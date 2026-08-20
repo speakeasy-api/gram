@@ -674,6 +674,9 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  // Legacy URL: Detection Rules lives as a Control Center tab now; the
+  // component redirects there (carrying ?rule= deep links along). Kept out of
+  // the sidebar.
   detectionRules: {
     title: "Detection Rules",
     url: "detection-rules",
@@ -681,7 +684,7 @@ const ROUTE_STRUCTURE = {
     component: DetectionRules,
   },
   policyCenter: {
-    title: "Risk Policies",
+    title: "Control Center",
     url: "risk-policies",
     icon: "shield-check",
     // Layout route: renders the policy list (index) or a policy detail subpage.
