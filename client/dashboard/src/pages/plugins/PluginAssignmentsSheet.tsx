@@ -1,3 +1,4 @@
+import { MemberFacepile } from "@/components/member-facepile";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Sheet,
@@ -9,22 +10,63 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type {
   PluginAudience,
   PluginAudienceKind,
 } from "@gram/client/models/components/pluginaudience.js";
 import { useAudiences } from "@gram/client/react-query/audiences";
+import { useMembers } from "@gram/client/react-query/members";
 import { useSetPluginAssignmentsMutation } from "@gram/client/react-query/setPluginAssignments";
 import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   audienceKindForPrincipal,
   audienceMapByUrn,
   describePrincipal,
+  individualMemberFacepileForUrns,
+  isIndividualMemberPrincipal,
+  memberMapByUrn,
   memberCountDescription,
   principalIcon,
 } from "./principals";
+
+const COLLAPSE_MEMBER_ASSIGNMENTS_AT = 5;
+
+function MemberAssignmentSummary({
+  members,
+}: {
+  members: ReturnType<typeof individualMemberFacepileForUrns>;
+}): JSX.Element {
+  return (
+    <MemberFacepile
+      members={members}
+      renderTrigger={({ label, onClick }) => (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`Show ${label}`}
+          onClick={onClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
+          className="bg-muted hover:bg-accent flex h-6 shrink-0 items-center gap-1.5 px-2 font-sans text-xs normal-case tracking-normal transition-colors"
+        >
+          <Users
+            className="text-muted-foreground size-3.5"
+            aria-hidden="true"
+          />
+          {label}
+        </span>
+      )}
+    />
+  );
+}
 
 const audienceGroups: {
   value: PluginAudienceKind;
@@ -48,9 +90,15 @@ const audienceGroups: {
 function existingAssignmentOption(
   urn: string,
   audienceByUrn: Map<string, PluginAudience>,
+  memberByUrn: Map<string, AccessMember>,
   description: string,
 ) {
-  const principal = describePrincipal(urn, new Map(), new Map(), audienceByUrn);
+  const principal = describePrincipal(
+    urn,
+    new Map(),
+    memberByUrn,
+    audienceByUrn,
+  );
   return {
     label: principal.label,
     value: urn,
@@ -78,6 +126,7 @@ function unavailableAudienceOptions(
   audienceType: PluginAudienceKind,
   selected: string[],
   audienceByUrn: Map<string, PluginAudience>,
+  memberByUrn: Map<string, AccessMember>,
 ) {
   return selected
     .filter(
@@ -89,6 +138,7 @@ function unavailableAudienceOptions(
       existingAssignmentOption(
         urn,
         audienceByUrn,
+        memberByUrn,
         "Unavailable. Remove this assignment to stop using it.",
       ),
     );
@@ -149,11 +199,17 @@ function AssignmentsEditor({
   onSaved: () => void;
 }): JSX.Element {
   const audiencesQuery = useAudiences();
+  const { data: membersData } = useMembers();
   const { data: audiencesData } = audiencesQuery;
   const audiences = useMemo(
     () => audiencesData?.audiences ?? [],
     [audiencesData?.audiences],
   );
+  const members = useMemo(
+    () => membersData?.members ?? [],
+    [membersData?.members],
+  );
+  const memberByUrn = useMemo(() => memberMapByUrn(members), [members]);
 
   const initialUrns = useMemo(
     () => assignments.map((a) => a.principalUrn),
@@ -167,6 +223,7 @@ function AssignmentsEditor({
   const availableAudienceGroups = useMemo(
     () =>
       audienceGroups.map((group) => ({
+        value: group.value,
         heading: group.heading,
         icon: group.icon,
         options: availableAudienceOptions(
@@ -186,36 +243,83 @@ function AssignmentsEditor({
           group.value,
           selected,
           audienceByUrn,
+          memberByUrn,
         ),
       })),
-    [audienceByUrn, selected],
+    [audienceByUrn, memberByUrn, selected],
   );
-  const options = useMemo(
+  const userOptions = useMemo(
     () =>
-      availableAudienceGroups
-        .map((group, index) => ({
-          heading: group.heading,
-          icon: group.icon,
-          options: [
-            ...group.options,
-            ...unavailableAudienceGroups[index]!.options,
-          ],
-        }))
-        .filter((group) => group.options.length > 0),
-    [availableAudienceGroups, unavailableAudienceGroups],
+      members.map((member) => ({
+        label: member.email,
+        value: member.principalUrn,
+        description: member.name || undefined,
+      })),
+    [members],
   );
-  const legacyOptions = useMemo(
+  const unavailableUserOptions = useMemo(
     () =>
       selected
-        .filter((urn) => !audienceKindForPrincipal(urn, audienceByUrn))
+        .filter(
+          (urn) => isIndividualMemberPrincipal(urn) && !memberByUrn.has(urn),
+        )
         .map((urn) =>
           existingAssignmentOption(
             urn,
             audienceByUrn,
+            memberByUrn,
+            "Unavailable. Remove this assignment to stop using it.",
+          ),
+        ),
+    [audienceByUrn, memberByUrn, selected],
+  );
+  const options = useMemo(
+    () =>
+      availableAudienceGroups
+        .flatMap((group, index) => {
+          const audienceGroup = {
+            heading: group.heading,
+            icon: group.icon,
+            options: [
+              ...group.options,
+              ...unavailableAudienceGroups[index]!.options,
+            ],
+          };
+          if (group.value !== "role") return [audienceGroup];
+          return [
+            audienceGroup,
+            {
+              heading: "Users",
+              icon: principalIcon("user"),
+              options: [...userOptions, ...unavailableUserOptions],
+            },
+          ];
+        })
+        .filter((group) => group.options.length > 0),
+    [
+      availableAudienceGroups,
+      unavailableAudienceGroups,
+      unavailableUserOptions,
+      userOptions,
+    ],
+  );
+  const legacyOptions = useMemo(
+    () =>
+      selected
+        .filter(
+          (urn) =>
+            !isIndividualMemberPrincipal(urn) &&
+            !audienceKindForPrincipal(urn, audienceByUrn),
+        )
+        .map((urn) =>
+          existingAssignmentOption(
+            urn,
+            audienceByUrn,
+            memberByUrn,
             "Legacy assignment. Remove it to stop using this audience.",
           ),
         ),
-    [audienceByUrn, selected],
+    [audienceByUrn, memberByUrn, selected],
   );
 
   const groupedOptions = useMemo(
@@ -270,6 +374,24 @@ function AssignmentsEditor({
           hideSelectAll
           modalPopover
           maxCount={20}
+          collapseSelectedValues={(values) => {
+            const memberUrns = values.filter(isIndividualMemberPrincipal);
+            if (memberUrns.length <= COLLAPSE_MEMBER_ASSIGNMENTS_AT) {
+              return null;
+            }
+
+            return {
+              values: memberUrns,
+              summary: (
+                <MemberAssignmentSummary
+                  members={individualMemberFacepileForUrns(
+                    memberUrns,
+                    memberByUrn,
+                  )}
+                />
+              ),
+            };
+          }}
           popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none [&_[cmdk-group-heading]]:px-0 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-input-wrapper]]:px-0 [&_[cmdk-item]]:py-1 [&_[cmdk-item]]:pl-2 [&_[cmdk-item]]:pr-0 [&_[data-slot=command-group]]:p-0 [&_[data-slot=command-group]+[data-slot=command-group]]:pt-2 [&_[data-slot=command-list]]:p-0"
         />
         {audiencesQuery.isPending && (
