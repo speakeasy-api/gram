@@ -33,6 +33,28 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeChatWrite),
 }
 
+// TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
+// dashboard against the set authz.Engine.PrepareContext enforces. They are
+// produced by different functions on the same condition, and when they drifted
+// apart the demo org rendered pages (Costs, Budgets, Organization API Keys)
+// whose handlers then returned 403.
+func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
+	t.Parallel()
+
+	reported := make([]string, 0, len(userVisibleScopeGrants()))
+	for _, grant := range userVisibleScopeGrants() {
+		reported = append(reported, grant.Scope)
+	}
+
+	enforced := make([]string, 0, len(authz.DemoScopeGrants()))
+	for _, grant := range authz.DemoScopeGrants() {
+		enforced = append(enforced, string(grant.Scope))
+	}
+
+	require.ElementsMatch(t, reported, enforced)
+	require.ElementsMatch(t, expectedFullAccessScopes, enforced)
+}
+
 func TestService_ListGrants(t *testing.T) {
 	t.Parallel()
 

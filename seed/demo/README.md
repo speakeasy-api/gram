@@ -168,17 +168,26 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    that org — without a logout round-trip (unlike the admin override, which
    only takes effect at the login callback). `sessions.Authenticate` accepts
    the membership-less demo session.
-2. DONE: `authz.Engine.PrepareContext` gives any demo session the fixed
-   read-only grant set `authz.DemoScopeGrants()` (`org:read`, `project:read`,
-   `mcp:read`, `skill:read`, `chat:read`; NO `environment:read`, no writes) —
-   for everyone, including admins with the override cookie.
+2. DONE: `authz.Engine.PrepareContext` gives any demo session
+   `authz.DemoScopeGrants()` — every user-visible scope, unrestricted,
+   `org:admin` and `environment:read` included — for everyone, including
+   admins with the override cookie. It is deliberately the same set
+   `access.listGrants` reports to the dashboard: when enforcement was narrower
+   than what was advertised, demo pages whose handlers require `org:admin`
+   (Costs, Budgets, Organization API Keys, Device Agent) rendered and then
+   403ed. Read-only-ness comes from the write guard in item 4, not from
+   withholding scopes.
 3. DONE (commit ae256351c1): transcript block lifted for the demo org in
    `chat.LoadChat` via `constants.DemoOrganizationID`.
 4. DONE: `authz.Engine.ShouldEnforce` forces enforcement for the demo org
    regardless of its RBAC product feature, and
    `middleware.DemoOrgWriteGuard` (`server/internal/middleware/demo.go`,
-   wired in `start.go`) rejects mutating `/rpc` calls by method-name verb as
-   defense-in-depth (POST alone is no signal — telemetry/risk reads POST).
+   wired in `start.go`) rejects mutating `/rpc` calls by method-name verb
+   (POST alone is no signal — telemetry/risk reads POST). Since demo sessions
+   hold every scope, this guard is the control that keeps the org read-only,
+   so it fails closed: only verbs in `demoReadOnlyVerbs` pass, and
+   `TestDemoGuardClassifiesEveryRPCVerb` fails when a new endpoint ships a
+   verb classified in neither map.
 5. DONE: `ImpersonationBanner` shows "Demo org — sample data" for any session
    whose active org slug is `acme-demo` (cookie no longer required); exit
    switches back to the user's own org via `auth.switchScopes`. Entry points:
