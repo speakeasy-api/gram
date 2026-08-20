@@ -130,6 +130,14 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 
 	txRepo := repo.New(dbtx)
 
+	// Match the deletion and update paths' lock order — custom domains before
+	// backend rows — so a create racing a backend deletion cannot deadlock:
+	// the insert's FK share on the domain row must not be requested while
+	// this transaction already holds the backend row a deleter is waiting on.
+	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(customDomainID)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
+	}
+
 	// Lock the backend row before validating and inserting. Backend deletion
 	// tombstones the backend and cascades a soft delete over its endpoints in
 	// one transaction, so an unlocked create could validate a live backend,
