@@ -343,7 +343,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Denied — enforced for the policy's audience only");
+    ).toBe("Denied, but enforced only for the policy's audience");
   });
 
   it("surfaces a decision the current rules contradict", () => {
@@ -357,7 +357,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Denied — overridden by an allow rule");
+    ).toBe("Denied, but overridden by an allow rule");
     // No grants at all: the denial's own block rule is what disappeared.
     expect(
       shadowMCPInventoryStatusDescription(
@@ -369,7 +369,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Denied — its block rule was removed");
+    ).toBe("Denied, but its block rule was removed");
     expect(
       shadowMCPInventoryStatusDescription(
         access({
@@ -380,7 +380,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Approved — overridden by a block rule");
+    ).toBe("Approved, but overridden by a block rule");
     // Deny-by-default with the approval's grants gone: nothing overrides,
     // the grants themselves were removed.
     expect(
@@ -393,7 +393,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Approved — its allow grants were removed");
+    ).toBe("Approved, but its allow grants were removed");
     // Standing grants outliving a newer denial name the real mechanism.
     expect(
       shadowMCPInventoryStatusDescription(
@@ -405,7 +405,7 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Denied — standing grants still allow some users");
+    ).toBe("Denied, but standing grants still allow some users");
   });
 
   it("flags a dormant decision no policy enforces", () => {
@@ -413,12 +413,12 @@ describe("shadowMCPInventoryStatusDescription", () => {
       shadowMCPInventoryStatusDescription(
         access({ state: "unenforced", decision: "denied" }),
       ),
-    ).toBe("Denied — not enforced until a blocking policy exists");
+    ).toBe("Denied, but not enforced until a blocking policy exists");
     expect(
       shadowMCPInventoryStatusDescription(
         access({ state: "unenforced", decision: "approved" }),
       ),
-    ).toBe("Approved — enforced once a blocking policy exists");
+    ).toBe("Approved, but not enforced until a blocking policy exists");
     expect(
       shadowMCPInventoryStatusDescription(access({ state: "unenforced" })),
     ).toBe("Not blocking");
