@@ -68,7 +68,6 @@ func registryAdapterKey(sourceType, authProfile string) string {
 }
 
 func zeroRegistry() Registry {
-	//nolint:exhaustruct // Registry projections intentionally omit unrelated row fields.
 	return Registry{ID: uuid.Nil, URL: ""}
 }
 
@@ -246,7 +245,7 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 	// out; arbitrary legacy URLs cannot enter the shared catalogue.
 	if legacyPulseSourceMetadataAbsent(row) && strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" {
 		return CatalogSource{
-			Registry:             Registry{ID: row.ID, URL: row.Url}, //nolint:exhaustruct // Registry projections intentionally omit unrelated row fields.
+			Registry:             Registry{ID: row.ID, URL: row.Url},
 			SourceType:           registrySourceTypePulseV01,
 			AuthProfile:          registryAuthProfilePulseServerCredentials,
 			CertificationVersion: "",
@@ -263,7 +262,7 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 		priority = row.Priority.Int32
 	}
 	return CatalogSource{
-		Registry:             Registry{ID: row.ID, URL: row.Url}, //nolint:exhaustruct // Registry projections intentionally omit unrelated row fields.
+		Registry:             Registry{ID: row.ID, URL: row.Url},
 		SourceType:           row.SourceType.String,
 		AuthProfile:          row.AuthProfile.String,
 		CertificationVersion: row.CertificationVersion.String,
@@ -287,6 +286,7 @@ func legacyPulseSourceMetadataAbsent(row repo.ListMCPRegistriesRow) bool {
 }
 
 func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, bool) {
+	//nolint:exhaustruct // Detail rows intentionally omit list-only timestamps.
 	return catalogSourceFromRow(repo.ListMCPRegistriesRow{
 		ID:                   row.ID,
 		Name:                 "",
