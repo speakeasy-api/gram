@@ -130,6 +130,26 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the backend row before validating and inserting. Backend deletion
+	// tombstones the backend and cascades a soft delete over its endpoints in
+	// one transaction, so an unlocked create could validate a live backend,
+	// then insert after that cascade commits, leaving a live endpoint pointing
+	// at a tombstoned backend.
+	if mcpServerID.Valid {
+		if _, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+			ID:        mcpServerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		}
+	}
+	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(metaMcpServerID), metaMcpServerID); err != nil {
+		return nil, err
+	}
+
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}

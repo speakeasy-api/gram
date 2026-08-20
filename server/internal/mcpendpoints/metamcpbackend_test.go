@@ -134,6 +134,35 @@ func TestCreateMcpEndpoint_RejectsForeignProjectMeta(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
+func TestCreateMcpEndpoint_RejectsTombstonedMeta(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	metaID := seedMetaMcpServer(t, ctx, ti, *authCtx.ProjectID)
+
+	_, err := metamcprepo.New(ti.conn).DeleteMetaMCPServer(ctx, metamcprepo.DeleteMetaMCPServerParams{
+		ID:             metaID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      nil,
+		MetaMcpServerID:  conv.PtrEmpty(metaID.String()),
+		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-tombstoned-meta"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestUpdateMcpEndpoint_SwitchesBackends(t *testing.T) {
 	t.Parallel()
 

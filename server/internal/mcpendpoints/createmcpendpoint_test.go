@@ -25,6 +25,34 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
+func TestCreateMcpEndpoint_RejectsTombstonedMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpServerID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+
+	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
+		ID:        mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
+		MetaMcpServerID:  nil,
+		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-tombstoned-server"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestCreateMcpEndpoint_PlatformDomainWithOrgPrefix(t *testing.T) {
 	t.Parallel()
 
