@@ -19,7 +19,7 @@ import { useOrgRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
@@ -1253,8 +1253,10 @@ function DeviceAgentSetupSheet({
   );
 }
 
-// PlatformTile is a clickable setup card. Local operating systems use their
-// platform marks; Remote sessions uses a cloud icon but opens the same sheet.
+// PlatformTile is a clickable setup card: logo on top, name and subtitle
+// stacked underneath, so four tiles fit a row without the text wrapping.
+// Local operating systems use their platform marks; Remote sessions uses a
+// cloud icon but opens the same sheet.
 function PlatformTile({
   platform,
   onClick,
@@ -1267,9 +1269,9 @@ function PlatformTile({
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full flex-col items-center gap-3 border p-5 text-center transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
+      <div className="bg-secondary flex h-14 w-14 shrink-0 items-center justify-center">
         {platform === "remote" ? (
           <Icon name="cloud" className="h-7 w-7" />
         ) : (
@@ -1284,11 +1286,10 @@ function PlatformTile({
           />
         )}
       </div>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="space-y-1">
         <p className="text-foreground text-sm font-medium">{cfg.label}</p>
         <p className="text-muted-foreground text-xs">{cfg.tileDesc}</p>
       </div>
-      <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
     </button>
   );
 }
