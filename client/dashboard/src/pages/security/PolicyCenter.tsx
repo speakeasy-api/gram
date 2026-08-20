@@ -98,6 +98,7 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { DetectionRulesTab } from "./DetectionRules";
+import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -561,6 +562,17 @@ const POLICY_CENTER_TABS = [
   "exclusions",
 ] as const;
 
+/** Assistant context for the Detection Rules tab: assembled from the static
+ *  client-side rule catalog so the other tabs pay no extra queries for it.
+ *  Rule-activity questions route through the finding-level tools. */
+const DETECTION_RULES_INSIGHTS_CONTEXT = [
+  "Page: Control Center, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
+  `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
+  "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
+  "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
+  "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+].join(" ");
+
 /** The page-level primary action follows the active tab: each tab creates its
  *  own kind of resource. */
 function policyCenterHeaderAction(
@@ -793,7 +805,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    "Page: Policy Center.",
+    "Page: Control Center, Policies tab.",
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -1026,7 +1038,7 @@ function PolicyCenterContent() {
           the standalone page whose URL used to select these suggestions. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
-          contextInfo={insightsContext}
+          contextInfo={DETECTION_RULES_INSIGHTS_CONTEXT}
           suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
