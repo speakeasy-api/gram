@@ -24,6 +24,7 @@ type Endpoints struct {
 	BulkUpdateAccountType    goa.Endpoint
 	DisableOrganization      goa.Endpoint
 	EnableOrganization       goa.Endpoint
+	SetupRBAC                goa.Endpoint
 	GetOrganization          goa.Endpoint
 	ListOrganizationMembers  goa.Endpoint
 	ListOrganizationProjects goa.Endpoint
@@ -52,6 +53,7 @@ func NewEndpoints(s Service) *Endpoints {
 		BulkUpdateAccountType:    NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
 		DisableOrganization:      NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
 		EnableOrganization:       NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		SetupRBAC:                NewSetupRBACEndpoint(s, a.APIKeyAuth),
 		GetOrganization:          NewGetOrganizationEndpoint(s, a.APIKeyAuth),
 		ListOrganizationMembers:  NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
@@ -78,6 +80,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.BulkUpdateAccountType = m(e.BulkUpdateAccountType)
 	e.DisableOrganization = m(e.DisableOrganization)
 	e.EnableOrganization = m(e.EnableOrganization)
+	e.SetupRBAC = m(e.SetupRBAC)
 	e.GetOrganization = m(e.GetOrganization)
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
@@ -232,6 +235,29 @@ func NewEnableOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.EnableOrganization(ctx, p)
+	}
+}
+
+// NewSetupRBACEndpoint returns an endpoint function that calls the method
+// "setupRBAC" of service "admin".
+func NewSetupRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetupRBACPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetupRBAC(ctx, p)
 	}
 }
 

@@ -19,6 +19,7 @@ import {
   MIN_TRIAL_REARM_DAYS,
   rearmTrial,
   resumeStripeSubscription,
+  setupOrganizationRBAC,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -313,6 +314,24 @@ describe("the organization write endpoints", () => {
 
     expect(requestOf(fetch)).toEqual({
       path: "/admin/organization.enable",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id },
+    });
+  });
+
+  it("posts the id to the RBAC setup path", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      setupOrganizationRBAC({ id: ORG.id }),
+    ).resolves.toBeUndefined();
+
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/organization.setupRBAC",
       method: "POST",
       contentType: "application/json",
       body: { id: ORG.id },

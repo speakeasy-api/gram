@@ -47,6 +47,10 @@ type Client struct {
 	// enableOrganization endpoint.
 	EnableOrganizationDoer goahttp.Doer
 
+	// SetupRBAC Doer is the HTTP client used to make requests to the setupRBAC
+	// endpoint.
+	SetupRBACDoer goahttp.Doer
+
 	// GetOrganization Doer is the HTTP client used to make requests to the
 	// getOrganization endpoint.
 	GetOrganizationDoer goahttp.Doer
@@ -127,6 +131,7 @@ func NewClient(
 		BulkUpdateAccountTypeDoer:    doer,
 		DisableOrganizationDoer:      doer,
 		EnableOrganizationDoer:       doer,
+		SetupRBACDoer:                doer,
 		GetOrganizationDoer:          doer,
 		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
@@ -335,6 +340,30 @@ func (c *Client) EnableOrganization() goa.Endpoint {
 		resp, err := c.EnableOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "enableOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetupRBAC returns an endpoint that makes HTTP requests to the admin service
+// setupRBAC server.
+func (c *Client) SetupRBAC() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetupRBACRequest(c.encoder)
+		decodeResponse = DecodeSetupRBACResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetupRBACRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetupRBACDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setupRBAC", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -100,7 +100,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|setup-rbac|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -349,6 +349,10 @@ func ParseEndpoint(
 		adminEnableOrganizationFlags                 = flag.NewFlagSet("enable-organization", flag.ExitOnError)
 		adminEnableOrganizationBodyFlag              = adminEnableOrganizationFlags.String("body", "REQUIRED", "")
 		adminEnableOrganizationAdminSessionTokenFlag = adminEnableOrganizationFlags.String("admin-session-token", "", "")
+
+		adminSetupRBACFlags                 = flag.NewFlagSet("setup-rbac", flag.ExitOnError)
+		adminSetupRBACBodyFlag              = adminSetupRBACFlags.String("body", "REQUIRED", "")
+		adminSetupRBACAdminSessionTokenFlag = adminSetupRBACFlags.String("admin-session-token", "", "")
 
 		adminGetOrganizationFlags                 = flag.NewFlagSet("get-organization", flag.ExitOnError)
 		adminGetOrganizationIDOrSlugFlag          = adminGetOrganizationFlags.String("id-or-slug", "REQUIRED", "")
@@ -3573,6 +3577,7 @@ func ParseEndpoint(
 	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
 	adminDisableOrganizationFlags.Usage = adminDisableOrganizationUsage
 	adminEnableOrganizationFlags.Usage = adminEnableOrganizationUsage
+	adminSetupRBACFlags.Usage = adminSetupRBACUsage
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
 	adminListOrganizationMembersFlags.Usage = adminListOrganizationMembersUsage
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
@@ -4559,6 +4564,9 @@ func ParseEndpoint(
 
 			case "enable-organization":
 				epf = adminEnableOrganizationFlags
+
+			case "setup-rbac":
+				epf = adminSetupRBACFlags
 
 			case "get-organization":
 				epf = adminGetOrganizationFlags
@@ -6659,6 +6667,9 @@ func ParseEndpoint(
 			case "enable-organization":
 				endpoint = c.EnableOrganization()
 				data, err = adminc.BuildEnableOrganizationPayload(*adminEnableOrganizationBodyFlag, *adminEnableOrganizationAdminSessionTokenFlag)
+			case "setup-rbac":
+				endpoint = c.SetupRBAC()
+				data, err = adminc.BuildSetupRBACPayload(*adminSetupRBACBodyFlag, *adminSetupRBACAdminSessionTokenFlag)
 			case "get-organization":
 				endpoint = c.GetOrganization()
 				data, err = adminc.BuildGetOrganizationPayload(*adminGetOrganizationIDOrSlugFlag, *adminGetOrganizationAdminSessionTokenFlag)
@@ -9196,6 +9207,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
+	fmt.Fprintln(os.Stderr, `    setup-rbac: Seeds the built-in roles and their core grants for a legacy organization. Idempotent: roles that already hold grants are left unchanged. New organizations receive this setup automatically.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
@@ -9377,6 +9389,26 @@ func adminEnableOrganizationUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin enable-organization --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminSetupRBACUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin setup-rbac", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Seeds the built-in roles and their core grants for a legacy organization. Idempotent: roles that already hold grants are left unchanged. New organizations receive this setup automatically.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin setup-rbac --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetOrganizationUsage() {

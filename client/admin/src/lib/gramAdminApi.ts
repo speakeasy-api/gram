@@ -375,6 +375,16 @@ export function enableOrganization(
   });
 }
 
+export function setupOrganizationRBAC(
+  body: OrganizationRequest,
+): Promise<void> {
+  return gramAdminSend("/admin/organization.setupRBAC", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 // The server's own bounds, mirrored so a value it would reject never leaves the
 // browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
 // server/internal/constants/trials.go: zero moves nothing but updated_at, a

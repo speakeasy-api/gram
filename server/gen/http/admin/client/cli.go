@@ -272,6 +272,37 @@ func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEna
 	return v, nil
 }
 
+// BuildSetupRBACPayload builds the payload for the admin setupRBAC endpoint
+// from CLI flags.
+func BuildSetupRBACPayload(adminSetupRBACBody string, adminSetupRBACAdminSessionToken string) (*admin.SetupRBACPayload, error) {
+	var err error
+	var body SetupRBACRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetupRBACBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetupRBACAdminSessionToken != "" {
+			adminSessionToken = &adminSetupRBACAdminSessionToken
+		}
+	}
+	v := &admin.SetupRBACPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetOrganizationPayload builds the payload for the admin getOrganization
 // endpoint from CLI flags.
 func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {

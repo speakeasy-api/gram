@@ -1050,6 +1050,78 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.setupRBAC:
+        post:
+            tags:
+                - admin
+            summary: setupRBAC admin
+            description: 'Seeds the built-in roles and their core grants for a legacy organization. Idempotent: roles that already hold grants are left unchanged. New organizations receive this setup automatically.'
+            operationId: adminSetupRBAC
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetupRBACRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.stripeSubscription:
         get:
             tags:
@@ -76390,6 +76462,15 @@ components:
                     type: string
                     description: The user_session_issuer id to link, or null to unlink.
                     format: uuid
+        SetupRBACRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
         ShadowMCPInventoryApprovalRequest:
             type: object
             properties:

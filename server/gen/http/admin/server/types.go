@@ -48,6 +48,13 @@ type EnableOrganizationRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// SetupRBACRequestBody is the type of the "admin" service "setupRBAC" endpoint
+// HTTP request body.
+type SetupRBACRequestBody struct {
+	// Organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ExtendTrialRequestBody is the type of the "admin" service "extendTrial"
 // endpoint HTTP request body.
 type ExtendTrialRequestBody struct {
@@ -1910,6 +1917,186 @@ type EnableOrganizationUnexpectedResponseBody struct {
 // service "enableOrganization" endpoint HTTP response body for the
 // "gateway_error" error.
 type EnableOrganizationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACUnauthorizedResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "unauthorized" error.
+type SetupRBACUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACForbiddenResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "forbidden" error.
+type SetupRBACForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACBadRequestResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "bad_request" error.
+type SetupRBACBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACNotFoundResponseBody is the type of the "admin" service "setupRBAC"
+// endpoint HTTP response body for the "not_found" error.
+type SetupRBACNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACConflictResponseBody is the type of the "admin" service "setupRBAC"
+// endpoint HTTP response body for the "conflict" error.
+type SetupRBACConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACUnsupportedMediaResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "unsupported_media" error.
+type SetupRBACUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACInvalidResponseBody is the type of the "admin" service "setupRBAC"
+// endpoint HTTP response body for the "invalid" error.
+type SetupRBACInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACInvariantViolationResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "invariant_violation" error.
+type SetupRBACInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACUnexpectedResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "unexpected" error.
+type SetupRBACUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetupRBACGatewayErrorResponseBody is the type of the "admin" service
+// "setupRBAC" endpoint HTTP response body for the "gateway_error" error.
+type SetupRBACGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5903,6 +6090,146 @@ func NewEnableOrganizationGatewayErrorResponseBody(res *goa.ServiceError) *Enabl
 	return body
 }
 
+// NewSetupRBACUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACUnauthorizedResponseBody(res *goa.ServiceError) *SetupRBACUnauthorizedResponseBody {
+	body := &SetupRBACUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACForbiddenResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACForbiddenResponseBody(res *goa.ServiceError) *SetupRBACForbiddenResponseBody {
+	body := &SetupRBACForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACBadRequestResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACBadRequestResponseBody(res *goa.ServiceError) *SetupRBACBadRequestResponseBody {
+	body := &SetupRBACBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACNotFoundResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACNotFoundResponseBody(res *goa.ServiceError) *SetupRBACNotFoundResponseBody {
+	body := &SetupRBACNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACConflictResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACConflictResponseBody(res *goa.ServiceError) *SetupRBACConflictResponseBody {
+	body := &SetupRBACConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACUnsupportedMediaResponseBody(res *goa.ServiceError) *SetupRBACUnsupportedMediaResponseBody {
+	body := &SetupRBACUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACInvalidResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACInvalidResponseBody(res *goa.ServiceError) *SetupRBACInvalidResponseBody {
+	body := &SetupRBACInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACInvariantViolationResponseBody(res *goa.ServiceError) *SetupRBACInvariantViolationResponseBody {
+	body := &SetupRBACInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACUnexpectedResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACUnexpectedResponseBody(res *goa.ServiceError) *SetupRBACUnexpectedResponseBody {
+	body := &SetupRBACUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetupRBACGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "setupRBAC" endpoint of the "admin" service.
+func NewSetupRBACGatewayErrorResponseBody(res *goa.ServiceError) *SetupRBACGatewayErrorResponseBody {
+	body := &SetupRBACGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetOrganizationUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getOrganization" endpoint of the "admin" service.
 func NewGetOrganizationUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationUnauthorizedResponseBody {
@@ -7889,6 +8216,16 @@ func NewEnableOrganizationPayload(body *EnableOrganizationRequestBody, adminSess
 	return v
 }
 
+// NewSetupRBACPayload builds a admin service setupRBAC endpoint payload.
+func NewSetupRBACPayload(body *SetupRBACRequestBody, adminSessionToken *string) *admin.SetupRBACPayload {
+	v := &admin.SetupRBACPayload{
+		ID: *body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetOrganizationPayload builds a admin service getOrganization endpoint
 // payload.
 func NewGetOrganizationPayload(idOrSlug string, adminSessionToken *string) *admin.GetOrganizationPayload {
@@ -8092,6 +8429,20 @@ func ValidateDisableOrganizationRequestBody(body *DisableOrganizationRequestBody
 // ValidateEnableOrganizationRequestBody runs the validations defined on
 // EnableOrganizationRequestBody
 func ValidateEnableOrganizationRequestBody(body *EnableOrganizationRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateSetupRBACRequestBody runs the validations defined on
+// SetupRBACRequestBody
+func ValidateSetupRBACRequestBody(body *SetupRBACRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

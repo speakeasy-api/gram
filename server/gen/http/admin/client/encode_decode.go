@@ -1925,6 +1925,227 @@ func DecodeEnableOrganizationResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildSetupRBACRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "setupRBAC" endpoint
+func (c *Client) BuildSetupRBACRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetupRBACAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setupRBAC", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetupRBACRequest returns an encoder for requests sent to the admin
+// setupRBAC server.
+func EncodeSetupRBACRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetupRBACPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setupRBAC", "*admin.SetupRBACPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetupRBACRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setupRBAC", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetupRBACResponse returns a decoder for responses returned by the
+// admin setupRBAC endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSetupRBACResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetupRBACResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetupRBACUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetupRBACForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetupRBACBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetupRBACNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetupRBACConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetupRBACUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetupRBACInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetupRBACInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+				}
+				err = ValidateSetupRBACInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+				}
+				return nil, NewSetupRBACInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetupRBACUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+				}
+				err = ValidateSetupRBACUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+				}
+				return nil, NewSetupRBACUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setupRBAC", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetupRBACGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setupRBAC", err)
+			}
+			err = ValidateSetupRBACGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setupRBAC", err)
+			}
+			return nil, NewSetupRBACGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setupRBAC", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetOrganizationRequest instantiates a HTTP request object with method
 // and path set to call the "admin" service "getOrganization" endpoint
 func (c *Client) BuildGetOrganizationRequest(ctx context.Context, v any) (*http.Request, error) {
