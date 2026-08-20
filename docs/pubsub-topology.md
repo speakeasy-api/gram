@@ -95,7 +95,7 @@ flowchart LR
   s_gram_authz_v1_challenge_ch_writer --> c12
   c13[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanTransformHandler"\]:::go
   s_gram_otel_v1_inbound_span_transformer --> c13
-  c14[\"📥<br/>server/cmd/gram/streams.go<br/>gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second}<br/>(batch)"\]:::go
+  c14[\"📥<br/>server/cmd/gram/streams.go<br/>spanRelayHandler<br/>(batch)"\]:::go
   s_gram_otel_v1_span_relay --> c14
   c15[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
   s_gram_ping_v2_processor --> c15
@@ -103,7 +103,7 @@ flowchart LR
   s_gram_ping_v2_py_processor --> c16
   c17[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
   s_gram_risk_v1_custom_rules_analyzer --> c17
-  c18[\"📥<br/>server/cmd/gram/streams.go<br/>gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second}<br/>(batch)"\]:::go
+  c18[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
   s_gram_risk_v1_finding_ch_writer --> c18
   c19[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
   s_gram_risk_v1_gitleaks_analyzer --> c19
@@ -125,7 +125,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge`](../infra/proto/gram/authz/v1/challenge.proto) | topic | 7d | [`server/internal/authz/challenge_logger.go`](../server/internal/authz/challenge_logger.go) |
 | [`gram-authz-v1-challenge-ch-writer-dlq`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | DLQ | — | — |
-| [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | 7d | — |
+| [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | — | — |
 | [`gram-otel-v1-inbound-span-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | DLQ | — | — |
 | [`gram-otel-v1-log-record`](../infra/proto/gram/otel/v1/log_record.proto) | topic | 7d | — |
 | [`gram-otel-v1-span`](../infra/proto/gram/otel/v1/span.proto) | topic | 7d | — |

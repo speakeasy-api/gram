@@ -611,7 +611,7 @@ pubsub:
           name: gram-otel-v1-inbound-span-transformer-dlq
         maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
-      retainAckedMessages: true
+      retainAckedMessages: false
       retryPolicy:
         maximumBackoff: 60s
         minimumBackoff: 10s
@@ -809,7 +809,6 @@ pubsub:
       proto_message: gram-otel-v1-inbound-span
     name: gram-otel-v1-inbound-span
     spec:
-      messageRetentionDuration: 604800s
       schemaSettings:
         encoding: BINARY
         schemaRef:

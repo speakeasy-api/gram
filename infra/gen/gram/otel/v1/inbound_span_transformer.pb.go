@@ -69,7 +69,7 @@ var File_gram_otel_v1_inbound_span_transformer_proto protoreflect.FileDescriptor
 const file_gram_otel_v1_inbound_span_transformer_proto_rawDesc = "" +
 	"\n" +
 	"+gram/otel/v1/inbound_span_transformer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"R\n" +
-	"\x16InboundSpanTransformer:8\x92\xb5\x184\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\b\n" +
+	"\x16InboundSpanTransformer:8\x92\xb5\x184\x12\x04\b\x80\xf5$\x18\x00\"\x02\b<2\b\n" +
 	"\x02\b\n" +
 	"\x12\x02\b<J\x02\x10\n" +
 	"R\x18gram.otel.v1.InboundSpanB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"

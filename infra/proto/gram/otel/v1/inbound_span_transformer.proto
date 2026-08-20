@@ -11,7 +11,7 @@ message InboundSpanTransformer {
     topic: "gram.otel.v1.InboundSpan"
     ack_deadline: {seconds: 60}
     retention: {seconds: 604800} /* 7 days */
-    retain_acked_messages: true
+    retain_acked_messages: false
     retry_policy: {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 60}

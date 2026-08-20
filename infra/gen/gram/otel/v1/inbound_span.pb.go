@@ -2420,7 +2420,7 @@ var File_gram_otel_v1_inbound_span_proto protoreflect.FileDescriptor
 
 const file_gram_otel_v1_inbound_span_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgram/otel/v1/inbound_span.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc2\x17\n" +
+	"\x1fgram/otel/v1/inbound_span.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbc\x17\n" +
 	"\vInboundSpan\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\fR\atraceId\x12\x17\n" +
 	"\aspan_id\x18\x02 \x01(\fR\x06spanId\x12\x1f\n" +
@@ -2524,8 +2524,7 @@ const file_gram_otel_v1_inbound_span_proto_rawDesc = "" +
 	"StatusCode\x12\x1b\n" +
 	"\x17STATUS_CODE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSTATUS_CODE_OK\x10\x01\x12\x15\n" +
-	"\x11STATUS_CODE_ERROR\x10\x02:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$J\x06\b\xe8\a\x10\xe9\aB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
+	"\x11STATUS_CODE_ERROR\x10\x02:\x04\x8a\xb5\x18\x00J\x06\b\xe8\a\x10\xe9\aB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
 
 var file_gram_otel_v1_inbound_span_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_gram_otel_v1_inbound_span_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
