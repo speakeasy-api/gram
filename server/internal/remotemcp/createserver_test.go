@@ -78,6 +78,97 @@ func TestCreateServerAndMcpServer(t *testing.T) {
 	require.Equal(t, beforeMcpAuditCount+1, afterMcpAuditCount)
 }
 
+func TestCreateServerAndMcpServer_AllowsSSE(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("SSE source"),
+		URL:              "https://mcp.example.com/events",
+		TransportType:    "sse",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "sse", result.RemoteMcpServer.TransportType)
+	require.Equal(t, result.RemoteMcpServer.ID, *result.McpServer.RemoteMcpServerID)
+}
+
+func TestCreateServerAndMcpServer_RequiresLiveProjectInActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	foreignAuthCtx := *authCtx
+	foreignAuthCtx.ActiveOrganizationID = "another-organization"
+	ctx = contextvalues.SetAuthContext(ctx, &foreignAuthCtx)
+
+	_, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("Foreign organization source"),
+		URL:              "https://mcp.example.com/foreign",
+		TransportType:    "streamable-http",
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	var remoteCount, mcpCount, issuerCount int
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&remoteCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&mcpCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&issuerCount))
+	require.Zero(t, remoteCount)
+	require.Zero(t, mcpCount)
+	require.Zero(t, issuerCount)
+}
+
+func TestCreateServerAndMcpServer_RollsBackAllResourcesWhenMaterializationFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.conn.Exec(ctx, `
+CREATE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql`)
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()`)
+	require.NoError(t, err)
+
+	var remoteCount, mcpCount, issuerCount int
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&remoteCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&mcpCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&issuerCount))
+
+	_, err = ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("Fails atomically"),
+		URL:              "https://mcp.example.com/failing",
+		TransportType:    "streamable-http",
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	var afterRemoteCount, afterMcpCount, afterIssuerCount int
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterRemoteCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterMcpCount))
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterIssuerCount))
+	require.Equal(t, remoteCount, afterRemoteCount)
+	require.Equal(t, mcpCount, afterMcpCount)
+	require.Equal(t, issuerCount, afterIssuerCount)
+}
+
 func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {
 	t.Parallel()
 

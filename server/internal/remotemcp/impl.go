@@ -103,59 +103,23 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
-	// Generate the server ID up front so the slug can include its suffix and
-	// the row can be inserted in a single statement (no insert-then-update).
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
-	}
-
-	slug, err := conv.URLBackedSlug(payload.URL, serverID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
-	}
-
-	name := pgtype.Text{String: "", Valid: false}
-	if payload.Name != nil {
-		if trimmed := strings.TrimSpace(*payload.Name); trimmed != "" {
-			name = pgtype.Text{String: trimmed, Valid: true}
-		}
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	txRepo := repo.New(dbtx)
-
-	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:            serverID,
-		ProjectID:     *authCtx.ProjectID,
-		Name:          name,
-		Slug:          conv.ToPGText(slug),
+	server, err := createRemoteMCPSource(ctx, dbtx, s.audit, authCtx, remoteMCPSourceInput{
+		Name:          payload.Name,
+		URL:           payload.URL,
 		TransportType: payload.TransportType,
-		Url:           payload.URL,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").LogError(ctx, logger)
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, shareableErr.LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").LogError(ctx, logger)
-	}
-
-	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          *authCtx.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:   authCtx.Email,
-		ActorSlug:          nil,
-		RemoteMcpServerURN: urn.NewRemoteMcpServer(server.ID),
-		RemoteMcpServerURL: server.Url,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server creation").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create remote MCP server").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
