@@ -34103,6 +34103,109 @@ paths:
       x-speakeasy-name-override: createServer
       x-speakeasy-react-hook:
         name: CreateRemoteMcpServer
+  /rpc/remoteMcp.createServerAndMcpServer:
+    post:
+      description: Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.
+      operationId: createRemoteMcpServerAndMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateServerAndMcpServerResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createServerAndMcpServer remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: createServerAndMcpServer
   /rpc/remoteMcp.createServerHeader:
     post:
       description: Create a header on a remote MCP server
@@ -62910,6 +63013,17 @@ components:
       required:
         - name
         - grants
+    CreateServerAndMcpServerResult:
+      type: object
+      properties:
+        mcp_server:
+          $ref: '#/components/schemas/McpServer'
+        remote_mcp_server:
+          $ref: '#/components/schemas/RemoteMcpServer'
+      description: The atomically created remote MCP source and its linked disabled MCP server.
+      required:
+        - remote_mcp_server
+        - mcp_server
     CreateServerForm:
       type: object
       properties:
