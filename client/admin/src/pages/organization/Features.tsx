@@ -67,6 +67,13 @@ const PRODUCT_FEATURES: FeatureDefinition[] = [
       "Shows the Auto refresh opt-in on remote-session consent screens.",
   },
   {
+    featureName: "session_portability",
+    enabledKey: "session_portability_enabled",
+    label: "Session Portability",
+    description:
+      "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
+  },
+  {
     featureName: "sso",
     enabledKey: "sso_enabled",
     label: "SSO",

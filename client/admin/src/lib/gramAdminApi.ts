@@ -501,6 +501,7 @@ export type AdminOrganizationFeatures = {
   custom_model_keys_enabled: boolean;
   platform_mcp_enabled: boolean;
   remote_session_auto_refresh_enabled: boolean;
+  session_portability_enabled: boolean;
   sso_enabled: boolean;
   scim_enabled: boolean;
 };
@@ -511,6 +512,7 @@ export type AdminOrganizationFeatureName =
   | "custom_model_keys"
   | "platform_mcp"
   | "remote_session_auto_refresh"
+  | "session_portability"
   | "sso"
   | "scim";
 
