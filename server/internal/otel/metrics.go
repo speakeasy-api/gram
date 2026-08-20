@@ -33,6 +33,10 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metric
 }
 
 func (m *metrics) recordEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
+	if m.enricherDuration == nil {
+		return
+	}
+
 	m.enricherDuration.Record(
 		ctx,
 		duration,
