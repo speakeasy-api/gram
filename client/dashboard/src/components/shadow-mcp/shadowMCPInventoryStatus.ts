@@ -237,10 +237,14 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
   switch (summary.state) {
     case "allowed": {
       // A denial the current rules no longer carry must not vanish under a
-      // green badge: the decision stands recorded even though nothing
-      // enforces it.
+      // green badge — and the subtext names what displaced it: an allow rule
+      // that wins over the denial, or the denial's own block rule having
+      // been removed (a denial under allow-by-default always writes one, so
+      // allowed-yet-denied means it is gone).
       if (summary.decision === "denied") {
-        return "Allowed — a recorded denial is not enforced";
+        return summary.allowedFor !== "none"
+          ? "Denied — overridden by an allow rule"
+          : "Denied — its block rule was removed";
       }
       // Credit the review only while its own grants carry the allow; an
       // approval whose grants were removed leaves the server allowed by
@@ -264,9 +268,13 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
           : "Blocked by review";
       }
       if (summary.decision === "approved") {
-        // The symmetric contradiction: an approval an explicit block
-        // overrides.
-        return "Blocked — a recorded approval is not enforced";
+        // The symmetric contradiction, naming the mechanism: an explicit
+        // block rule that wins over the approval, or the approval's own
+        // grants having been removed (an approval always writes them, so
+        // blocked-yet-approved with no block rule means they are gone).
+        return summary.blockedFor !== "none"
+          ? "Approved — overridden by a block rule"
+          : "Approved — its allow grants were removed";
       }
       return summary.blockingDefault === "deny"
         ? "Blocked by policy"

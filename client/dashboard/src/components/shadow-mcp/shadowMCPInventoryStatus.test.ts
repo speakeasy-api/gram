@@ -357,7 +357,19 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Allowed — a recorded denial is not enforced");
+    ).toBe("Denied — overridden by an allow rule");
+    // No grants at all: the denial's own block rule is what disappeared.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        access({
+          state: "allowed",
+          allowedFor: "none",
+          blockingDefault: "allow",
+          decision: "denied",
+          decisionCoverage: "partial",
+        }),
+      ),
+    ).toBe("Denied — its block rule was removed");
     expect(
       shadowMCPInventoryStatusDescription(
         access({
@@ -368,7 +380,20 @@ describe("shadowMCPInventoryStatusDescription", () => {
           decisionCoverage: "partial",
         }),
       ),
-    ).toBe("Blocked — a recorded approval is not enforced");
+    ).toBe("Approved — overridden by a block rule");
+    // Deny-by-default with the approval's grants gone: nothing overrides,
+    // the grants themselves were removed.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        access({
+          state: "blocked",
+          blockedFor: "none",
+          blockingDefault: "deny",
+          decision: "approved",
+          decisionCoverage: "partial",
+        }),
+      ),
+    ).toBe("Approved — its allow grants were removed");
     // Standing grants outliving a newer denial name the real mechanism.
     expect(
       shadowMCPInventoryStatusDescription(
