@@ -3,6 +3,7 @@ import {
   decodeManifestFile,
   manifestByteLength,
   MAX_SKILL_MANIFEST_BYTES,
+  SKILL_MANIFEST_TEMPLATE,
   stripSkillFrontmatter,
   validateManifestContent,
 } from "./skill-manifest";
@@ -45,6 +46,14 @@ describe("skill manifest helpers", () => {
     const manifest =
       "--- \u2003\nname: example\ndescription: Example.\n---\t\n\n# Body  \ntext\u2003";
     expect(stripSkillFrontmatter(manifest)).toBe("# Body  \ntext\u2003");
+  });
+
+  it("exposes a create-dialog skeleton with required frontmatter and a body", () => {
+    expect(validateManifestContent(SKILL_MANIFEST_TEMPLATE)).toBeNull();
+    expect(SKILL_MANIFEST_TEMPLATE.startsWith("---\n")).toBe(true);
+    expect(SKILL_MANIFEST_TEMPLATE).toContain("name: my-skill");
+    expect(SKILL_MANIFEST_TEMPLATE).toContain("description:");
+    expect(stripSkillFrontmatter(SKILL_MANIFEST_TEMPLATE)).toMatch(/^# /);
   });
 
   it("safely returns malformed manifests unchanged", () => {

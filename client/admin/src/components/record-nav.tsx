@@ -4,7 +4,7 @@ import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   BuildingIcon,
   ChevronLeftIcon,
-  ExternalLinkIcon,
+  CreditCardIcon,
   FolderIcon,
   SlidersHorizontalIcon,
   UsersIcon,
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/sidebar";
 import { organizationProjectsQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { LEAVES_THE_APP, organizationFeaturesUrl } from "@/lib/impersonation";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 
 // Indexed as a plain string record, for the reason `Trial` gives: the server
@@ -79,11 +78,6 @@ export function RecordNav({
   const matchRoute = useMatchRoute();
   const { data } = useQuery(organizationProjectsQuery(org.id));
 
-  // The one item built from `org.slug` rather than the address: the server
-  // reads the organization back out of the redirect's first segment, so an id
-  // there lands the operator nowhere.
-  const featuresUrl = organizationFeaturesUrl(org.slug);
-
   // Undefined until the query resolves. `?? 0` here would paint a zero over a
   // question nothing has answered yet.
   const projectCount = data?.projects.length;
@@ -100,8 +94,16 @@ export function RecordNav({
     to: "/organizations/$idOrSlug",
     params: { idOrSlug },
   });
+  const onBilling = !!matchRoute({
+    to: "/organizations/$idOrSlug/billing",
+    params: { idOrSlug },
+  });
   const onMembers = !!matchRoute({
     to: "/organizations/$idOrSlug/members",
+    params: { idOrSlug },
+  });
+  const onFeatures = !!matchRoute({
+    to: "/organizations/$idOrSlug/features",
     params: { idOrSlug },
   });
 
@@ -204,35 +206,35 @@ export function RecordNav({
               )}
             </SidebarMenuItem>
 
-            {/* Absent rather than dead when the record has no slug or no app
-                origin is configured, the way the header's Open in Gram is. */}
-            {featuresUrl && (
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Features">
-                  {/* A plain anchor, not a `Link`: this is the only item that
-                      leaves the admin app, because every admin endpoint for
-                      the feature switches resolves the operator's own
-                      organization rather than this record. AGE-3242. It is not
-                      an address here, so it can never be the current page. */}
-                  <a
-                    href={featuresUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-current={ariaCurrent(false)}
-                  >
-                    <SlidersHorizontalIcon />
-                    <span>
-                      Features
-                      <span className="sr-only">{LEAVES_THE_APP}</span>
-                    </span>
-                    <ExternalLinkIcon
-                      aria-hidden="true"
-                      className="ml-auto opacity-60 group-data-[collapsible=icon]:hidden"
-                    />
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={onBilling} tooltip="Billing">
+                <Link
+                  to="/organizations/$idOrSlug/billing"
+                  params={{ idOrSlug }}
+                  {...currentProps(onBilling)}
+                >
+                  <CreditCardIcon />
+                  <span>Billing</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onFeatures}
+                tooltip="Features"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/features"
+                  params={{ idOrSlug }}
+                  {...currentProps(onFeatures)}
+                >
+                  <SlidersHorizontalIcon />
+                  <span>Features</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={onMembers} tooltip="Members">

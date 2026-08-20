@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -54,6 +55,11 @@ type ProxyManager struct {
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
 	platformMCPSelectedUseRecorder        toolcallobserver.SuccessRecorder
+
+	// witnessStore backs listing-witnessed live enforcement of live
+	// annotation grants: the list interceptor records the rows each session
+	// was shown, the call interceptor matches against them.
+	witnessStore *toolfilter.SessionToolWitnessStore
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -72,6 +78,7 @@ func NewProxyManager(
 	billingTracker billing.Tracker,
 	toolDispositions ToolDispositionResolver,
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
+	witnessStore *toolfilter.SessionToolWitnessStore,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -92,6 +99,7 @@ func NewProxyManager(
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
+		witnessStore:                          witnessStore,
 	}
 }
 
@@ -116,6 +124,12 @@ func NewProxyManager(
 // upfront server-level `mcp:connect` check uses, keeping per-tool and
 // server-level authorization consistent for the same caller. server.ID still
 // drives telemetry/logging dimensions, which are keyed by remote_mcp_servers.
+//
+// selection is the caller's consent-screen session tool selection. Nil means
+// all tools: no selection interceptors attach and strict typed handling stays
+// off. Non-nil attaches exact-name tools/list filtering and tools/call
+// rejection after any RBAC interceptors, and turns on the proxy's strict
+// typed handling so malformed tools traffic fails closed instead of relaying.
 func (f *ProxyManager) Build(
 	logger *slog.Logger,
 	server *remotemcprepo.RemoteMcpServer,
@@ -125,6 +139,7 @@ func (f *ProxyManager) Build(
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
@@ -140,7 +155,7 @@ func (f *ProxyManager) Build(
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
-	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate)
+	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate, selection)
 }
 
 func (f *ProxyManager) BuildTarget(
@@ -152,6 +167,7 @@ func (f *ProxyManager) BuildTarget(
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) *proxy.Proxy {
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
@@ -196,6 +212,14 @@ func (f *ProxyManager) BuildTarget(
 		)
 	}
 
+	// Session-selection enforcement runs after the RBAC interceptors above so
+	// the effective catalog is the intersection of RBAC and consent.
+	if selection != nil {
+		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
+		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
+	}
+
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC
 	// and the resources/list RBAC filter are deferred to a follow-up —
@@ -225,6 +249,7 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
+		StrictToolSelection:         selection != nil,
 		WWWAuthenticate:             wwwAuthenticate,
 		// The census runs first so every parsed request is counted, including
 		// those a later interceptor rejects — matching the hosted dispatch,

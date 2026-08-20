@@ -100,7 +100,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -110,7 +110,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -141,7 +141,7 @@ func UsageCommands() []string {
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -181,7 +181,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin login --return-to \"abc123\" --prompt \"abc123\"" + "\n" +
-		os.Args[0] + " " + "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"" + "\n" +
 		""
 }
 
@@ -391,11 +391,32 @@ func ParseEndpoint(
 		adminGetOrganizationStatsFlags                 = flag.NewFlagSet("get-organization-stats", flag.ExitOnError)
 		adminGetOrganizationStatsAdminSessionTokenFlag = adminGetOrganizationStatsFlags.String("admin-session-token", "", "")
 
+		adminGetInferenceKeysFlags                 = flag.NewFlagSet("get-inference-keys", flag.ExitOnError)
+		adminGetInferenceKeysOrganizationIDFlag    = adminGetInferenceKeysFlags.String("organization-id", "REQUIRED", "")
+		adminGetInferenceKeysAdminSessionTokenFlag = adminGetInferenceKeysFlags.String("admin-session-token", "", "")
+
+		adminGetPaygBillingSummaryFlags                 = flag.NewFlagSet("get-payg-billing-summary", flag.ExitOnError)
+		adminGetPaygBillingSummaryOrganizationIDFlag    = adminGetPaygBillingSummaryFlags.String("organization-id", "REQUIRED", "")
+		adminGetPaygBillingSummaryAdminSessionTokenFlag = adminGetPaygBillingSummaryFlags.String("admin-session-token", "", "")
+
+		adminGetStripeSubscriptionFlags                 = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
+		adminGetStripeSubscriptionOrganizationIDFlag    = adminGetStripeSubscriptionFlags.String("organization-id", "REQUIRED", "")
+		adminGetStripeSubscriptionAdminSessionTokenFlag = adminGetStripeSubscriptionFlags.String("admin-session-token", "", "")
+
+		adminCancelStripeSubscriptionFlags                 = flag.NewFlagSet("cancel-stripe-subscription", flag.ExitOnError)
+		adminCancelStripeSubscriptionBodyFlag              = adminCancelStripeSubscriptionFlags.String("body", "REQUIRED", "")
+		adminCancelStripeSubscriptionAdminSessionTokenFlag = adminCancelStripeSubscriptionFlags.String("admin-session-token", "", "")
+
+		adminResumeStripeSubscriptionFlags                 = flag.NewFlagSet("resume-stripe-subscription", flag.ExitOnError)
+		adminResumeStripeSubscriptionBodyFlag              = adminResumeStripeSubscriptionFlags.String("body", "REQUIRED", "")
+		adminResumeStripeSubscriptionAdminSessionTokenFlag = adminResumeStripeSubscriptionFlags.String("admin-session-token", "", "")
+
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
 		agentGetPluginsFlags            = flag.NewFlagSet("get-plugins", flag.ExitOnError)
-		agentGetPluginsEmailFlag        = agentGetPluginsFlags.String("email", "REQUIRED", "")
+		agentGetPluginsLegacyEmailFlag  = agentGetPluginsFlags.String("legacy-email", "", "")
 		agentGetPluginsApikeyTokenFlag  = agentGetPluginsFlags.String("apikey-token", "", "")
+		agentGetPluginsEmailFlag        = agentGetPluginsFlags.String("email", "", "")
 		agentGetPluginsSerialNumberFlag = agentGetPluginsFlags.String("serial-number", "", "")
 		agentGetPluginsHostnameFlag     = agentGetPluginsFlags.String("hostname", "", "")
 
@@ -765,6 +786,12 @@ func ParseEndpoint(
 		chatListSourcesSessionTokenFlag      = chatListSourcesFlags.String("session-token", "", "")
 		chatListSourcesProjectSlugInputFlag  = chatListSourcesFlags.String("project-slug-input", "", "")
 		chatListSourcesChatSessionsTokenFlag = chatListSourcesFlags.String("chat-sessions-token", "", "")
+
+		chatListSessionLinksFlags                 = flag.NewFlagSet("list-session-links", flag.ExitOnError)
+		chatListSessionLinksChatIdsFlag           = chatListSessionLinksFlags.String("chat-ids", "REQUIRED", "")
+		chatListSessionLinksSessionTokenFlag      = chatListSessionLinksFlags.String("session-token", "", "")
+		chatListSessionLinksProjectSlugInputFlag  = chatListSessionLinksFlags.String("project-slug-input", "", "")
+		chatListSessionLinksChatSessionsTokenFlag = chatListSessionLinksFlags.String("chat-sessions-token", "", "")
 
 		chatSessionsFlags = flag.NewFlagSet("chat-sessions", flag.ContinueOnError)
 
@@ -1769,6 +1796,10 @@ func ParseEndpoint(
 		pluginsSetPluginAssignmentsSessionTokenFlag     = pluginsSetPluginAssignmentsFlags.String("session-token", "", "")
 		pluginsSetPluginAssignmentsProjectSlugInputFlag = pluginsSetPluginAssignmentsFlags.String("project-slug-input", "", "")
 
+		pluginsListAudiencesFlags                = flag.NewFlagSet("list-audiences", flag.ExitOnError)
+		pluginsListAudiencesSessionTokenFlag     = pluginsListAudiencesFlags.String("session-token", "", "")
+		pluginsListAudiencesProjectSlugInputFlag = pluginsListAudiencesFlags.String("project-slug-input", "", "")
+
 		pluginsDownloadPluginPackageFlags                = flag.NewFlagSet("download-plugin-package", flag.ExitOnError)
 		pluginsDownloadPluginPackagePluginIDFlag         = pluginsDownloadPluginPackageFlags.String("plugin-id", "REQUIRED", "")
 		pluginsDownloadPluginPackagePlatformFlag         = pluginsDownloadPluginPackageFlags.String("platform", "REQUIRED", "")
@@ -1816,8 +1847,9 @@ func ParseEndpoint(
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
-		featuresGetProductFeaturesFlags            = flag.NewFlagSet("get-product-features", flag.ExitOnError)
-		featuresGetProductFeaturesSessionTokenFlag = featuresGetProductFeaturesFlags.String("session-token", "", "")
+		featuresGetProductFeaturesFlags              = flag.NewFlagSet("get-product-features", flag.ExitOnError)
+		featuresGetProductFeaturesOrganizationIDFlag = featuresGetProductFeaturesFlags.String("organization-id", "REQUIRED", "")
+		featuresGetProductFeaturesSessionTokenFlag   = featuresGetProductFeaturesFlags.String("session-token", "", "")
 
 		featuresSetProductFeatureFlags            = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
@@ -2384,6 +2416,7 @@ func ParseEndpoint(
 		riskListDismissedRiskResultsFlags                = flag.NewFlagSet("list-dismissed-risk-results", flag.ExitOnError)
 		riskListDismissedRiskResultsCursorFlag           = riskListDismissedRiskResultsFlags.String("cursor", "", "")
 		riskListDismissedRiskResultsLimitFlag            = riskListDismissedRiskResultsFlags.String("limit", "", "")
+		riskListDismissedRiskResultsReasonsFlag          = riskListDismissedRiskResultsFlags.String("reasons", "", "")
 		riskListDismissedRiskResultsApikeyTokenFlag      = riskListDismissedRiskResultsFlags.String("apikey-token", "", "")
 		riskListDismissedRiskResultsSessionTokenFlag     = riskListDismissedRiskResultsFlags.String("session-token", "", "")
 		riskListDismissedRiskResultsProjectSlugInputFlag = riskListDismissedRiskResultsFlags.String("project-slug-input", "", "")
@@ -3548,6 +3581,11 @@ func ParseEndpoint(
 	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
 	adminRearmTrialFlags.Usage = adminRearmTrialUsage
 	adminGetOrganizationStatsFlags.Usage = adminGetOrganizationStatsUsage
+	adminGetInferenceKeysFlags.Usage = adminGetInferenceKeysUsage
+	adminGetPaygBillingSummaryFlags.Usage = adminGetPaygBillingSummaryUsage
+	adminGetStripeSubscriptionFlags.Usage = adminGetStripeSubscriptionUsage
+	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
+	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -3630,6 +3668,7 @@ func ParseEndpoint(
 	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
+	chatListSessionLinksFlags.Usage = chatListSessionLinksUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
@@ -3885,6 +3924,7 @@ func ParseEndpoint(
 	pluginsUpdatePluginServerFlags.Usage = pluginsUpdatePluginServerUsage
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
+	pluginsListAudiencesFlags.Usage = pluginsListAudiencesUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
 	pluginsDownloadPlatformMCPPluginFlags.Usage = pluginsDownloadPlatformMCPPluginUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
@@ -4544,6 +4584,21 @@ func ParseEndpoint(
 			case "get-organization-stats":
 				epf = adminGetOrganizationStatsFlags
 
+			case "get-inference-keys":
+				epf = adminGetInferenceKeysFlags
+
+			case "get-payg-billing-summary":
+				epf = adminGetPaygBillingSummaryFlags
+
+			case "get-stripe-subscription":
+				epf = adminGetStripeSubscriptionFlags
+
+			case "cancel-stripe-subscription":
+				epf = adminCancelStripeSubscriptionFlags
+
+			case "resume-stripe-subscription":
+				epf = adminResumeStripeSubscriptionFlags
+
 			}
 
 		case "agent":
@@ -4769,6 +4824,9 @@ func ParseEndpoint(
 
 			case "list-sources":
 				epf = chatListSourcesFlags
+
+			case "list-session-links":
+				epf = chatListSessionLinksFlags
 
 			}
 
@@ -5472,6 +5530,9 @@ func ParseEndpoint(
 
 			case "set-plugin-assignments":
 				epf = pluginsSetPluginAssignmentsFlags
+
+			case "list-audiences":
+				epf = pluginsListAudiencesFlags
 
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
@@ -6622,13 +6683,28 @@ func ParseEndpoint(
 			case "get-organization-stats":
 				endpoint = c.GetOrganizationStats()
 				data, err = adminc.BuildGetOrganizationStatsPayload(*adminGetOrganizationStatsAdminSessionTokenFlag)
+			case "get-inference-keys":
+				endpoint = c.GetInferenceKeys()
+				data, err = adminc.BuildGetInferenceKeysPayload(*adminGetInferenceKeysOrganizationIDFlag, *adminGetInferenceKeysAdminSessionTokenFlag)
+			case "get-payg-billing-summary":
+				endpoint = c.GetPaygBillingSummary()
+				data, err = adminc.BuildGetPaygBillingSummaryPayload(*adminGetPaygBillingSummaryOrganizationIDFlag, *adminGetPaygBillingSummaryAdminSessionTokenFlag)
+			case "get-stripe-subscription":
+				endpoint = c.GetStripeSubscription()
+				data, err = adminc.BuildGetStripeSubscriptionPayload(*adminGetStripeSubscriptionOrganizationIDFlag, *adminGetStripeSubscriptionAdminSessionTokenFlag)
+			case "cancel-stripe-subscription":
+				endpoint = c.CancelStripeSubscription()
+				data, err = adminc.BuildCancelStripeSubscriptionPayload(*adminCancelStripeSubscriptionBodyFlag, *adminCancelStripeSubscriptionAdminSessionTokenFlag)
+			case "resume-stripe-subscription":
+				endpoint = c.ResumeStripeSubscription()
+				data, err = adminc.BuildResumeStripeSubscriptionPayload(*adminResumeStripeSubscriptionBodyFlag, *adminResumeStripeSubscriptionAdminSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
 			case "get-plugins":
 				endpoint = c.GetPlugins()
-				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag)
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag)
 			case "list-synced-users":
 				endpoint = c.ListSyncedUsers()
 				data, err = agentc.BuildListSyncedUsersPayload(*agentListSyncedUsersSessionTokenFlag)
@@ -6863,6 +6939,9 @@ func ParseEndpoint(
 			case "list-sources":
 				endpoint = c.ListSources()
 				data, err = chatc.BuildListSourcesPayload(*chatListSourcesSessionTokenFlag, *chatListSourcesProjectSlugInputFlag, *chatListSourcesChatSessionsTokenFlag)
+			case "list-session-links":
+				endpoint = c.ListSessionLinks()
+				data, err = chatc.BuildListSessionLinksPayload(*chatListSessionLinksChatIdsFlag, *chatListSessionLinksSessionTokenFlag, *chatListSessionLinksProjectSlugInputFlag, *chatListSessionLinksChatSessionsTokenFlag)
 			}
 		case "chat-sessions":
 			c := chatsessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7569,6 +7648,9 @@ func ParseEndpoint(
 			case "set-plugin-assignments":
 				endpoint = c.SetPluginAssignments()
 				data, err = pluginsc.BuildSetPluginAssignmentsPayload(*pluginsSetPluginAssignmentsBodyFlag, *pluginsSetPluginAssignmentsSessionTokenFlag, *pluginsSetPluginAssignmentsProjectSlugInputFlag)
+			case "list-audiences":
+				endpoint = c.ListAudiences()
+				data, err = pluginsc.BuildListAudiencesPayload(*pluginsListAudiencesSessionTokenFlag, *pluginsListAudiencesProjectSlugInputFlag)
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
@@ -7605,7 +7687,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-product-features":
 				endpoint = c.GetProductFeatures()
-				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesSessionTokenFlag)
+				data, err = featuresc.BuildGetProductFeaturesPayload(*featuresGetProductFeaturesOrganizationIDFlag, *featuresGetProductFeaturesSessionTokenFlag)
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
@@ -7934,7 +8016,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildUnmarkRiskResultsFalsePositivePayload(*riskUnmarkRiskResultsFalsePositiveBodyFlag, *riskUnmarkRiskResultsFalsePositiveApikeyTokenFlag, *riskUnmarkRiskResultsFalsePositiveSessionTokenFlag, *riskUnmarkRiskResultsFalsePositiveProjectSlugInputFlag)
 			case "list-dismissed-risk-results":
 				endpoint = c.ListDismissedRiskResults()
-				data, err = riskc.BuildListDismissedRiskResultsPayload(*riskListDismissedRiskResultsCursorFlag, *riskListDismissedRiskResultsLimitFlag, *riskListDismissedRiskResultsApikeyTokenFlag, *riskListDismissedRiskResultsSessionTokenFlag, *riskListDismissedRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListDismissedRiskResultsPayload(*riskListDismissedRiskResultsCursorFlag, *riskListDismissedRiskResultsLimitFlag, *riskListDismissedRiskResultsReasonsFlag, *riskListDismissedRiskResultsApikeyTokenFlag, *riskListDismissedRiskResultsSessionTokenFlag, *riskListDismissedRiskResultsProjectSlugInputFlag)
 			case "get-risk-overview":
 				endpoint = c.GetRiskOverview()
 				data, err = riskc.BuildGetRiskOverviewPayload(*riskGetRiskOverviewFromFlag, *riskGetRiskOverviewToFlag, *riskGetRiskOverviewApikeyTokenFlag, *riskGetRiskOverviewSessionTokenFlag, *riskGetRiskOverviewProjectSlugInputFlag)
@@ -9122,6 +9204,11 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
 	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-stats: Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
+	fmt.Fprintln(os.Stderr, `    get-inference-keys: Returns the configured state of every materialized platform-managed OpenRouter key for an organization.`)
+	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Returns current PAYG usage and estimated cost for an organization.`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Returns the live Stripe subscription and payment state for an organization.`)
+	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
+	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -9470,6 +9557,106 @@ func adminGetOrganizationStatsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-stats --admin-session-token \"abc123\"")
 }
 
+func adminGetInferenceKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-inference-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the configured state of every materialized platform-managed OpenRouter key for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-inference-keys --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminGetPaygBillingSummaryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-payg-billing-summary", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns current PAYG usage and estimated cost for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-payg-billing-summary --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminGetStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the live Stripe subscription and payment state for an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-stripe-subscription --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminCancelStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin cancel-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Schedules an organization's PAYG subscription to cancel at period end.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin cancel-stripe-subscription --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminResumeStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin resume-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resume-stripe-subscription --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
 // agentUsage displays the usage of the agent command and its subcommands.
 func agentUsage() {
 	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.`)
@@ -9489,8 +9676,9 @@ func agentUsage() {
 func agentGetPluginsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agent get-plugins", os.Args[0])
-	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -legacy-email STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -serial-number STRING")
 	fmt.Fprint(os.Stderr, " -hostname STRING")
 	fmt.Fprintln(os.Stderr)
@@ -9500,14 +9688,15 @@ func agentGetPluginsUsage() {
 	fmt.Fprintln(os.Stderr, `Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -legacy-email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\"")
 }
 
 func agentListSyncedUsersUsage() {
@@ -9607,7 +9796,7 @@ func agentReportSessionMovedUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\",\n      \"target_session_id\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
 }
 
 func agentCreateSessionHandoffUsage() {
@@ -10756,6 +10945,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
+	fmt.Fprintln(os.Stderr, `    list-session-links: List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s chat COMMAND --help\n", os.Args[0])
@@ -11080,6 +11270,30 @@ func chatListSourcesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-sources --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatListSessionLinksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat list-session-links", os.Args[0])
+	fmt.Fprint(os.Stderr, " -chat-ids JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -chat-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-session-links --chat-ids '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 // chatSessionsUsage displays the usage of the chat-sessions command and its
@@ -15574,6 +15788,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-plugin-server: Update a server's configuration within a plugin.`)
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
+	fmt.Fprintln(os.Stderr, `    list-audiences: List the audiences that can be assigned to plugins.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
 	fmt.Fprintln(os.Stderr, `    download-platform-mcp-plugin: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
@@ -15784,6 +15999,26 @@ func pluginsSetPluginAssignmentsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsListAudiencesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-audiences", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the audiences that can be assigned to plugins.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-audiences --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDownloadPluginPackageUsage() {
@@ -16011,6 +16246,7 @@ func featuresUsage() {
 func featuresGetProductFeaturesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] features get-product-features", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16019,11 +16255,12 @@ func featuresGetProductFeaturesUsage() {
 	fmt.Fprintln(os.Stderr, `Get the current state of all product feature flags.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features get-product-features --organization-id \"abc123\" --session-token \"abc123\"")
 }
 
 func featuresSetProductFeatureUsage() {
@@ -16043,7 +16280,7 @@ func featuresSetProductFeatureUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
@@ -16063,7 +16300,7 @@ func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"organization_id\": \"abc123\",\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -18130,7 +18367,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
-	fmt.Fprintln(os.Stderr, `    list-dismissed-risk-results: List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.`)
+	fmt.Fprintln(os.Stderr, `    list-dismissed-risk-results: List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-overview: Get risk overview metrics and trend data for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-categories: Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.`)
 	fmt.Fprintln(os.Stderr, `    compile-expr: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).`)
@@ -18506,6 +18743,7 @@ func riskListDismissedRiskResultsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk list-dismissed-risk-results", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -reasons JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -18513,18 +18751,19 @@ func riskListDismissedRiskResultsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.`)
+	fmt.Fprintln(os.Stderr, `List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -reasons JSON: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-dismissed-risk-results --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-dismissed-risk-results --cursor \"abc123\" --limit 2 --reasons '[\n      \"manual\"\n   ]' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskOverviewUsage() {

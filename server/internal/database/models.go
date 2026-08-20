@@ -477,6 +477,24 @@ type ChatResolutionMessage struct {
 	MessageID        uuid.UUID
 }
 
+type ChatSessionLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	Kind            string
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ChatUserFeedback struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
@@ -1182,13 +1200,20 @@ type McpMetadatum struct {
 }
 
 type McpRegistry struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	ID                   uuid.UUID
+	Name                 string
+	Url                  string
+	SourceType           pgtype.Text
+	AuthProfile          pgtype.Text
+	Enabled              pgtype.Bool
+	CertificationState   pgtype.Text
+	CertificationVersion pgtype.Text
+	Priority             pgtype.Int4
+	SourceKey            pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
@@ -1200,6 +1225,7 @@ type McpResearchReport struct {
 	Status               string
 	Report               []byte
 	ReportVersion        int32
+	ToolCalls            []byte
 	Model                pgtype.Text
 	PromptVersion        pgtype.Text
 	RequestedBy          pgtype.Text
@@ -1614,6 +1640,7 @@ type PlatformMcpDistribution struct {
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
 	DefaultPluginID      uuid.UUID
+	PluginID             uuid.NullUUID
 	PluginServerID       uuid.NullUUID
 	State                string
 	Version              int64

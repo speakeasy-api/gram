@@ -163,13 +163,13 @@ describe("PaygUsageSection", () => {
     ).toBeTruthy();
   });
 
-  // The estimate's inference line is the invoiced half of the Gram-managed
-  // inference. The analysis Gram funds is not a line here and not in the total.
-  it("names the invoiced inference as its own line", () => {
+  it("names all billable Gram-managed inference", () => {
     render(<PaygUsageSection />);
 
-    expect(screen.getByText("Other inference spend")).toBeTruthy();
-    expect(screen.getByText(/Billed to you as its own line/)).toBeTruthy();
+    expect(screen.getByText("Inference spend")).toBeTruthy();
+    expect(
+      screen.getByText(/customer-facing and platform-initiated inference/),
+    ).toBeTruthy();
   });
 
   // The cutoff is the whole point of that figure: today's usage is not in it.
@@ -296,6 +296,7 @@ describe("PaygUsageSection", () => {
 
     expect(estimatedTotal()).toBeNull();
     expect(screen.queryByText(/72 hours/)).toBeNull();
+    expect(screen.queryByText(/estimate above/i)).toBeNull();
   });
 
   describe("inference cap meters", () => {
@@ -333,27 +334,22 @@ describe("PaygUsageSection", () => {
     // The caps run on the calendar month while the invoice runs on the Stripe
     // cycle; the two windows overlap without matching, so the copy has to say
     // which one these figures belong to.
-    it("says the invoiced cap's month doesn't line up with the cycle", () => {
+    it("says both caps' month doesn't line up with the cycle", () => {
       render(<PaygUsageSection />);
 
       expect(
-        screen.getByText(/doesn't line up with the billing cycle above/),
-      ).toBeTruthy();
-      expect(
-        screen.getByText(/billed to this organization as its own line/i),
-      ).toBeTruthy();
+        screen.getAllByText(
+          /doesn't line up with the organization's billing cycle/,
+        ),
+      ).toHaveLength(2);
     });
 
-    // The distinction the section exists to make: one of these caps is money
-    // the customer is invoiced for, and the other never reaches their bill.
-    it("says the platform-funded cap is not in the invoice estimate", () => {
+    it("says both inference categories are billed on the invoice", () => {
       render(<PaygUsageSection />);
 
       expect(
-        screen.getByText(
-          /Gram funds this inference, so it never reaches your invoice/,
-        ),
-      ).toBeTruthy();
+        screen.getAllByText(/included in the inference spend.*invoice/i),
+      ).toHaveLength(2);
     });
 
     // The estimate's inference figure and the meters' figures come from
@@ -377,6 +373,7 @@ describe("PaygUsageSection", () => {
 
       expect(meters()).toHaveLength(2);
       expect(estimatedTotal()).toBeNull();
+      expect(screen.queryByText(/estimate above/i)).toBeNull();
     });
 
     it.each<[number, number]>([
@@ -427,11 +424,9 @@ describe("PaygUsageSection", () => {
       expect(screen.getByText(/\$10\.00 spent this month/)).toBeTruthy();
     });
 
-    // Uncapped spend is still spend, and one of these keys is invoiced while
-    // the other never is — so the note that tells them apart has to survive the
-    // no-cap branch too. Only that part of it: the rest is about the cap's
-    // month resetting, which would contradict the "No cap is set." beside it.
-    it("keeps the invoice note on an uncapped meter, without the cap-reset copy", () => {
+    // Uncapped spend is still billable. Keep that note while omitting the
+    // cap-reset sentence that would contradict the "No cap is set." line.
+    it("keeps the invoice note on uncapped meters, without the cap-reset copy", () => {
       inferenceCapsQuery([
         cap({ keyType: "chat", creditsUsed: 10, monthlyCredits: 0 }),
         cap({ keyType: "internal", creditsUsed: 20, monthlyCredits: 0 }),
@@ -441,13 +436,8 @@ describe("PaygUsageSection", () => {
 
       expect(meters()).toHaveLength(0);
       expect(
-        screen.getByText(/billed to this organization as its own line/i),
-      ).toBeTruthy();
-      expect(
-        screen.getByText(
-          /Gram funds this inference, so it never reaches your invoice/,
-        ),
-      ).toBeTruthy();
+        screen.getAllByText(/included in the inference spend.*invoice/i),
+      ).toHaveLength(2);
       expect(screen.queryByText(/resets on the first of the month/)).toBeNull();
       expect(
         screen.queryByText(/doesn't line up with the billing cycle above/),

@@ -1,4 +1,5 @@
 import { SettingsPage } from "@/components/page-templates";
+import { useOrganization } from "@/contexts/Auth";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/Switch";
@@ -12,13 +13,28 @@ import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function OrgLogs(): JSX.Element {
-  return <OrgLogsInner />;
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <OrgLogsInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
+  );
 }
 
-function OrgLogsInner() {
-  const { data: featuresData } = useProductFeatures();
+function OrgLogsInner({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}) {
+  const { data: featuresData } = useProductFeatures({ organizationId });
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
@@ -47,6 +63,7 @@ function OrgLogsInner() {
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: (_, variables) => {
+        if (!isCurrentOrganization()) return;
         const { featureName, enabled } =
           variables.request.setProductFeatureRequestBody;
         if (featureName === FeatureName.Logs) {
@@ -62,6 +79,7 @@ function OrgLogsInner() {
         }
       },
       onError: (error) => {
+        if (!isCurrentOrganization()) return;
         // On error the optimistic state above never runs, so the switch
         // reverts to the server value.
         handleAPIError(error, "Failed to update setting");
@@ -74,6 +92,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.Logs,
           enabled,
         },
@@ -84,6 +103,7 @@ function OrgLogsInner() {
       setLogsFeature({
         request: {
           setProductFeatureRequestBody: {
+            organizationId,
             featureName: FeatureName.ToolIoLogs,
             enabled: false,
           },
@@ -96,6 +116,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.ToolIoLogs,
           enabled,
         },
@@ -107,6 +128,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.SessionCapture,
           enabled,
         },
@@ -118,6 +140,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksBrowserLogin,
           enabled,
         },
@@ -129,6 +152,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksFailOpen,
           enabled,
         },

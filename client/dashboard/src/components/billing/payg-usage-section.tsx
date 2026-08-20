@@ -101,7 +101,7 @@ function BillingCycleFigures({
   const tokens = formatTokenCount(summary.tumTokens);
   const unitPrice = formatExactUsd(summary.tumUnitPriceUsd);
   const tumCost = formatExactUsd(summary.tumCostUsd);
-  const otherInferenceSpend = formatExactUsd(summary.otherInferenceSpendUsd);
+  const inferenceSpend = formatExactUsd(summary.otherInferenceSpendUsd);
   const estimatedTotal = formatExactUsd(summary.estimatedTotalUsd);
   const recordedThrough = formatRecordedThrough(summary.recordedThrough);
 
@@ -118,14 +118,14 @@ function BillingCycleFigures({
           value={tokens ?? MISSING_FIGURE}
           description={tumCostDescription(unitPrice, tumCost)}
         />
-        {/* The invoiced half of the Gram-managed inference. The analysis
-            Gram runs for its own features is funded by Gram, so it is not a
-            line here and is not in the total below. */}
+        {/* All Gram-managed inference is customer-billable on PAYG. The
+            estimate combines both key types through the latest completed UTC
+            day. */}
         <MetricCard
           size="sm"
           tone="information"
-          label="Other inference spend"
-          value={otherInferenceSpend ?? MISSING_FIGURE}
+          label="Inference spend"
+          value={inferenceSpend ?? MISSING_FIGURE}
           description={inferenceSpendDescription(recordedThrough)}
         />
         <MetricCard
@@ -163,9 +163,9 @@ function tumCostDescription(
 // would make the estimate look stale to the customer who just used it.
 function inferenceSpendDescription(recordedThrough: string | null): string {
   if (recordedThrough === null) {
-    return "Billed to you as its own line. No completed day has been recorded in this cycle yet.";
+    return "Includes customer-facing and platform-initiated inference. No completed day has been recorded in this cycle yet.";
   }
-  return `Billed to you as its own line. Completed days through ${recordedThrough}; today isn't counted yet.`;
+  return `Includes customer-facing and platform-initiated inference. Completed days through ${recordedThrough}; today isn't counted yet.`;
 }
 
 // The total inherits that cutoff, so it names it too — an estimate that
@@ -179,11 +179,10 @@ function estimatedTotalDescription(recordedThrough: string | null): string {
  * This calendar month's spend against every inference cap this organization
  * has, one meter each.
  *
- * Deliberately not part of the estimate above: the caps run on the calendar
+ * Deliberately separate from the invoice estimate: the caps run on the calendar
  * month while the invoice runs on the Stripe cycle, so the two windows overlap
- * without matching. Each meter carries its own billing note, which is also
- * where the invoiced inference is told apart from the analysis Gram funds and
- * never puts on an invoice.
+ * without matching. Each meter carries its own billing note explaining that
+ * its spend is customer-billable.
  */
 function InferenceCapMeters(): JSX.Element | null {
   const { data, isError } = useGetInferenceSpendCaps(undefined, undefined, {

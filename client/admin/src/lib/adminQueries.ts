@@ -11,15 +11,25 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationChatAnalysisSettings,
+  getOrganizationFeatures,
   getOrganizationStats,
+  getInferenceKeys,
+  getPaygBillingSummary,
+  getStripeSubscription,
   getProject,
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
   omitUnset,
+  type AdminInferenceKey,
   type AdminOrganization,
+  type AdminOrganizationChatAnalysisSettings,
+  type AdminOrganizationFeatures,
   type AdminProjectDetail,
+  type AdminPaygBillingSummary,
+  type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
   type ListOrganizationsParams,
@@ -82,6 +92,33 @@ export function organizationQuery(
   });
 }
 
+export function organizationFeaturesQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationFeatures,
+  readonly ["gram-admin-organization-features", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-features", organizationID] as const,
+    queryFn: () => getOrganizationFeatures(organizationID),
+  });
+}
+
+export function organizationChatAnalysisSettingsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationChatAnalysisSettings,
+  readonly ["gram-admin-organization-chat-analysis-settings", string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-organization-chat-analysis-settings",
+      organizationID,
+    ] as const,
+    queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
+  });
+}
+
 export function organizationProjectsQuery(
   organizationID: string,
 ): AdminQuery<
@@ -104,6 +141,59 @@ export function organizationMembersQuery(
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
   });
+}
+
+export function inferenceKeysQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminInferenceKey[],
+  readonly ["gram-admin-inference-keys", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-inference-keys", organizationID] as const,
+    queryFn: () => getInferenceKeys(organizationID),
+    retry: false,
+  });
+}
+
+export function paygBillingSummaryQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminPaygBillingSummary,
+  readonly ["gram-admin-payg-billing-summary", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-payg-billing-summary", organizationID] as const,
+    queryFn: () => getPaygBillingSummary(organizationID),
+    retry: false,
+  });
+}
+
+export function stripeSubscriptionQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminStripeSubscription,
+  readonly ["gram-admin-stripe-subscription", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-stripe-subscription", organizationID] as const,
+    queryFn: () => getStripeSubscription(organizationID),
+    retry: false,
+  });
+}
+
+export function invalidateOrganizationBilling(
+  qc: QueryClient,
+  organizationID: string,
+): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({
+      queryKey: paygBillingSummaryQuery(organizationID).queryKey,
+    }),
+    qc.invalidateQueries({
+      queryKey: stripeSubscriptionQuery(organizationID).queryKey,
+    }),
+  ]).then(() => undefined);
 }
 
 // Every cache a write to an organization can stale, listed once. Cancelling and

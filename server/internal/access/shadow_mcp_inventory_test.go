@@ -840,6 +840,9 @@ type shadowMCPInventoryPolicyInput struct {
 	Action         string
 	Disposition    string
 	BlockedURLs    []string
+	// AudienceType is the risk_policies.audience_type value; empty defaults to
+	// "everyone". Set "targeted" to model a policy scoped to a subset of users.
+	AudienceType string
 }
 
 type shadowMCPInventoryBypassRequestInput struct {
@@ -864,6 +867,11 @@ func createShadowMCPInventoryPolicyWithEnabled(t *testing.T, ctx context.Context
 	projectID, err := uuid.Parse(input.ProjectID)
 	require.NoError(t, err)
 
+	audienceType := input.AudienceType
+	if audienceType == "" {
+		audienceType = "everyone"
+	}
+
 	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:                   uuid.New(),
 		ProjectID:            projectID,
@@ -872,7 +880,7 @@ func createShadowMCPInventoryPolicyWithEnabled(t *testing.T, ctx context.Context
 		Sources:              []string{"shadow_mcp"},
 		Enabled:              enabled,
 		Action:               input.Action,
-		AudienceType:         "everyone",
+		AudienceType:         audienceType,
 		ShadowMcpDisposition: conv.ToPGTextEmpty(input.Disposition),
 		AutoName:             false,
 	})
@@ -1126,6 +1134,54 @@ func TestService_ListShadowMCPInventory_AllowAllDispositionUsesBlockedList(t *te
 	require.Equal(t, shadowMCPInventoryAccessAllowed, fine.Access)
 	require.Empty(t, fine.AllowedPolicyIds)
 	require.Empty(t, fine.BlockedPolicyIds)
+}
+
+func TestService_ListShadowMCPInventory_TargetedBlockAllPolicyIsRestricted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	ch := telemetryRepo.New(ti.chConn)
+	now := time.Now().UTC()
+	require.NoError(t, ch.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://scoped.example.com/mcp",
+			URLHost:            "scoped.example.com",
+			ServerName:         "Scoped",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	// A deny-by-default policy scoped to a subset of users blocks the server
+	// for them only, so it must read as restricted rather than blocked.
+	createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Targeted Block All",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "targeted",
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+
+	scoped := shadowMCPInventoryServerByURL(result.Servers, "https://scoped.example.com/mcp")
+	require.NotNil(t, scoped)
+	require.Equal(t, shadowMCPInventoryAccessRestricted, scoped.Access)
 }
 
 func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t *testing.T) {

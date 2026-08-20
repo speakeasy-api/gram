@@ -106,9 +106,9 @@ func TestService_ListChats_PinnedFilter(t *testing.T) {
 	require.NotContains(t, ids2, pinnedID.String())
 }
 
-// Pinning writes to a chat's row, so it needs the same grant reading it does.
-// Before the shared gate the owner branch was skipped entirely for dashboard
-// sessions, so any project member could pin any chat.
+// Pinning a chat someone else owns needs chat:read (same as opening it). A
+// member with no grant is still forbidden, and a rejected pin must not mutate
+// the row.
 func TestService_SetPinned_MemberCannotPinAnothersChat(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -123,6 +123,23 @@ func TestService_SetPinned_MemberCannotPinAnothersChat(t *testing.T) {
 	chat, err := repo.New(ti.conn).GetChat(seedCtx, repo.GetChatParams{ID: victim, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.False(t, chat.PinnedAt.Valid, "a rejected pin must not mutate the chat")
+}
+
+// Pinning is a shared project bookmark, so a chat:read holder (who can already
+// open any session) can pin someone else's chat without chat:write.
+func TestService_SetPinned_ChatReadHolderCanPinAnothersChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	seedCtx := initSessionCtx(t, ti)
+
+	victim := seedChat(t, seedCtx, ti, "some-other-user", "", "their session")
+
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	require.NoError(t, ti.service.SetPinned(ctx, &gen.SetPinnedPayload{ID: victim.String(), Pinned: true}))
+
+	chat, err := repo.New(ti.conn).GetChat(seedCtx, repo.GetChatParams{ID: victim, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.True(t, chat.PinnedAt.Valid)
 }
 
 // setPinned is Session-only in the design today, so an embedded token cannot

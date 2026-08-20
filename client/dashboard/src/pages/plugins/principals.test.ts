@@ -1,7 +1,10 @@
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import { describe, expect, it } from "vitest";
 import {
+  audienceKindForPrincipal,
+  audienceMapByUrn,
   describePrincipal,
   memberMapByUrn,
   normalizeToPrincipalUrn,
@@ -21,6 +24,12 @@ const member = {
 
 const roleByUrn = roleMapByUrn([role]);
 const memberByUrn = memberMapByUrn([member]);
+const directoryAudience = {
+  principalUrn: "directory_group:00000000-0000-0000-0000-000000000000",
+  displayName: "Engineering",
+  kind: "directory_group",
+  memberCount: 2,
+} as PluginAudience;
 
 describe("normalizeToPrincipalUrn", () => {
   it("passes through the wildcard", () => {
@@ -98,5 +107,27 @@ describe("describePrincipal", () => {
     expect(
       describePrincipal("role:organization:missing", roleByUrn, memberByUrn),
     ).toEqual({ kind: "role", label: "role:organization:missing" });
+  });
+
+  it("resolves a directory audience to its display name", () => {
+    expect(
+      describePrincipal(
+        directoryAudience.principalUrn,
+        roleByUrn,
+        memberByUrn,
+        audienceMapByUrn([directoryAudience]),
+      ),
+    ).toEqual({ kind: "directory_group", label: "Engineering" });
+  });
+
+  it("labels an unavailable directory audience and retains its kind", () => {
+    const unavailableUrn = "directory_group:deleted-group";
+    expect(describePrincipal(unavailableUrn, roleByUrn, memberByUrn)).toEqual({
+      kind: "directory_group",
+      label: `Unavailable directory group (${unavailableUrn})`,
+    });
+    expect(audienceKindForPrincipal(unavailableUrn, new Map())).toBe(
+      "directory_group",
+    );
   });
 });

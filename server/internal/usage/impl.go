@@ -112,6 +112,34 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	return service
 }
 
+// NewBillingOperations builds the narrow usage service used by trusted server
+// surfaces that authorize independently and pass canonical organization IDs.
+func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
+	return &Service{
+		tracer:          nil,
+		logger:          logger.With(attr.SlogComponent("usage-billing")),
+		auth:            nil,
+		authz:           nil,
+		serverURL:       nil,
+		siteURL:         nil,
+		db:              db,
+		repo:            repo.New(db),
+		billingRepo:     nil,
+		orgRepo:         orgRepo.New(db),
+		telemetryRepo:   telemetryRepo,
+		auditLogger:     auditLogger,
+		posthogClient:   nil,
+		openRouter:      nil,
+		keyRefresher:    nil,
+		stripeClient:    stripeClient,
+		stripeHandler:   nil,
+		stripeMetrics:   nil,
+		featureFlags:    nil,
+		productFeatures: nil,
+		trial:           nil,
+	}
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())

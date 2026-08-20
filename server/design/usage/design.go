@@ -169,7 +169,7 @@ var PaygBillingSummary = Type("PaygBillingSummary", func() {
 	Attribute("tum_tokens", Int64, "Tokens under management in the live paid service period")
 	Attribute("tum_unit_price_usd", String, "Exact flat USD price per token under management")
 	Attribute("tum_cost_usd", String, "Exact estimated tokens-under-management cost in USD")
-	Attribute("other_inference_spend_usd", String, "Exact durable Other inference spend in USD through recorded_through")
+	Attribute("other_inference_spend_usd", String, "Exact durable customer-billable OpenRouter inference spend in USD through recorded_through")
 	Attribute("recorded_through", String, "Most recent completed durable UTC spend day included in the estimate", func() {
 		Format(FormatDate)
 	})

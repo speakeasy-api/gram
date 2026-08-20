@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -954,6 +955,12 @@ type fakeApprovalIntake struct {
 	gotServerURL      string
 	gotRequesterID    string
 	gotNote           string
+}
+
+// The fake never backfills: these tests exercise the intake seam's admission
+// half, and a no-op mirrors an org whose project has no recorded decisions.
+func (f *fakeApprovalIntake) ReconcileStandingDecisionsForPolicy(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
 }
 
 func (f *fakeApprovalIntake) AdmitBlockedServer(_ context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, _ string, note string) (string, string, error) {

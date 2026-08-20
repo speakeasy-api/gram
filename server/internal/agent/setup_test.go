@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -205,6 +206,57 @@ func assignPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pluginI
 		PluginID:       pluginID,
 		OrganizationID: orgID,
 		PrincipalUrn:   principalURN,
+	})
+	require.NoError(t, err)
+}
+
+func seedDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID string) uuid.UUID {
+	t.Helper()
+	now := time.Now().UTC()
+	id, err := directoryrepo.New(conn).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         orgID,
+		WorkosDirectoryGroupID: workosID,
+		Name:                   workosID,
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGText("event_" + workosID),
+	})
+	require.NoError(t, err)
+	return id
+}
+
+func seedDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID, email string) uuid.UUID {
+	t.Helper()
+	return seedDirectoryUserWithAttributes(t, ctx, conn, orgID, workosID, email, []byte(`{}`))
+}
+
+func seedDirectoryUserWithAttributes(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID, email string, attributes []byte) uuid.UUID {
+	t.Helper()
+	now := time.Now().UTC()
+	id, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        orgID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: workosID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            attributes,
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
+		WorkosLastEventID:     conv.ToPGText("event_" + workosID),
+	})
+	require.NoError(t, err)
+	return id
+}
+
+func seedDirectoryGroupMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, directoryUserID, directoryGroupID uuid.UUID, workosUserID, workosGroupID string) {
+	t.Helper()
+	_, err := directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserID,
+		DirectoryGroupID:       directoryGroupID,
+		WorkosDirectoryUserID:  workosUserID,
+		WorkosDirectoryGroupID: workosGroupID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 	})
 	require.NoError(t, err)
 }

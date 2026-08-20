@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -32,14 +31,14 @@ import (
 
 // Service implements organization feature management operations.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	auth         *auth.Auth
-	authz        *authz.Engine
-	featureCache cache.TypedCacheObject[FeatureCache]
-	audit        *audit.Logger
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *repo.Queries
+	auth          *auth.Auth
+	authz         *authz.Engine
+	featureClient *Client
+	audit         *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,14 +55,14 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
-		logger:       logger,
-		db:           db,
-		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions, authzEngine),
-		authz:        authzEngine,
-		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		audit:        auditLogger,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		logger:        logger,
+		db:            db,
+		repo:          repo.New(db),
+		auth:          auth.New(logger, db, sessions, authzEngine),
+		authz:         authzEngine,
+		featureClient: NewClient(logger, tracerProvider, db, redisClient),
+		audit:         auditLogger,
 	}
 }
 
@@ -77,21 +76,55 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return fmt.Errorf("require org admin: %w", err)
+	if !ok || authCtx == nil {
+		return nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
-	orgID := authCtx.ActiveOrganizationID
+	if organizationID == "" {
+		return nil, "", oops.C(oops.CodeUnauthorized)
+	}
+
+	if organizationID == authCtx.ActiveOrganizationID {
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
+		if err := s.authz.Require(ctx, check); err != nil {
+			return nil, "", fmt.Errorf("require %s: %w", scope, err)
+		}
+		return authCtx, organizationID, nil
+	}
+
+	if err := s.authz.RequireUserOrganizationScope(ctx, organizationID, authCtx.UserID, scope); err != nil {
+		return nil, "", fmt.Errorf("require %s for requested organization: %w", scope, err)
+	}
+
+	if _, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, "", oops.E(oops.CodeNotFound, err, "organization not found")
+		}
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger, attr.SlogOrganizationID(organizationID))
+	}
+
+	return authCtx, organizationID, nil
+}
+
+func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
+	authCtx, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	if err != nil {
+		return err
+	}
+
 	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
 		return nil
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(payload.FeatureName)})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock feature cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	defer releaseFeatureLock()
+
+	dbtx, err := lockConn.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin feature flag transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
@@ -159,32 +192,16 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
-	cacheEntry := FeatureCache{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Feature:        Feature(payload.FeatureName),
-		Enabled:        payload.Enabled,
-	}
-
-	if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-		s.logger.WarnContext(ctx, "failed to cache feature flag state",
-			attr.SlogError(cacheErr),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-			attr.SlogProductFeatureName(payload.FeatureName),
-		)
-	}
+	s.featureClient.storeFeatureCache(ctx, orgID, Feature(payload.FeatureName), payload.Enabled, "failed to cache feature flag state")
 
 	return nil
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeUnauthorized)
+	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	if err != nil {
+		return err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return fmt.Errorf("require org admin: %w", err)
-	}
-
 	var visible, enforced bool
 	switch payload.Policy {
 	case "disabled":
@@ -196,9 +213,17 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		return oops.C(oops.CodeBadRequest)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	lockConn, releaseFeatureLocks, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{
+		FeatureRemoteSessionAutoRefresh, FeatureRemoteSessionAutoRefreshEnforced,
+	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "lock remote session refresh cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	defer releaseFeatureLocks()
+
+	dbtx, err := lockConn.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -206,7 +231,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 	setFeatureState := func(feature Feature, enabled bool) error {
 		if enabled {
 			_, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
-				OrganizationID: authCtx.ActiveOrganizationID,
+				OrganizationID: orgID,
 				FeatureName:    string(feature),
 			})
 			if err != nil {
@@ -216,7 +241,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		}
 
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: orgID,
 			FeatureName:    string(feature),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -229,13 +254,13 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 	}
 
 	if err := setFeatureState(FeatureRemoteSessionAutoRefresh, visible); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "set remote session refresh visibility").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh visibility").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	if err := setFeatureState(FeatureRemoteSessionAutoRefreshEnforced, enforced); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "set remote session refresh enforcement").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh enforcement").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
 	for _, state := range []struct {
@@ -245,49 +270,20 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		{feature: FeatureRemoteSessionAutoRefresh, enabled: visible},
 		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
-		cacheEntry := FeatureCache{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Feature:        state.feature,
-			Enabled:        state.enabled,
-		}
-		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-			s.logger.WarnContext(ctx, "failed to cache remote session refresh policy",
-				attr.SlogError(cacheErr),
-				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-				attr.SlogProductFeatureName(string(state.feature)),
-			)
-		}
+		s.featureClient.storeFeatureCache(ctx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
 	}
 
 	return nil
 }
 
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, fmt.Errorf("require org read: %w", err)
+	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
 	}
 
-	orgID := authCtx.ActiveOrganizationID
-
-	// Helper function to check if a feature is enabled (cache first, then DB)
 	isEnabled := func(feature Feature) bool {
-		cacheKey := FeatureCacheKey(orgID, feature)
-
-		// Try cache first
-		cached, err := s.featureCache.Get(ctx, cacheKey)
-		if err == nil {
-			return cached.Enabled
-		}
-
-		// Fall back to database
-		enabled, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: orgID,
-			FeatureName:    string(feature),
-		})
+		enabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, feature)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to check feature flag",
 				attr.SlogError(err),
@@ -295,20 +291,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 				attr.SlogProductFeatureName(string(feature)),
 			)
 			return false
-		}
-
-		// Cache the result
-		cacheEntry := FeatureCache{
-			OrganizationID: orgID,
-			Feature:        feature,
-			Enabled:        enabled,
-		}
-		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-			s.logger.WarnContext(ctx, "failed to cache feature flag state",
-				attr.SlogError(cacheErr),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogProductFeatureName(string(feature)),
-			)
 		}
 
 		return enabled
@@ -343,6 +325,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CustomerManagedEncryptionKeysEnabled:    isEnabled(FeatureCustomerManagedEncryptionKeys),
 		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
+		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		DeviceAgent:                             deviceAgent,
 	}, nil
 }

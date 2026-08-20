@@ -94,7 +94,7 @@
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
         padding: 2rem;
-        max-width: 30rem;
+        max-width: 52rem;
         width: 100%;
         display: flex;
         flex-direction: column;
@@ -394,6 +394,25 @@
       .remote-card button.btn-link[aria-disabled="true"] {
         pointer-events: none;
         opacity: 0.65;
+      }
+
+      .tools {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .tools h3 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 0.875rem;
+        font-weight: 400;
+      }
+
+      .tools-note {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--text-default);
       }
 
       .actions {
@@ -696,7 +715,29 @@
           </form>
           {{end}}
         </div>
-        {{end}} {{if .AutoClose}}
+        {{end}}
+
+        {{if .ShowToolsIsland}}
+        <div class="tools">
+          <h3>Tool access</h3>
+          <div
+            id="consent-tools-root"
+            data-tools-url="{{.ConsentToolsURL}}"
+            data-state="{{.State}}"
+            data-csrf-token="{{.CSRFToken}}"
+            data-form-id="consent-approve-form"
+            data-approve-button-id="consent-approve-button"
+            data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-server-name="{{.MCPSlug}}"
+            {{if .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"{{end}}
+            aria-live="polite"
+          >
+            <p class="tools-note">Loading available tools…</p>
+          </div>
+        </div>
+        {{end}}
+
+        {{if .AutoClose}}
         <p class="info">
           Connection complete. This tab will close automatically.
         </p>
@@ -718,10 +759,9 @@
               type="submit"
               name="action"
               value="approve"
+              id="consent-approve-button"
               class="btn btn-primary"
-              {{if
-              not
-              .ConsentEnabled}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give Access
             </button>
@@ -743,5 +783,8 @@
       </div>
     </main>
     <script src="{{.ScriptURL}}"></script>
+    {{if .ShowToolsIsland}}
+    <script defer src="{{.ConsentToolsScriptURL}}"></script>
+    {{end}}
   </body>
 </html>

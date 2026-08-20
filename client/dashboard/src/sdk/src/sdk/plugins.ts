@@ -13,6 +13,7 @@ import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSet
 import { pluginsGetPlatformMCPPackageStatus } from "../funcs/pluginsGetPlatformMCPPackageStatus.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
+import { pluginsListAudiences } from "../funcs/pluginsListAudiences.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
@@ -22,6 +23,7 @@ import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketpl
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
 import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ListAudiencesResult } from "../models/components/listaudiencesresult.js";
 import { ListPluginsResult } from "../models/components/listpluginsresult.js";
 import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
 import { PlatformMCPPackageStatusResult } from "../models/components/platformmcppackagestatusresult.js";
@@ -79,6 +81,10 @@ import {
   GetPublishStatusRequest,
   GetPublishStatusSecurity,
 } from "../models/operations/getpublishstatus.js";
+import {
+  ListAudiencesRequest,
+  ListAudiencesSecurity,
+} from "../models/operations/listaudiences.js";
 import {
   ListPluginsRequest,
   ListPluginsSecurity,
@@ -316,6 +322,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PublishStatusResult> {
     return unwrapAsync(pluginsGetPublishStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAudiences plugins
+   *
+   * @remarks
+   * List the audiences that can be assigned to plugins.
+   */
+  async listAudiences(
+    request?: ListAudiencesRequest | undefined,
+    security?: ListAudiencesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAudiencesResult> {
+    return unwrapAsync(pluginsListAudiences(
       this,
       request,
       security,

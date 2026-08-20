@@ -27,10 +27,11 @@ type Client struct {
 	SummarizeToolCallEndpoint          goa.Endpoint
 	SubmitFeedbackEndpoint             goa.Endpoint
 	ListSourcesEndpoint                goa.Endpoint
+	ListSessionLinksEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolCall, submitFeedback, listSources goa.Endpoint) *Client {
+func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolCall, submitFeedback, listSources, listSessionLinks goa.Endpoint) *Client {
 	return &Client{
 		ListChatsEndpoint:                  listChats,
 		GetAssistantSessionSummaryEndpoint: getAssistantSessionSummary,
@@ -44,6 +45,7 @@ func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadCha
 		SummarizeToolCallEndpoint:          summarizeToolCall,
 		SubmitFeedbackEndpoint:             submitFeedback,
 		ListSourcesEndpoint:                listSources,
+		ListSessionLinksEndpoint:           listSessionLinks,
 	}
 }
 
@@ -304,4 +306,26 @@ func (c *Client) ListSources(ctx context.Context, p *ListSourcesPayload) (res *L
 		return
 	}
 	return ires.(*ListSourcesResult), nil
+}
+
+// ListSessionLinks calls the "listSessionLinks" endpoint of the "chat" service.
+// ListSessionLinks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSessionLinks(ctx context.Context, p *ListSessionLinksPayload) (res *ListSessionLinksResult, err error) {
+	var ires any
+	ires, err = c.ListSessionLinksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSessionLinksResult), nil
 }

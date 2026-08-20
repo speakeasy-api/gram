@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Service struct {
@@ -61,12 +63,21 @@ type Service struct {
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
 
-	openRouter      TrialKeyReviver
-	productFeatures *productfeatures.Client
+	openRouter           TrialKeyReviver
+	openRouterUsage      OpenRouterUsageReader
+	productFeatures      *productfeatures.Client
+	chatAnalysisSignaler analysis.Signaler
 
 	audit *audit.Logger
 
-	trial trialemails.Notifier
+	trial   trialemails.Notifier
+	billing BillingOperations
+}
+
+type BillingOperations interface {
+	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
+	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
 // TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
@@ -76,8 +87,27 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
-// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
-var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+// OpenRouterUsageReader reads the current monthly usage for a materialized key.
+type OpenRouterUsageReader interface {
+	GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error)
+}
+
+// AdminOpenRouter is the complete OpenRouter surface used by the admin service.
+type AdminOpenRouter interface {
+	TrialKeyReviver
+	OpenRouterUsageReader
+}
+
+// ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
+var ErrOpenRouterUnavailable = errors.New("no usable OpenRouter configuration")
+
+var ErrChatAnalysisTriggerUnavailable = errors.New("chat analysis triggering is not configured")
+
+type ChatAnalysisTriggerUnavailable struct{}
+
+func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
+	return ErrChatAnalysisTriggerUnavailable
+}
 
 const keyBillingLockWaitTimeout = 5 * time.Second
 
@@ -85,15 +115,19 @@ const keyBillingLockWaitTimeout = 5 * time.Second
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrKeyRevivalUnavailable
+	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
+	return 0, 0, ErrOpenRouterUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -108,9 +142,11 @@ func NewService(
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
-	openRouter TrialKeyReviver,
+	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	chatAnalysisSignaler analysis.Signaler,
+	billing BillingOperations,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -129,23 +165,26 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:          logger,
-		db:              db,
-		oidc:            oidcClient,
-		sessions:        sessionStore,
-		verifier:        NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins:  allowedOrigins,
-		workos:          workosClient,
-		openRouter:      openRouter,
-		productFeatures: productFeatures,
-		audit:           audit.NewLogger(),
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:               logger,
+		db:                   db,
+		oidc:                 oidcClient,
+		sessions:             sessionStore,
+		verifier:             NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:       allowedOrigins,
+		workos:               workosClient,
+		openRouter:           openRouter,
+		openRouterUsage:      openRouter,
+		productFeatures:      productFeatures,
+		chatAnalysisSignaler: chatAnalysisSignaler,
+		audit:                audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial: trialNotifier,
+		trial:   trialNotifier,
+		billing: billing,
 	}
 }
 
@@ -158,12 +197,38 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// See sessionInfo in session_handler.go for why this one route is hand
-	// written rather than generated from the Goa design.
+	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
+	// features_handler.go for why these routes are hand written rather than
+	// generated from the Goa design.
 	mux.Handle(
 		http.MethodGet,
 		"/admin/session.get",
 		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.features",
+		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodGet,
+		"/admin/organization.chatAnalysisSettings",
+		oops.ErrHandle(service.logger, service.handleGetChatAnalysisSettings).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.chatAnalysisSettings",
+		oops.ErrHandle(service.logger, service.handleSetChatAnalysisSettings).ServeHTTP,
+	)
+	mux.Handle(
+		http.MethodPost,
+		"/admin/organization.chatAnalysisTrigger",
+		oops.ErrHandle(service.logger, service.handleTriggerChatAnalysis).ServeHTTP,
 	)
 }
 
@@ -1141,7 +1206,7 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lock
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
 		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
 		switch {
-		case errors.Is(err, ErrKeyRevivalUnavailable):
+		case errors.Is(err, ErrOpenRouterUnavailable):
 			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
 		case err != nil:
 			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)

@@ -132,6 +132,16 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
+// A mutation reports its own failure rather than taking the 401 redirect,
+// which would sign the operator back in behind the action they just took.
+async function gramAdminMutation<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await gramAdminRequest(path, init, false);
+  return (await res.json()) as T;
+}
+
 // For an endpoint that answers 204. A mutation reports its own failure rather
 // than taking the 401 redirect, which would sign the operator back in behind
 // the action they just took.
@@ -475,5 +485,206 @@ export function listOrganizationMembers(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationMembersResult>(
     `/admin/organization.members?${qs}`,
+  );
+}
+
+export type AdminInferenceKey = {
+  key_type: string;
+  credits_used: number;
+  monthly_credits: number;
+  disabled: boolean;
+};
+
+export type AdminOrganizationFeatures = {
+  authz_challenge_logging_enabled: boolean;
+  customer_managed_encryption_keys_enabled: boolean;
+  custom_model_keys_enabled: boolean;
+  platform_mcp_enabled: boolean;
+  remote_session_auto_refresh_enabled: boolean;
+  sso_enabled: boolean;
+  scim_enabled: boolean;
+};
+
+export type AdminOrganizationFeatureName =
+  | "authz_challenge_logging"
+  | "customer_managed_encryption_keys"
+  | "custom_model_keys"
+  | "platform_mcp"
+  | "remote_session_auto_refresh"
+  | "sso"
+  | "scim";
+
+export function getOrganizationFeatures(
+  organizationID: string,
+): Promise<AdminOrganizationFeatures> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationFeatures>(
+    `/admin/organization.features?${qs}`,
+  );
+}
+
+export function setOrganizationFeature(input: {
+  organizationID: string;
+  featureName: AdminOrganizationFeatureName;
+  enabled: boolean;
+}): Promise<AdminOrganizationFeatures> {
+  return gramAdminMutation<AdminOrganizationFeatures>(
+    "/admin/organization.features",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        feature_name: input.featureName,
+        enabled: input.enabled,
+      }),
+    },
+  );
+}
+
+export type AdminChatAnalysisJudge = "work_units" | "business_memory";
+
+export type AdminOrganizationChatAnalysisSettings = {
+  organization_id: string;
+  work_units_enabled: boolean;
+  work_units_daily_cap: number;
+  business_memory_enabled: boolean;
+  business_memory_daily_cap: number;
+  is_default: boolean;
+};
+
+export function getOrganizationChatAnalysisSettings(
+  organizationID: string,
+): Promise<AdminOrganizationChatAnalysisSettings> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationChatAnalysisSettings>(
+    `/admin/organization.chatAnalysisSettings?${qs}`,
+  );
+}
+
+export type AdminChatAnalysisTriggerResult = {
+  projects_signaled: number;
+};
+
+export function triggerOrganizationChatAnalysis(
+  organizationID: string,
+): Promise<AdminChatAnalysisTriggerResult> {
+  return gramAdminMutation<AdminChatAnalysisTriggerResult>(
+    "/admin/organization.chatAnalysisTrigger",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export function setOrganizationChatAnalysisSetting(input: {
+  organizationID: string;
+  judge: AdminChatAnalysisJudge;
+  enabled: boolean;
+  dailyCap: number;
+}): Promise<AdminOrganizationChatAnalysisSettings> {
+  return gramAdminMutation<AdminOrganizationChatAnalysisSettings>(
+    "/admin/organization.chatAnalysisSettings",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        judge: input.judge,
+        enabled: input.enabled,
+        daily_cap: input.dailyCap,
+      }),
+    },
+  );
+}
+
+export function getInferenceKeys(
+  organizationID: string,
+): Promise<AdminInferenceKey[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceKey[]>(
+    `/admin/organization.inferenceKeys?${qs}`,
+  );
+}
+
+export type AdminPaygBillingSummary = {
+  period_start: string;
+  period_end: string;
+  tum_tokens: number;
+  tum_unit_price_usd: string;
+  tum_cost_usd: string;
+  other_inference_spend_usd: string;
+  recorded_through?: string;
+  estimated_total_usd: string;
+};
+
+export type AdminStripeSubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused";
+
+export type AdminStripeSubscription = {
+  status: AdminStripeSubscriptionStatus;
+  current_period_start: string;
+  current_period_end: string;
+  trial_start?: string;
+  trial_end?: string;
+  cancel_at_period_end: boolean;
+  cancel_at?: string;
+  canceled_at?: string;
+  payment_failed: boolean;
+};
+
+export function getPaygBillingSummary(
+  organizationID: string,
+): Promise<AdminPaygBillingSummary> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminPaygBillingSummary>(
+    `/admin/organization.paygBillingSummary?${qs}`,
+  );
+}
+
+export function getStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminStripeSubscription>(
+    `/admin/organization.stripeSubscription?${qs}`,
+  );
+}
+
+function updateStripeSubscription(
+  path: string,
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return gramAdminMutation<AdminStripeSubscription>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationID }),
+  });
+}
+
+export function cancelStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return updateStripeSubscription(
+    "/admin/organization.cancelStripeSubscription",
+    organizationID,
+  );
+}
+
+export function resumeStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return updateStripeSubscription(
+    "/admin/organization.resumeStripeSubscription",
+    organizationID,
   );
 }

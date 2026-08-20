@@ -48,6 +48,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func requestedOrganizationID(ctx context.Context) string {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return "test-organization"
+	}
+	return authCtx.ActiveOrganizationID
+}
+
 type testInstance struct {
 	service        *productfeatures.Service
 	conn           *pgxpool.Pool

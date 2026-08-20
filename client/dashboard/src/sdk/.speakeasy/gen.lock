@@ -137,6 +137,7 @@ trackedFiles:
   src/funcs/chatGetAssistantSessionSummary.ts: {}
   src/funcs/chatGetWorkUnitsTrend.ts: {}
   src/funcs/chatList.ts: {}
+  src/funcs/chatListSessionLinks.ts: {}
   src/funcs/chatListSources.ts: {}
   src/funcs/chatLoad.ts: {}
   src/funcs/chatSessionsCreate.ts: {}
@@ -351,6 +352,7 @@ trackedFiles:
   src/funcs/pluginsGetPlatformMCPPackageStatus.ts: {}
   src/funcs/pluginsGetPlugin.ts: {}
   src/funcs/pluginsGetPublishStatus.ts: {}
+  src/funcs/pluginsListAudiences.ts: {}
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
@@ -676,6 +678,7 @@ trackedFiles:
   src/models/components/chatcontentpart.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
+  src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}
   src/models/components/cimdclientpreset.ts: {}
@@ -902,6 +905,7 @@ trackedFiles:
   src/models/components/listassistantmemoriesresult.ts: {}
   src/models/components/listassistantsresult.ts: {}
   src/models/components/listattributekeysresult.ts: {}
+  src/models/components/listaudiencesresult.ts: {}
   src/models/components/listauditlogfacetsresult.ts: {}
   src/models/components/listauditlogsresult.ts: {}
   src/models/components/listbuiltinexclusionsresult.ts: {}
@@ -964,6 +968,7 @@ trackedFiles:
   src/models/components/listserverheadersresult.ts: {}
   src/models/components/listserversresponsebody.ts: {}
   src/models/components/listserversresult.ts: {}
+  src/models/components/listsessionlinksresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
@@ -1083,6 +1088,7 @@ trackedFiles:
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
+  src/models/components/pluginaudience.ts: {}
   src/models/components/pluginserver.ts: {}
   src/models/components/pluginskilldistribution.ts: {}
   src/models/components/policybypassredemption.ts: {}
@@ -1138,7 +1144,10 @@ trackedFiles:
   src/models/components/reportsessionmovedrequestbody.ts: {}
   src/models/components/requestaccessform.ts: {}
   src/models/components/requestaccessresult.ts: {}
+  src/models/components/researchpagefetchcall.ts: {}
   src/models/components/researchreport.ts: {}
+  src/models/components/researchtoolcall.ts: {}
+  src/models/components/researchwebsearchcall.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
   src/models/components/resolveshadowmcpinventoryrequestform.ts: {}
@@ -1721,6 +1730,7 @@ trackedFiles:
   src/models/operations/listassistantmemories.ts: {}
   src/models/operations/listassistants.ts: {}
   src/models/operations/listattributekeys.ts: {}
+  src/models/operations/listaudiences.ts: {}
   src/models/operations/listauditlogfacets.ts: {}
   src/models/operations/listauditlogs.ts: {}
   src/models/operations/listawsiamcredentials.ts: {}
@@ -1731,6 +1741,7 @@ trackedFiles:
   src/models/operations/listchallengebuckets.ts: {}
   src/models/operations/listchallenges.ts: {}
   src/models/operations/listchats.ts: {}
+  src/models/operations/listchatsessionlinks.ts: {}
   src/models/operations/listchatsources.ts: {}
   src/models/operations/listcimdclientpresets.ts: {}
   src/models/operations/listcollections.ts: {}
@@ -2047,6 +2058,8 @@ trackedFiles:
   src/react-query/assistantsList.ts: {}
   src/react-query/assistantsUpdate.ts: {}
   src/react-query/attachUserSessionIssuer.ts: {}
+  src/react-query/audiences.core.ts: {}
+  src/react-query/audiences.ts: {}
   src/react-query/auditLogFacets.core.ts: {}
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
@@ -2351,6 +2364,8 @@ trackedFiles:
   src/react-query/listBusinessMemories.ts: {}
   src/react-query/listBusinessMemoryContentScopes.core.ts: {}
   src/react-query/listBusinessMemoryContentScopes.ts: {}
+  src/react-query/listChatSessionLinks.core.ts: {}
+  src/react-query/listChatSessionLinks.ts: {}
   src/react-query/listChatSources.core.ts: {}
   src/react-query/listChatSources.ts: {}
   src/react-query/listChats.core.ts: {}
@@ -4749,6 +4764,7 @@ examples:
         header:
           Gram-Device-Serial: "C02XK1ABCDEF"
           Gram-Device-Hostname: "dev-macbook-pro"
+          Gram-User-Email: "dev@acme.corp"
       responses:
         "200":
           application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}
@@ -5352,9 +5368,12 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getProductFeatures:
     speakeasy-default-get-product-features:
+      parameters:
+        query:
+          organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -6146,6 +6165,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAudiences:
+    speakeasy-default-list-audiences:
+      responses:
+        "200":
+          application/json: {"audiences": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAuditLogFacets:
     speakeasy-default-list-audit-log-facets:
       responses:
@@ -6238,6 +6266,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listChatSessionLinks:
+    speakeasy-default-list-chat-session-links:
+      parameters:
+        query:
+          chat_ids: []
+      responses:
+        "200":
+          application/json: {"links": [{"child_captured": true, "created_at": "2024-08-10T22:28:06.238Z", "kind": "<value>", "parent_captured": true, "parent_chat_id": "15b5d33d-1e55-46b4-9fa9-07041dd071cb", "target_harness": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listChatSources:
     speakeasy-default-list-chat-sources:
       responses:
@@ -6352,6 +6392,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDirectoryAudiences:
+    speakeasy-default-list-directory-audiences:
+      responses:
+        "200":
+          application/json: {"attributes": [{"key": "<key>", "member_count": 682575, "principal_urn": "<value>", "value": "<value>"}], "groups": [{"id": "dce927d1-b5f8-4ab1-9358-7c22221fc1d8", "member_count": 642470, "name": "<value>", "principal_urn": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listDismissedRiskResults:
     speakeasy-default-list-dismissed-risk-results:
       responses:
@@ -7830,7 +7879,7 @@ examples:
         application/json: {"decision": "allow", "project_id": "5f38bdf2-2935-4580-835b-fdb3d2efbe12", "server_url": "https://cautious-mentor.info/"}
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": [], "blocked_policy_ids": [], "request_count": 542291}
+          application/json: {"access": "none", "allowed_policy_ids": [], "blocked_policy_ids": [], "request_count": 542291}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -8334,7 +8383,7 @@ examples:
   setProductFeature:
     speakeasy-default-set-product-feature:
       requestBody:
-        application/json: {"enabled": true, "feature_name": "tool_io_logs"}
+        application/json: {"enabled": true, "feature_name": "tool_io_logs", "organization_id": "<id>"}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -8354,7 +8403,7 @@ examples:
   setRemoteSessionAutoRefreshPolicy:
     speakeasy-default-set-remote-session-auto-refresh-policy:
       requestBody:
-        application/json: {"policy": "enforced"}
+        application/json: {"organization_id": "<id>", "policy": "enforced"}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}

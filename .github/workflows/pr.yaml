@@ -1798,6 +1798,10 @@ jobs:
         run: aube run knip
         working-directory: client/dashboard
 
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 
@@ -2207,7 +2211,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"

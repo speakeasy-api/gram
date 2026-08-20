@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
@@ -1037,6 +1038,7 @@ func newStartCommand() *cli.Command {
 				billingTracker,
 				toolDispositionCache,
 				platformSelectedUseRecorder,
+				toolfilter.NewSessionToolWitnessStore(logger, cache.NewRedisCacheAdapter(redisClient)),
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -1529,7 +1531,8 @@ func newStartCommand() *cli.Command {
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
+			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                 logger,
@@ -1549,6 +1552,7 @@ func newStartCommand() *cli.Command {
 				Identity:               identityResolver,
 				Sessions:               sessionManager,
 				Registry:               mcpRegistryClient,
+				Catalog:                mcpCatalog,
 				GuardianPolicy:         guardianPolicy,
 				RemoteChallengeManager: remoteChallengeManager,
 				AuditLogger:            auditLogger,

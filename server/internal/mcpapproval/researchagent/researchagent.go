@@ -38,6 +38,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -177,8 +179,9 @@ type RunInput struct {
 }
 
 // Run executes one research run: the agent loop, then the extraction pass.
-// It returns the encoded report document and its run metadata.
-func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunMeta, error) {
+// It returns the encoded report document, its run metadata, and the per-
+// action trace of the tool calls the run made.
+func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunMeta, []ToolCallRecord, error) {
 	meta := RunMeta{
 		Model:                Model,
 		PromptVersion:        PromptVersion,
@@ -250,6 +253,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// result of a sweep.
 	temperature := 0.2
 	var injections []InjectionFinding
+	var toolCalls []ToolCallRecord
 	toolSuccesses := 0
 	lastToolError := ""
 	wrappingUp := false
@@ -311,7 +315,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 			DisableResponseHealing:    false,
 		})
 		if err != nil {
-			return nil, meta, fmt.Errorf("research turn %d: %w", meta.Turns, err)
+			return nil, meta, toolCalls, fmt.Errorf("research turn %d: %w", meta.Turns, err)
 		}
 
 		meta.PromptTokens += int64(response.Usage.PromptTokens)
@@ -327,13 +331,42 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 		messages = append(messages, assistantToolCallMessage(response))
 		for _, call := range response.ToolCalls {
+			record := ToolCallRecord{
+				Sequence: len(toolCalls),
+				Tool:     r.toolHandlerName(call.Function.Name),
+				Error:    "",
+				Search:   nil,
+				Fetch:    nil,
+			}
+			switch record.Tool {
+			case "web_search":
+				record.Search = &SearchCall{Query: searchQueryArgument(call.Function.Arguments), ResultCount: 0, PromptTokens: 0, CompletionTokens: 0}
+			case "fetch_page":
+				// URL from the request, so a fetch that fails before a result
+				// still names its target; a successful fetch overwrites it with
+				// the URL the tool reports.
+				record.Fetch = &FetchCall{URL: fetchURLArgument(call.Function.Arguments), FinalURL: "", ContentType: "", ContentBytes: 0, Truncated: false, Judged: false, InjectionFlagged: false, JudgeRationale: "", ContentPreview: "", CitedByClaims: nil}
+			}
+
+			// Snapshot before executeTool so the delta is this call's tool
+			// spend: a search drains its billed completion into meta here.
+			beforePrompt, beforeCompletion := meta.PromptTokens, meta.CompletionTokens
 			result, ok := r.executeTool(ctx, input.ReportID, call, &meta)
+			if record.Search != nil {
+				record.Search.PromptTokens = meta.PromptTokens - beforePrompt
+				record.Search.CompletionTokens = meta.CompletionTokens - beforeCompletion
+			}
+
 			if ok {
 				toolSuccesses++
-				result = r.judgeFetch(ctx, input, call, result, &meta, &injections)
+				describeToolOutcome(&record, result)
+				result = r.judgeFetch(ctx, input, call, result, &meta, &injections, &record)
 			} else {
+				record.Error = result
 				lastToolError = result
 			}
+			toolCalls = append(toolCalls, record)
+
 			fmt.Fprintf(transcript, "\nTOOL %s(%s):\n%s\n", call.Function.Name, call.Function.Arguments, result)
 			messages = append(messages, or.CreateChatMessagesTool(or.ChatToolMessage{
 				Role:       or.ChatToolMessageRoleTool,
@@ -352,14 +385,14 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// fetched, stored as evidence for a security decision.
 	if toolSuccesses == 0 {
 		if lastToolError != "" {
-			return nil, meta, fmt.Errorf("every research tool call failed; last failure: %s", lastToolError)
+			return nil, meta, toolCalls, fmt.Errorf("every research tool call failed; last failure: %s", lastToolError)
 		}
-		return nil, meta, fmt.Errorf("the model performed no research: it made no tool calls and its claims would be uncited recall")
+		return nil, meta, toolCalls, fmt.Errorf("the model performed no research: it made no tool calls and its claims would be uncited recall")
 	}
 
 	document, err := r.extract(ctx, input, transcript.String(), &meta)
 	if err != nil {
-		return nil, meta, err
+		return nil, meta, toolCalls, err
 	}
 
 	// Attached after extraction, on purpose: the model that writes the report
@@ -367,12 +400,18 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// tried to do cannot be left to it to report.
 	document.Injections = injections
 
+	// Link each fetch in the trace to the claims that cited it, now that the
+	// report's claims exist. Most fetched pages contribute nothing to the
+	// final claims; this marks the ones that became evidence, so the trace
+	// distinguishes "read and cited" from "read and dropped".
+	linkFetchesToCitations(toolCalls, document.Claims)
+
 	encoded, err := json.Marshal(document)
 	if err != nil {
-		return nil, meta, fmt.Errorf("encode research report: %w", err)
+		return nil, meta, toolCalls, fmt.Errorf("encode research report: %w", err)
 	}
 
-	return encoded, meta, nil
+	return encoded, meta, toolCalls, nil
 }
 
 // briefing renders the agent's starting context: the server under review and
@@ -540,6 +579,7 @@ func (r *Runner) judgeFetch(
 	result string,
 	meta *RunMeta,
 	injections *[]InjectionFinding,
+	record *ToolCallRecord,
 ) string {
 	if r.judge == nil {
 		return result
@@ -576,10 +616,17 @@ func (r *Runner) judgeFetch(
 	}
 
 	meta.PagesJudged++
+	if record.Fetch != nil {
+		record.Fetch.Judged = true
+	}
 	if !verdict.Injection {
 		return result
 	}
 
+	if record.Fetch != nil {
+		record.Fetch.InjectionFlagged = true
+		record.Fetch.JudgeRationale = verdict.Rationale
+	}
 	recordInjection(injections, InjectionFinding{URL: source, Rationale: verdict.Rationale})
 
 	return fmt.Sprintf(
@@ -743,4 +790,146 @@ func assistantToolCallMessage(response *openrouter.CompletionResponse) or.ChatMe
 	}
 
 	return or.CreateChatMessagesAssistant(message)
+}
+
+// toolHandlerName maps a completion tool name to its handler ("web_search",
+// "fetch_page") for the trace, empty when no registered tool matches.
+func (r *Runner) toolHandlerName(name string) string {
+	for _, tool := range r.tools {
+		descriptor := tool.executor.Descriptor()
+		if descriptor.Name == name {
+			return descriptor.HandlerName
+		}
+	}
+	return ""
+}
+
+// describeToolOutcome parses a successful tool result into the trace record.
+// Both shapes are our own tools' output, not model text: a fetch returns
+// {url, final_url, content_type, content, truncated}; a search returns
+// {results: [...]}.
+func describeToolOutcome(record *ToolCallRecord, result string) {
+	switch {
+	case record.Fetch != nil:
+		var page struct {
+			URL         string `json:"url"`
+			FinalURL    string `json:"final_url"`
+			ContentType string `json:"content_type"`
+			Content     string `json:"content"`
+			Truncated   bool   `json:"truncated"`
+		}
+		if json.Unmarshal([]byte(result), &page) != nil {
+			return
+		}
+		record.Fetch.URL = page.URL
+		record.Fetch.FinalURL = page.FinalURL
+		record.Fetch.ContentType = page.ContentType
+		record.Fetch.ContentBytes = len(page.Content)
+		record.Fetch.Truncated = page.Truncated
+		record.Fetch.ContentPreview = boundPreview(page.Content)
+	case record.Search != nil:
+		var search struct {
+			Results []json.RawMessage `json:"results"`
+		}
+		if json.Unmarshal([]byte(result), &search) == nil {
+			record.Search.ResultCount = len(search.Results)
+		}
+	}
+}
+
+// fetchURLArgument reads the url out of a fetch_page call's arguments,
+// falling back to the raw arguments when they do not parse — the trace
+// should identify the target even when the request was malformed.
+func fetchURLArgument(arguments string) string {
+	var input struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal([]byte(arguments), &input) == nil && input.URL != "" {
+		return input.URL
+	}
+	return arguments
+}
+
+// searchQueryArgument reads the query out of a web_search call's arguments,
+// falling back to the raw arguments when they do not parse.
+func searchQueryArgument(arguments string) string {
+	var input struct {
+		Query string `json:"query"`
+	}
+	if json.Unmarshal([]byte(arguments), &input) == nil && input.Query != "" {
+		return input.Query
+	}
+	return arguments
+}
+
+// boundPreview cuts extracted page text to a rune-bounded preview.
+func boundPreview(content string) string {
+	trimmed := strings.TrimSpace(content)
+	runes := []rune(trimmed)
+	if len(runes) <= maxToolCallPreviewRunes {
+		return trimmed
+	}
+	return string(runes[:maxToolCallPreviewRunes]) + "…"
+}
+
+// linkFetchesToCitations stamps each fetch record with the indices of the
+// report claims whose citations point at that page. Matching is by normalized
+// URL against both the requested and final URL, best-effort: a citation can
+// name a redirect target or a search-result URL the model cited without
+// fetching, so an unmatched citation is not an error. The indices are into
+// the final claims array, which is what the report stores and renders.
+func linkFetchesToCitations(toolCalls []ToolCallRecord, claims []Claim) {
+	citedBy := make(map[string][]int)
+	for claimIndex, claim := range claims {
+		for _, citation := range claim.Citations {
+			key := normalizeCitationURL(citation.URL)
+			if key == "" {
+				continue
+			}
+			citedBy[key] = append(citedBy[key], claimIndex)
+		}
+	}
+	if len(citedBy) == 0 {
+		return
+	}
+
+	for i := range toolCalls {
+		fetch := toolCalls[i].Fetch
+		if fetch == nil {
+			continue
+		}
+		seen := make(map[int]struct{})
+		var indices []int
+		for _, raw := range []string{fetch.URL, fetch.FinalURL} {
+			for _, claimIndex := range citedBy[normalizeCitationURL(raw)] {
+				if _, ok := seen[claimIndex]; ok {
+					continue
+				}
+				seen[claimIndex] = struct{}{}
+				indices = append(indices, claimIndex)
+			}
+		}
+		if len(indices) > 0 {
+			sort.Ints(indices)
+			fetch.CitedByClaims = indices
+		}
+	}
+}
+
+// normalizeCitationURL reduces a URL to a stable key for matching a citation
+// against a fetch: lowercased scheme and host, a trailing slash dropped.
+// Empty in, empty out.
+func normalizeCitationURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return strings.TrimRight(trimmed, "/")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/")
 }

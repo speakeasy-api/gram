@@ -144,6 +144,85 @@ type Citation struct {
 	TrustedSource string `json:"trusted_source,omitempty"`
 }
 
+// maxToolCallPreviewRunes bounds the extracted-text preview kept per fetch.
+// A preview is a peek at what the agent saw, not the page: full bodies (up
+// to maxContentChars each, dozens per run) do not belong at rest.
+const maxToolCallPreviewRunes = 500
+
+// ToolCallRecord is one entry in a run's per-action trace: a thin envelope
+// naming the action and its position, carrying exactly one typed payload for
+// the tool that ran. The runner assembles these during the run; they persist
+// to mcp_research_reports.tool_calls. Every field is an observation of what
+// the agent did, never an instruction.
+type ToolCallRecord struct {
+	// Sequence orders the trace, from zero.
+	Sequence int `json:"sequence"`
+
+	// Tool is the handler that ran — "web_search" or "fetch_page" — and the
+	// discriminator naming which payload below is set. Empty for a tool the
+	// model named that is not registered, whose only record is Error.
+	Tool string `json:"tool"`
+
+	// Error is the tool's failure text when the call did not succeed. A
+	// failed call still carries its payload with the argument it tried; the
+	// outcome fields are simply unset.
+	Error string `json:"error,omitempty"`
+
+	// Search is set when Tool is "web_search", Fetch when it is "fetch_page".
+	// Exactly one is non-nil for a registered tool; both are nil for an
+	// unregistered one.
+	Search *SearchCall `json:"search,omitempty"`
+	Fetch  *FetchCall  `json:"fetch,omitempty"`
+}
+
+// SearchCall is the payload of a web-search action. A search runs a billed
+// completion, which is why token spend lives here and not on the fetch.
+type SearchCall struct {
+	// Query is what the agent searched for.
+	Query string `json:"query,omitempty"`
+
+	// ResultCount is how many citations the search returned.
+	ResultCount int `json:"result_count,omitempty"`
+
+	// PromptTokens and CompletionTokens are what this search's completion
+	// spent.
+	PromptTokens     int64 `json:"prompt_tokens,omitempty"`
+	CompletionTokens int64 `json:"completion_tokens,omitempty"`
+}
+
+// FetchCall is the payload of a page-fetch action: what was fetched, what came
+// back, and the injection judge's verdict on it. A fetch spends nothing.
+type FetchCall struct {
+	// URL is the page the agent fetched; FinalURL is where it landed after
+	// redirects, when that differed.
+	URL      string `json:"url,omitempty"`
+	FinalURL string `json:"final_url,omitempty"`
+
+	// ContentType and ContentBytes describe the fetched page.
+	ContentType  string `json:"content_type,omitempty"`
+	ContentBytes int    `json:"content_bytes,omitempty"`
+
+	// Truncated reports the fetch hit its caps and the preview is of a prefix.
+	Truncated bool `json:"truncated,omitempty"`
+
+	// Judged, InjectionFlagged, and JudgeRationale carry the injection
+	// judge's verdict. Judged is false for a fetch that never reached the
+	// judge (error, menu refusal, judge outage).
+	Judged           bool   `json:"judged,omitempty"`
+	InjectionFlagged bool   `json:"injection_flagged,omitempty"`
+	JudgeRationale   string `json:"judge_rationale,omitempty"`
+
+	// ContentPreview is a bounded prefix of the extracted page text —
+	// untrusted web content, kept for review context, never a full body.
+	ContentPreview string `json:"content_preview,omitempty"`
+
+	// CitedByClaims holds the indices of the report claims whose citations
+	// point at this page — the link from a fetch back to the evidence it
+	// became. Empty when the page was read but nothing in the final report
+	// rests on it. Indices are into the report's claims array.
+	CitedByClaims []int `json:"cited_by_claims,omitempty"`
+}
+
 // RunMeta records what produced the report, for the audit trail and for
 // spend accounting.
 type RunMeta struct {
