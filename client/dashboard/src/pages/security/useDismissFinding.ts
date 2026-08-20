@@ -103,29 +103,43 @@ export function useDismissFinding(): {
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation();
 
   const invalidateLists = useCallback(() => {
-    // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
-    // directly via useInfiniteQuery (not a generated hook), under their own
-    // queryKey under this shared ["risk", "results", ...] prefix (e.g.
-    // ["risk","results","list"]). Invalidate the whole prefix rather than each
-    // exact key — suppressing from one surface (e.g. Risk Events) must be
-    // reflected on every other surface, and matching each new custom key
-    // one-by-one here is exactly the kind of thing that's easy to add a
-    // surface and forget to wire up.
-    void queryClient.invalidateQueries({
-      queryKey: ["risk", "results"],
-    });
-    void invalidateAllRiskListDismissedResults(queryClient);
-    // The chat transcript's ChatDetailPanel reads findings through the
-    // *generated* useRiskListResults hook (a separate ["@gram/client",
-    // "results", "list", ...] key namespace the prefix above never touches),
-    // so a tool-call-section dismiss left the transcript showing a finding
-    // as still flagged until a manual reload.
-    void invalidateAllRiskListResults(queryClient);
-    void invalidateAllRiskOverview(queryClient);
-    void invalidateAllRiskRuleBreakdown(queryClient);
-    void invalidateAllRiskUserBreakdown(queryClient);
-    // The Watchdog page clusters the same findings into signals.
-    void invalidateAllRiskSignals(queryClient);
+    const invalidate = () => {
+      // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
+      // directly via useInfiniteQuery (not a generated hook), under their own
+      // queryKey under this shared ["risk", "results", ...] prefix (e.g.
+      // ["risk","results","list"]). Invalidate the whole prefix rather than
+      // each exact key — suppressing from one surface (e.g. Risk Events) must
+      // be reflected on every other surface, and matching each new custom key
+      // one-by-one here is exactly the kind of thing that's easy to add a
+      // surface and forget to wire up.
+      void queryClient.invalidateQueries({
+        queryKey: ["risk", "results"],
+      });
+      void invalidateAllRiskListDismissedResults(queryClient);
+      // The chat transcript's ChatDetailPanel reads findings through the
+      // *generated* useRiskListResults hook (a separate ["@gram/client",
+      // "results", "list", ...] key namespace the prefix above never touches),
+      // so a tool-call-section dismiss left the transcript showing a finding
+      // as still flagged until a manual reload.
+      void invalidateAllRiskListResults(queryClient);
+      void invalidateAllRiskOverview(queryClient);
+      void invalidateAllRiskRuleBreakdown(queryClient);
+      void invalidateAllRiskUserBreakdown(queryClient);
+      // The Watchdog page clusters the same findings into signals.
+      void invalidateAllRiskSignals(queryClient);
+    };
+
+    invalidate();
+    // These surfaces read from ClickHouse, which trails the Postgres write by
+    // a few seconds (the suppression state arrives via an async mirror), so
+    // the immediate refetch above usually re-serves the pre-suppression data.
+    // Re-invalidate after the mirror's typical catch-up window, and once more
+    // as a backstop, so the content settles without a manual reload. The
+    // timers deliberately outlive the component: invalidating a long-lived
+    // query client is a safe no-op when nothing is mounted.
+    for (const delayMs of [4_000, 12_000]) {
+      setTimeout(invalidate, delayMs);
+    }
   }, [queryClient]);
 
   const removeOptimistic = useCallback((ids: string[]) => {

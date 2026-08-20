@@ -45,6 +45,7 @@ import {
 } from "./signals-helpers";
 import { collectFindingsForRules } from "./collect-findings";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { ExposureBar } from "./ExposureBar";
 import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
@@ -339,32 +340,13 @@ function WatchdogContent(): JSX.Element {
                 </div>
                 {hasSelection ? (
                   <div className="flex items-center gap-2">
-                    <Button
+                    <SuppressMenu
                       variant="secondary"
                       size="sm"
-                      disabled={collecting}
-                      onClick={() => void handleDismissSelected()}
-                    >
-                      {collecting && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Suppress</Button.Text>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={creatingExclusions}
-                      onClick={handleExcludeSelected}
-                    >
-                      {creatingExclusions && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Set up exclusion rules</Button.Text>
-                    </Button>
+                      busy={collecting || creatingExclusions}
+                      onSuppressOnce={() => void handleDismissSelected()}
+                      onCreateRule={handleExcludeSelected}
+                    />
                     <Button
                       variant="secondary"
                       size="sm"

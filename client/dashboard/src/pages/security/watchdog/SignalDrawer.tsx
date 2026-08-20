@@ -36,6 +36,7 @@ import {
 import { useDismissFinding } from "../useDismissFinding";
 import { collectFindingsForRules } from "./collect-findings";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -122,10 +123,9 @@ function EvidenceRow({
   // so the evidence cell shows the rationale with the audited event dialog
   // behind it instead of a redaction chip over content that may not exist.
   // Judge findings also can't be excluded (their rule id is a constant for
-  // the whole detector), so the row offers only suppression.
-  // Every other detector gets only Exclude: exclusion rules are the reviewed
-  // suppression path for pattern detectors, and offering both actions side by
-  // side made per-row suppression the path of least resistance.
+  // the whole detector), so the row offers only suppression. Every other
+  // detector gets the shared Suppress menu: a one-off manual suppression or
+  // exclusion rule creation, same affordance as the drawer and list actions.
   const judge = isJudgeSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
@@ -175,13 +175,12 @@ function EvidenceRow({
               <Button.Text>Suppress</Button.Text>
             </Button>
           ) : (
-            <Button
+            <SuppressMenu
               variant="tertiary"
               size="sm"
-              onClick={() => onExclude(result)}
-            >
-              <Button.Text>Exclude</Button.Text>
-            </Button>
+              onSuppressOnce={() => onDismiss(result)}
+              onCreateRule={() => onExclude(result)}
+            />
           )}
         </span>
       </div>
@@ -328,6 +327,9 @@ export function SignalDrawer({
     if (!pendingDismiss) return;
     dismiss(pendingDismiss);
     setPendingDismiss(null);
+    // The whole signal was just suppressed, so the drawer has nothing left to
+    // show — close it rather than leaving it open over a vanished signal.
+    onClose();
   };
 
   return (
@@ -437,9 +439,12 @@ export function SignalDrawer({
                         </Text>
                       </>
                     ) : (
-                      <Button variant="primary" onClick={openSignalExclusion}>
-                        <Button.Text>Create exclusion rule</Button.Text>
-                      </Button>
+                      <SuppressMenu
+                        variant="primary"
+                        busy={collecting}
+                        onSuppressOnce={() => void openSignalDismiss()}
+                        onCreateRule={openSignalExclusion}
+                      />
                     )}
                   </div>
                   <div className="relative flex-1">
