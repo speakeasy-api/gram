@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -17,6 +18,7 @@ const (
 	ActionMCPApprovalRequestDeny            Action = "mcp_approval_request:deny"
 	ActionMCPApprovalRequestEvidenceChanged Action = "mcp_approval_request:evidence_changed"
 	ActionMCPApprovalRequestResearchStart   Action = "mcp_approval_request:research_start"
+	ActionMCPApprovalRequestSupersede       Action = "mcp_approval_request:supersede"
 )
 
 type LogMCPApprovalRequestCreateEvent struct {
@@ -117,6 +119,64 @@ func (l *Logger) LogMCPApprovalRequestDecide(ctx context.Context, dbtx repo.DBTX
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpApprovalRequestV1})
+}
+
+type LogMCPApprovalRequestSupersedeEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RequestURN urn.MCPApprovalRequest
+
+	// Decision is the standing decision that was displaced — approved or
+	// denied — carried as metadata so the feed shows what intent the edit
+	// overrode without a lookup into the decision history.
+	Decision string
+
+	// TargetRaw is the stored (redacted) form of the server reference,
+	// recorded as the subject display name so a feed entry is readable
+	// without a second lookup.
+	TargetRaw string
+}
+
+// LogMCPApprovalRequestSupersede records that a policy URL-list edit
+// displaced a request's standing decision after the editor explicitly
+// confirmed the contradiction. Written in the same transaction as the status
+// change and the grant writes it explains, so the feed never shows a
+// superseded decision whose enforcement still stands or vice versa.
+func (l *Logger) LogMCPApprovalRequestSupersede(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestSupersedeEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
+		"superseded_decision": event.Decision,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", ActionMCPApprovalRequestSupersede, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionMCPApprovalRequestSupersede),
+
+		SubjectID:          event.RequestURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpApprovalRequest),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.TargetRaw),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpApprovalRequestV1})

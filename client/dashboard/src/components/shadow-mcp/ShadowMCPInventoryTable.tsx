@@ -46,6 +46,7 @@ const REVIEW_FILTER_OPTIONS = [
   { value: "requested", label: "Awaiting decision" },
   { value: "approved", label: "Approved" },
   { value: "denied", label: "Denied" },
+  { value: "superseded", label: "Superseded" },
   { value: "none", label: "No review" },
 ];
 

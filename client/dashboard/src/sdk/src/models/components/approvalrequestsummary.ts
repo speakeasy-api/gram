@@ -37,7 +37,7 @@ export type ApprovalRequestSummary = {
    */
   serverSlug?: string | undefined;
   /**
-   * The request's current status.
+   * The request's current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).
    */
   status: string;
   /**

@@ -1226,7 +1226,8 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 
 const listStandingServerDecisionsForProject = `-- name: ListStandingServerDecisionsForProject :many
 SELECT
-    r.target_key
+    r.id
+  , r.target_key
   , r.target_raw
   , d.decision
   , d.granted_principal_urns
@@ -1242,10 +1243,12 @@ JOIN LATERAL (
 ) d ON TRUE
 WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
+  AND r.status != 'superseded'
   AND r.deleted IS FALSE
 `
 
 type ListStandingServerDecisionsForProjectRow struct {
+	ID                   uuid.UUID
 	TargetKey            string
 	TargetRaw            string
 	Decision             string
@@ -1255,7 +1258,12 @@ type ListStandingServerDecisionsForProjectRow struct {
 // The latest decision per server_url review in a project — what enforcement
 // derived its grants from. Read by the policy-creation backfill so a blocking
 // policy created after decisions were recorded honors them, instead of
-// blocking servers whose rows still read approved.
+// blocking servers whose rows still read approved. Also read by the policy
+// URL-list conflict check, which is why the request id rides along.
+//
+// A superseded request's decision is excluded: an admin explicitly overrode
+// it from the policy editor, so it is no longer standing intent — replaying
+// it would resurrect exactly the access change the admin confirmed away.
 func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
 	if err != nil {
@@ -1266,6 +1274,7 @@ func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, pro
 	for rows.Next() {
 		var i ListStandingServerDecisionsForProjectRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.TargetKey,
 			&i.TargetRaw,
 			&i.Decision,
@@ -1544,7 +1553,7 @@ ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDA
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN EXCLUDED.status = 'requested'
-        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed', 'superseded')
         THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END

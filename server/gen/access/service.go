@@ -600,7 +600,10 @@ type ShadowMCPAccessSummary struct {
 // the review outcome, which may cover only selected principals; the server's
 // access field reports enforcement state.
 type ShadowMCPInventoryApprovalRequest struct {
-	ID     string
+	ID string
+	// superseded means the latest decision was explicitly displaced by a policy
+	// URL-list edit: the history is preserved but no enforcement derives from it
+	// until someone re-decides.
 	Status string
 	// How many distinct people have asked for this server.
 	RequesterCount int

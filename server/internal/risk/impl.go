@@ -518,6 +518,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
+			// No preserve set on create: the replay below re-derives every
+			// standing decision's grants over whatever this list wrote.
+			PreserveURLs: nil,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
 		}
@@ -531,6 +534,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			Scope:          authz.ScopeRiskPolicyBlock,
 			DesiredURLs:    shadowMCPBlockedURLs,
 			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+			PreserveURLs:   nil,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
@@ -1004,6 +1008,44 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
 	}
+
+	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
+	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
+
+	// The conflict review runs exactly where the replay below does not: on a
+	// policy that was and stays blocking, no replay re-derives decision
+	// grants, so this edit is the only writer of the URL grant state — it
+	// must not displace a standing decision silently. Conflicts abort the
+	// save unless the caller explicitly confirmed superseding them; either
+	// way the review's standing URLs are preserved through the reconcile so
+	// re-sending an unchanged list never rewrites a decision's recorded
+	// blast radius with the policy audience.
+	var preserveDecisionURLs map[string]struct{}
+	if s.approvalIntake != nil && wasBlocking && nowBlocking {
+		review, err := s.approvalIntake.ReviewShadowMCPPolicyURLEdit(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, current.ID, effectiveDisposition, shadowMCPAllowedURLs, shadowMCPBlockedURLs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "review shadow mcp policy url edit").LogError(ctx, s.logger)
+		}
+		if len(review.Conflicts) > 0 {
+			if payload.SupersedeDecisions == nil || !*payload.SupersedeDecisions {
+				names := make([]string, 0, len(review.Conflicts))
+				for _, conflict := range review.Conflicts {
+					names = append(names, conflict.TargetRaw)
+				}
+				return nil, oops.E(oops.CodeConflict, nil, "This change contradicts recorded access decisions for %s. Confirm superseding those decisions to proceed.", strings.Join(names, ", "))
+			}
+			if err := s.approvalIntake.SupersedeShadowMCPDecisions(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, review.Conflicts, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "supersede contradicted decisions").LogError(ctx, s.logger)
+			}
+		}
+		if len(review.StandingURLs) > 0 {
+			preserveDecisionURLs = make(map[string]struct{}, len(review.StandingURLs))
+			for _, serverURL := range review.StandingURLs {
+				preserveDecisionURLs[serverURL] = struct{}{}
+			}
+		}
+	}
+
 	if payload.ShadowMcpAllowedUrls != nil || audienceUpdateRequested {
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -1011,6 +1053,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
+			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
 		}
@@ -1024,6 +1067,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			Scope:          authz.ScopeRiskPolicyBlock,
 			DesiredURLs:    shadowMCPBlockedURLs,
 			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
@@ -1034,8 +1078,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// apply to it exactly as they would to a newly created one. The replay
 	// is idempotent, so firing on any transition into the blocking state is
 	// safe even when stale grants survive a disable/enable cycle.
-	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
-	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
 	if s.approvalIntake != nil && nowBlocking && !wasBlocking {
 		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
 			// Same shareable pass-through as the create path: the radius

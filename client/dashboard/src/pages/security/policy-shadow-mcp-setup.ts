@@ -1,4 +1,5 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 
 type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
 
@@ -104,6 +105,66 @@ export function shadowMCPSelectionIsInitialized(
 ): boolean {
   return (
     !targetIsShadowMCPBlock || initializedEditorIdentity === editorIdentity
+  );
+}
+
+export interface ShadowMCPDecisionConflict {
+  canonicalServerUrl: string;
+  serverName?: string;
+  decision: "approved" | "denied";
+}
+
+/**
+ * The standing review decisions this edit's URL toggles contradict —
+ * unchecking an approved server, allow-listing a denied one, block-listing
+ * an approved one, or unblocking a denied one. Mirrors the server's own
+ * conflict check so the confirm dialog can open before the save round-trips;
+ * the server independently rejects an unconfirmed contradicting save, so a
+ * miss here (e.g. a reopened request whose prior decision still stands)
+ * degrades to the error toast, never to a silent supersession.
+ */
+export function shadowMCPDecisionConflicts({
+  servers,
+  originalURLs,
+  selectedURLs,
+  disposition,
+}: {
+  servers: readonly ShadowMCPInventoryServer[];
+  originalURLs: ReadonlySet<string> | null;
+  selectedURLs: ReadonlySet<string>;
+  disposition: ShadowMCPDisposition;
+}): ShadowMCPDecisionConflict[] {
+  if (originalURLs === null) return [];
+
+  const conflicts: ShadowMCPDecisionConflict[] = [];
+  for (const server of servers) {
+    const status = server.approvalRequest?.status;
+    if (status !== "approved" && status !== "denied") continue;
+
+    const url = server.canonicalServerUrl;
+    const has = originalURLs.has(url);
+    const wants = selectedURLs.has(url);
+    if (has === wants) continue;
+
+    // On an allow list (block_all) removing revokes access and adding grants
+    // it; on a block list (allow_all) the directions invert.
+    let removingAllow = has && !wants;
+    if (disposition === "allow_all") removingAllow = !removingAllow;
+
+    const contradicted =
+      (removingAllow && status === "approved") ||
+      (!removingAllow && status === "denied");
+    if (!contradicted) continue;
+
+    conflicts.push({
+      canonicalServerUrl: url,
+      serverName: server.serverName,
+      decision: status,
+    });
+  }
+
+  return conflicts.sort((a, b) =>
+    a.canonicalServerUrl.localeCompare(b.canonicalServerUrl),
   );
 }
 

@@ -9,12 +9,19 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+ */
 export const Status = {
   Unreviewed: "unreviewed",
   Requested: "requested",
   Approved: "approved",
   Denied: "denied",
+  Superseded: "superseded",
 } as const;
+/**
+ * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+ */
 export type Status = ClosedEnum<typeof Status>;
 
 /**
@@ -30,6 +37,9 @@ export type ShadowMCPInventoryApprovalRequest = {
    * How many distinct people have asked for this server.
    */
   requesterCount: number;
+  /**
+   * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+   */
   status: Status;
 };
 

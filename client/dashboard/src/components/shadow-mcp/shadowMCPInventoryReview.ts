@@ -21,6 +21,10 @@ export function reviewSortRank(server: ShadowMCPInventoryServer): number {
       return 0;
     case "approved":
     case "denied":
+    // Superseded ranks with the decided states: it is settled review
+    // history — an admin deliberately displaced the decision — not
+    // something waiting on anyone.
+    case "superseded":
       return 1;
     case "unreviewed":
     case undefined:

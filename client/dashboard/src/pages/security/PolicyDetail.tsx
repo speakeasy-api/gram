@@ -86,11 +86,14 @@ import {
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   DETECTION_RULES,
@@ -3561,6 +3564,13 @@ export function StandardPolicyEditor({
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  // Standing decisions the pending save would contradict; non-null opens the
+  // supersede confirmation. The server refuses a contradicting save without
+  // the confirmation flag, so a stale miss here degrades to an error toast,
+  // never to a silent supersession.
+  const [supersedeConflicts, setSupersedeConflicts] = useState<
+    ShadowMCPDecisionConflict[] | null
+  >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
     useState<ShadowMCPDisposition>(
       () =>
@@ -3746,7 +3756,7 @@ export function StandardPolicyEditor({
   };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
-  const save = () => {
+  const save = (options?: { supersedeDecisions?: boolean }) => {
     const {
       sources,
       presidioEntities,
@@ -3796,6 +3806,26 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
+      // A URL toggle that contradicts a recorded decision needs the admin's
+      // explicit confirmation before it supersedes that decision. Only edits
+      // of a policy that stays blocking can contradict — on any other save
+      // the server runs its replay or clears the lists, not this check.
+      if (
+        !options?.supersedeDecisions &&
+        targetIsShadowMCPBlock &&
+        originalHasShadowMCPBlockConfiguration
+      ) {
+        const conflicts = shadowMCPDecisionConflicts({
+          servers: inventoryQuery.data ?? [],
+          originalURLs: originalShadowMCPURLs,
+          selectedURLs: selectedShadowMCPURLs,
+          disposition: shadowMCPDisposition,
+        });
+        if (conflicts.length > 0) {
+          setSupersedeConflicts(conflicts);
+          return;
+        }
+      }
       updateMutation.mutate({
         request: {
           updateRiskPolicyRequestBody: {
@@ -3821,6 +3851,9 @@ export function StandardPolicyEditor({
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
             ...setupFields,
+            ...(options?.supersedeDecisions
+              ? { supersedeDecisions: true }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3869,12 +3902,21 @@ export function StandardPolicyEditor({
       saving={saving}
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
-      onCreate={save}
+      onCreate={() => save()}
     />
   );
 
   return (
     <>
+      <SupersedeDecisionsDialog
+        conflicts={supersedeConflicts}
+        saving={saving}
+        onCancel={() => setSupersedeConflicts(null)}
+        onConfirm={() => {
+          setSupersedeConflicts(null);
+          save({ supersedeDecisions: true });
+        }}
+      />
       <StepperShell
         header={header}
         steps={STANDARD_STEPS}

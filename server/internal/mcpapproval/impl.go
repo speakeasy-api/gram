@@ -87,6 +87,14 @@ const statusRequested = "requested"
 // upgrades in place to requested the moment someone actually asks.
 const statusUnreviewed = "unreviewed"
 
+// statusSuperseded marks a decided request whose decision an admin
+// explicitly overrode from the policy editor. The decision history stays
+// intact, but the decision is no longer standing intent: enforcement stops
+// deriving grants from it, the drift recheck skips it, and the policy
+// replay never resurrects it. A new decision or a re-request moves the row
+// back into the ordinary lifecycle.
+const statusSuperseded = "superseded"
+
 // gatherTimeout is the overall backstop for evidence gathering at intake.
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
