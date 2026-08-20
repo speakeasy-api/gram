@@ -61116,6 +61116,11 @@ components:
         client_setup_documentation_url:
           type: string
           description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
         grant_types_supported:
           type: array
           items:
@@ -61543,6 +61548,11 @@ components:
         client_setup_documentation_url:
           type: string
           description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
         grant_types_supported:
           type: array
           items:
@@ -71991,6 +72001,12 @@ components:
         client_setup_documentation_url:
           type: string
           description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -72084,6 +72100,12 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.
+          nullable: true
         discovery_warnings:
           type: array
           items:
@@ -80199,6 +80221,11 @@ components:
         client_setup_documentation_url:
           type: string
           description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.
         grant_types_supported:
           type: array
           items:

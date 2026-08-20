@@ -300,6 +300,12 @@ export function AttachRemoteIdentityProviderSheet({
               discoveredSnapshot?.responseTypesSupported ?? [],
             tokenEndpointAuthMethodsSupported:
               discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+            // Nullable server-side, so no `?? []` fallback: hand-typed setups
+            // omit the field to store NULL ("not captured") rather than claim
+            // the issuer advertises no PKCE methods. A discovery snapshot is
+            // never null and records what the document said.
+            codeChallengeMethodsSupported:
+              discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
             // CIMD support parsed during discovery; persisted so the issuer can
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:

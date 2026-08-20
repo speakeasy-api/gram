@@ -300,6 +300,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -319,6 +320,7 @@ VALUES (
     $10,
     $11,
     $12,
+    $13,
     FALSE,
     FALSE,
     FALSE
@@ -336,6 +338,7 @@ SET
     grant_types_supported = EXCLUDED.grant_types_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
     client_id_metadata_document_supported = FALSE,
     oidc = FALSE,
     passthrough = FALSE,
@@ -359,6 +362,7 @@ type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 }
 
 // The local Platform MCP fixture owns this fixed global issuer identity. The
@@ -379,6 +383,7 @@ func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Contex
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
@@ -599,6 +604,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -623,9 +629,13 @@ VALUES (
     $17,
     $18,
     $19,
+    -- Nullable on purpose: a caller with neither a discovery document nor an
+    -- operator-supplied value passes NULL ("not captured"), which must stay
+    -- distinct from the empty array ("the issuer advertises no methods").
     $20,
     $21,
-    $22
+    $22,
+    $23
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
@@ -650,6 +660,7 @@ type CreateRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
@@ -681,6 +692,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -3373,6 +3385,7 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_client_user_session_issuers AS link
@@ -3395,23 +3408,24 @@ type ListRemoteSessionClientsForUserSessionIssuerParams struct {
 }
 
 type ListRemoteSessionClientsForUserSessionIssuerRow struct {
-	ClientID                uuid.UUID
-	ExternalClientID        string
-	ClientSecretEncrypted   pgtype.Text
-	TokenEndpointAuthMethod pgtype.Text
-	ClientScope             []string
-	ClientAudience          pgtype.Text
-	LegacyCallbackUrl       bool
-	RemoteSessionIssuerID   uuid.UUID
-	IssuerSlug              string
-	IssuerName              pgtype.Text
-	IssuerLogoAssetID       uuid.NullUUID
-	IssuerUrl               string
-	AuthorizationEndpoint   pgtype.Text
-	TokenEndpoint           pgtype.Text
-	ScopesSupported         []string
-	Passthrough             bool
-	Oidc                    bool
+	ClientID                      uuid.UUID
+	ExternalClientID              string
+	ClientSecretEncrypted         pgtype.Text
+	TokenEndpointAuthMethod       pgtype.Text
+	ClientScope                   []string
+	ClientAudience                pgtype.Text
+	LegacyCallbackUrl             bool
+	RemoteSessionIssuerID         uuid.UUID
+	IssuerSlug                    string
+	IssuerName                    pgtype.Text
+	IssuerLogoAssetID             uuid.NullUUID
+	IssuerUrl                     string
+	AuthorizationEndpoint         pgtype.Text
+	TokenEndpoint                 pgtype.Text
+	ScopesSupported               []string
+	CodeChallengeMethodsSupported []string
+	Passthrough                   bool
+	Oidc                          bool
 }
 
 // Joined client + issuer view used by the consent renderer and the
@@ -3445,6 +3459,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.AuthorizationEndpoint,
 			&i.TokenEndpoint,
 			&i.ScopesSupported,
+			&i.CodeChallengeMethodsSupported,
 			&i.Passthrough,
 			&i.Oidc,
 		); err != nil {
@@ -4566,11 +4581,12 @@ SET
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
     response_types_supported = COALESCE($16::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($18, client_id_metadata_document_supported),
-    oidc = COALESCE($19, oidc),
-    passthrough = COALESCE($20, passthrough),
+    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    oidc = COALESCE($20, oidc),
+    passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $21 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $22 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -4592,6 +4608,7 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
@@ -4619,6 +4636,7 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -4778,11 +4796,12 @@ SET
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
     response_types_supported = COALESCE($16::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($18, client_id_metadata_document_supported),
-    oidc = COALESCE($19, oidc),
-    passthrough = COALESCE($20, passthrough),
+    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    oidc = COALESCE($20, oidc),
+    passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $21 AND organization_id = $22 AND deleted IS FALSE
+WHERE id = $22 AND organization_id = $23 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -4804,6 +4823,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
@@ -4832,6 +4852,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -5021,11 +5042,12 @@ SET
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
     response_types_supported = COALESCE($16::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    client_id_metadata_document_supported = COALESCE($18, client_id_metadata_document_supported),
-    oidc = COALESCE($19, oidc),
-    passthrough = COALESCE($20, passthrough),
+    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    oidc = COALESCE($20, oidc),
+    passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $21 AND project_id = $22 AND deleted IS FALSE
+WHERE id = $22 AND project_id = $23 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -5047,6 +5069,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported pgtype.Bool
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
@@ -5082,6 +5105,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -5137,12 +5161,13 @@ SET
     grant_types_supported = $10::text[],
     response_types_supported = $11::text[],
     token_endpoint_auth_methods_supported = $12::text[],
-    client_id_metadata_document_supported = $13::boolean,
+    code_challenge_methods_supported = $13::text[],
+    client_id_metadata_document_supported = $14::boolean,
     updated_at = clock_timestamp()
-WHERE id = $14
-  AND issuer = $15::text
-  AND project_id IS NOT DISTINCT FROM $16::uuid
-  AND organization_id IS NOT DISTINCT FROM $17::text
+WHERE id = $15
+  AND issuer = $16::text
+  AND project_id IS NOT DISTINCT FROM $17::uuid
+  AND organization_id IS NOT DISTINCT FROM $18::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
@@ -5160,6 +5185,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
 	ID                                uuid.UUID
 	Issuer                            string
@@ -5179,8 +5205,12 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 // restates the issuer's full discovered surface, so there is no "leave this
 // one alone" case: an endpoint the issuer has stopped advertising arrives as
 // an empty string and is cleared to NULL, and a *_supported array it has
-// stopped advertising arrives as an empty array (those columns are NOT NULL
-// with an empty-array default, so NULL is not a value they can hold).
+// stopped advertising arrives as an empty array. For the capability arrays
+// that are NOT NULL with an empty-array default, NULL is not a value they can
+// hold anyway; for the nullable code_challenge_methods_supported the empty
+// array is itself load-bearing ("captured; the upstream advertises nothing"),
+// and a refresh must never write NULL there — NULL is reserved for rows
+// discovery has not captured yet, and this query is the capture.
 //
 // Scoping differs from the tier-specific updates by necessity, since one query
 // serves project-owned, organization-level, and global rows. Rather than the
@@ -5219,6 +5249,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.GrantTypesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
+		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
 		arg.ID,
 		arg.Issuer,

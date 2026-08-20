@@ -30,11 +30,15 @@ import (
 // grant, so each handler gates inline on the platform-admin flag; audit is
 // structured-logs only (audit_log.organization_id is NOT NULL).
 
-// orEmptySlice coalesces a nil slice to empty. The remote_session_issuers
+// orEmptySlice coalesces a nil slice to empty. Most remote_session_issuers
 // *_supported columns are NOT NULL: on INSERT an explicit NULL bypasses their
-// empty-array default, and on UPDATE it violates the constraint outright. All
-// four arrays are OPTIONAL in RFC 8414, so an upstream that omits one decodes
-// to a nil slice and reaches the write path routinely.
+// empty-array default, and on UPDATE it violates the constraint outright. The
+// nullable code_challenge_methods_supported needs it for a different reason:
+// on paths where discovery ran, a document omitting the field must persist as
+// the empty array ("captured; the upstream advertises nothing"), keeping NULL
+// reserved for rows discovery has never captured. The arrays are all OPTIONAL
+// in RFC 8414, so an upstream that omits one decodes to a nil slice and
+// reaches the write path routinely.
 func orEmptySlice(s []string) []string {
 	if s == nil {
 		return []string{}
@@ -130,6 +134,11 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		GrantTypesSupported:               orEmptySlice(payload.GrantTypesSupported),
 		ResponseTypesSupported:            orEmptySlice(payload.ResponseTypesSupported),
 		TokenEndpointAuthMethodsSupported: orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
+		// Unlike the NOT NULL siblings above, deliberately not orEmptySlice:
+		// the column is nullable, and an omitted payload field must store NULL
+		// ("not captured") rather than the empty array ("the issuer advertises
+		// no methods").
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
@@ -341,6 +350,7 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),

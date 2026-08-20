@@ -117,6 +117,7 @@ func CreateIssuerGatedToolset(
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
 		Oidc:                              false,
 		Passthrough:                       false,
 	})
