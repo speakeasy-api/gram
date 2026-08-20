@@ -356,8 +356,8 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <Text muted>
         Create a <strong>shared</strong> Anthropic-hosted environment in{" "}
-        <InlineLink href="https://claude.ai/admin-settings">
-          Claude admin settings
+        <InlineLink href="https://claude.ai/admin-settings/cloud-environments">
+          Cloud environments
         </InlineLink>{" "}
         for Claude Code on the web.
       </Text>
@@ -384,8 +384,8 @@ export function RemoteOrganizationDefaultStep(): React.JSX.Element {
       <Text small muted>
         Anthropic has no lock-members-to-this-environment switch. After creating
         the shared environment at{" "}
-        <InlineLink href="https://claude.ai/admin-settings">
-          Claude admin settings
+        <InlineLink href="https://claude.ai/admin-settings/cloud-environments">
+          Cloud environments
         </InlineLink>
         , set it as the org default at{" "}
         <InlineLink href="https://claude.ai/admin-settings/claude-code">
