@@ -11,7 +11,7 @@ import (
 
 func TestValidateAction(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"flag", "block", "warn"} {
+	for _, action := range []string{"flag", "block", "warn", "quarantine"} {
 		require.NoError(t, validateAction(action), "action %q must be accepted", action)
 	}
 	for _, action := range []string{"", "warning", "deny", "ask", "Block"} {
@@ -29,9 +29,9 @@ func TestValidateSourceAction_WarnIsBlockingClass(t *testing.T) {
 	require.NoError(t, validateSourceAction(flagOnly, "flag"))
 	require.NoError(t, validateSourceAction(scannable, "flag"))
 
-	// warn and block are equally constrained: rejected on flag-only sources,
-	// allowed on scannable ones.
-	for _, action := range []string{"warn", "block"} {
+	// warn, block, and quarantine are equally constrained: rejected on
+	// flag-only sources, allowed on scannable ones.
+	for _, action := range []string{"warn", "block", "quarantine"} {
 		require.Error(t, validateSourceAction(flagOnly, action),
 			"%q must be rejected on a flag-only source", action)
 		require.Error(t, validateSourceAction([]string{ra.SourceCLIDestructive}, action),

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -544,6 +545,13 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
+	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
+			reason := sessionquarantine.DenyReason(quarantine)
+			return reason, reason
+		}
+	}
+
 	// Spend gate runs before any risk-policy evaluation, for every adapter
 	// with a per-provider enforcement surface (claude, codex, cursor) — the
 	// risk scans below already run adapter-agnostically, and an over-budget
@@ -577,6 +585,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			Prompt: canonicalPromptText(payload),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "quarantine" {
+				auditReason := quarantineAuditReason("prompt", scanResult)
+				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+			}
 			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
@@ -605,6 +618,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			// returning early on them.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
 				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				if scanResult.Action == "quarantine" {
+					auditReason := quarantineAuditReason("permission request", scanResult)
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+				}
 				if scanResult.Action == "warn" {
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -622,6 +640,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput: toolInput,
 			})
 			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+				if scanResult.Action == "quarantine" {
+					auditReason := quarantineAuditReason("tool call", scanResult)
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+				}
 				if scanResult.Action == "warn" {
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
@@ -642,6 +665,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolInput: toolInput,
 		})
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "quarantine" {
+				auditReason := quarantineAuditReason("tool call", scanResult)
+				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+			}
 			if scanResult.Action == "warn" {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""

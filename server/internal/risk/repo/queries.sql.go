@@ -888,6 +888,66 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 	return i, err
 }
 
+const createSessionQuarantine = `-- name: CreateSessionQuarantine :one
+INSERT INTO session_quarantines (
+    organization_id
+  , project_id
+  , session_id
+  , risk_policy_id
+  , risk_policy_name
+  , user_id
+  , reason
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+ON CONFLICT (session_id) WHERE released_at IS NULL DO NOTHING
+RETURNING id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+`
+
+type CreateSessionQuarantineParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+}
+
+func (q *Queries) CreateSessionQuarantine(ctx context.Context, arg CreateSessionQuarantineParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, createSessionQuarantine,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SessionID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyName,
+		arg.UserID,
+		arg.Reason,
+	)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
+	)
+	return i, err
+}
+
 const createUserAccountForTest = `-- name: CreateUserAccountForTest :one
 INSERT INTO user_accounts (organization_id, external_account_uuid, email)
 VALUES ($1, $2, $3)
@@ -1192,6 +1252,33 @@ func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskP
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getActiveSessionQuarantineBySession = `-- name: GetActiveSessionQuarantineBySession :one
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE session_id = $1
+  AND released_at IS NULL
+`
+
+func (q *Queries) GetActiveSessionQuarantineBySession(ctx context.Context, sessionID string) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, getActiveSessionQuarantineBySession, sessionID)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
 	)
 	return i, err
 }
@@ -2222,6 +2309,19 @@ func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByI
 	return items, nil
 }
 
+const getSessionQuarantineFailClosed = `-- name: GetSessionQuarantineFailClosed :one
+SELECT session_quarantine_fail_closed
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetSessionQuarantineFailClosed(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, getSessionQuarantineFailClosed, organizationID)
+	var session_quarantine_fail_closed bool
+	err := row.Scan(&session_quarantine_fail_closed)
+	return session_quarantine_fail_closed, err
+}
+
 const getToolCallBlock = `-- name: GetToolCallBlock :one
 SELECT
     b.id,
@@ -2338,6 +2438,93 @@ func (q *Queries) LinkChatUserAccountForTest(ctx context.Context, arg LinkChatUs
 	return err
 }
 
+const listActiveSessionQuarantines = `-- name: ListActiveSessionQuarantines :many
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE organization_id = $1
+  AND project_id = $2
+  AND released_at IS NULL
+ORDER BY created_at DESC, id DESC
+`
+
+type ListActiveSessionQuarantinesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListActiveSessionQuarantines(ctx context.Context, arg ListActiveSessionQuarantinesParams) ([]SessionQuarantine, error) {
+	rows, err := q.db.Query(ctx, listActiveSessionQuarantines, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SessionQuarantine
+	for rows.Next() {
+		var i SessionQuarantine
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyName,
+			&i.UserID,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReleasedAt,
+			&i.ReleasedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllActiveSessionQuarantines = `-- name: ListAllActiveSessionQuarantines :many
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE released_at IS NULL
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListAllActiveSessionQuarantines(ctx context.Context) ([]SessionQuarantine, error) {
+	rows, err := q.db.Query(ctx, listAllActiveSessionQuarantines)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SessionQuarantine
+	for rows.Next() {
+		var i SessionQuarantine
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyName,
+			&i.UserID,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReleasedAt,
+			&i.ReleasedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
 SELECT c.id, c.title
 FROM chats c
@@ -2428,12 +2615,13 @@ SELECT id, project_id, organization_id, enabled, name, policy_type, sources, pre
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action IN ('block', 'warn')
+  AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE
 `
 
-// Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
-// allowed after acknowledgement). flag is non-enforcing and excluded.
+// Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
+// allowed after acknowledgement), and quarantine (hard deny + session circuit).
+// flag is non-enforcing and excluded.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -4569,6 +4757,50 @@ func (q *Queries) RefreshAccountIdentityFindingMatch(ctx context.Context, arg Re
 	return result.RowsAffected(), nil
 }
 
+const releaseSessionQuarantine = `-- name: ReleaseSessionQuarantine :one
+UPDATE session_quarantines
+SET released_at = clock_timestamp()
+  , released_by = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND released_at IS NULL
+RETURNING id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+`
+
+type ReleaseSessionQuarantineParams struct {
+	ReleasedBy     pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ReleaseSessionQuarantine(ctx context.Context, arg ReleaseSessionQuarantineParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, releaseSessionQuarantine,
+		arg.ReleasedBy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
+	)
+	return i, err
+}
+
 const resolveRequestedRiskPolicyBypassRequest = `-- name: ResolveRequestedRiskPolicyBypassRequest :one
 UPDATE risk_policy_bypass_requests
 SET status = $1
@@ -4716,6 +4948,22 @@ WHERE id = $1
 
 func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
+	return err
+}
+
+const setSessionQuarantineFailClosed = `-- name: SetSessionQuarantineFailClosed :exec
+UPDATE organization_metadata
+SET session_quarantine_fail_closed = $1
+WHERE id = $2
+`
+
+type SetSessionQuarantineFailClosedParams struct {
+	FailClosed     bool
+	OrganizationID string
+}
+
+func (q *Queries) SetSessionQuarantineFailClosed(ctx context.Context, arg SetSessionQuarantineFailClosedParams) error {
+	_, err := q.db.Exec(ctx, setSessionQuarantineFailClosed, arg.FailClosed, arg.OrganizationID)
 	return err
 }
 
