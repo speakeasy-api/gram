@@ -3,6 +3,7 @@ server/internal/database/models.go
   s_d8569503ddf9c1::t_8e138f8948ed3a 2272-2286
 server/migrations/atlas.sum
   s_d8569503ddf9c1::t_8f9c88b1c09dd5 361
+  s_1b89b64f839d5a::t_b2f85c895d16f1 1,362
 server/migrations/20260820164700_session-quarantines.sql
   s_d8569503ddf9c1::t_8f9c88b1c09dd5 1-25
 server/database/schema.sql
@@ -21,6 +22,14 @@ server/internal/projects/repo/queries.sql.go
   "base_commit_sha": "30f062499bd682fba2dcd9149ffb08ab37282e86",
   "prompts": {},
   "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
     "s_d8569503ddf9c1": {
       "agent_id": {
         "tool": "codex",
