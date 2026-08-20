@@ -203,13 +203,21 @@ describe("shadowMCPAccessSummaryOf fallback", () => {
         requestCount: 0,
       }),
     ).toBe("blocked");
+    // Wording claims no mechanism — the legacy field never knew one.
     expect(
       shadowMCPInventoryStatusDescription({
         access: "restricted",
         accessSummary: undefined,
         requestCount: 0,
       }),
-    ).toBe("Blocked for some users");
+    ).toBe("Access varies by user");
+    expect(
+      shadowMCPInventoryStatusDescription({
+        access: "allowed",
+        accessSummary: undefined,
+        requestCount: 0,
+      }),
+    ).toBe("Allowed");
   });
 });
 
@@ -226,6 +234,19 @@ describe("shadowMCPInventoryStatusDescription", () => {
         }),
       ),
     ).toBe("Allowed by review");
+    // An approval whose grants no longer carry the allow is not the
+    // mechanism; the surviving default is.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        access({
+          state: "allowed",
+          allowedFor: "none",
+          blockingDefault: "allow",
+          decision: "approved",
+          decisionCoverage: "partial",
+        }),
+      ),
+    ).toBe("Allowed by default");
     expect(
       shadowMCPInventoryStatusDescription(
         access({

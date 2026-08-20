@@ -1175,7 +1175,14 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			return state, fmt.Errorf("listing audience grants for shadow mcp policy: %w", err)
 		}
 		audience := make([]string, 0, len(audienceGrants))
+		baseSelector := authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)
 		for _, grant := range audienceGrants {
+			// Only base-selector grants are the audience; a grant carrying
+			// extra selector keys scopes something narrower, and counting it
+			// would inflate the audience a bypass set must cover.
+			if !maps.Equal(grant.Selector, baseSelector) {
+				continue
+			}
 			audience = append(audience, grant.PrincipalUrn)
 		}
 		state.blockAllPolicyAudiences[policyID] = audience
@@ -1296,7 +1303,7 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 
 	return shadowMCPInventoryRowState{
 		Access:           access,
-		Summary:          s.summaryForURL(canonicalURL, access),
+		Summary:          s.summaryForURL(canonicalURL, access, allowedForEveryone),
 		RequestCount:     requestState.Count,
 		LatestRequest:    requestState.Latest,
 		ApprovalRequest:  s.approvalsByURL[canonicalURL],
@@ -1346,7 +1353,7 @@ func (s shadowMCPInventoryPolicyState) bypassCoversEveryBlockAllAudience(canonic
 // because it is the only place holding all the inputs: clients that
 // re-derived enforcement from policy lists and review status each told a
 // slightly different lie.
-func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access string) *gen.ShadowMCPAccessSummary {
+func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access string, allowedForEveryone bool) *gen.ShadowMCPAccessSummary {
 	// The legacy access value and the summary state are the same partition
 	// under different names: none meant "no blocking policy", which unenforced
 	// says outright.
@@ -1358,7 +1365,7 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	allowedFor := shadowMCPAccessReachNone
 	if len(s.allowedPolicyIDs[canonicalURL]) > 0 {
 		allowedFor = shadowMCPAccessReachSelected
-		if s.bypassCoversEveryBlockAllAudience(canonicalURL) {
+		if allowedForEveryone {
 			allowedFor = shadowMCPAccessReachEveryone
 		}
 	}
@@ -1399,7 +1406,10 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 		coverage = shadowMCPAccessCoveragePartial
 		switch *decision {
 		case shadowMCPInventoryBypassStatusApproved:
-			if allowedFor != shadowMCPAccessReachNone && state != shadowMCPAccessStateBlocked {
+			// Full while the approval's grants survive and no explicit block
+			// rule overrides them. The targeted deny-by-default posture is
+			// not an override — the approval was recorded against it.
+			if allowedFor != shadowMCPAccessReachNone && len(s.blockedPolicyIDs[canonicalURL]) == 0 {
 				coverage = shadowMCPAccessCoverageFull
 			}
 		case shadowMCPInventoryBypassStatusDenied:

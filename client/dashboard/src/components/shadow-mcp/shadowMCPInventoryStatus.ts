@@ -209,7 +209,22 @@ export function shadowMCPInventoryStatusDescription(
   if (server.requestCount > 0) {
     return `${server.requestCount} access ${server.requestCount === 1 ? "request" : "requests"} pending`;
   }
-  return describeShadowMCPAccess(shadowMCPAccessSummaryOf(server));
+  // The skew fallback knows the legacy verdict but not the mechanism — an
+  // allow-by-default project would be mis-credited to "policy" or "URL rule".
+  // Say only what the old field actually knew.
+  if (!server.accessSummary) {
+    switch (shadowMCPAccessSummaryOf(server).state) {
+      case "allowed":
+        return "Allowed";
+      case "blocked":
+        return "Blocked";
+      case "restricted":
+        return "Access varies by user";
+      case "unenforced":
+        return "Not blocking";
+    }
+  }
+  return describeShadowMCPAccess(server.accessSummary);
 }
 
 /**
@@ -227,7 +242,15 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
       if (summary.decision === "denied") {
         return "Allowed — a recorded denial is not enforced";
       }
-      if (summary.decision === "approved") return "Allowed by review";
+      // Credit the review only while its own grants carry the allow; an
+      // approval whose grants were removed leaves the server allowed by
+      // whatever mechanism actually remains.
+      if (
+        summary.decision === "approved" &&
+        summary.decisionCoverage === "full"
+      ) {
+        return "Allowed by review";
+      }
       if (summary.allowedFor === "everyone") return "Allowed by URL rule";
       return "Allowed by default";
     }
