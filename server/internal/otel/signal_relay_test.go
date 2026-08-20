@@ -2,8 +2,11 @@ package otel
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -43,6 +46,34 @@ func TestSignalRelayDestinationUsesConfiguredSignalEndpoint(t *testing.T) {
 	require.Equal(t, "/v1/metrics", requestPath)
 	require.Equal(t, "application/x-protobuf", requestContentType)
 	require.Equal(t, "Bearer test-token", requestHeader)
+}
+
+func TestSignalRelayDestinationDrainsFailedResponses(t *testing.T) {
+	t.Parallel()
+
+	var newConnections atomic.Int64
+	errorBody := strings.Repeat("x", maxRelayErrorBodyBytes+1)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, errorBody)
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			newConnections.Add(1)
+		}
+	}
+	server.Start()
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	relay := newSignalRelay(nil, nil, policy, "/v1/traces", "trace")
+	destination, err := relay.newDestination("organization-id", server.URL, nil)
+	require.NoError(t, err)
+
+	require.Error(t, destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
+	require.Error(t, destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
+	require.Equal(t, int64(1), newConnections.Load())
 }
 
 func TestClassifyRelayStatusDistinguishesRetryableFailures(t *testing.T) {

@@ -260,6 +260,7 @@ func (d *relayDestination) export(ctx context.Context, message proto.Message) er
 	}
 
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxRelayErrorBodyBytes))
+	_, _ = io.Copy(io.Discard, response.Body)
 	reason, retryable := classifyRelayStatus(response.StatusCode)
 	return &relayExportError{
 		reason:    reason,
