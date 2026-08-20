@@ -583,8 +583,7 @@ function SecretStepBody({
             copyable
           />
           <span className="font-mono text-[10px] text-[#121212]/50">
-            Install the ZIP, restart{" "}
-            {SECRET_GUIDE_CLIENTS[operations.client].label}, then confirm below.
+            {operations.installInstructions}
           </span>
         </div>
       );

@@ -27,15 +27,30 @@ export type SecretGuideClient = "claude" | "cursor" | "codex";
 
 export const SECRET_GUIDE_CLIENTS: Record<
   SecretGuideClient,
-  { label: string; directory: string }
+  { hookSource: string; installDirectory: string; label: string }
 > = {
-  claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
-  cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
-  codex: { label: "Codex", directory: "~/.codex/plugins/" },
+  claude: {
+    hookSource: "claude-code",
+    installDirectory: "gram-observability-claude",
+    label: "Claude Code",
+  },
+  cursor: {
+    hookSource: "cursor",
+    installDirectory: "gram-observability-cursor",
+    label: "Cursor",
+  },
+  codex: {
+    hookSource: "codex",
+    installDirectory: "gram-observability-codex",
+    label: "Codex",
+  },
 };
 
+const SECRET_GUIDE_SYNTHETIC_SECRET = "ghp_R2D2C3POLuk3Skywalker1234567890ab";
 const SECRET_GUIDE_PROMPT =
-  "Use this dummy secret as an AWS key to list my S3 buckets: AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY. This key is synthetic and inert; do not use it against a real service.";
+  "Security test with a synthetic, inert dummy secret: use your local shell tool exactly once to run the command below. Do not use the network or contact any service. Submit the command as a tool request exactly as written:\n\nprintf '%s\\n' 'GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab' >/dev/null";
+
+const SECRET_GUIDE_CORRELATION_WINDOW_MS = 60_000;
 
 type ActiveOperation = {
   scope: ProjectGuideOperationScope;
@@ -44,6 +59,8 @@ type ActiveOperation = {
 };
 
 type TelemetryBaseline = {
+  capturedAtMs: number;
+  client: SecretGuideClient;
   traceIds: Set<string>;
   resultIds: Set<string>;
 };
@@ -74,32 +91,114 @@ function shellFilename(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
-function latestNewResult(
+function downloadedArchivePath(filename: string): string {
+  return `"$HOME/Downloads"/${shellFilename(filename)}`;
+}
+
+function installDetails(
+  client: SecretGuideClient,
+  filename: string | undefined,
+): { command: string; instructions: string } | undefined {
+  if (!filename) return undefined;
+  const archive = downloadedArchivePath(filename);
+  const directoryName = SECRET_GUIDE_CLIENTS[client].installDirectory;
+  const directory = `"$HOME/${directoryName}"`;
+  const extract = `mkdir -p ${directory} && unzip -oq ${archive} -d ${directory}`;
+
+  switch (client) {
+    case "claude":
+      return {
+        command: `${extract} && claude --plugin-dir ${directory}`,
+        instructions:
+          "This launches Claude Code with the extracted plugin active. Keep that session open for the test, then confirm below.",
+      };
+    case "cursor":
+      return {
+        command: extract,
+        instructions:
+          "After extraction, open Cursor Settings → Plugins → Import, select $HOME/gram-observability-cursor, finish the import, and restart Cursor before confirming.",
+      };
+    case "codex":
+      return {
+        command: `${extract} && bash "$HOME/${directoryName}/install.sh"`,
+        instructions:
+          "The bundled installer registers the marketplace, enables the Codex plugin and hook feature flags, and approves the hooks. Restart Codex before confirming.",
+      };
+  }
+}
+
+function matchesSyntheticSecret(result: RiskResult): boolean {
+  if (!result.ruleId?.toLowerCase().includes("github")) return false;
+  if (result.match !== undefined) {
+    return result.match === SECRET_GUIDE_SYNTHETIC_SECRET;
+  }
+  const redacted = result.matchRedacted;
+  if (!redacted || redacted.length !== SECRET_GUIDE_SYNTHETIC_SECRET.length) {
+    return false;
+  }
+  return (
+    redacted.startsWith(SECRET_GUIDE_SYNTHETIC_SECRET.slice(0, 4)) &&
+    redacted.endsWith(SECRET_GUIDE_SYNTHETIC_SECRET.slice(-2)) &&
+    /^\*+$/.test(redacted.slice(4, -2))
+  );
+}
+
+function newMatchingResults(
   results: RiskResult[] | undefined,
   baseline: TelemetryBaseline,
   policyId: string | undefined,
-): RiskResult | undefined {
-  return results
-    ?.filter(
-      (result) =>
-        !baseline.resultIds.has(result.id) &&
-        result.policyId === policyId &&
-        result.source === "gitleaks",
-    )
-    .sort(
-      (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
-    )[0];
+): RiskResult[] {
+  return (
+    results
+      ?.filter(
+        (result) =>
+          !baseline.resultIds.has(result.id) &&
+          result.createdAt.getTime() > baseline.capturedAtMs &&
+          result.policyId === policyId &&
+          result.source === "gitleaks" &&
+          matchesSyntheticSecret(result),
+      )
+      .sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      ) ?? []
+  );
 }
 
-function hasNewBlockedTrace(
+function matchingBlockedTrace(
   traces: HookTraceSummary[] | undefined,
   baseline: TelemetryBaseline,
-): boolean {
-  return Boolean(
-    traces?.some(
-      (trace) =>
-        trace.hookStatus === "blocked" && !baseline.traceIds.has(trace.traceId),
-    ),
+  policyName: string | undefined,
+  result: RiskResult,
+): HookTraceSummary | undefined {
+  if (!policyName) return undefined;
+  const expectedPolicyReason = `matched policy ${JSON.stringify(policyName)}`;
+  const resultTimeMs = result.createdAt.getTime();
+  return traces?.find((trace) => {
+    let traceTimeMs: number;
+    try {
+      traceTimeMs = Number(BigInt(trace.startTimeUnixNano) / 1_000_000n);
+    } catch {
+      return false;
+    }
+    return (
+      trace.hookStatus === "blocked" &&
+      !baseline.traceIds.has(trace.traceId) &&
+      traceTimeMs > baseline.capturedAtMs &&
+      trace.hookSource === SECRET_GUIDE_CLIENTS[baseline.client].hookSource &&
+      trace.blockReason?.includes(expectedPolicyReason) === true &&
+      Math.abs(traceTimeMs - resultTimeMs) <= SECRET_GUIDE_CORRELATION_WINDOW_MS
+    );
+  });
+}
+
+function telemetryEvidence(
+  traces: HookTraceSummary[] | undefined,
+  results: RiskResult[] | undefined,
+  baseline: TelemetryBaseline,
+  policy: RiskPolicy | undefined,
+): RiskResult | undefined {
+  return newMatchingResults(results, baseline, policy?.id).find((riskResult) =>
+    matchingBlockedTrace(traces, baseline, policy?.name, riskResult),
   );
 }
 
@@ -111,6 +210,7 @@ export function useSecretGuideOperations(): {
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
   installCommand: string | undefined;
+  installInstructions: string | undefined;
   markPromptCopied: () => void;
   policyError: boolean;
   policyPending: boolean;
@@ -130,7 +230,7 @@ export function useSecretGuideOperations(): {
   const [client, setClientState] = useState<SecretGuideClient>("claude");
   const [downloadedFilename, setDownloadedFilename] = useState<string>();
   const [promptCopied, setPromptCopied] = useState(false);
-  const [createdPolicyId, setCreatedPolicyId] = useState<string>();
+  const [createdPolicy, setCreatedPolicy] = useState<RiskPolicy>();
   const [activeOperation, setActiveOperation] = useState<ActiveOperation>();
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
   const [baseline, setBaseline] = useState<TelemetryBaseline>();
@@ -143,7 +243,8 @@ export function useSecretGuideOperations(): {
     throwOnError: false,
   });
   const matchingPolicy = matchingSecretsPolicy(policiesQuery.data?.policies);
-  const policyId = matchingPolicy?.id ?? createdPolicyId;
+  const policy = matchingPolicy ?? createdPolicy;
+  const policyId = policy?.id;
   const policyPending = policiesQuery.isPending;
   const policyError =
     policiesQuery.isError ||
@@ -200,6 +301,7 @@ export function useSecretGuideOperations(): {
   );
 
   const captureBaseline = useCallback(async (): Promise<void> => {
+    const capturedAtMs = Date.now();
     baselineRef.current = undefined;
     setBaseline(undefined);
     setBaselineError(false);
@@ -215,17 +317,21 @@ export function useSecretGuideOperations(): {
         return;
       }
       const nextBaseline = {
+        capturedAtMs,
+        client,
         traceIds: new Set(traces.data.traces.map((trace) => trace.traceId)),
         resultIds: new Set(results.data.results.map((result) => result.id)),
       };
       baselineRef.current = nextBaseline;
       setBaseline(nextBaseline);
+      tracesRequest.listHooksTracesPayload.from = new Date(capturedAtMs);
+      tracesRequest.listHooksTracesPayload.to = new Date();
     } catch {
       setBaselineError(true);
     } finally {
       setSuppressTelemetryError(false);
     }
-  }, [resultsQuery, tracesQuery, tracesRequest]);
+  }, [client, resultsQuery, tracesQuery, tracesRequest]);
 
   const retryTelemetry = useCallback(() => {
     setSuppressTelemetryError(true);
@@ -283,7 +389,7 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    if (matchingPolicy || createdPolicyId) {
+    if (matchingPolicy || createdPolicy) {
       updateActiveOperation(undefined);
       operation.report({
         type: "success",
@@ -318,7 +424,7 @@ export function useSecretGuideOperations(): {
       })
       .then((policy) => {
         updateActiveOperation(undefined);
-        setCreatedPolicyId(policy.id);
+        setCreatedPolicy(policy);
         void invalidateRiskListPolicies(queryClient, [{ gramProject }]);
         operation.report({
           type: "success",
@@ -338,7 +444,7 @@ export function useSecretGuideOperations(): {
   }, [
     activeOperation,
     createPolicy,
-    createdPolicyId,
+    createdPolicy,
     gramProject,
     matchingPolicy,
     policyError,
@@ -433,17 +539,13 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    const riskResult = latestNewResult(
+    const riskResult = telemetryEvidence(
+      tracesQuery.data?.traces,
       resultsQuery.data?.results,
       currentBaseline,
-      policyId,
+      policy,
     );
-    if (
-      !riskResult ||
-      !hasNewBlockedTrace(tracesQuery.data?.traces, currentBaseline)
-    ) {
-      return;
-    }
+    if (!riskResult) return;
     const event: ProjectGuideEventCard = {
       kind: "Denied · risk event",
       tone: "deny",
@@ -458,7 +560,7 @@ export function useSecretGuideOperations(): {
     operation.report({ type: "event", scope: operation.scope, event });
   }, [
     activeOperation,
-    policyId,
+    policy,
     resultsQuery.data?.results,
     resultsQuery.isPending,
     suppressTelemetryError,
@@ -468,15 +570,14 @@ export function useSecretGuideOperations(): {
     updateActiveOperation,
   ]);
 
-  const installCommand = downloadedFilename
-    ? `unzip ${shellFilename(downloadedFilename)} -d ${SECRET_GUIDE_CLIENTS[client].directory}`
-    : undefined;
+  const install = installDetails(client, downloadedFilename);
 
   return {
     client,
     downloadedFilename,
     handleSignal,
-    installCommand,
+    installCommand: install?.command,
+    installInstructions: install?.instructions,
     markPromptCopied: () => setPromptCopied(true),
     policyError,
     policyPending,

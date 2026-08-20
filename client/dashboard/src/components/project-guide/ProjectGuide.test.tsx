@@ -161,12 +161,15 @@ function resetSecretOperations(): void {
     client: "claude",
     downloadedFilename: "gram-observability.zip",
     handleSignal: vi.fn(),
-    installCommand: "unzip gram-observability.zip -d ~/.claude/plugins/",
+    installCommand:
+      'unzip -q "$HOME/Downloads"/gram-observability.zip -d "$HOME/gram-observability-claude" && claude --plugin-dir "$HOME/gram-observability-claude"',
+    installInstructions:
+      "This launches Claude Code with the extracted plugin active. Keep that session open for the test, then confirm below.",
     markPromptCopied: vi.fn(),
     policyError: false,
     policyPending: false,
     prompt:
-      "This is a security test using a dummy secret. Inspect AKIAIOSFODNN7EXAMPLE.",
+      "Use your local shell tool exactly once for this dummy secret test. Do not use the network. Run: printf '%s\\n' 'GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab' >/dev/null",
     promptCopied: true,
     retryBaseline: vi.fn(),
     retryPolicy: vi.fn(),
@@ -793,11 +796,16 @@ describe("ProjectGuide", () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.tagName === "PRE" &&
-            element.textContent?.includes("unzip gram-observability.zip"),
+            element.textContent?.includes("claude --plugin-dir"),
           ),
         ),
       ).toBeTruthy(),
     );
+    expect(
+      screen.getByText(
+        /launches Claude Code with the extracted plugin active/i,
+      ),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "I've installed and restarted it" }),
     );
@@ -811,6 +819,7 @@ describe("ProjectGuide", () => {
         ),
       ).toBeTruthy(),
     );
+    expect(screen.getByText(/do not use the network/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
 
     expect(

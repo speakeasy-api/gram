@@ -82,7 +82,10 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
 
 function trace(overrides: Partial<HookTraceSummary> = {}): HookTraceSummary {
   return {
+    blockReason:
+      'Speakeasy blocked this tool call: matched policy "Secrets" (synthetic credential)',
     gramUrn: "urn:gram:hook",
+    hookSource: "claude-code",
     hookStatus: "blocked",
     logCount: 1,
     startTimeUnixNano: "1787140800000000000",
@@ -262,7 +265,57 @@ describe("useSecretGuideOperations", () => {
       scope,
       result: "Observability plugin downloaded · gram-observability.zip",
     });
+    expect(hook.current.installCommand).toContain(
+      '"$HOME/Downloads"/gram-observability.zip',
+    );
+    expect(hook.current.installCommand).toContain("claude --plugin-dir");
+    expect(hook.current.installInstructions).toMatch(
+      /launches Claude Code with the extracted plugin active/i,
+    );
   });
+
+  it.each([
+    {
+      client: "cursor" as const,
+      filename: "observability-cursor.zip",
+      commandPart:
+        'unzip -oq "$HOME/Downloads"/observability-cursor.zip -d "$HOME/gram-observability-cursor"',
+      instructions: /Settings.*Plugins.*Import/i,
+    },
+    {
+      client: "codex" as const,
+      filename: "observability-codex.zip",
+      commandPart: 'bash "$HOME/gram-observability-codex/install.sh"',
+      instructions: /registers the marketplace.*approves the hooks/i,
+    },
+  ])(
+    "activates the generated $client archive through its existing install contract",
+    async ({ client, filename, commandPart, instructions }) => {
+      authFetch.mockResolvedValueOnce(
+        new Response(new Blob(["zip"]), {
+          status: 200,
+          headers: {
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+        }),
+      );
+      const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+      const { result: hook } = renderHook(() => useSecretGuideOperations());
+      const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
+
+      act(() => hook.current.setClient(client));
+      act(() => hook.current.handleSignal({ type: "start", scope }, report));
+
+      await waitFor(() =>
+        expect(hook.current.downloadedFilename).toBe(filename),
+      );
+      expect(hook.current.installCommand).toContain(
+        `"$HOME/Downloads"/${filename}`,
+      );
+      expect(hook.current.installCommand).toContain(commandPart);
+      expect(hook.current.installInstructions).toMatch(instructions);
+    },
+  );
 
   it("captures the hook and risk baselines only at the install/restart checkpoint", async () => {
     const hooks = queryResult({ traces: [trace()] });
@@ -285,7 +338,8 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
-  it("excludes historical events and completes only for a new matching blocked hook and risk result", async () => {
+  it("completes only for post-baseline evidence from the selected client and policy", async () => {
+    const now = Date.now();
     const hookData = { current: { traces: [trace()] } };
     const riskData = { current: { results: [result()] } };
     const refetchHooks = vi.fn(() =>
@@ -330,15 +384,17 @@ describe("useSecretGuideOperations", () => {
       traces: [
         trace({
           traceId: "new-blocked-trace",
-          startTimeUnixNano: "1787140860000000000",
+          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
         }),
       ],
     };
     riskData.current = {
       results: [
         result({
-          createdAt: new Date("2026-08-19T12:01:00Z"),
+          createdAt: new Date(now + 2_000),
           id: "new-result",
+          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          ruleId: "secret.github_pat",
         }),
       ],
     };
@@ -353,12 +409,201 @@ describe("useSecretGuideOperations", () => {
           tone: "deny",
           title: "request denied by secrets policy",
           rows: [
-            { key: "rule", value: "secrets.aws_access_key_id" },
+            { key: "rule", value: "secret.github_pat" },
             { key: "match", value: "synthetic credential" },
           ],
           note: "The prompt was blocked before the model answered.",
         },
       }),
+    );
+  });
+
+  it("ignores a post-baseline risk result paired with an unrelated blocked trace", async () => {
+    const now = Date.now();
+    const hookData = { current: { traces: [] as HookTraceSummary[] } };
+    const riskData = { current: { results: [] as RiskResult[] } };
+    queryHooks.hooks.mockImplementation(() => ({
+      ...queryResult(hookData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: hookData.current, isError: false }),
+      ),
+    }));
+    queryHooks.results.mockImplementation(() => ({
+      ...queryResult(riskData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: riskData.current, isError: false }),
+      ),
+    }));
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const view = renderHook(() => useSecretGuideOperations());
+
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },
+        report,
+      ),
+    );
+    await waitFor(() =>
+      expect(view.result.current.telemetryBaselineReady).toBe(true),
+    );
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
+        report,
+      ),
+    );
+
+    hookData.current = {
+      traces: [
+        trace({
+          hookSource: "cursor",
+          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
+          traceId: "wrong-client-trace",
+        }),
+        trace({
+          blockReason:
+            'Speakeasy blocked this tool call: matched policy "Another policy" (different request)',
+          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
+          traceId: "wrong-policy-trace",
+        }),
+      ],
+    };
+    riskData.current = {
+      results: [
+        result({
+          createdAt: new Date(now + 2_000),
+          id: "matching-result",
+          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          ruleId: "secret.github_pat",
+        }),
+      ],
+    };
+    view.rerender();
+
+    await waitFor(() => expect(queryHooks.results).toHaveBeenCalled());
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
+    );
+  });
+
+  it("ignores delayed historical records that were outside the baseline page", async () => {
+    const now = Date.now();
+    const hookData = { current: { traces: [] as HookTraceSummary[] } };
+    const riskData = { current: { results: [] as RiskResult[] } };
+    queryHooks.hooks.mockImplementation(() => ({
+      ...queryResult(hookData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: hookData.current, isError: false }),
+      ),
+    }));
+    queryHooks.results.mockImplementation(() => ({
+      ...queryResult(riskData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: riskData.current, isError: false }),
+      ),
+    }));
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const view = renderHook(() => useSecretGuideOperations());
+
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },
+        report,
+      ),
+    );
+    await waitFor(() =>
+      expect(view.result.current.telemetryBaselineReady).toBe(true),
+    );
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
+        report,
+      ),
+    );
+
+    hookData.current = {
+      traces: [
+        trace({
+          startTimeUnixNano: String(BigInt(now - 60_000) * 1_000_000n),
+          traceId: "delayed-old-trace",
+        }),
+      ],
+    };
+    riskData.current = {
+      results: [
+        result({
+          createdAt: new Date(now - 60_000),
+          id: "delayed-old-result",
+          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          ruleId: "secret.github_pat",
+        }),
+      ],
+    };
+    view.rerender();
+
+    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
+    );
+  });
+
+  it("ignores otherwise correlated evidence for a different secret prompt", async () => {
+    const now = Date.now();
+    const hookData = { current: { traces: [] as HookTraceSummary[] } };
+    const riskData = { current: { results: [] as RiskResult[] } };
+    queryHooks.hooks.mockImplementation(() => ({
+      ...queryResult(hookData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: hookData.current, isError: false }),
+      ),
+    }));
+    queryHooks.results.mockImplementation(() => ({
+      ...queryResult(riskData.current),
+      refetch: vi.fn(() =>
+        Promise.resolve({ data: riskData.current, isError: false }),
+      ),
+    }));
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const view = renderHook(() => useSecretGuideOperations());
+
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },
+        report,
+      ),
+    );
+    await waitFor(() =>
+      expect(view.result.current.telemetryBaselineReady).toBe(true),
+    );
+    act(() =>
+      view.result.current.handleSignal(
+        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
+        report,
+      ),
+    );
+
+    hookData.current = {
+      traces: [
+        trace({
+          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
+          traceId: "correlated-trace",
+        }),
+      ],
+    };
+    riskData.current = {
+      results: [
+        result({
+          createdAt: new Date(now + 2_000),
+          id: "other-secret-result",
+          match: "ghp_000000000000000000000000000000000",
+          ruleId: "secret.github_pat",
+        }),
+      ],
+    };
+    view.rerender();
+
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
     );
   });
 
@@ -371,7 +616,13 @@ describe("useSecretGuideOperations", () => {
     const { result: hook } = renderHook(() => useSecretGuideOperations());
 
     expect(hook.current.prompt).toMatch(/dummy secret/i);
-    expect(hook.current.prompt).toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(hook.current.prompt).toMatch(
+      /use your local shell tool exactly once/i,
+    );
+    expect(hook.current.prompt).toMatch(/do not use the network/i);
+    expect(hook.current.prompt).toContain(
+      "printf '%s\\n' 'GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab' >/dev/null",
+    );
     expect(hook.current.promptCopied).toBe(false);
     act(() => hook.current.markPromptCopied());
     expect(hook.current.promptCopied).toBe(true);
