@@ -14,7 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -72,17 +71,20 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace export").LogError(ctx, logger)
 	}
 
+	// Validate before publishing any span: rejecting the export makes OTLP clients
+	// retry the whole batch, so publishing a prefix first would duplicate it.
+	for _, span := range spans {
+		if err := validateSpan(span); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid OTLP trace export").LogError(ctx, logger)
+		}
+	}
+
 	// Enqueue the whole export before waiting on any result so the batch flushes
 	// as one round trip, then settle every result: answering the exporter before
 	// its spans are durable would turn a Pub/Sub failure into silent data loss,
 	// since OTLP clients only retry what the server rejects.
 	results := make([]gcp.PublishResult, 0, len(spans))
 	for _, span := range spans {
-		if err := validateSpan(span); err != nil {
-			logger.WarnContext(ctx, "invalid otlp span", attr.SlogError(err))
-			continue
-		}
-
 		results = append(results, s.spanPublisher.Publish(ctx, span))
 	}
 
