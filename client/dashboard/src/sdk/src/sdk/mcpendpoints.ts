@@ -61,7 +61,7 @@ export class McpEndpoints extends ClientSDK {
    * createMcpEndpoint mcpEndpoints
    *
    * @remarks
-   * Create a new MCP endpoint for an MCP server
+   * Create a new MCP endpoint for an MCP server or a meta MCP server. Provide exactly one of mcp_server_id or meta_mcp_server_id.
    */
   async create(
     request: CreateMcpEndpointRequest,
@@ -118,7 +118,7 @@ export class McpEndpoints extends ClientSDK {
    * listMcpEndpoints mcpEndpoints
    *
    * @remarks
-   * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+   * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).
    */
   async list(
     request?: ListMcpEndpointsRequest | undefined,
@@ -137,7 +137,7 @@ export class McpEndpoints extends ClientSDK {
    * updateMcpEndpoint mcpEndpoints
    *
    * @remarks
-   * Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.
+   * Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id and slug fields are required, along with exactly one of mcp_server_id or meta_mcp_server_id.
    */
   async update(
     request: UpdateMcpEndpointRequest,

@@ -1651,15 +1651,16 @@ func marshalDomainsCustomDomainToCustomDomainResponseBody(v *domains.CustomDomai
 // type *domains.CustomDomainMcpEndpoint.
 func marshalDomainsCustomDomainMcpEndpointToCustomDomainMcpEndpointResponseBody(v *domains.CustomDomainMcpEndpoint) *CustomDomainMcpEndpointResponseBody {
 	res := &CustomDomainMcpEndpointResponseBody{
-		ID:            v.ID,
-		Slug:          v.Slug,
-		ProjectID:     v.ProjectID,
-		ProjectName:   v.ProjectName,
-		ProjectSlug:   v.ProjectSlug,
-		McpServerID:   v.McpServerID,
-		McpServerName: v.McpServerName,
-		McpServerSlug: v.McpServerSlug,
-		IsDomainRoot:  v.IsDomainRoot,
+		ID:              v.ID,
+		Slug:            v.Slug,
+		ProjectID:       v.ProjectID,
+		ProjectName:     v.ProjectName,
+		ProjectSlug:     v.ProjectSlug,
+		McpServerID:     v.McpServerID,
+		MetaMcpServerID: v.MetaMcpServerID,
+		McpServerName:   v.McpServerName,
+		McpServerSlug:   v.McpServerSlug,
+		IsDomainRoot:    v.IsDomainRoot,
 	}
 
 	return res

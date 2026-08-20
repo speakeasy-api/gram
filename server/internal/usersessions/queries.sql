@@ -69,12 +69,20 @@ WHERE issuer.id = @id
     WHERE toolset.project_id = @project_id
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = @project_id
+      AND meta_mcp_server.user_session_issuer_id = issuer.id
+      AND meta_mcp_server.deleted IS FALSE
   )
 RETURNING issuer.*;
 
 -- name: UserSessionIssuerHasActiveOwner :one
--- An issuer can be referenced by an MCP server or toolset. Only delete it once
--- no active owner remains.
+-- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+-- Only delete it once no active owner remains.
 SELECT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
@@ -89,6 +97,14 @@ SELECT EXISTS (
     WHERE toolset.project_id = sqlc.arg('project_id')
       AND toolset.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = sqlc.arg('project_id')
+      AND meta_mcp_server.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND meta_mcp_server.deleted IS FALSE
 );
 
 -- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -286,7 +287,7 @@ func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {
 		_, err := slugRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 			ProjectID:      *authCtx.ProjectID,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			McpServerID:    frontendUUID,
+			McpServerID:    uuid.NullUUID{UUID: frontendUUID, Valid: true},
 			Slug:           authCtx.OrganizationSlug + v,
 		})
 		require.NoError(t, err)
@@ -308,7 +309,7 @@ func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {
 	remaining, err := slugRepo.ListMCPEndpointsByProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	for _, s := range remaining {
-		require.NotEqual(t, frontendUUID, s.McpServerID, "slug pointing at deleted frontend should have been soft-deleted")
+		require.NotEqual(t, frontendUUID, s.McpServerID.UUID, "slug pointing at deleted frontend should have been soft-deleted")
 	}
 
 	// The cascade must produce one mcp-endpoint:delete audit event per child slug.
@@ -331,4 +332,73 @@ func TestDeleteMcpServer_RBACForbidden(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestDeleteMcpServer_SoftDeletesMetaMcpMemberships(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "meta member server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	serverUUID := uuid.MustParse(created.ID)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "membership holder",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	membership, err := metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID:       *authCtx.ProjectID,
+		MetaMcpServerID: meta.ID,
+		McpServerID:     serverUUID,
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+
+	removeBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerRemoveMember)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// The live-filtered membership lookup must no longer see the row.
+	_, err = metamcprepo.New(ti.conn).GetMetaMCPMember(ctx, metamcprepo.GetMetaMCPMemberParams{
+		ID:        membership.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// The meta MCP server itself must survive its member's deletion.
+	_, err = metamcprepo.New(ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+		ID:             meta.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	removeAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerRemoveMember)
+	require.NoError(t, err)
+	require.Equal(t, removeBefore+1, removeAfter)
 }

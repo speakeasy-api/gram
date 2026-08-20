@@ -41,6 +41,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -951,6 +952,47 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach mcp server from plugins").LogError(ctx, logger)
+	}
+
+	// Meta MCP memberships reference this server through a soft-delete-aware
+	// join table; tombstone them so member listings and the meta runtime stop
+	// projecting a deleted server.
+	deletedMemberships, err := metamcprepo.New(dbtx).DeleteMetaMCPMembersByMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMCPServerIDParams{
+		McpServerID: deleted.ID,
+		ProjectID:   *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp memberships").LogError(ctx, logger)
+	}
+	metaNames := make(map[uuid.UUID]string, len(deletedMemberships))
+	for _, membership := range deletedMemberships {
+		metaName, ok := metaNames[membership.MetaMcpServerID]
+		if !ok {
+			meta, err := metamcprepo.New(dbtx).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+				ID:             membership.MetaMcpServerID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "load meta mcp server for membership audit").LogError(ctx, logger)
+			}
+			metaName = meta.Name
+			metaNames[membership.MetaMcpServerID] = metaName
+		}
+		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			MetaMcpServerURN: urn.NewMetaMcpServer(membership.MetaMcpServerID),
+			Name:             metaName,
+			MembershipURN:    urn.NewMetaMcpServerMember(membership.ID),
+			McpServerURN:     urn.NewMcpServer(membership.McpServerID),
+			SortOrder:        membership.SortOrder,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log meta mcp membership removal").LogError(ctx, logger)
+		}
 	}
 
 	deletedServerURN := urn.NewMcpServer(deleted.ID)

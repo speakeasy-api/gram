@@ -44,8 +44,15 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}
 
+	// Meta-MCP-backed endpoints have no generic mcp_server to resolve. Their
+	// terminating runtime is tracked by AGE-3296; until it lands they are not
+	// served, and existence is not leaked to unauthenticated callers.
+	if !endpoint.McpServerID.Valid {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
 	server, err := mcpservers_repo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-		ID:        endpoint.McpServerID,
+		ID:        endpoint.McpServerID.UUID,
 		ProjectID: endpoint.ProjectID,
 	})
 	switch {

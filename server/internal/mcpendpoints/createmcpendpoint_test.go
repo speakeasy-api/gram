@@ -44,13 +44,14 @@ func TestCreateMcpEndpoint_PlatformDomainWithOrgPrefix(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slug),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotEmpty(t, result.ID)
-	require.Equal(t, mcpServerID, result.McpServerID)
+	require.NotNil(t, result.McpServerID)
+	require.Equal(t, mcpServerID, *result.McpServerID)
 	require.Equal(t, slug, string(result.Slug))
 	require.Nil(t, result.CustomDomainID)
 
@@ -74,7 +75,7 @@ func TestCreateMcpEndpoint_PlatformDomainRejectsUnprefixedSlug(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug("some-unrelated-slug"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
@@ -93,7 +94,7 @@ func TestCreateMcpEndpoint_InvalidFrontendID(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      "not-a-uuid",
+		McpServerID:      conv.PtrEmpty("not-a-uuid"),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-example"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -116,7 +117,7 @@ func TestCreateMcpEndpoint_RBACForbidden(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-example"),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -138,7 +139,7 @@ func TestCreateMcpEndpoint_RejectsCrossTenantMcpFrontend(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      otherFrontendID,
+		McpServerID:      conv.PtrEmpty(otherFrontendID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-leak"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
@@ -160,7 +161,7 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlug(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	require.NoError(t, err)
@@ -171,7 +172,7 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlug(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -204,7 +205,7 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlugWithCustomDomain(t *testing.T)
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   &customDomainID,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	require.NoError(t, err)
@@ -215,7 +216,7 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlugWithCustomDomain(t *testing.T)
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   &customDomainID,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -266,7 +267,7 @@ func TestCreateMcpEndpoint_AttachesToDefaultPlugin(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID.String(),
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-attach-test"),
 	})
 	require.NoError(t, err)
@@ -330,7 +331,7 @@ func TestCreateMcpEndpoint_LazilyCreatesDefaultPluginWhenMissing(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID.String(),
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-no-default"),
 	})
 	require.NoError(t, err)
@@ -404,7 +405,7 @@ func TestCreateMcpEndpoint_LegacyProject_TriggersInitialPublish(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID.String(),
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-legacy-gap"),
 	})
 	require.NoError(t, err)
@@ -466,7 +467,7 @@ func TestCreateMcpEndpoint_SecondEndpointOnAttachedServerIsNoOp(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID.String(),
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-second-ep-first"),
 	})
 	require.NoError(t, err)
@@ -481,7 +482,7 @@ func TestCreateMcpEndpoint_SecondEndpointOnAttachedServerIsNoOp(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID.String(),
+		McpServerID:      conv.PtrEmpty(mcpServerID.String()),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-second-ep-second"),
 	})
 	require.NoError(t, err)

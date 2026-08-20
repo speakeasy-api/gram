@@ -3,12 +3,14 @@ INSERT INTO mcp_endpoints (
     project_id,
     custom_domain_id,
     mcp_server_id,
+    meta_mcp_server_id,
     slug
 )
 VALUES (
     @project_id,
     @custom_domain_id,
     @mcp_server_id,
+    @meta_mcp_server_id,
     @slug
 )
 RETURNING *;
@@ -54,28 +56,40 @@ ORDER BY created_at DESC;
 SELECT *
 FROM mcp_endpoints
 WHERE project_id = @project_id
-  AND mcp_server_id = @mcp_server_id
+  AND mcp_server_id = @mcp_server_id::uuid
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: ListMCPEndpointsByMetaMCPServerID :many
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND meta_mcp_server_id = @meta_mcp_server_id::uuid
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: ListMCPEndpointsByCustomDomainID :many
 -- List active endpoints (across every project under the owning org) registered
--- under a custom domain, with the parent mcp_server name/slug and project
+-- under a custom domain, with the parent server name/slug and project
 -- name/slug joined in. Used by the org-scoped domains.listMcpEndpoints handler
--- to preview the impact of a custom domain deletion.
+-- to preview the impact of a custom domain deletion. The server name comes
+-- from whichever backend the endpoint addresses; only generic servers carry a
+-- slug (meta MCP servers have none).
 SELECT
     e.id,
     e.project_id,
     e.mcp_server_id,
+    e.meta_mcp_server_id,
     e.slug,
     e.is_domain_root,
     p.name AS project_name,
     p.slug AS project_slug,
-    s.name AS mcp_server_name,
+    COALESCE(s.name, ms.name, '') AS mcp_server_name,
     s.slug AS mcp_server_slug
 FROM mcp_endpoints e
 JOIN projects p ON p.id = e.project_id
-JOIN mcp_servers s ON s.id = e.mcp_server_id
+LEFT JOIN mcp_servers s ON s.id = e.mcp_server_id
+LEFT JOIN meta_mcp_servers ms ON ms.id = e.meta_mcp_server_id
 WHERE e.custom_domain_id = @custom_domain_id::uuid
   AND e.deleted IS FALSE
 ORDER BY p.slug, e.slug;
@@ -85,6 +99,7 @@ UPDATE mcp_endpoints
 SET
     custom_domain_id = @custom_domain_id,
     mcp_server_id = @mcp_server_id,
+    meta_mcp_server_id = @meta_mcp_server_id,
     slug = @slug,
     is_domain_root = @is_domain_root,
     updated_at = clock_timestamp()
@@ -140,7 +155,20 @@ UPDATE mcp_endpoints
 SET
     is_domain_root = NULL,
     deleted_at = clock_timestamp()
-WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id AND deleted IS FALSE
+WHERE mcp_server_id = @mcp_server_id::uuid AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteMCPEndpointsByMetaMCPServerID :many
+-- Soft-delete all endpoints that point at a given meta MCP server. Used when
+-- the parent meta MCP server is soft-deleted so callers don't end up with
+-- endpoints pointing at a tombstoned server (the FK ON DELETE CASCADE does not
+-- fire for soft deletes). Returns the affected rows so the caller can emit
+-- per-endpoint audit events for the cascade.
+UPDATE mcp_endpoints
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
+WHERE meta_mcp_server_id = @meta_mcp_server_id::uuid AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteMCPEndpointsByCustomDomainID :many
@@ -162,7 +190,7 @@ RETURNING *;
 -- name: ListRootMCPEndpointsByMCPServerID :many
 SELECT *
 FROM mcp_endpoints
-WHERE mcp_server_id = @mcp_server_id
+WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id
   AND is_domain_root IS TRUE
   AND deleted IS FALSE
@@ -171,7 +199,7 @@ ORDER BY custom_domain_id, id;
 -- name: ListCustomDomainIDsByMCPServerID :many
 SELECT DISTINCT custom_domain_id::uuid
 FROM mcp_endpoints
-WHERE mcp_server_id = @mcp_server_id
+WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id
   AND custom_domain_id IS NOT NULL
   AND deleted IS FALSE
@@ -180,7 +208,7 @@ ORDER BY custom_domain_id::uuid;
 -- name: LockRootMCPEndpointsByMCPServerID :many
 SELECT *
 FROM mcp_endpoints
-WHERE mcp_server_id = @mcp_server_id
+WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id
   AND is_domain_root IS TRUE
   AND deleted IS FALSE
@@ -194,7 +222,7 @@ FOR UPDATE;
 -- Re-run after the server lock for the authoritative pre-delete root set.
 SELECT *
 FROM mcp_endpoints
-WHERE mcp_server_id = @mcp_server_id
+WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id
   AND deleted IS FALSE
 ORDER BY id
@@ -205,7 +233,7 @@ UPDATE mcp_endpoints
 SET
     is_domain_root = NULL,
     updated_at = clock_timestamp()
-WHERE mcp_server_id = @mcp_server_id
+WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id
   AND is_domain_root IS TRUE
   AND deleted IS FALSE

@@ -386,6 +386,14 @@ WHERE issuer.id = $1
     WHERE toolset.project_id = $2
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = $2
+      AND meta_mcp_server.user_session_issuer_id = issuer.id
+      AND meta_mcp_server.deleted IS FALSE
   )
 RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
@@ -2231,6 +2239,14 @@ SELECT EXISTS (
     WHERE toolset.project_id = $1
       AND toolset.user_session_issuer_id = $2::uuid
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = $1
+      AND meta_mcp_server.user_session_issuer_id = $2::uuid
+      AND meta_mcp_server.deleted IS FALSE
 )
 `
 
@@ -2239,8 +2255,8 @@ type UserSessionIssuerHasActiveOwnerParams struct {
 	UserSessionIssuerID uuid.UUID
 }
 
-// An issuer can be referenced by an MCP server or toolset. Only delete it once
-// no active owner remains.
+// An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+// Only delete it once no active owner remains.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
 	var exists bool

@@ -1,0 +1,721 @@
+package metamcp
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"math"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
+	srv "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/server"
+	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+type Service struct {
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Engine
+	audit  *audit.Logger
+}
+
+var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
+
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
+	logger = logger.With(attr.SlogComponent("metamcp"))
+
+	return &Service{
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
+		logger: logger,
+		db:     db,
+		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
+		audit:  auditLogger,
+	}
+}
+
+func Attach(mux goahttp.Muxer, service *Service) {
+	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	srv.Mount(
+		mux,
+		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	issuerID, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
+		return nil, err
+	}
+
+	created, err := txRepo.CreateMetaMCPServer(ctx, repo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                payload.Name,
+		UserSessionIssuerID: issuerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogMetaMcpServerCreate(ctx, dbtx, audit.LogMetaMcpServerCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		MetaMcpServerURN: urn.NewMetaMcpServer(created.ID),
+		Name:             created.Name,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp server creation").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildMetaMcpServerView(created), nil
+}
+
+func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta mcp server id").LogError(ctx, s.logger)
+	}
+
+	row, err := repo.New(s.db).GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildMetaMcpServerView(row), nil
+}
+
+func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	rows, err := repo.New(s.db).ListMetaMCPServers(ctx, repo.ListMetaMCPServersParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
+	}
+
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+}
+
+func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta mcp server id").LogError(ctx, logger)
+	}
+
+	issuerID, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
+		return nil, err
+	}
+
+	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
+		Name:                payload.Name,
+		UserSessionIssuerID: issuerID,
+		ID:                  serverID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
+	}
+
+	afterView := mv.BuildMetaMcpServerView(updated)
+
+	if err := s.audit.LogMetaMcpServerUpdate(ctx, dbtx, audit.LogMetaMcpServerUpdateEvent{
+		OrganizationID:              authCtx.ActiveOrganizationID,
+		ProjectID:                   *authCtx.ProjectID,
+		Actor:                       urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:            authCtx.Email,
+		ActorSlug:                   nil,
+		MetaMcpServerURN:            urn.NewMetaMcpServer(updated.ID),
+		Name:                        updated.Name,
+		MetaMcpServerSnapshotBefore: mv.BuildMetaMcpServerView(existing),
+		MetaMcpServerSnapshotAfter:  afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp server update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return afterView, nil
+}
+
+func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMetaMcpServerPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid meta mcp server id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
+	}
+
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	metaURN := urn.NewMetaMcpServer(existing.ID)
+
+	members, err := txRepo.DeleteMetaMCPMembersByMetaMCPServerID(ctx, repo.DeleteMetaMCPMembersByMetaMCPServerIDParams{
+		MetaMcpServerID: existing.ID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp memberships").LogError(ctx, logger)
+	}
+	for _, member := range members {
+		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            actor,
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			MetaMcpServerURN: metaURN,
+			Name:             existing.Name,
+			MembershipURN:    urn.NewMetaMcpServerMember(member.ID),
+			McpServerURN:     urn.NewMcpServer(member.McpServerID),
+			SortOrder:        member.SortOrder,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log meta mcp membership removal").LogError(ctx, logger)
+		}
+	}
+
+	endpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{
+		MetaMcpServerID: existing.ID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp endpoints").LogError(ctx, logger)
+	}
+	for _, endpoint := range endpoints {
+		if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            actor,
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			McpEndpointURN:   urn.NewMcpEndpoint(endpoint.ID),
+			Slug:             endpoint.Slug,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log meta mcp endpoint deletion").LogError(ctx, logger)
+		}
+	}
+
+	deleted, err := txRepo.DeleteMetaMCPServer(ctx, repo.DeleteMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogMetaMcpServerDelete(ctx, dbtx, audit.LogMetaMcpServerDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            actor,
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		MetaMcpServerURN: metaURN,
+		Name:             deleted.Name,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log meta mcp server deletion").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) ListMetaMcpMembers(ctx context.Context, payload *gen.ListMetaMcpMembersPayload) (*gen.ListMetaMcpMembersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	metaID, err := uuid.Parse(payload.MetaMcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, s.logger)
+	}
+
+	r := repo.New(s.db)
+
+	if _, err := r.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             metaID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
+	}
+
+	rows, err := r.ListMetaMCPMembers(ctx, repo.ListMetaMCPMembersParams{
+		MetaMcpServerID: metaID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, s.logger)
+	}
+
+	return &gen.ListMetaMcpMembersResult{Members: mv.BuildMetaMcpMemberListView(rows)}, nil
+}
+
+func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpMemberPayload) (*types.MetaMcpMember, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	metaID, err := uuid.Parse(payload.MetaMcpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, logger)
+	}
+
+	mcpServerID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+
+	sortOrder, err := sortOrderValue(payload.SortOrder)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	meta, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
+		ID:             metaID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
+	}
+
+	server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID:        mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a live server in this project").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+	}
+
+	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{
+		ProjectID:       *authCtx.ProjectID,
+		MetaMcpServerID: metaID,
+		McpServerID:     mcpServerID,
+		SortOrder:       sortOrder,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "mcp server is already a member of this meta mcp server").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "add meta mcp member").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogMetaMcpMemberAdd(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		MetaMcpServerURN: urn.NewMetaMcpServer(meta.ID),
+		Name:             meta.Name,
+		MembershipURN:    urn.NewMetaMcpServerMember(member.ID),
+		McpServerURN:     urn.NewMcpServer(member.McpServerID),
+		SortOrder:        member.SortOrder,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp member addition").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildMetaMcpMemberViewFromParts(member, server), nil
+}
+
+func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMetaMcpMemberPayload) (*types.MetaMcpMember, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	memberID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid membership id").LogError(ctx, logger)
+	}
+
+	sortOrder, err := sortOrderValue(&payload.SortOrder)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	existing, err := txRepo.LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{
+		ID:        memberID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp membership not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp membership").LogError(ctx, logger)
+	}
+
+	meta, err := txRepo.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             existing.MetaMcpServerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateMetaMCPMemberSortOrder(ctx, repo.UpdateMetaMCPMemberSortOrderParams{
+		SortOrder: sortOrder,
+		ID:        memberID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp membership").LogError(ctx, logger)
+	}
+
+	server, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        updated.McpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "member mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get member mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogMetaMcpMemberUpdate(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		MetaMcpServerURN: urn.NewMetaMcpServer(meta.ID),
+		Name:             meta.Name,
+		MembershipURN:    urn.NewMetaMcpServerMember(updated.ID),
+		McpServerURN:     urn.NewMcpServer(updated.McpServerID),
+		SortOrder:        updated.SortOrder,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp member update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildMetaMcpMemberViewFromParts(updated, server), nil
+}
+
+func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMetaMcpMemberPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	memberID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid membership id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	existing, err := txRepo.LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{
+		ID:        memberID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "meta mcp membership not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock meta mcp membership").LogError(ctx, logger)
+	}
+
+	meta, err := txRepo.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             existing.MetaMcpServerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+	}
+
+	deleted, err := txRepo.DeleteMetaMCPMember(ctx, repo.DeleteMetaMCPMemberParams{
+		ID:        memberID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove meta mcp member").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		MetaMcpServerURN: urn.NewMetaMcpServer(meta.ID),
+		Name:             meta.Name,
+		MembershipURN:    urn.NewMetaMcpServerMember(deleted.ID),
+		McpServerURN:     urn.NewMcpServer(deleted.McpServerID),
+		SortOrder:        deleted.SortOrder,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log meta mcp member removal").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+// lockIssuerReference validates an optional user session issuer reference and
+// locks the issuer row for the duration of the transaction so a concurrent
+// issuer delete cannot race the attach. A null issuer id is a no-op.
+func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries, projectID uuid.UUID, issuerID uuid.NullUUID) error {
+	if !issuerID.Valid {
+		return nil
+	}
+
+	if _, err := txRepo.LockUserSessionIssuerForMetaMCP(ctx, repo.LockUserSessionIssuerForMetaMCPParams{
+		UserSessionIssuerID: issuerID.UUID,
+		ProjectID:           projectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeInvalid, err, "user_session_issuer_id does not reference a live issuer in this project").LogError(ctx, s.logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+// sortOrderValue bounds-checks an optional sort order before narrowing it to
+// the column's int32 type. A nil pointer defaults to 0.
+func sortOrderValue(v *int) (int32, error) {
+	value := conv.PtrValOr(v, 0)
+	if value < math.MinInt32 || value > math.MaxInt32 {
+		return 0, errors.New("sort_order out of range")
+	}
+	return int32(value), nil
+}

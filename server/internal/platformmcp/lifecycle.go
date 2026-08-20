@@ -289,7 +289,7 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("load platform mcp provider endpoint: %w", err)
 	}
-	if endpoint.McpServerID != registration.McpServerID.UUID || endpoint.Slug == "" || endpoint.CustomDomainID.Valid || endpoint.IsDomainRoot.Bool {
+	if !endpoint.McpServerID.Valid || endpoint.McpServerID.UUID != registration.McpServerID.UUID || endpoint.Slug == "" || endpoint.CustomDomainID.Valid || endpoint.IsDomainRoot.Bool {
 		return ProviderSetupResult{}, ErrSetupHandoffInvalid
 	}
 	preflight := ProviderSetupRequest{

@@ -344,8 +344,13 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
+		// A meta-MCP-backed endpoint has no generic mcp_server behind it and
+		// cannot resume a challenge minted for this generic-server path.
+		if !mcpEndpoint.McpServerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		}
 		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-			ID:        mcpEndpoint.McpServerID,
+			ID:        mcpEndpoint.McpServerID.UUID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})
 		switch {
