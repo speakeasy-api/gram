@@ -771,3 +771,18 @@ func skillTargetKinds(targets []SkillTarget) []SkillTargetKind {
 	}
 	return kinds
 }
+
+// The advice cap is a cap for any limit, not only the one the caller happens
+// to pass today.
+func TestAuthoringAdviceNeverExceedsTheCap(t *testing.T) {
+	t.Parallel()
+
+	targets := []SkillTarget{
+		{Kind: SkillTargetPlugin, ID: testDefaultPluginID, Name: "Default"},
+		{Kind: SkillTargetAssistant, ID: testAssistantID, Name: "Support"},
+	}
+
+	for _, limit := range []int{1, 2, 3} {
+		require.LessOrEqual(t, len(adviceTargets(targets, limit)), limit)
+	}
+}

@@ -836,6 +836,9 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
 			return nil, staleErr
 		}
+		// Returned before the write so a replay neither advances updated_at nor
+		// records a second update event for an edit that already happened.
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{

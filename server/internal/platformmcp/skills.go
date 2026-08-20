@@ -846,6 +846,9 @@ func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
 	kept := make([]SkillTarget, 0, limit)
 	counts := map[SkillTargetKind]int{}
 	for _, target := range targets {
+		if len(kept) >= limit {
+			break
+		}
 		if counts[target.Kind] < perKind {
 			kept = append(kept, target)
 			counts[target.Kind]++

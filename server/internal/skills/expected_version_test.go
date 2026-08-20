@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -204,4 +206,41 @@ func TestUpdateSkillRejectsADifferentEditUnderAStaleToken(t *testing.T) {
 	})
 
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+// A replay writes nothing. Advancing updated_at or recording a second update
+// event would make a dropped response look like a real edit in the audit trail.
+func TestUpdateSkillReplayRecordsNoSecondUpdateEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "quiet-replay", "First summary.")
+	summary := "First summary."
+	applied, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: "quiet-replay", DisplayName: "Quiet Replay", Summary: &summary, Tags: nil,
+		ExpectedLatestVersionID: &created.Version.ID,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: created.Skill.ID, Content: skillManifest("quiet-replay", "First summary.", "second"),
+		DerivedFromVersionID: nil, ExpectedLatestVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillUpdate)
+	require.NoError(t, err)
+
+	replayed, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: created.Skill.ID, Name: "quiet-replay", DisplayName: "Quiet Replay", Summary: &summary, Tags: nil,
+		ExpectedLatestVersionID: &created.Version.ID,
+		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "a replay records no second update event")
+	require.Equal(t, applied.UpdatedAt, replayed.UpdatedAt, "a replay does not advance updated_at")
 }
