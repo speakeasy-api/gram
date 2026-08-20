@@ -16,6 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
+const (
+	normalizedInstrumentationScopeName = "com.speakeasy.ai.tracing"
+	originalInstrumentationScopeAttr   = "speakeasy.original_instrumentation_scope.name"
+)
+
 type SpanTransformHandler struct {
 	logger        *slog.Logger
 	metrics       *metrics
@@ -46,6 +51,7 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	if err != nil {
 		return fmt.Errorf("convert inbound span: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound span"))
 	}
+	rewriteInstrumentationScope(out)
 
 	enrichments, err := enrichSpan(ctx, h.metrics, m, h.enrichers)
 	if err != nil {
@@ -62,6 +68,35 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	}
 
 	return nil
+}
+
+func rewriteInstrumentationScope(span *otelv1.Span) {
+	scope := span.GetScope()
+	if scope == nil {
+		name := normalizedInstrumentationScopeName
+		span.SetScope((&otelv1.Span_InstrumentationScope_builder{Name: &name}).Build())
+		return
+	}
+
+	originalName := scope.GetName()
+	if originalName == normalizedInstrumentationScopeName {
+		return
+	}
+	scope.SetName(normalizedInstrumentationScopeName)
+	if originalName == "" {
+		return
+	}
+
+	key := originalInstrumentationScopeAttr
+	span.SetAttributes(append(
+		span.GetAttributes(),
+		(&otelv1.Span_KeyValue_builder{
+			Key: &key,
+			Value: (&otelv1.Span_AnyValue_builder{
+				StringValue: &originalName,
+			}).Build(),
+		}).Build(),
+	))
 }
 
 func applySpanEnrichments(out *otelv1.Span, enrichments []otelattr.KeyValue) error {

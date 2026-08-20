@@ -144,3 +144,61 @@ func TestApplySpanEnrichmentsRejectsInvalidValue(t *testing.T) {
 	require.ErrorContains(t, err, "convert enrichment \"invalid\"")
 	require.Len(t, out.GetAttributes(), 1)
 }
+
+func TestRewriteInstrumentationScopePreservesOriginalName(t *testing.T) {
+	t.Parallel()
+
+	originalName := "com.anthropic.claude_code.tracing"
+	version := "1.2.3"
+	existingKey := "existing"
+	existingValue := "preserved"
+	span := (&otelv1.Span_builder{
+		Scope: (&otelv1.Span_InstrumentationScope_builder{
+			Name:    &originalName,
+			Version: &version,
+		}).Build(),
+		Attributes: []*otelv1.Span_KeyValue{
+			(&otelv1.Span_KeyValue_builder{
+				Key: &existingKey,
+				Value: (&otelv1.Span_AnyValue_builder{
+					StringValue: &existingValue,
+				}).Build(),
+			}).Build(),
+		},
+	}).Build()
+
+	rewriteInstrumentationScope(span)
+
+	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
+	require.Equal(t, version, span.GetScope().GetVersion())
+	require.Len(t, span.GetAttributes(), 2)
+	require.Equal(t, existingKey, span.GetAttributes()[0].GetKey())
+	require.Equal(t, existingValue, span.GetAttributes()[0].GetValue().GetStringValue())
+	require.Equal(t, originalInstrumentationScopeAttr, span.GetAttributes()[1].GetKey())
+	require.Equal(t, originalName, span.GetAttributes()[1].GetValue().GetStringValue())
+}
+
+func TestRewriteInstrumentationScopeCreatesMissingScope(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.Span_builder{}).Build()
+
+	rewriteInstrumentationScope(span)
+
+	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
+	require.Empty(t, span.GetAttributes())
+}
+
+func TestRewriteInstrumentationScopeLeavesNormalizedScopeUnchanged(t *testing.T) {
+	t.Parallel()
+
+	name := normalizedInstrumentationScopeName
+	span := (&otelv1.Span_builder{
+		Scope: (&otelv1.Span_InstrumentationScope_builder{Name: &name}).Build(),
+	}).Build()
+
+	rewriteInstrumentationScope(span)
+
+	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
+	require.Empty(t, span.GetAttributes())
+}

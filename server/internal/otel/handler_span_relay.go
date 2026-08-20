@@ -205,7 +205,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 		})
 	}
 	if err := exportGroup.Wait(); err != nil {
-		return o11y.LogError(ctx, logger, fmt.Errorf("wait for span relay exports: %w", err), "failed to relay span batch")
+		return fmt.Errorf("relay span batch: %w", o11y.LogError(ctx, logger, fmt.Errorf("wait for span relay exports: %w", err), "failed to relay span batch"))
 	}
 	return nil
 }
