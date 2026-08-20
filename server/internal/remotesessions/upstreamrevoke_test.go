@@ -634,7 +634,7 @@ func TestDisconnectRemoteSession_RevokesUpstream(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-revokes", upstream.URL+"/revoke", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -661,7 +661,7 @@ func TestDisconnectRemoteSession_NoRevocationEndpointSkipsUpstream(t *testing.T)
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-no-endpoint", "", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -684,7 +684,7 @@ func TestDisconnectRemoteSession_UpstreamErrorStillDisconnects(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-upstream-500", upstream.URL+"/revoke", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err, "an upstream failure must not surface to the consent screen")
 	require.Equal(t, int64(1), n)
 

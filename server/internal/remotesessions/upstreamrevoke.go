@@ -215,7 +215,7 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 //
 // The stored user_session_issuer_id is provenance from INSERT, not a lookup
 // key, so a grant minted by a different issuer in the same project is still
-// tombstoned.
+// tombstoned, including when that issuer has since been soft-deleted.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
 // it commits or rolls back with the revocation that triggered it; the upstream

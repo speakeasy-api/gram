@@ -146,7 +146,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, client.ID); err != nil {
+		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
@@ -194,7 +194,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, clients[i].ID, enabled); err != nil {
+			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}

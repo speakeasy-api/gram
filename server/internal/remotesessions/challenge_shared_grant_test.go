@@ -1,9 +1,9 @@
 // challenge_shared_grant_test.go is the regression guard for AIS-589: a
 // remote_sessions row is keyed on (subject_urn, remote_session_client_id).
 // user_session_issuer_id is provenance from INSERT and is never updated on
-// conflict. Consent reads and writes that filtered on that column hid a live
-// grant from a second MCP server whose issuer did not mint the row, while
-// GetActiveRemoteSession (the runtime) still found it.
+// conflict. Consent reads and writes must find that live grant from every
+// MCP server bound to the client, including after the minting issuer is
+// soft-deleted (ON DELETE CASCADE never fires on a soft delete).
 package remotesessions_test
 
 import (
@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -89,6 +90,18 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance) *remotesessions.Upst
 	)
 }
 
+func seedSharedGrantThenSoftDeleteMintingIssuer(t *testing.T) (context.Context, sharedGrantFixture) {
+	t.Helper()
+
+	ctx, fx := seedSharedGrantAcrossIssuers(t)
+	err := testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
+		ID:        fx.issuerA,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+	return ctx, fx
+}
+
 func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +109,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 
 	require.Equal(t, fx.issuerA, fx.session.UserSessionIssuerID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 
@@ -106,7 +119,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, fx.session.ID, reconnect.ID)
 	require.Equal(t, fx.issuerA, reconnect.UserSessionIssuerID)
 
-	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID)
+	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -118,7 +131,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 
 	require.False(t, fx.session.AutoRefresh)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.clientID, true)
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -136,7 +149,7 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
 
-	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.clientID)
+	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -191,13 +204,13 @@ func TestRemoteSessionStatuses_DoesNotCrossProjects(t *testing.T) {
 	}))
 	insertRemoteSession(t, ctx, fx.ti.conn, fx.subject, otherUserIssuer.String(), otherClient.ID.String())
 
-	homeStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID)
+	homeStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, homeStatuses[fx.clientID].Status)
 	_, leaked := homeStatuses[otherClient.ID]
 	require.False(t, leaked)
 
-	otherStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, otherProject)
+	otherStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{otherClient.ID})
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, otherStatuses[otherClient.ID].Status)
 	_, leaked = otherStatuses[fx.clientID]
@@ -247,4 +260,70 @@ func TestSoftDeleteSubjectSessions_DoesNotCrossProjects(t *testing.T) {
 		RemoteSessionClientID: otherClient.ID,
 	})
 	require.NoError(t, err)
+}
+
+func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	_, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.NoError(t, err)
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
+}
+
+func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	active, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.NoError(t, err)
+	require.True(t, active.AutoRefresh)
+}
+
+func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
+
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.projectID)
+	require.NoError(t, err)
+	require.Len(t, creds, 1)
+	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
+
+	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

@@ -3672,16 +3672,14 @@ SELECT
     ELSE 'expired'
   END)::text AS status
 FROM remote_sessions AS s
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.subject_urn = $1
-  AND usi.project_id = $2
-  AND usi.deleted IS FALSE
+  AND s.remote_session_client_id = ANY($2::uuid[])
   AND s.deleted IS FALSE
 `
 
 type ListRemoteSessionStatusesForSubjectParams struct {
-	SubjectUrn urn.SessionSubject
-	ProjectID  uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientIds []uuid.UUID
 }
 
 type ListRemoteSessionStatusesForSubjectRow struct {
@@ -3695,19 +3693,20 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 }
 
 // Bulk lookup for the consent renderer: returns each non-deleted
-// remote_session for the given subject in the project's issuers, tagged with
-// whether it is still usable. Folds the N per-card lookups into one
+// remote_session for the given subject among the supplied clients, tagged
+// with whether it is still usable. Folds the N per-card lookups into one
 // round-trip. The partial unique index on (subject_urn,
 // remote_session_client_id) WHERE deleted IS FALSE means at most one row per
 // (subject, client), so the result doubles as a per-client map without
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 //
-// user_session_issuer_id on the row is provenance from INSERT, not a lookup
-// key: UpsertRemoteSession conflicts on (subject_urn, remote_session_client_id)
-// and never updates that column. Filtering on it would hide a live grant from
-// a second MCP server whose issuer did not mint the row, while
-// GetActiveRemoteSession (the runtime) still finds it. Tenant scope is the
-// stored issuer's project.
+// Scope is the client IDs the caller already resolved (ListClients / posted
+// client_id). Project scoping is intentionally NOT applied: re-joining
+// user_session_issuers would only repeat that check, and that table is
+// soft-deleted — ON DELETE CASCADE never fires, so a live grant minted by a
+// now-deleted issuer would disappear from consent while GetActiveRemoteSession
+// still finds it. user_session_issuer_id on the row is provenance from INSERT,
+// not a lookup key.
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
 // session is usable while the upstream authorization remains valid and its
@@ -3719,7 +3718,7 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 // disagreeing with a green "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.RemoteSessionClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -4216,12 +4215,8 @@ func (q *Queries) SetRemoteSessionAccessExpiresAt(ctx context.Context, arg SetRe
 const setRemoteSessionAutoRefresh = `-- name: SetRemoteSessionAutoRefresh :execrows
 UPDATE remote_sessions AS s
 SET auto_refresh = $1
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $4
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 `
 
@@ -4229,24 +4224,17 @@ type SetRemoteSessionAutoRefreshParams struct {
 	AutoRefresh           bool
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.UUID
 }
 
 // Records the subject's consent-screen auto-refresh choice. Deliberately does
 // NOT touch updated_at: that column doubles as the refresh CAS token-version
 // signal and keepalive clock, and a preference toggle must not perturb either.
-// Scoped through the stored issuer's project so the write cannot cross tenant
-// boundaries. A subject's grant is shared across every MCP server in the
-// project because remote_sessions is keyed on (subject_urn,
-// remote_session_client_id); the stored user_session_issuer_id is provenance
-// and is not a write predicate.
+// Scope is the client ID the caller already resolved through the endpoint's
+// current bindings. Project scoping is intentionally NOT applied: re-joining
+// user_session_issuers would only repeat that check, and a live grant minted
+// by a now-soft-deleted issuer must still accept the preference toggle.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
-		arg.AutoRefresh,
-		arg.SubjectUrn,
-		arg.RemoteSessionClientID,
-		arg.ProjectID,
-	)
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh, arg.AutoRefresh, arg.SubjectUrn, arg.RemoteSessionClientID)
 	if err != nil {
 		return 0, err
 	}
@@ -4279,12 +4267,8 @@ func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSe
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $3
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -4292,7 +4276,6 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.UUID
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
@@ -4303,15 +4286,16 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 
 // Consent-screen disconnect: soft-deletes the subject's own binding for one
 // upstream client. Subject and client are derived server-side from the
-// challenge state and the endpoint's bindings, never from the form; scoped
-// through the stored issuer's project so the write cannot cross tenants.
+// challenge state and the endpoint's bindings, never from the form.
 //
 // Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row. The stored
-// user_session_issuer_id is provenance, not a lookup key, so disconnect from
-// a second MCP server still finds the row.
+// (subject_urn, remote_session_client_id) caps that at one row. Project
+// scoping is intentionally NOT applied: the acted-on client is already
+// re-resolved through the endpoint's current bindings, and re-joining
+// user_session_issuers would hide a live grant minted by a now-soft-deleted
+// issuer, skipping RFC 7009.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient, arg.SubjectUrn, arg.RemoteSessionClientID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient, arg.SubjectUrn, arg.RemoteSessionClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -4371,7 +4355,6 @@ FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
   AND usi.id = s.user_session_issuer_id
   AND usi.project_id = $2
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -4388,9 +4371,11 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 }
 
 // Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds in the issuer's project and returns their stored credentials.
-// Scoped through the stored issuer's project so the write cannot cross
-// tenants.
+// subject holds in the stored issuer's project and returns their stored
+// credentials. Join user_session_issuers for that project scope, including a
+// now-soft-deleted issuer: that table is soft-deleted, ON DELETE CASCADE
+// never fires, and a live grant still points at the deleted row. Filtering
+// usi.deleted would skip those grants and silently skip RFC 7009.
 //
 // A subject's grant is shared by every MCP client it authenticates, because
 // remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
