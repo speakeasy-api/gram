@@ -33,9 +33,9 @@ type LogSessionQuarantineEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	SessionQuarantineID uuid.UUID //nolint:glint // Session quarantine URNs are not defined yet.
-	RiskPolicyName      string
-	Metadata            SessionQuarantineMetadata
+	SessionQuarantineURN urn.SessionQuarantine
+	RiskPolicyName       string
+	Metadata             SessionQuarantineMetadata
 }
 
 func (l *Logger) LogSessionQuarantineOpen(ctx context.Context, dbtx repo.DBTX, event LogSessionQuarantineEvent) error {
@@ -63,7 +63,7 @@ func (l *Logger) logSessionQuarantine(ctx context.Context, dbtx repo.DBTX, actio
 
 		Action: string(action),
 
-		SubjectID:          event.SessionQuarantineID.String(),
+		SubjectID:          event.SessionQuarantineURN.ID.String(),
 		SubjectType:        string(subjectTypeSessionQuarantine),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.RiskPolicyName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Metadata.SessionID),

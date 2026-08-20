@@ -21,22 +21,28 @@ func TestIngestSessionQuarantineTripsAndFreezesPromptAndTool(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 	sessionID := "quarantine-session-" + uuid.NewString()
-	userMessage := "Your organization quarantined this session."
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "quarantine",
 		PolicyName:   "Sensitive commands",
 		Description:  "matched a restricted command",
-		MatchedValue: "restricted",
-		UserMessage:  &userMessage,
+		MatchedValue: "/.ssh/",
+		Entity:       "custom.sensitive_file_read",
+		RuleID:       "custom.sensitive_file_read",
 	}}
 
-	triggerPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
-	promptText := "restricted prompt"
-	triggerPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &promptText}}
+	triggerPayload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	toolName := "read_file"
+	triggerPayload.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		Name:  &toolName,
+		Input: map[string]any{"file_path": "/tmp/demo/.ssh/id_rsa"},
+	}}
 	triggered, err := ti.service.Ingest(ctx, triggerPayload)
 	require.NoError(t, err)
 	require.Equal(t, "deny", triggered.Decision)
-	require.Equal(t, userMessage, requireString(t, triggered.Message))
+	require.Equal(t,
+		`Your request matched policy "Sensitive commands": potentially harmful or sensitive content "/.ssh/" identified as custom.sensitive_file_read. This session has been quarantined; contact your org admin to release it.`,
+		requireString(t, triggered.Message),
+	)
 
 	ti.service.riskScanner = &stubResultScanner{}
 	fixedMessage := "This session has been quarantined by your organization's Speakeasy risk policy \"Sensitive commands\". Contact your org admin to release it."
@@ -58,6 +64,24 @@ func TestIngestSessionQuarantineTripsAndFreezesPromptAndTool(t *testing.T) {
 	auditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSessionQuarantineOpen)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), auditCount)
+}
+
+func TestQuarantineTriggerUserReasonUsesPolicyTemplate(t *testing.T) {
+	t.Parallel()
+
+	userMessage := "Policy %{policy} quarantined %{entity} after matching %{match} (%{rule})."
+	result := &risk.ScanResult{
+		PolicyName:   "Sensitive commands",
+		MatchedValue: "/.ssh/",
+		Entity:       "credential file",
+		RuleID:       "custom.sensitive_file_read",
+		UserMessage:  &userMessage,
+	}
+
+	require.Equal(t,
+		"Policy Sensitive commands quarantined credential file after matching /.ssh/ (custom.sensitive_file_read).",
+		quarantineTriggerUserReason(result, "fallback"),
+	)
 }
 
 func TestIngestSessionQuarantineRedisErrorFailMode(t *testing.T) {
