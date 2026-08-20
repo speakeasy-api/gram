@@ -158,24 +158,32 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	// through.
 	//
 	// Shape 1: Speakeasy admin impersonating a customer org via the dev-tools
-	// override. Same refusal as chat-transcript access in chat.LoadChat.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
+	// override — same refusal as chat-transcript access in chat.LoadChat, but
+	// scoped to overrides that target THIS session's active org. The
+	// gram_admin_override cookie survives switching back to one's own org, so
+	// an unscoped check would 403 an admin's own-org enrollment for as long as
+	// the stale cookie lives; a stale override pointing elsewhere falls
+	// through, and Shape 3 still catches any genuine parked impersonation.
+	if override, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin && override == authCtx.OrganizationSlug {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating an organization").LogError(ctx, s.logger)
 	}
 
 	// Shape 2: WorkOS user impersonation. The session was minted by an admin
 	// impersonating this user through the IDP; enrolling would hand the
-	// impersonator's device a real key bearing the user's identity.
-	if authCtx.SessionID != nil && *authCtx.SessionID != "" {
-		session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
-		if err != nil {
-			// The session authenticated this same request, so a lookup failure
-			// here is infrastructure trouble, not a bad credential. Fail closed.
-			return nil, oops.E(oops.CodeUnexpected, err, "load session").LogError(ctx, s.logger)
-		}
-		if session.ImpersonatorEmail != "" {
-			return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
-		}
+	// impersonator's device a real key bearing the user's identity. Authorize
+	// only runs under the Session scheme, so a missing session id is a broken
+	// auth context, not a skippable case.
+	if authCtx.SessionID == nil || *authCtx.SessionID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no id").LogError(ctx, s.logger)
+	}
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		// The session authenticated this same request, so a lookup failure
+		// here is infrastructure trouble, not a bad credential. Fail closed.
+		return nil, oops.E(oops.CodeUnexpected, err, "load session").LogError(ctx, s.logger)
+	}
+	if session.ImpersonatorEmail != "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
 	}
 
 	// Shape 3 (backstop): a session parked on an org the user is not actually
