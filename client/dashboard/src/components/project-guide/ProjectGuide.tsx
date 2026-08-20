@@ -165,24 +165,6 @@ export function ProjectGuide({
         secretOperations,
       )
     : undefined;
-  const secondaryAction = selectedJourney
-    ? displayState === "complete"
-      ? {
-          label: "Start the other journey",
-          onClick: () => {
-            const otherId = otherProjectGuideJourney(selectedJourney.id);
-            const otherJourney = PROJECT_GUIDE_JOURNEYS.find(
-              (journey) => journey.id === otherId,
-            );
-            if (otherJourney) switchJourney(otherJourney);
-          },
-        }
-      : {
-          label: "Exit guide",
-          onClick: () => send({ type: "EXIT" }),
-        }
-    : undefined;
-
   if (isComplete && !reviewingCompletedJourneys) {
     return (
       <GuideCanvas>
@@ -212,13 +194,6 @@ export function ProjectGuide({
                 className="font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
               >
                 ← Back to start
-              </button>
-              <button
-                type="button"
-                onClick={() => send({ type: "EXIT" })}
-                className="font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
-              >
-                Exit guide
               </button>
             </div>
           )}
@@ -290,7 +265,6 @@ export function ProjectGuide({
                       ) : null
                     }
                     primaryAction={primaryAction}
-                    secondaryAction={secondaryAction}
                     listeningElapsedSeconds={
                       snapshot.context.elapsedListeningSeconds
                     }
@@ -331,26 +305,17 @@ function primaryActionFor(
 ): ProjectGuideRunAction {
   switch (displayState) {
     case "ready":
-      if (journey.id === "third-party-mcp" && currentStep === 0) {
-        return {
-          label: "Install selected server",
-          disabled:
-            !mcpOperations.selectedServer ||
-            mcpOperations.projectStatePending ||
-            mcpOperations.projectStateError,
-          onClick: () => send({ type: "START" }),
-        };
-      }
-      if (journey.id === "secret-block" && currentStep === 0) {
-        return {
-          label: "Create secrets policy",
-          disabled:
-            secretOperations.policyPending || secretOperations.policyError,
-          onClick: () => send({ type: "START" }),
-        };
-      }
       return {
-        label: currentStep === 0 ? "Start the journey" : "Continue the journey",
+        label: "Start the journey",
+        disabled:
+          (journey.id === "third-party-mcp" &&
+            currentStep === 0 &&
+            (!mcpOperations.selectedServer ||
+              mcpOperations.projectStatePending ||
+              mcpOperations.projectStateError)) ||
+          (journey.id === "secret-block" &&
+            currentStep === 0 &&
+            (secretOperations.policyPending || secretOperations.policyError)),
         onClick: () => send({ type: "START" }),
       };
     case "running":
@@ -979,7 +944,7 @@ function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
       )}
     >
       <BrandMeshLayers />
-      <div className="relative z-10 flex w-full items-start justify-center">
+      <div className="relative z-10 flex w-full items-center justify-center">
         {children}
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   render as baseRender,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
@@ -246,6 +247,10 @@ describe("ProjectGuide", () => {
         .getByRole("button", { name: "← Back to start" })
         .getAttribute("aria-controls"),
     ).toBe(controlledRegionId);
+    expect(screen.queryByRole("button", { name: "Exit guide" })).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Start the journey" }),
+    ).toHaveLength(1);
 
     const switchControl = screen.getByRole("button", {
       name: "Switch to Block a leaked credential mid-prompt",
@@ -299,9 +304,7 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install selected server" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
@@ -347,9 +350,7 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install selected server" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
@@ -406,9 +407,7 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install selected server" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
     expect(screen.getByRole("alert").textContent).toContain(
       "Catalog unavailable",
@@ -426,7 +425,6 @@ describe("ProjectGuide", () => {
 
   it("renders supplied current content, output, event, and action callbacks", () => {
     const onPrimaryAction = vi.fn();
-    const onSecondaryAction = vi.fn();
 
     render(
       <ProjectGuideRun
@@ -443,12 +441,6 @@ describe("ProjectGuide", () => {
             onPrimaryAction();
           },
         }}
-        secondaryAction={{
-          label: "Cancel run",
-          onClick: () => {
-            onSecondaryAction();
-          },
-        }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -461,10 +453,13 @@ describe("ProjectGuide", () => {
     ).toBe("fixture-run");
 
     fireEvent.click(screen.getByRole("button", { name: "Continue run" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
 
     expect(onPrimaryAction).toHaveBeenCalledOnce();
-    expect(onSecondaryAction).toHaveBeenCalledOnce();
+    expect(
+      within(
+        screen.getByRole("complementary", { name: "Journey A run panel" }),
+      ).getAllByRole("button"),
+    ).toHaveLength(1);
   });
 
   it("keeps activity history bounded and scrolls to the latest output", () => {
@@ -626,7 +621,7 @@ describe("ProjectGuide", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Install selected server",
+          name: "Start the journey",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -638,7 +633,7 @@ describe("ProjectGuide", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Install selected server",
+          name: "Start the journey",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -693,9 +688,7 @@ describe("ProjectGuide", () => {
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install selected server" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
     expect(screen.getByRole("tab", { name: "Claude" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
@@ -787,9 +780,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create secrets policy" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
     await waitFor(() =>
       expect(
@@ -860,9 +851,7 @@ describe("ProjectGuide", () => {
         name: /Block a leaked credential mid-prompt/,
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create secrets policy" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(
       screen.getByRole("button", { name: "I've installed and restarted it" }),
     );
@@ -913,9 +902,7 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Install selected server" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
     fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
 

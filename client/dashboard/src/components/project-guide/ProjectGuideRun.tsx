@@ -31,7 +31,6 @@ export type ProjectGuideRunProps = {
   output?: ReactNode;
   eventCard?: ReactNode;
   primaryAction?: ProjectGuideRunAction;
-  secondaryAction?: ProjectGuideRunAction;
   listeningElapsedSeconds?: number;
   onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
@@ -68,7 +67,6 @@ export function ProjectGuideRun({
   output,
   eventCard,
   primaryAction,
-  secondaryAction,
   listeningElapsedSeconds = 0,
   onRewind,
   onSwitchJourney,
@@ -95,7 +93,6 @@ export function ProjectGuideRun({
   let resolvedOutput = output;
   let resolvedEventCard = eventCard;
   let resolvedPrimaryAction = primaryAction;
-  let resolvedSecondaryAction = secondaryAction;
 
   if (resolvedCurrentContent === undefined) {
     resolvedCurrentContent = (
@@ -123,12 +120,12 @@ export function ProjectGuideRun({
     if (isComplete) label = journey.completion.primaryAction;
     resolvedPrimaryAction = { label, disabled: !isComplete };
   }
-  if (resolvedSecondaryAction === undefined && isComplete) {
-    resolvedSecondaryAction = {
-      label: "Start the other journey",
-      onClick: onSwitchJourney,
-    };
-  }
+  const resolvedSecondaryAction = isComplete
+    ? {
+        label: "Start the other journey",
+        onClick: onSwitchJourney,
+      }
+    : undefined;
 
   const activityLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -245,7 +242,10 @@ export function ProjectGuideRun({
               );
             })}
           </ol>
-          <aside className="flex min-h-[390px] min-w-0 flex-col gap-[13px] border-l border-[#EBEBEB] bg-[#FCFCFC] px-5 pt-[18px] pb-5">
+          <aside
+            aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
+            className="flex min-h-[390px] min-w-0 flex-col gap-[13px] border-l border-[#EBEBEB] bg-[#FCFCFC] px-5 pt-[18px] pb-5"
+          >
             <div className="flex items-baseline gap-2.5">
               <span
                 className="font-mono text-[10px]"
@@ -290,16 +290,6 @@ export function ProjectGuideRun({
             >
               {resolvedPrimaryAction.label}
             </button>
-            {resolvedSecondaryAction && (
-              <button
-                type="button"
-                onClick={resolvedSecondaryAction.onClick}
-                disabled={resolvedSecondaryAction.disabled}
-                className="w-full border border-[#DBDBDB] px-4 py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
-              >
-                {resolvedSecondaryAction.label}
-              </button>
-            )}
           </aside>
         </div>
       </motion.div>
