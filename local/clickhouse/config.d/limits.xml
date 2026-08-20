@@ -6,9 +6,11 @@
          enforced in every environment, in which case ClickHouse sees the whole host's RAM.
 
          Sized for N concurrent worktrees, not one: each worktree runs its own ClickHouse, so
-         this budget is multiplied by however many stacks are up. 512 MiB is ample for the
+         this budget is multiplied by however many stacks are up. 1 GiB is ample for the
          local dataset (dev seed plus whatever a test run writes) and keeps six worktrees
-         under 3 GiB of ClickHouse headroom instead of 12 GiB. -->
+         under 6 GiB of ClickHouse headroom instead of 12 GiB. It is also the floor that
+         boots: ClickHouse derives background_pool_size from this cap, and at 512 MiB the
+         pool shrinks until startup fails with BAD_ARGUMENTS (see the note below). -->
     <max_server_memory_usage>1073741824</max_server_memory_usage> <!-- 1 GiB -->
 
     <!-- Reduce cache sizes relative to available RAM -->

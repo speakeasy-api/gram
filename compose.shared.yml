@@ -58,13 +58,18 @@ services:
   lgtm:
     image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
     restart: unless-stopped
+    # Bound to 127.0.0.1 for the same reason as Presidio: every one of these
+    # APIs is unauthenticated, and this container now holds every worktree's
+    # traces and metrics. All consumers are local host processes
+    # (OTEL_EXPORTER_OTLP_ENDPOINT points at localhost), so nothing needs it on
+    # the host's external interfaces.
     ports:
-      - "13000:3000" # Grafana UI
-      - "13200:3200" # Tempo HTTP API
-      - "13100:3100" # Loki HTTP API
-      - "9099:9090" # Prometheus UI/API
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
+      - "127.0.0.1:13000:3000" # Grafana UI
+      - "127.0.0.1:13200:3200" # Tempo HTTP API
+      - "127.0.0.1:13100:3100" # Loki HTTP API
+      - "127.0.0.1:9099:9090" # Prometheus UI/API
+      - "127.0.0.1:4317:4317" # OTLP gRPC receiver
+      - "127.0.0.1:4318:4318" # OTLP HTTP receiver
     volumes:
       # Runs as root, so wipe this from inside the container rather than sudo:
       # docker compose -f compose.shared.yml -p gram-shared exec lgtm \

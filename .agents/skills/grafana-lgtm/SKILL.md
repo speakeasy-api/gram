@@ -170,9 +170,9 @@ Every span names its parent, so "did this cross the boundary?" is answered by th
 
 ## Common mistakes
 
-- Hardcoding `3000`, `3200` or `9090`. Those are container-internal; host ports are remapped per worktree.
+- Hardcoding `3000`, `3200` or `9090`. Those are container-internal; the host ports are the fixed shared ones (`GRAFANA_PORT`, `TEMPO_HTTP_PORT`, `PROMETHEUS_PORT`).
 - Treating an empty result as proof of absence — for traces retry and widen the window, for metrics wrap in `last_over_time`.
 - Querying a metric by its Go instrument name instead of the translated series name, or without a `service_name` filter.
 - Reading `traces_service_graph_request_total` as proof of propagation either way. That graph is built from CLIENT/SERVER span pairs, so an edge appears only where the caller recorded a CLIENT span — real `deployments.evolve` traffic does produce `client="gram-server", server="gram-worker"`, but a path that dispatches without a CLIENT span shows no edge while propagating perfectly well. `parentSpanId` is the authority.
-- Assuming the running services belong to the worktree you ran `mise env` in. Several worktrees can have stacks up at once; match the port back to a container with `docker ps --filter publish=…`.
+- Assuming the data you get back belongs to the worktree you ran `mise env` in. Several worktrees can have stacks up at once, and every port resolves to the one shared `gram-shared-lgtm-1` — the port tells you nothing. Separation comes only from the `worktree` resource attribute, so filter on it.
 - Reading a counter as an all-time total. OTLP counters are cumulative per process, so a local restart starts them over.
