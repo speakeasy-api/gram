@@ -140,3 +140,19 @@ func TestListMetaMcpMembers_CrossProjectMetaInvisible(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
+
+func TestListMetaMcpMembers_RequiresReadScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.ListMetaMcpMembers(ctx, &gen.ListMetaMcpMembersPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  uuid.NewString(),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

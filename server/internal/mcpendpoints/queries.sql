@@ -205,6 +205,15 @@ WHERE mcp_server_id = @mcp_server_id::uuid
   AND deleted IS FALSE
 ORDER BY custom_domain_id::uuid;
 
+-- name: ListCustomDomainIDsByMetaMCPServerID :many
+SELECT DISTINCT custom_domain_id::uuid
+FROM mcp_endpoints
+WHERE meta_mcp_server_id = @meta_mcp_server_id::uuid
+  AND project_id = @project_id
+  AND custom_domain_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY custom_domain_id::uuid;
+
 -- name: LockRootMCPEndpointsByMCPServerID :many
 SELECT *
 FROM mcp_endpoints
@@ -223,6 +232,20 @@ FOR UPDATE;
 SELECT *
 FROM mcp_endpoints
 WHERE mcp_server_id = @mcp_server_id::uuid
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
+-- name: LockMCPEndpointsByMetaMCPServerID :many
+-- Lock every live endpoint (not only current roots) before the meta server
+-- row lock: endpoint mutations hold endpoint locks while waiting on the meta
+-- row, so writing an unlocked endpoint after taking the meta lock can
+-- deadlock. Re-run after the meta lock for the authoritative pre-delete root
+-- set.
+SELECT *
+FROM mcp_endpoints
+WHERE meta_mcp_server_id = @meta_mcp_server_id::uuid
   AND project_id = @project_id
   AND deleted IS FALSE
 ORDER BY id

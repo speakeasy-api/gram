@@ -1,8 +1,6 @@
 package mv
 
 import (
-	"time"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -18,8 +16,8 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		ProjectID:           server.ProjectID.String(),
 		Name:                server.Name,
 		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
-		CreatedAt:           server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:           server.UpdatedAt.Time.Format(time.RFC3339),
+		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
+		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
 	}
 }
 

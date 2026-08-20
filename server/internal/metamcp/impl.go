@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"math"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -23,8 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -32,16 +35,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	audit       *audit.Logger
+	temporalEnv *tenv.Environment
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -54,16 +59,18 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	temporalEnv *tenv.Environment,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		audit:       auditLogger,
+		temporalEnv: temporalEnv,
 	}
 }
 
@@ -294,6 +301,29 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	endpointsRepo := mcpendpointsrepo.New(dbtx)
+
+	// Match the lock order used by endpoint mutations and generic server
+	// deletion: custom domains, then endpoints, then the backend row.
+	affectedDomainIDs, err := endpointsRepo.ListCustomDomainIDsByMetaMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMetaMCPServerIDParams{
+		MetaMcpServerID: serverID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list custom domains for meta mcp server").LogError(ctx, logger)
+	}
+	domainsRepo := customdomainsrepo.New(dbtx)
+	for _, domainID := range affectedDomainIDs {
+		if _, err := domainsRepo.LockCustomDomainByID(ctx, domainID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
+		}
+	}
+	if _, err := endpointsRepo.LockMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMetaMCPServerIDParams{
+		MetaMcpServerID: serverID,
+		ProjectID:       *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
+	}
 
 	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
 		ID:             serverID,
@@ -306,6 +336,21 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
 	}
+
+	// Post-meta-lock read is the authoritative root set: endpoint mutations
+	// hold the meta row lock while writing a meta-backed endpoint, so no new
+	// root can commit past this point, and rows here carry the pre-delete
+	// is_domain_root.
+	rootEndpoints, err := endpointsRepo.LockMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMetaMCPServerIDParams{
+		MetaMcpServerID: serverID,
+		ProjectID:       *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
+	}
+	rootEndpoints = slices.DeleteFunc(rootEndpoints, func(endpoint mcpendpointsrepo.McpEndpoint) bool {
+		return !endpoint.IsDomainRoot.Valid || !endpoint.IsDomainRoot.Bool
+	})
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	metaURN := urn.NewMetaMcpServer(existing.ID)
@@ -334,12 +379,15 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		}
 	}
 
-	endpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{
+	endpoints, err := endpointsRepo.SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{
 		MetaMcpServerID: existing.ID,
 		ProjectID:       *authCtx.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete meta mcp endpoints").LogError(ctx, logger)
+	}
+	if err := s.logRootAutoClears(ctx, dbtx, authCtx, rootEndpoints); err != nil {
+		return err
 	}
 	for _, endpoint := range endpoints {
 		if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
@@ -378,6 +426,10 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
+		return err
 	}
 
 	return nil
@@ -708,6 +760,72 @@ func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries,
 	}
 
 	return nil
+}
+
+// logRootAutoClears emits a custom-domain update audit event for every root
+// endpoint tombstoned by a meta MCP server delete, mirroring the root cleanup
+// audits that generic server deletion produces.
+func (s *Service) logRootAutoClears(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	authCtx *contextvalues.AuthContext,
+	rootEndpoints []mcpendpointsrepo.McpEndpoint,
+) error {
+	repository := customdomainsrepo.New(dbtx)
+	for _, endpoint := range rootEndpoints {
+		if !endpoint.CustomDomainID.Valid {
+			continue
+		}
+		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load custom domain for root cleanup audit").LogError(ctx, s.logger)
+		}
+		if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
+			OrganizationID:             authCtx.ActiveOrganizationID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:           authCtx.Email,
+			ActorSlug:                  nil,
+			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
+			DomainName:                 domain.Domain,
+			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
+			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log automatic root endpoint cleanup").LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+// rootDomainIDs collects the distinct custom domain ids referenced by the
+// given endpoints, preserving the sorted endpoint order.
+func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(endpoints))
+	result := make([]uuid.UUID, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if !endpoint.CustomDomainID.Valid {
+			continue
+		}
+		if _, ok := seen[endpoint.CustomDomainID.UUID]; ok {
+			continue
+		}
+		seen[endpoint.CustomDomainID.UUID] = struct{}{}
+		result = append(result, endpoint.CustomDomainID.UUID)
+	}
+	return result
+}
+
+func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
+	if s.temporalEnv == nil {
+		return nil
+	}
+	var reconcileErrors []error
+	for _, customDomainID := range customDomainIDs {
+		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
+		if err != nil {
+			reconcileErrors = append(reconcileErrors, oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger))
+		}
+	}
+	return errors.Join(reconcileErrors...)
 }
 
 // sortOrderValue bounds-checks an optional sort order before narrowing it to

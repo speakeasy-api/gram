@@ -138,10 +138,12 @@ const deleteMetaMCPMembersByMCPServerID = `-- name: DeleteMetaMCPMembersByMCPSer
 UPDATE meta_mcp_server_members
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE mcp_server_id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-RETURNING id, project_id, meta_mcp_server_id, mcp_server_id, sort_order, created_at, updated_at, deleted_at, deleted
+FROM meta_mcp_servers
+WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
+  AND meta_mcp_server_members.mcp_server_id = $1
+  AND meta_mcp_server_members.project_id = $2
+  AND meta_mcp_server_members.deleted IS FALSE
+RETURNING meta_mcp_server_members.id, meta_mcp_server_members.project_id, meta_mcp_server_members.meta_mcp_server_id, meta_mcp_server_members.mcp_server_id, meta_mcp_server_members.sort_order, meta_mcp_server_members.created_at, meta_mcp_server_members.updated_at, meta_mcp_server_members.deleted_at, meta_mcp_server_members.deleted, meta_mcp_servers.name AS meta_mcp_server_name
 `
 
 type DeleteMetaMCPMembersByMCPServerIDParams struct {
@@ -149,19 +151,33 @@ type DeleteMetaMCPMembersByMCPServerIDParams struct {
 	ProjectID   uuid.UUID
 }
 
+type DeleteMetaMCPMembersByMCPServerIDRow struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	MetaMcpServerID   uuid.UUID
+	McpServerID       uuid.UUID
+	SortOrder         int32
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+	MetaMcpServerName string
+}
+
 // Soft-delete all live memberships that reference a generic MCP server. Used
 // when the member server is soft-deleted so meta MCPs don't keep live
 // membership rows pointing at a tombstoned server. Returns the affected rows
-// so the caller can emit per-membership audit events.
-func (q *Queries) DeleteMetaMCPMembersByMCPServerID(ctx context.Context, arg DeleteMetaMCPMembersByMCPServerIDParams) ([]MetaMcpServerMember, error) {
+// with the owning meta's name so the caller can emit per-membership audit
+// events without re-reading each meta.
+func (q *Queries) DeleteMetaMCPMembersByMCPServerID(ctx context.Context, arg DeleteMetaMCPMembersByMCPServerIDParams) ([]DeleteMetaMCPMembersByMCPServerIDRow, error) {
 	rows, err := q.db.Query(ctx, deleteMetaMCPMembersByMCPServerID, arg.McpServerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MetaMcpServerMember
+	var items []DeleteMetaMCPMembersByMCPServerIDRow
 	for rows.Next() {
-		var i MetaMcpServerMember
+		var i DeleteMetaMCPMembersByMCPServerIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -172,6 +188,7 @@ func (q *Queries) DeleteMetaMCPMembersByMCPServerID(ctx context.Context, arg Del
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.MetaMcpServerName,
 		); err != nil {
 			return nil, err
 		}

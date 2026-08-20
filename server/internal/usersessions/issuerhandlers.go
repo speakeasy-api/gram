@@ -298,6 +298,20 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the issuer row before the ownership check. A concurrent meta MCP
+	// attach holds this same row lock while writing its reference, so once the
+	// lock is acquired the statements below run on a snapshot that includes
+	// any newly committed owner.
+	if _, err := txRepo.LockUserSessionIssuer(ctx, repo.LockUserSessionIssuerParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, logger)
+	}
+
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
 		UserSessionIssuerID: id,

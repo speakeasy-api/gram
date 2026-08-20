@@ -326,6 +326,41 @@ func (q *Queries) ListCustomDomainIDsByMCPServerID(ctx context.Context, arg List
 	return items, nil
 }
 
+const listCustomDomainIDsByMetaMCPServerID = `-- name: ListCustomDomainIDsByMetaMCPServerID :many
+SELECT DISTINCT custom_domain_id::uuid
+FROM mcp_endpoints
+WHERE meta_mcp_server_id = $1::uuid
+  AND project_id = $2
+  AND custom_domain_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY custom_domain_id::uuid
+`
+
+type ListCustomDomainIDsByMetaMCPServerIDParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+func (q *Queries) ListCustomDomainIDsByMetaMCPServerID(ctx context.Context, arg ListCustomDomainIDsByMetaMCPServerIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCustomDomainIDsByMetaMCPServerID, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var custom_domain_id uuid.UUID
+		if err := rows.Scan(&custom_domain_id); err != nil {
+			return nil, err
+		}
+		items = append(items, custom_domain_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPEndpointsByCustomDomainID = `-- name: ListMCPEndpointsByCustomDomainID :many
 SELECT
     e.id,
@@ -627,6 +662,58 @@ type LockMCPEndpointsByMCPServerIDParams struct {
 // Re-run after the server lock for the authoritative pre-delete root set.
 func (q *Queries) LockMCPEndpointsByMCPServerID(ctx context.Context, arg LockMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
 	rows, err := q.db.Query(ctx, lockMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.MetaMcpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockMCPEndpointsByMetaMCPServerID = `-- name: LockMCPEndpointsByMetaMCPServerID :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE meta_mcp_server_id = $1::uuid
+  AND project_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockMCPEndpointsByMetaMCPServerIDParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Lock every live endpoint (not only current roots) before the meta server
+// row lock: endpoint mutations hold endpoint locks while waiting on the meta
+// row, so writing an unlocked endpoint after taking the meta lock can
+// deadlock. Re-run after the meta lock for the authoritative pre-delete root
+// set.
+func (q *Queries) LockMCPEndpointsByMetaMCPServerID(ctx context.Context, arg LockMCPEndpointsByMetaMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, lockMCPEndpointsByMetaMCPServerID, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

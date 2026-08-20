@@ -47,6 +47,19 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: LockUserSessionIssuer :one
+-- Lock a live issuer row before checking for active owners. Attach flows
+-- that reference a pre-existing issuer (meta MCP create/update) hold this
+-- same row lock while writing their reference, so acquiring it first
+-- guarantees the follow-up ownership statements read a snapshot that
+-- includes any reference committed by a concurrent attach.
+SELECT id
+FROM user_session_issuers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: DeleteUserSessionIssuer :one
 -- Recheck active owners in the write so an owner added after the handler's
 -- preflight check prevents the issuer from being soft-deleted.

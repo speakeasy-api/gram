@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -123,4 +124,72 @@ func TestDeleteMetaMcpServer_RepeatDeleteNotFound(t *testing.T) {
 		ID:               created.ID,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteMetaMcpServer_RootAutoClearsAndAudits(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "rooted gateway",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+	metaUUID := uuid.MustParse(created.ID)
+
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "meta-delete-root.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+
+	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: uuid.NullUUID{UUID: metaUUID, Valid: true},
+		Slug:            "root",
+	})
+	require.NoError(t, err)
+	require.NoError(t, customdomainsrepo.New(ti.conn).SetRootMcpEndpoint(ctx, customdomainsrepo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMetaMcpServer(ctx, &gen.DeleteMetaMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount+1, afterAuditCount, "tombstoning a root endpoint must audit the domain root clear")
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, endpoint.ID.String(), beforeSnapshot["RootMcpEndpointID"])
+	require.Nil(t, afterSnapshot["RootMcpEndpointID"])
+
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
+	require.Empty(t, route.RootSlug)
 }

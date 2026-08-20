@@ -1008,9 +1008,7 @@ function OrgDomainsInner() {
                         </span>{" "}
                         <Text variant="small" as="span" muted>
                           &middot; {endpoint.projectName} &middot;{" "}
-                          {endpoint.mcpServerName ??
-                            endpoint.mcpServerSlug ??
-                            endpoint.mcpServerId}
+                          {mcpServerLabel(endpoint)}
                         </Text>
                       </Text>
                     </li>

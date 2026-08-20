@@ -87,14 +87,17 @@ RETURNING *;
 -- Soft-delete all live memberships that reference a generic MCP server. Used
 -- when the member server is soft-deleted so meta MCPs don't keep live
 -- membership rows pointing at a tombstoned server. Returns the affected rows
--- so the caller can emit per-membership audit events.
+-- with the owning meta's name so the caller can emit per-membership audit
+-- events without re-reading each meta.
 UPDATE meta_mcp_server_members
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE mcp_server_id = @mcp_server_id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-RETURNING *;
+FROM meta_mcp_servers
+WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
+  AND meta_mcp_server_members.mcp_server_id = @mcp_server_id
+  AND meta_mcp_server_members.project_id = @project_id
+  AND meta_mcp_server_members.deleted IS FALSE
+RETURNING meta_mcp_server_members.*, meta_mcp_servers.name AS meta_mcp_server_name;
 
 -- name: CreateMetaMCPMember :one
 INSERT INTO meta_mcp_server_members (

@@ -964,21 +964,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete meta mcp memberships").LogError(ctx, logger)
 	}
-	metaNames := make(map[uuid.UUID]string, len(deletedMemberships))
 	for _, membership := range deletedMemberships {
-		metaName, ok := metaNames[membership.MetaMcpServerID]
-		if !ok {
-			meta, err := metamcprepo.New(dbtx).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
-				ID:             membership.MetaMcpServerID,
-				OrganizationID: authCtx.ActiveOrganizationID,
-				ProjectID:      *authCtx.ProjectID,
-			})
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "load meta mcp server for membership audit").LogError(ctx, logger)
-			}
-			metaName = meta.Name
-			metaNames[membership.MetaMcpServerID] = metaName
-		}
 		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			ProjectID:        *authCtx.ProjectID,
@@ -986,7 +972,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
 			MetaMcpServerURN: urn.NewMetaMcpServer(membership.MetaMcpServerID),
-			Name:             metaName,
+			Name:             membership.MetaMcpServerName,
 			MembershipURN:    urn.NewMetaMcpServerMember(membership.ID),
 			McpServerURN:     urn.NewMcpServer(membership.McpServerID),
 			SortOrder:        membership.SortOrder,
@@ -1019,6 +1005,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// cascade once this deletion leaves it without an active owner.
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
+		// Lock the issuer row before the ownership check. A concurrent meta
+		// MCP attach holds this same row lock while writing its reference, so
+		// the statements below see any newly committed owner. A missing
+		// issuer must not block server deletion, so ErrNoRows skips the
+		// cascade entirely.
+		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
+			ID:        deleted.UserSessionIssuerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
+		}
+
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
@@ -1027,7 +1026,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
 		}
 
-		if !hasActiveOwner {
+		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
 				ID:        deleted.UserSessionIssuerID.UUID,
 				ProjectID: *authCtx.ProjectID,

@@ -1495,6 +1495,32 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
+SELECT id
+FROM user_session_issuers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Lock a live issuer row before checking for active owners. Attach flows
+// that reference a pre-existing issuer (meta MCP create/update) hold this
+// same row lock while writing their reference, so acquiring it first
+// guarantees the follow-up ownership statements read a snapshot that
+// includes any reference committed by a concurrent attach.
+func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSessionIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserSessionIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const purgeUserSessionClientCIMDCache = `-- name: PurgeUserSessionClientCIMDCache :one
 UPDATE user_session_clients
 SET client_id_metadata_cache_expires_at = NULL,
