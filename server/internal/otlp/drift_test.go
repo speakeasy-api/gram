@@ -30,60 +30,6 @@ type messagePair struct {
 	skip map[protoreflect.FieldNumber]string
 }
 
-// spanCopy describes one self-contained Gram copy of the OTLP span schema.
-// Keeping the copied message and enum descriptors together lets every drift
-// guard cover Span and InboundSpan from the same table.
-type spanCopy struct {
-	name                 string
-	span                 proto.Message
-	event                proto.Message
-	link                 proto.Message
-	status               proto.Message
-	resource             proto.Message
-	instrumentationScope proto.Message
-	anyValue             proto.Message
-	arrayValue           proto.Message
-	keyValueList         proto.Message
-	keyValue             proto.Message
-	spanKind             protoreflect.EnumDescriptor
-	statusCode           protoreflect.EnumDescriptor
-}
-
-func spanCopies() []spanCopy {
-	return []spanCopy{
-		{
-			name:                 "Span",
-			span:                 &otelv1.Span{},
-			event:                &otelv1.Span_Event{},
-			link:                 &otelv1.Span_Link{},
-			status:               &otelv1.Span_Status{},
-			resource:             &otelv1.Span_Resource{},
-			instrumentationScope: &otelv1.Span_InstrumentationScope{},
-			anyValue:             &otelv1.Span_AnyValue{},
-			arrayValue:           &otelv1.Span_ArrayValue{},
-			keyValueList:         &otelv1.Span_KeyValueList{},
-			keyValue:             &otelv1.Span_KeyValue{},
-			spanKind:             otelv1.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
-			statusCode:           otelv1.Span_STATUS_CODE_UNSPECIFIED.Descriptor(),
-		},
-		{
-			name:                 "InboundSpan",
-			span:                 &otelv1.InboundSpan{},
-			event:                &otelv1.InboundSpan_Event{},
-			link:                 &otelv1.InboundSpan_Link{},
-			status:               &otelv1.InboundSpan_Status{},
-			resource:             &otelv1.InboundSpan_Resource{},
-			instrumentationScope: &otelv1.InboundSpan_InstrumentationScope{},
-			anyValue:             &otelv1.InboundSpan_AnyValue{},
-			arrayValue:           &otelv1.InboundSpan_ArrayValue{},
-			keyValueList:         &otelv1.InboundSpan_KeyValueList{},
-			keyValue:             &otelv1.InboundSpan_KeyValue{},
-			spanKind:             otelv1.InboundSpan_SPAN_KIND_UNSPECIFIED.Descriptor(),
-			statusCode:           otelv1.InboundSpan_STATUS_CODE_UNSPECIFIED.Descriptor(),
-		},
-	}
-}
-
 // entityRefsSkip omits Resource.entity_refs: Development status upstream, so
 // it is not carried and its field number is reserved in our copies.
 var entityRefsSkip = map[protoreflect.FieldNumber]string{
@@ -123,7 +69,7 @@ func messagePairs() []messagePair {
 
 	for _, copy := range spanCopies() {
 		pairs = append(pairs,
-			messagePair{name: fmt.Sprintf("trace.v1.Span (%s)", copy.name), upstream: &otlptrace.Span{}, ours: copy.span},
+			messagePair{name: fmt.Sprintf("trace.v1.Span (%s)", copy.name), upstream: &otlptrace.Span{}, ours: copy.newSpan()},
 			messagePair{name: fmt.Sprintf("trace.v1.Span.Event (%s)", copy.name), upstream: &otlptrace.Span_Event{}, ours: copy.event},
 			messagePair{name: fmt.Sprintf("trace.v1.Span.Link (%s)", copy.name), upstream: &otlptrace.Span_Link{}, ours: copy.link},
 			messagePair{name: fmt.Sprintf("trace.v1.Status (%s)", copy.name), upstream: &otlptrace.Status{}, ours: copy.status},

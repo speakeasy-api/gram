@@ -70,18 +70,6 @@ func logAttrFixtures() []*otelv1.LogRecord_KeyValue {
 	}
 }
 
-type gramSpanCase struct {
-	name       string
-	newMessage func() proto.Message
-}
-
-func gramSpanCases() []gramSpanCase {
-	return []gramSpanCase{
-		{name: "Span", newMessage: func() proto.Message { return &otelv1.Span{} }},
-		{name: "InboundSpan", newMessage: func() proto.Message { return &otelv1.InboundSpan{} }},
-	}
-}
-
 func TestLogRecordUnmarshalsAsOTLP(t *testing.T) {
 	t.Parallel()
 
@@ -225,8 +213,8 @@ func TestGramSpansUnmarshalAsOTLP(t *testing.T) {
 	raw, err := proto.Marshal(src)
 	require.NoError(t, err, "marshal canonical gram span")
 
-	for _, test := range gramSpanCases() {
-		gramSpan := test.newMessage()
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
 		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal canonical gram span", test.name)
 
 		copyRaw, err := proto.Marshal(gramSpan)
@@ -291,8 +279,8 @@ func TestOTLPSpanUnmarshalsAsGramCopies(t *testing.T) {
 	raw, err := proto.Marshal(src)
 	require.NoError(t, err, "marshal OTLP span")
 
-	for _, test := range gramSpanCases() {
-		gramSpan := test.newMessage()
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
 		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal as gram span", test.name)
 
 		copyRaw, err := proto.Marshal(gramSpan)
@@ -369,8 +357,8 @@ func TestGramSpanFieldsSurviveOTLPRoundTrip(t *testing.T) {
 	raw, err := proto.Marshal(src)
 	require.NoError(t, err, "marshal canonical gram span")
 
-	for _, test := range gramSpanCases() {
-		gramSpan := test.newMessage()
+	for _, test := range spanCopies() {
+		gramSpan := test.newSpan()
 		require.NoError(t, proto.Unmarshal(raw, gramSpan), "%s: unmarshal canonical gram span", test.name)
 
 		copyRaw, err := proto.Marshal(gramSpan)
@@ -382,7 +370,7 @@ func TestGramSpanFieldsSurviveOTLPRoundTrip(t *testing.T) {
 		reencoded, err := proto.Marshal(&viaOTLP)
 		require.NoError(t, err, "%s: re-marshal OTLP span", test.name)
 
-		back := test.newMessage()
+		back := test.newSpan()
 		require.NoError(t, proto.Unmarshal(reencoded, back), "%s: unmarshal round-tripped bytes as gram span", test.name)
 
 		switch got := back.(type) {
