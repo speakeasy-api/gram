@@ -960,7 +960,7 @@ func (s *Service) buildRemoteSessionCards(
 	// not-connected.
 	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID)
 		if err != nil {
 			return nil, fmt.Errorf("remote session statuses: %w", err)
 		}

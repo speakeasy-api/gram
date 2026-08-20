@@ -3674,16 +3674,14 @@ SELECT
 FROM remote_sessions AS s
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.subject_urn = $1
-  AND s.user_session_issuer_id = $2
-  AND usi.project_id = $3
+  AND usi.project_id = $2
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 `
 
 type ListRemoteSessionStatusesForSubjectParams struct {
-	SubjectUrn          urn.SessionSubject
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
+	SubjectUrn urn.SessionSubject
+	ProjectID  uuid.UUID
 }
 
 type ListRemoteSessionStatusesForSubjectRow struct {
@@ -3697,12 +3695,19 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 }
 
 // Bulk lookup for the consent renderer: returns each non-deleted
-// remote_session for the given subject under a single user_session_issuer,
-// tagged with whether it is still usable. Folds the N per-card lookups into
-// one round-trip. The partial unique index on (subject_urn,
+// remote_session for the given subject in the project's issuers, tagged with
+// whether it is still usable. Folds the N per-card lookups into one
+// round-trip. The partial unique index on (subject_urn,
 // remote_session_client_id) WHERE deleted IS FALSE means at most one row per
 // (subject, client), so the result doubles as a per-client map without
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+//
+// user_session_issuer_id on the row is provenance from INSERT, not a lookup
+// key: UpsertRemoteSession conflicts on (subject_urn, remote_session_client_id)
+// and never updates that column. Filtering on it would hide a live grant from
+// a second MCP server whose issuer did not mint the row, while
+// GetActiveRemoteSession (the runtime) still finds it. Tenant scope is the
+// stored issuer's project.
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
 // session is usable while the upstream authorization remains valid and its
@@ -3714,7 +3719,7 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 // disagreeing with a green "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -4214,9 +4219,8 @@ SET auto_refresh = $1
 FROM user_session_issuers AS usi
 WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
-  AND s.user_session_issuer_id = $4
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $5
+  AND usi.project_id = $4
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 `
@@ -4225,23 +4229,22 @@ type SetRemoteSessionAutoRefreshParams struct {
 	AutoRefresh           bool
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 }
 
 // Records the subject's consent-screen auto-refresh choice. Deliberately does
 // NOT touch updated_at: that column doubles as the refresh CAS token-version
 // signal and keepalive clock, and a preference toggle must not perturb either.
-// Scoped through the endpoint's user_session_issuer project so the write
-// cannot cross tenant boundaries. A client may be bound to several
-// user_session_issuers; the issuer predicate pins the write to the binding the
-// consent screen displayed (reads filter by issuer the same way).
+// Scoped through the stored issuer's project so the write cannot cross tenant
+// boundaries. A subject's grant is shared across every MCP server in the
+// project because remote_sessions is keyed on (subject_urn,
+// remote_session_client_id); the stored user_session_issuer_id is provenance
+// and is not a write predicate.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
 		arg.AutoRefresh,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
 		arg.ProjectID,
 	)
 	if err != nil {
@@ -4279,9 +4282,8 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
-  AND s.user_session_issuer_id = $3
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $4
+  AND usi.project_id = $3
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
@@ -4290,7 +4292,6 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 }
 
@@ -4301,19 +4302,16 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 }
 
 // Consent-screen disconnect: soft-deletes the subject's own binding for one
-// upstream client. Subject, client and issuer all derived server-side from
-// the challenge state and the endpoint's bindings, never from the form;
-// scoped through the issuer's project so the write cannot cross tenants.
+// upstream client. Subject and client are derived server-side from the
+// challenge state and the endpoint's bindings, never from the form; scoped
+// through the stored issuer's project so the write cannot cross tenants.
 //
 // Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row.
+// (subject_urn, remote_session_client_id) caps that at one row. The stored
+// user_session_issuer_id is provenance, not a lookup key, so disconnect from
+// a second MCP server still finds the row.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
-		arg.SubjectUrn,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-	)
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient, arg.SubjectUrn, arg.RemoteSessionClientID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -4371,18 +4369,16 @@ UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
 WHERE s.subject_urn = $1
-  AND s.user_session_issuer_id = $2
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $3
+  AND usi.project_id = $2
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
-	SubjectUrn          urn.SessionSubject
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
+	SubjectUrn urn.SessionSubject
+	ProjectID  uuid.UUID
 }
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
@@ -4392,17 +4388,18 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 }
 
 // Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds through one user session issuer and returns their stored
-// credentials. Scoped through the issuer's project so the write cannot
-// cross tenants.
+// subject holds in the issuer's project and returns their stored credentials.
+// Scoped through the stored issuer's project so the write cannot cross
+// tenants.
 //
 // A subject's grant is shared by every MCP client it authenticates, because
 // remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
-// user-session-client column. Revoking one client's session therefore drops
-// the provider link for all of them, which is the intended blast radius: a
-// revoke that left the upstream tokens alive would not be a revoke.
+// user-session-client column. The stored user_session_issuer_id is provenance
+// from INSERT, not a lookup key, so a revoke through one issuer in the
+// project must still tombstone a row minted by another. A revoke that left
+// the upstream tokens alive would not be a revoke.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer, arg.SubjectUrn, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

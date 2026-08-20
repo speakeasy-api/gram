@@ -69,7 +69,6 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 		ctx,
 		env.subject,
 		env.projectID,
-		env.session.UserSessionIssuerID,
 	)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[env.clientID].Status)
