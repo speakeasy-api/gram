@@ -731,6 +731,24 @@ pubsub:
         name: gram-otel-v1-inbound-span
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-relay
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-log-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-log-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
       topic_proto_message: gram-otel-v1-span
     name: gram-otel-v1-span-relay
@@ -956,6 +974,12 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-log-record
+  - labels:
+      dlq_for: gram-otel-v1-log-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-relay
+    name: gram-otel-v1-log-relay-dlq
+    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span

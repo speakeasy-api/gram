@@ -524,6 +524,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
 			}
 
+			logRelayHandler := otelsvc.NewLogRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
+
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
 				meterProvider,
@@ -549,6 +557,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(logger, meterProvider, logPub))
 				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(logger, meterProvider, spanPub))
+				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				if enableCHRiskWrites {
