@@ -406,22 +406,17 @@ func allScopeGrants() []Grant {
 	return grants
 }
 
-// DemoScopeGrants returns the fixed read-only grant set for sessions pointed
-// at the shared demo organization. Deliberately excludes environment:read
-// (secrets-adjacent) and every write scope.
+// DemoScopeGrants returns the grant set for sessions pointed at the shared
+// demo organization: every user-visible scope, unrestricted — including
+// org:admin. It is the same set access.ListGrants reports to the dashboard, so
+// a demo visitor never sees a page or control the server then refuses to
+// serve.
+//
+// Demo visitors can therefore mutate demo data. That is intended: the demo
+// organization is a sandbox, and `gram demo-seed` deletes and reinserts its
+// data daily, so anything a visitor changes is reverted on the next run.
 func DemoScopeGrants() []Grant {
-	scopes := []Scope{
-		ScopeOrgRead,
-		ScopeProjectRead,
-		ScopeMCPRead,
-		ScopeSkillRead,
-		ScopeChatRead,
-	}
-	grants := make([]Grant, 0, len(scopes))
-	for _, s := range scopes {
-		grants = append(grants, NewGrant(s, WildcardResource))
-	}
-	return grants
+	return allScopeGrants()
 }
 
 func roleGrantsForScopes(scopes []Scope) []*RoleGrant {

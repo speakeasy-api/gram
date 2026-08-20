@@ -732,7 +732,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}, nil
 }
 
-// EnterDemo points the current session at the shared read-only demo
+// EnterDemo points the current session at the shared demo
 // organization. Any authenticated user may enter — the demo org has no
 // membership rows, so downstream request auth and grant resolution rely on
 // carve-outs keyed off constants.DemoOrganizationID.

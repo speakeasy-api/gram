@@ -20,7 +20,7 @@ when its check passes.
 Most checks below can also be run WITHOUT impersonation, straight against your
 own org after `mise run seed` — it seeds the same data. Use that for quick
 iteration; use the demo org itself before ticking a row, since only it exercises
-the read-only grant set and the impersonation carve-outs.
+the demo grant set and the impersonation carve-outs.
 
 ## Checks
 

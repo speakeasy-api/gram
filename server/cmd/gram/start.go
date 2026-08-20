@@ -64,7 +64,6 @@ import (
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
 	"github.com/speakeasy-api/gram/server/internal/collections"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -1249,15 +1248,6 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
-			// Backstop for the demo org's read-only grant set: reject mutating
-			// RPCs from sessions parked in the shared demo org.
-			mux.Use(middleware.DemoOrgWriteGuard(constants.DemoOrganizationID, func(ctx context.Context, token string) (string, bool) {
-				sess, err := sessionManager.GetSession(ctx, token)
-				if err != nil {
-					return "", false
-				}
-				return sess.ActiveOrganizationID, true
-			}))
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 			// LiteLLM dispatch must run before OTLP forwarding: LiteLLM ingest
