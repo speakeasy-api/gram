@@ -423,6 +423,62 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	require.Equal(t, session.ID, candidate.RemoteSession.ID)
 }
 
+func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// The client is owned by the fixture project. A binding row attached
+	// directly (bypassing the attach handlers' tenancy validation, as a
+	// corrupted or maliciously inserted row would) links it to an issuer in a
+	// DIFFERENT project. That issuer holds the only live Gram session for the
+	// subject, so without the client-tenancy predicate the sweep would claim
+	// the credential through the foreign project's binding.
+	issuerID := createRemoteIssuer(t, ctx, ti, "shared-sweep-xten-issuer", "")
+	provenance := createUserSessionIssuer(t, ctx, ti.conn, "shared-sweep-xten-usi-a")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, provenance.String(), "shared-sweep-xten-client")
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+
+	subject := urn.NewUserSubject("subject-shared-sweep-xten")
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   provenance,
+		RemoteSessionClientID: clientUUID,
+		AccessTokenEncrypted:  "access-ciphertext",
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText("refresh-ciphertext"),
+		Scopes:                []string{},
+		AutoRefresh:           true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
+		ID:        session.ID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
+		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-25 * time.Hour)),
+	}))
+
+	otherProject := createProject(t, ctx, ti.conn, "shared-sweep-xten-other")
+	foreign := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "shared-sweep-xten-usi-b")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientUUID,
+		UserSessionIssuerID:   foreign,
+	}))
+	seedGramSession(t, ctx, ti, subject, foreign, "shared-sweep-xten-b", 24*time.Hour)
+	enableOrgAutoRefreshFeature(t, ctx, ti, authCtx.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)
+
+	window := newSweepWindow()
+	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	require.Empty(t, rows, "a binding to an issuer outside the client's own project must not make the credential keepalive-eligible")
+
+	_, err = repo.New(ti.conn).GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, authCtx.ActiveOrganizationID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestRefreshSweep_NoLiveBoundIssuerSessionNotEligible(t *testing.T) {
 	t.Parallel()
 

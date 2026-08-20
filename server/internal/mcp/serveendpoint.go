@@ -238,8 +238,9 @@ func (s *Service) serveResolvedMCPEndpoint(
 // credential by construction (this preserves behavior for servers connected
 // before resources were recorded, and for tunneled backends whose resource is
 // always empty). A lone credential whose recorded resource disagrees with the
-// backend's is still forwarded, but logged at debug level so a future move to
-// strict single-entry matching has a signal for how often it would reject.
+// backend's is still forwarded, but logged at warn level so the mismatch is
+// visible in production and a future move to strict single-entry matching has
+// a signal for how often it would reject.
 func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) (string, error) {
 	switch len(tokens) {
 	case 0:
@@ -247,7 +248,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 	case 1:
 		for _, entry := range tokens {
 			if entry.Resource != "" && strings.TrimRight(entry.Resource, "/") != strings.TrimRight(upstreamResource, "/") {
-				logger.DebugContext(ctx, "forwarding lone remote_session token whose recorded resource does not match the backend's upstream resource",
+				logger.WarnContext(ctx, "forwarding lone remote_session token whose recorded resource does not match the backend's upstream resource",
 					attr.SlogRemoteSessionClientID(entry.RemoteSessionClientID.String()),
 					attr.SlogOAuthResource(entry.Resource),
 					attr.SlogResourceURI(upstreamResource),
