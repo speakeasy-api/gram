@@ -61,6 +61,9 @@ type RemoteSessionIssuer struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported bool
-	CreatedAt                         string
-	UpdatedAt                         string
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string
+	CreatedAt           string
+	UpdatedAt           string
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -133,10 +134,19 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 // Gram's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
-func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
+func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	doer, err := upstreamHTTPDoer(issuerDiscoveryHTTPClient(policy), tunnels, issuer.TunneledMcpServerID)
+	if err != nil {
+		return zero, nil, &discoveryError{
+			WellKnownURL: issuer.Issuer,
+			Status:       0,
+			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
+		}
+	}
+
+	doc, warnings, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}

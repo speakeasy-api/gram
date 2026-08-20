@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -64,7 +65,12 @@ import (
 )
 
 type WorkerOptions struct {
-	GuardianPolicy      *guardian.Policy
+	GuardianPolicy *guardian.Policy
+
+	// TunnelHTTPClient carries back-channel OAuth calls for remote session
+	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
+	// closed with a configuration error.
+	TunnelHTTPClient    *tunnelrouting.HTTPClient
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -148,6 +154,7 @@ func ForDeploymentProcessing(
 	return &WorkerOptions{
 		DB:                  db,
 		GuardianPolicy:      guardianPolicy,
+		TunnelHTTPClient:    nil,
 		EncryptionClient:    enc,
 		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
@@ -213,6 +220,7 @@ func NewTemporalWorker(
 ) *Workers {
 	opts := &WorkerOptions{
 		GuardianPolicy:            nil,
+		TunnelHTTPClient:          nil,
 		DB:                        nil,
 		EncryptionClient:          nil,
 		FeatureProvider:           nil,
@@ -262,6 +270,7 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			GuardianPolicy:            conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			TunnelHTTPClient:          conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                        conv.Default(o.DB, opts.DB),
 			EncryptionClient:          conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			FeatureProvider:           conv.Default(o.FeatureProvider, opts.FeatureProvider),
@@ -350,6 +359,7 @@ func NewTemporalWorker(
 		tracerProvider,
 		meterProvider,
 		opts.GuardianPolicy,
+		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,

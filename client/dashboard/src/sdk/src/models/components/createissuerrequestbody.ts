@@ -94,6 +94,10 @@ export type CreateIssuerRequestBody = {
    * Token endpoint auth methods advertised by the issuer.
    */
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
+  /**
+   * Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+   */
+  tunneledMcpServerId?: string | undefined;
 };
 
 /** @internal */
@@ -120,6 +124,7 @@ export type CreateIssuerRequestBody$Outbound = {
   slug: string;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
+  tunneled_mcp_server_id?: string | undefined;
 };
 
 /** @internal */
@@ -150,6 +155,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
+    tunneledMcpServerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -172,6 +178,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
+      tunneledMcpServerId: "tunneled_mcp_server_id",
     });
   }),
 );

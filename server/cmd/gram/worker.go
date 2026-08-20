@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -206,6 +208,16 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "List of CIDR blocks to block for SSRF protection",
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "tunnel-forward-token",
+			Usage:   "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker; unset means tunnel-bound token refreshes fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "tunnel-gateway-cidr-blocks",
+			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
 		&cli.StringFlag{
 			Name:    "stripe-api-key",
@@ -785,6 +797,27 @@ func newWorkerCommand() *cli.Command {
 			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
+			// Back-channel OAuth calls (token refresh, revocation) for
+			// tunnel-bound remote session clients ride this transport instead
+			// of dialing from cloud egress. The refresh sweep runs here, so
+			// the worker needs the same tunnel reach as the HTTP server.
+			tunnelHTTPClient := tunnelrouting.NewHTTPClient(
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
+				guardianPolicy,
+				tunnelGatewayCIDRs,
+			)
+
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -792,6 +825,7 @@ func newWorkerCommand() *cli.Command {
 				db,
 				encryptionClient,
 				guardianPolicy,
+				tunnelHTTPClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				serverURL,
 			)
@@ -906,6 +940,7 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:            guardianPolicy,
+				TunnelHTTPClient:          tunnelHTTPClient,
 				DB:                        db,
 				EncryptionClient:          encryptionClient,
 				FeatureProvider:           featureFlags,

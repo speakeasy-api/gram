@@ -188,10 +188,11 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 	)
-	refresher := remotesessions.NewRefreshService(logger, ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
+	refresher := remotesessions.NewRefreshService(logger, ti.conn, enc, policy, nil, cache.NewRedisCacheAdapter(redisClient))
 
 	q := repo.New(ti.conn)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
@@ -275,7 +276,7 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(locks cache.Cache) *remotesessions.RefreshService {
-			return remotesessions.NewRefreshService(logger, ti.conn, enc, policy, locks)
+			return remotesessions.NewRefreshService(logger, ti.conn, enc, policy, nil, locks)
 		},
 		q:         q,
 		projectID: *authCtx.ProjectID,
