@@ -293,6 +293,7 @@ const (
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
 	McpURLKey                     = attribute.Key("gram.mcp.url")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
@@ -1870,6 +1871,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func MetaMcpServerID(v string) attribute.KeyValue { return MetaMcpServerIDKey.String(v) }
+func SlogMetaMcpServerID(v string) slog.Attr      { return slog.String(string(MetaMcpServerIDKey), v) }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }

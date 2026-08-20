@@ -1033,13 +1033,18 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // a 404 and is allowed to fall through to the legacy path, again matching
 // mcp.ServePublic.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
-	endpoint, server, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
+	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to legacy toolset lookup.
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
+	case metaServer != nil:
+		// Meta-backed endpoints have no install page yet (AGE-3299); the
+		// slug is authoritative, so surface not-found rather than falling
+		// through to an unrelated legacy toolset.
+		return nil, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {

@@ -344,6 +344,39 @@ func (q *Queries) GetMetaMCPServer(ctx context.Context, arg GetMetaMCPServerPara
 	return i, err
 }
 
+const getMetaMCPServerByIDAndProjectID = `-- name: GetMetaMCPServerByIDAndProjectID :one
+SELECT id, organization_id, project_id, user_session_issuer_id, name, created_at, updated_at, deleted_at, deleted
+FROM meta_mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetMetaMCPServerByIDAndProjectIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Project-scoped lookup for the public endpoint resolution path, which
+// holds an mcp_endpoints row (and so a trusted project id) but no
+// organization context.
+func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetMetaMCPServerByIDAndProjectIDParams) (MetaMcpServer, error) {
+	row := q.db.QueryRow(ctx, getMetaMCPServerByIDAndProjectID, arg.ID, arg.ProjectID)
+	var i MetaMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listMetaMCPMembers = `-- name: ListMetaMCPMembers :many
 SELECT
     m.id,

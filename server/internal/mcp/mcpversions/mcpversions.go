@@ -49,6 +49,12 @@ const (
 	// deliberately not honored there. That closed, first-party client set
 	// means this can move without third-party exposure.
 	ServedPlatformToolset = Version20250326
+
+	// ServedMetaServer is answered on meta-MCP-backed /mcp/{slug} endpoints.
+	// The surface is greenfield with no installed client base, so it serves
+	// the current revision and is the first Gram surface to do so; raising
+	// the older surfaces stays a separate compatibility decision.
+	ServedMetaServer = Version20260728
 )
 
 // HTTPHeader is the header MCP clients stamp on every request once the

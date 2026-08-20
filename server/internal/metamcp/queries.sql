@@ -32,6 +32,16 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetMetaMCPServerByIDAndProjectID :one
+-- Project-scoped lookup for the public endpoint resolution path, which
+-- holds an mcp_endpoints row (and so a trusted project id) but no
+-- organization context.
+SELECT *
+FROM meta_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: LockMetaMCPServer :one
 SELECT *
 FROM meta_mcp_servers

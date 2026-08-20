@@ -277,7 +277,7 @@ func TestListMcpEndpoints_RejectsBothFilters(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
-func TestBySlugAndCustomDomain_RejectsMetaBackedEndpoint(t *testing.T) {
+func TestBySlugAndCustomDomain_ResolvesMetaBackedEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -299,6 +299,10 @@ func TestBySlugAndCustomDomain_RejectsMetaBackedEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, _, err = mcpendpoints.BySlugAndCustomDomain(ctx, ti.conn, testenv.NewLogger(t), slug)
-	requireOopsCode(t, err, oops.CodeNotFound)
+	endpoint, server, meta, err := mcpendpoints.BySlugAndCustomDomain(ctx, ti.conn, testenv.NewLogger(t), slug)
+	require.NoError(t, err)
+	require.Nil(t, server, "meta-backed endpoints resolve with no generic server")
+	require.NotNil(t, meta)
+	require.Equal(t, metaID, meta.ID)
+	require.Equal(t, slug, endpoint.Slug)
 }
