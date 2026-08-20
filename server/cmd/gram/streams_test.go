@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func (b *blockingPublisherStopper) Stop(ctx context.Context) error {
 	case <-b.release:
 		return b.err
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("wait to release publisher stop: %w", ctx.Err())
 	}
 }
 
