@@ -1468,23 +1468,24 @@ type OrganizationMcpCollectionServerAttachment struct {
 }
 
 type OrganizationMetadatum struct {
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	ID                          string
+	Name                        string
+	Slug                        string
+	GramAccountType             string
+	WorkosID                    pgtype.Text
+	WorkosUpdatedAt             pgtype.Timestamptz
+	WorkosLastEventID           pgtype.Text
+	SvixAppID                   pgtype.Text
+	WebhooksEnabled             pgtype.Bool
+	Whitelisted                 bool
+	FreeTrialStartedAt          pgtype.Timestamptz
+	FreeTrialEndsAt             pgtype.Timestamptz
+	ScimEnabled                 pgtype.Bool
+	SsoEnabled                  pgtype.Bool
+	SessionQuarantineFailClosed bool
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DisabledAt                  pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
@@ -2291,6 +2292,21 @@ type SessionHandoffLink struct {
 	ConsumedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type SessionQuarantine struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ReleasedAt     pgtype.Timestamptz
+	ReleasedBy     pgtype.Text
 }
 
 type Skill struct {
