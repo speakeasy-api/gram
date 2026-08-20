@@ -31,6 +31,9 @@ type AddVersionRequestBody struct {
 	Content string `form:"content" json:"content" xml:"content"`
 	// The optional source version this new version was derived from.
 	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // RestoreVersionRequestBody is the type of the "skills" service
@@ -55,6 +58,9 @@ type UpdateRequestBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Registry tags for categorizing the skill. At most 40 tags.
 	Tags []string `form:"tags" json:"tags" xml:"tags"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // TriggerSuggestionRequestBody is the type of the "skills" service
@@ -4963,9 +4969,10 @@ func NewCreateRequestBody(p *skills.CreatePayload) *CreateRequestBody {
 // the "addVersion" endpoint of the "skills" service.
 func NewAddVersionRequestBody(p *skills.AddVersionPayload) *AddVersionRequestBody {
 	body := &AddVersionRequestBody{
-		ID:                   p.ID,
-		Content:              p.Content,
-		DerivedFromVersionID: p.DerivedFromVersionID,
+		ID:                      p.ID,
+		Content:                 p.Content,
+		DerivedFromVersionID:    p.DerivedFromVersionID,
+		ExpectedLatestVersionID: p.ExpectedLatestVersionID,
 	}
 	return body
 }
@@ -4984,10 +4991,11 @@ func NewRestoreVersionRequestBody(p *skills.RestoreVersionPayload) *RestoreVersi
 // "update" endpoint of the "skills" service.
 func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
 	body := &UpdateRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		DisplayName: p.DisplayName,
-		Summary:     p.Summary,
+		ID:                      p.ID,
+		Name:                    p.Name,
+		DisplayName:             p.DisplayName,
+		Summary:                 p.Summary,
+		ExpectedLatestVersionID: p.ExpectedLatestVersionID,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))

@@ -1547,6 +1547,7 @@ func newStartCommand() *cli.Command {
 				RemoteChallengeManager: remoteChallengeManager,
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
+				Skills:                 skillsService,
 				LocalFixture:           platformFixture,
 			})
 			if err != nil {

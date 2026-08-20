@@ -63,6 +63,7 @@ type platformMCPConfig struct {
 	RemoteChallengeManager *remotesessions.ChallengeManager
 	AuditLogger            *audit.Logger
 	PluginPublisher        *plugins.Service
+	Skills                 platformmcp.SkillsManagement
 	LocalFixture           *platformMCPLocalFixtureConfig
 }
 
@@ -180,6 +181,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -217,6 +219,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/revoke", fixtureOAuth.Handler().ServeHTTP)
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", fixtureMCP.Handler().ServeHTTP)
 
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -235,6 +238,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
+		skillAuthoring,
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -368,6 +372,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -414,6 +419,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			return err
 		},
 	)
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -429,6 +435,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
+		skillAuthoring,
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)

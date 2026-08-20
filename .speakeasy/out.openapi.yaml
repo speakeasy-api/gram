@@ -58054,6 +58054,10 @@ components:
           type: string
           description: The optional source version this new version was derived from.
           format: uuid
+        expected_latest_version_id:
+          type: string
+          description: The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
+          format: uuid
         id:
           type: string
           description: The skill ID.
@@ -80561,6 +80565,10 @@ components:
           type: string
           description: The user-facing skill name.
           maxLength: 256
+        expected_latest_version_id:
+          type: string
+          description: The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
+          format: uuid
         id:
           type: string
           description: The skill ID.

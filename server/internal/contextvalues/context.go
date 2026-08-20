@@ -173,6 +173,13 @@ func GetOAuthClientID(ctx context.Context) (string, bool) {
 // to depend on the audit package. Audit accepts only the values on its own
 // allowlist, so an unrecognized one records an unknown surface rather than
 // widening what the column can hold.
+// ActingSurfacePlatformMCP marks a call arriving through the OAuth-authenticated
+// Platform MCP endpoint. It is named here rather than only in that package
+// because authorization has to recognize the surface: a Platform MCP call
+// carries a real user but no browser session, and the session is what tells
+// RBAC to enforce for every other human-driven surface.
+const ActingSurfacePlatformMCP = "platform_mcp"
+
 func SetActingSurface(ctx context.Context, value string) context.Context {
 	return context.WithValue(ctx, actingSurfaceContextKey, value)
 }
