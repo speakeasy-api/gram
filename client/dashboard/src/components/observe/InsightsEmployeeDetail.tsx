@@ -29,7 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -1064,7 +1064,7 @@ function DataFlowNodeVisual({
   if (node.tier === "client" && !isSummary) {
     return (
       <span className="border-border bg-background inline-flex size-7 items-center justify-center border">
-        <HookSourceIcon source={node.label} className="size-4" />
+        <AgentProviderIcon source={node.label} className="size-4" />
       </span>
     );
   }

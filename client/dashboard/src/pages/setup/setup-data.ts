@@ -1,13 +1,18 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+import {
+  AGENT_PROVIDERS,
+  ACTIVE_AGENT_PROVIDER_IDS,
+  COMING_SOON_AGENT_PROVIDER_IDS,
+  type AgentProviderId,
+} from "@/components/agent-providers/agent-providers";
 import type { AgentPlatform } from "./types";
 
-export const AGENT_PLATFORMS: AgentPlatform[] = [
+const SETUP_AGENT_PLATFORMS: Array<{
+  id: AgentProviderId;
+  setupSteps: AgentPlatform["setupSteps"];
+}> = [
   {
     id: "claude",
-    name: "Claude Code",
-    description: "Anthropic CLI & IDE agent",
-    icon: "claude",
-    connected: false,
     setupSteps: [
       {
         title: "Plan check",
@@ -80,10 +85,6 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   },
   {
     id: "claude-cowork",
-    name: "Claude Cowork",
-    description: "Autonomous AI desktop assistant",
-    icon: "claude",
-    connected: false,
     setupSteps: [
       {
         title: "Open Organization settings on Claude.ai",
@@ -139,10 +140,6 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   },
   {
     id: "codex",
-    name: "OpenAI Codex",
-    description: "Codex CLI & Codex mode in the ChatGPT app",
-    icon: "codex",
-    connected: false,
     setupSteps: [
       {
         title: "Deploy the Speakeasy device agent via MDM",
@@ -175,10 +172,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
   },
   {
     id: "cursor",
-    name: "Cursor",
-    description: "AI-powered code editor",
-    icon: "cursor",
-    connected: false,
     setupSteps: [
       {
         title: "Open your Cursor team dashboard",
@@ -208,10 +201,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
   },
   {
     id: "opencode",
-    name: "opencode",
-    description: "Open-source terminal coding agent",
-    icon: "opencode",
-    connected: false,
     setupSteps: [
       {
         title: "Install the speakeasy-hooks binary",
@@ -231,49 +220,33 @@ speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug
       },
     ],
   },
-  {
-    id: "copilot",
-    name: "GitHub Copilot",
-    description: "Microsoft / GitHub AI pair programmer",
-    icon: "copilot",
+];
+
+function toAgentPlatform(
+  id: AgentProviderId,
+  setupSteps: AgentPlatform["setupSteps"],
+  available = true,
+): AgentPlatform {
+  const provider = AGENT_PROVIDERS[id];
+  return {
+    id,
+    name: provider.name,
+    description: provider.description,
+    icon: provider.iconSource,
     connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "gemini",
-    name: "Gemini",
-    description: "Google's coding assistant",
-    icon: "gemini",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "glean",
-    name: "Glean",
-    description: "Enterprise work assistant",
-    icon: "glean",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "devin",
-    name: "Devin",
-    description: "Cognition's autonomous software engineer",
-    icon: "devin",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "mistral",
-    name: "Mistral",
-    description: "Mistral AI coding assistant",
-    icon: "mistral",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
+    available,
+    setupSteps,
+  };
+}
+
+export const AGENT_PLATFORMS: AgentPlatform[] = [
+  ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
+    toAgentPlatform(
+      id,
+      SETUP_AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps,
+    ),
+  ),
+  ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
+    toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
+  ),
 ];

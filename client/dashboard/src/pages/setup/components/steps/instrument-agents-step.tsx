@@ -3,7 +3,7 @@ import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { platformStatusBadge } from "../platform-status-badge";
@@ -107,8 +107,8 @@ export function InstrumentAgentsStep({
                       className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                     >
                       <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
-                        <HookSourceIcon
-                          source={platform.id}
+                        <AgentProviderIcon
+                          source={platform.icon}
                           className="h-4 w-4"
                         />
                       </div>

@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
@@ -409,7 +409,7 @@ export function ChatLogsTable({
                         <>
                           <span className="text-muted-foreground/40">·</span>
                           <span className="inline-flex items-center gap-1.5">
-                            <HookSourceIcon
+                            <AgentProviderIcon
                               source={source}
                               className="size-3.5"
                             />
