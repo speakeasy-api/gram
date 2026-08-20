@@ -15,7 +15,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const meterSpanEnricherDuration = "gram.otel_span_enricher.duration"
+const (
+	meterSpanEnricherDuration = "gram.otel_span_enricher.duration"
+	otlpTraceIDSize           = 16
+	otlpSpanIDSize            = 8
+)
 
 type SpanEnricher interface {
 	Name() string
@@ -93,8 +97,14 @@ func validateSpan(span spanLike) error {
 	if len(span.GetTraceId()) == 0 {
 		return oops.E(oops.CodeBadRequest, nil, "span trace_id is empty")
 	}
+	if len(span.GetTraceId()) != otlpTraceIDSize {
+		return oops.E(oops.CodeBadRequest, nil, "span trace_id must be %d bytes", otlpTraceIDSize)
+	}
 	if len(span.GetSpanId()) == 0 {
 		return oops.E(oops.CodeBadRequest, nil, "span span_id is empty")
+	}
+	if len(span.GetSpanId()) != otlpSpanIDSize {
+		return oops.E(oops.CodeBadRequest, nil, "span span_id must be %d bytes", otlpSpanIDSize)
 	}
 	if len(span.GetName()) == 0 || strings.TrimSpace(span.GetName()) == "" {
 		return oops.E(oops.CodeBadRequest, nil, "span name is empty")

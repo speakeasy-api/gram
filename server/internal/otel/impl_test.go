@@ -35,15 +35,17 @@ func TestTracesRejectsInvalidExportBeforePublishing(t *testing.T) {
 	t.Parallel()
 
 	validSpan := &tracev1.Span{
-		TraceId:           []byte{1},
-		SpanId:            []byte{2},
+		TraceId:           make([]byte, 16),
+		SpanId:            make([]byte, 8),
 		Name:              "valid",
 		StartTimeUnixNano: 1,
 		EndTimeUnixNano:   2,
 	}
+	validSpan.TraceId[0] = 1
+	validSpan.SpanId[0] = 2
 	invalidSpan, ok := proto.Clone(validSpan).(*tracev1.Span)
 	require.True(t, ok)
-	invalidSpan.TraceId = nil
+	invalidSpan.TraceId = make([]byte, 15)
 	invalidSpan.Name = "invalid"
 	request := &collectortracev1.ExportTraceServiceRequest{
 		ResourceSpans: []*tracev1.ResourceSpans{{
