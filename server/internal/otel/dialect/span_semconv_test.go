@@ -86,3 +86,35 @@ func TestSemconvSpanReadsStructuredOutputMessages(t *testing.T) {
 	require.Equal(t, key, contentKey)
 	require.Equal(t, textOutputMessages("completed the task"), content)
 }
+
+func TestSemconvSpanSkipsPlainTextInputMessages(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			stringAttribute("gen_ai.input.messages", "plain text prompt"),
+		},
+	}).Build()
+
+	contentKey, content, err := (SemconvSpan{}).InputContent(span)
+
+	require.NoError(t, err)
+	require.Empty(t, contentKey)
+	require.Nil(t, content)
+}
+
+func TestSemconvSpanSkipsNonArrayOutputMessages(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			stringAttribute("gen_ai.output.messages", `{"role":"assistant"}`),
+		},
+	}).Build()
+
+	contentKey, content, err := (SemconvSpan{}).OutputContent(span)
+
+	require.NoError(t, err)
+	require.Empty(t, contentKey)
+	require.Nil(t, content)
+}

@@ -100,3 +100,18 @@ func spanStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
 		}).Build(),
 	}).Build()
 }
+
+func TestEnrichSpeakeasyTokensSkipsMalformedSemconvContent(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanStringAttribute("gen_ai.input.messages", "plain text prompt"),
+		},
+	}).Build()
+
+	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+
+	require.NoError(t, err)
+	require.Nil(t, got)
+}

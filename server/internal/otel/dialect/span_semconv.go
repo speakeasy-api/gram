@@ -1,9 +1,8 @@
 package dialect
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
-
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
@@ -39,15 +38,20 @@ func semconvContent[T any](span *otelv1.InboundSpan, desired string) (string, T,
 			var err error
 			encoded, err = json.Marshal(semconvAnyValue(value))
 			if err != nil {
-				return "", zero, fmt.Errorf("marshal structured %s: %w", desired, err)
+				continue
 			}
 		default:
 			continue
 		}
 
+		encoded = bytes.TrimSpace(encoded)
+		if len(encoded) == 0 || encoded[0] != '[' {
+			continue
+		}
+
 		var messages T
 		if err := json.Unmarshal(encoded, &messages); err != nil {
-			return "", zero, fmt.Errorf("decode %s: %w", desired, err)
+			continue
 		}
 
 		return desired, messages, nil
