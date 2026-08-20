@@ -56,6 +56,13 @@ suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
 
+# The LGTM stack is shared across every worktree (compose.shared.yml), so all of
+# their traces and metrics land in one Tempo/Prometheus. Tagging each worktree's
+# telemetry with its compose project is what keeps those signals apart — without
+# it, two worktrees on the same commit emit identical Prometheus series. The
+# OTel SDK reads this env var directly, so nothing in the Go code has to know.
+mise set --file mise.local.toml "OTEL_RESOURCE_ATTRIBUTES=worktree=${compose_project}"
+
 remap=$(mise run zero:remap-ports --format flat --file -)
 for line in $remap; do
   key="${line%%=*}"

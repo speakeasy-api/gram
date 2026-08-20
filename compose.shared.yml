@@ -6,10 +6,15 @@
 # a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
 # by compose.yml.
 #
-# (LGTM/OTel-collector are intentionally NOT shared: their signals
-# would collide across worktrees — same-commit worktrees emit identical
-# Prometheus series and intermixed traces — so they stay per-worktree in
-# compose.yml.)
+# The LGTM observability stack lives here for the same reason. It used to be
+# per-worktree, on the grounds that same-commit worktrees emit identical
+# Prometheus series and intermixed traces. That is true only while the signals
+# are indistinguishable — so instead of paying ~560 MB per worktree for a second
+# copy (the single most expensive container in the stack, and the main reason
+# several concurrent worktrees exhausted host memory), every worktree now tags
+# its telemetry with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
+# `git:workinit` writes that; `mise.toml` holds the main tree's default. Filter
+# by the `worktree` label in Grafana to get one worktree's signals back.
 #
 # Always manage this file with an explicit fixed project so a worktree's
 # COMPOSE_PROJECT_NAME cannot fork it into a second copy:
@@ -47,3 +52,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Tempo only makes a trace searchable once it has idled the trace out and cut
+  # a block — seconds to a minute. Lookup by trace ID is immediate.
+  lgtm:
+    image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
+    restart: unless-stopped
+    ports:
+      - "13000:3000" # Grafana UI
+      - "13200:3200" # Tempo HTTP API
+      - "13100:3100" # Loki HTTP API
+      - "9099:9090" # Prometheus UI/API
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+    volumes:
+      # Runs as root, so wipe this from inside the container rather than sudo:
+      # docker compose -f compose.shared.yml -p gram-shared exec lgtm \
+      #   sh -c 'rm -rf /data/*'
+      #
+      # A named volume, not ./local/lgtm: this stack is started by whichever
+      # worktree happens to run infra:start first, so a relative bind mount
+      # would put the data wherever that tree is — letting which worktree
+      # booted the machine silently decide where everyone's telemetry lives.
+      - lgtm_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  lgtm_data:
+    driver: local

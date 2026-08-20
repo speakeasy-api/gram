@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -11,11 +11,25 @@ import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRul
 import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
+import {
+  expireRestoredAfter,
+  getRestoredFindings,
+  holdRestored,
+  releaseRestored,
+  subscribeRestoredFindings,
+} from "./restored-findings-store";
 
 // Mirrors maxFalsePositiveBatch in server/internal/risk/false_positive.go — a
 // selection larger than the server's per-request cap is split into
 // sequential requests here rather than surfaced as a hard UI limit.
 const MAX_BATCH = 500;
+
+// How long a restored id stays hidden from the suppressed listing once its
+// write has landed. That listing is served from the ClickHouse mirror, which
+// lags the write by seconds, so the row can come back on the very refetch the
+// restore triggers. The window only has to outlast that lag; it expires on its
+// own so an id can never be hidden indefinitely.
+export const RESTORE_HIDE_MS = 60_000;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -47,32 +61,56 @@ async function runBatched(
   return { succeededIds, failedIds };
 }
 
-/** Bulk/single mark-false-positive with optimistic hide + undo toast, shared
- * by the risk overview category table, the risk events log, and the chat
- * session risk popover. Real mutations, not the AIS-321 UX-demo store: a
- * dismiss removes the result from every listRiskResults-backed surface
- * server-side, so this hook only needs to bridge the gap between "mutation
- * fired" and "the list query has refetched without it". */
+/** Bulk/single suppression with optimistic hide + undo toast, shared by the
+ * risk overview category table, the risk events log, and the chat session
+ * risk popover. Real mutations, not the AIS-321 UX-demo store: suppressing a
+ * finding removes it from every listRiskResults-backed surface server-side,
+ * so this hook only needs to bridge the gap between "mutation fired" and "the
+ * list query has refetched without it".
+ *
+ * `restore` is the same unmark call reached from the other direction — the
+ * Watchdog's Suppressed section, where the finding is already hidden and the
+ * user is putting it back — so it reports as a first-class action rather than
+ * as an undo of something that just happened. It resolves to whether anything
+ * actually came back, so a caller showing the finding (the suppressed-finding
+ * drawer) can close only once the restore landed. */
 export function useDismissFinding(): {
   dismiss: (results: RiskResult[], reason?: string) => void;
+  restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
+  /** Ids hidden from the suppressed listing because a restore is in flight or
+   * has landed ahead of the mirror. Shared across every hook instance (see
+   * restored-findings-store): held for the whole request, then expiring
+   * RESTORE_HIDE_MS after it lands, or immediately if the finding is
+   * suppressed again from anywhere. */
+  optimisticallyRestoredIds: ReadonlySet<string>;
 } {
   const queryClient = useQueryClient();
   const [optimistic, setOptimistic] = useState<Set<string>>(new Set());
+  // The mirror image of `optimistic`, and deliberately kept apart from it: an
+  // id in `optimistic` is hidden from the surfaces that list *live* findings,
+  // while an id here is hidden from the one surface that lists *suppressed*
+  // ones. Folding them together would make a restore hide the finding from the
+  // active listings it is on its way back into. This half is module-scoped so
+  // every hook instance agrees on it — see restored-findings-store.
+  const optimisticallyRestoredIds = useSyncExternalStore(
+    subscribeRestoredFindings,
+    getRestoredFindings,
+    getRestoredFindings,
+  );
 
   const markMutation = useRiskMarkResultsFalsePositiveMutation();
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation();
 
   const invalidateLists = useCallback(() => {
-    // RiskEvents.tsx, RiskOverviewCategoryDetail.tsx, and DismissedFindingsTab.tsx
-    // each query results directly via useInfiniteQuery (not a generated hook),
-    // under their own queryKey under this shared ["risk", "results", ...]
-    // prefix (e.g. ["risk","results","list"], ["risk","results","list-dismissed"]).
-    // Invalidate the whole prefix rather than each exact key — a dismiss from
-    // one surface (e.g. Risk Events) must be reflected on every other surface
-    // (e.g. the Dismissed tab), and matching each new custom key one-by-one
-    // here is exactly the kind of thing that's easy to add a surface and
-    // forget to wire up.
+    // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
+    // directly via useInfiniteQuery (not a generated hook), under their own
+    // queryKey under this shared ["risk", "results", ...] prefix (e.g.
+    // ["risk","results","list"]). Invalidate the whole prefix rather than each
+    // exact key — suppressing from one surface (e.g. Risk Events) must be
+    // reflected on every other surface, and matching each new custom key
+    // one-by-one here is exactly the kind of thing that's easy to add a
+    // surface and forget to wire up.
     void queryClient.invalidateQueries({
       queryKey: ["risk", "results"],
     });
@@ -110,29 +148,67 @@ export function useDismissFinding(): {
     });
   }, []);
 
-  const undo = useCallback(
-    (ids: string[]) => {
-      removeOptimistic(ids);
-      void runBatched(ids, (batchIds) =>
+  const unsuppress = useCallback(
+    (ids: string[]) =>
+      runBatched(ids, (batchIds) =>
         unmarkMutation.mutateAsync({
           request: {
             unmarkRiskResultsFalsePositiveRequestBody: { resultIds: batchIds },
           },
         }),
-      ).then(({ succeededIds, failedIds }) => {
+      ),
+    [unmarkMutation],
+  );
+
+  const undo = useCallback(
+    (ids: string[]) => {
+      removeOptimistic(ids);
+      void unsuppress(ids).then(({ succeededIds, failedIds }) => {
         if (succeededIds.length > 0) {
           invalidateLists();
         }
         if (failedIds.length > 0) {
-          // Put the failed ids back: the mark stayed in effect server-side,
-          // so the optimistic hide must too, or the row would look restored
-          // while still dismissed.
+          // Put the failed ids back: the suppression stayed in effect
+          // server-side, so the optimistic hide must too, or the row would
+          // look restored while still suppressed.
           addOptimistic(failedIds);
-          toast.error("Failed to undo — the finding is still dismissed.");
+          toast.error("Failed to undo — the finding is still suppressed.");
         }
       });
     },
-    [unmarkMutation, invalidateLists, removeOptimistic, addOptimistic],
+    [unsuppress, invalidateLists, removeOptimistic, addOptimistic],
+  );
+
+  const restore = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      if (ids.length === 0) return false;
+      // Hide the rows before the request goes out. The suppressed listing is
+      // served from the ClickHouse mirror, which lags the write, so the
+      // refetch this restore triggers can still come back carrying the rows
+      // that were just restored — without this they would reappear and stay
+      // until some later refetch happened to land after the mirror caught up.
+      holdRestored(ids);
+      const { succeededIds, failedIds } = await unsuppress(ids);
+      if (succeededIds.length > 0) {
+        invalidateLists();
+        // The clock starts here, not when the request went out: a request that
+        // outlasts the window would otherwise have burned it before the write
+        // ever landed, un-hiding a row the mirror is still serving.
+        expireRestoredAfter(succeededIds, RESTORE_HIDE_MS);
+        toast.success(
+          `Restored ${succeededIds.length} ${succeededIds.length === 1 ? "finding" : "findings"}`,
+        );
+      }
+      if (failedIds.length > 0) {
+        // Still suppressed server-side, so the row belongs back on the list.
+        releaseRestored(failedIds);
+        toast.error(
+          `Failed to restore ${failedIds.length} ${failedIds.length === 1 ? "finding" : "findings"}.`,
+        );
+      }
+      return succeededIds.length > 0;
+    },
+    [unsuppress, invalidateLists],
   );
 
   const dismiss = useCallback(
@@ -140,6 +216,11 @@ export function useDismissFinding(): {
       const ids = results.map((r) => r.id);
       if (ids.length === 0) return;
       addOptimistic(ids);
+      // Suppressing a finding that was restored earlier in this session ends
+      // the restore's claim on it: it belongs back on the suppressed listing
+      // now, whichever surface did the restoring and whatever expiry is still
+      // pending for it.
+      releaseRestored(ids);
 
       void runBatched(ids, (batchIds) =>
         markMutation.mutateAsync({
@@ -154,16 +235,17 @@ export function useDismissFinding(): {
         if (failedIds.length > 0) {
           removeOptimistic(failedIds);
           toast.error(
-            `Failed to mark ${failedIds.length} finding${failedIds.length === 1 ? "" : "s"} as false positive.`,
+            `Failed to suppress ${failedIds.length} finding${failedIds.length === 1 ? "" : "s"}.`,
           );
         }
         if (succeededIds.length > 0) {
           invalidateLists();
-          // Undo only becomes available once the mark has actually
+          // Undo only becomes available once the suppression has actually
           // succeeded — offering it earlier would let an immediate click
-          // race the outstanding mark request.
-          showUndoToast(`Marked ${succeededIds.length} as false positive`, () =>
-            undo(succeededIds),
+          // race the outstanding request.
+          showUndoToast(
+            `Suppressed ${succeededIds.length} ${succeededIds.length === 1 ? "finding" : "findings"}`,
+            () => undo(succeededIds),
           );
         }
       });
@@ -178,6 +260,8 @@ export function useDismissFinding(): {
 
   return {
     dismiss,
+    restore,
     isOptimisticallyDismissed,
+    optimisticallyRestoredIds,
   };
 }

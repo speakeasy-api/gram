@@ -1,47 +1,63 @@
 ---
 name: grafana-lgtm
-description: Use when inspecting OpenTelemetry traces or metrics that gram-server, gram-worker or pystreams emitted during local development — confirming an endpoint is instrumented, finding the slow or failing span after hitting a local route, proving a request propagated from server into a Temporal activity, or checking a local counter/histogram. Also use when a local trace search comes back empty, a metric looks missing from Prometheus, or results look like they came from the wrong worktree. Triggers — "check the trace", "did that get instrumented", "why is this slow locally", "what did the worker do", TraceQL, Tempo, Grafana, LGTM, spanmetrics, `mise run open:grafana`, GRAFANA_PORT / TEMPO_HTTP_PORT / PROMETHEUS_PORT, and any local trace or metric lookup that returns 404 or an empty result.
+description: Use when inspecting OpenTelemetry traces or metrics that gram-server, gram-worker or pystreams emitted during local development — confirming an endpoint is instrumented, finding the slow or failing span after hitting a local route, proving a request propagated from server into a Temporal activity, or checking a local counter/histogram. Also use when a local trace search comes back empty, a metric looks missing from Prometheus, or results look like they came from the wrong worktree (every worktree now shares one LGTM, so unfiltered queries return everyone's data). Triggers — "check the trace", "did that get instrumented", "why is this slow locally", "what did the worker do", TraceQL, Tempo, Grafana, LGTM, spanmetrics, `mise run open:grafana`, GRAFANA_PORT / TEMPO_HTTP_PORT / PROMETHEUS_PORT, and any local trace or metric lookup that returns 404 or an empty result.
 ---
 
 # Local traces and metrics
 
-One `lgtm` compose service (`grafana/otel-lgtm`) runs Grafana, Tempo and Prometheus together. Query it over HTTP with `curl` — the UI is for humans, the APIs are for you.
+One `lgtm` container (`grafana/otel-lgtm`) runs Grafana, Tempo and Prometheus together. Query it over HTTP with `curl` — the UI is for humans, the APIs are for you.
 
 ```
-gram-server / gram-worker → OTLP gRPC :$OTLP_GRPC_PORT → otel-collector → lgtm:4317
-                                                                          ├→ Tempo      (traces)
-                                                                          └→ Prometheus (metrics)
+every worktree's gram-server / gram-worker
+  → OTLP gRPC localhost:4317 → gram-shared-lgtm-1 ├→ Tempo      (traces)
+                                                  └→ Prometheus (metrics)
 ```
 
-`mise run infra:start` brings it up. Logs and profiles are not wired into it — application logs go to stdout, so reach for `pitchfork logs` instead.
+**It is shared across every worktree**, declared in `compose.shared.yml` under the fixed project `gram-shared` — not in the per-worktree `compose.yml`. One copy serves the whole machine, so its ports are the same everywhere and are never remapped. `mise run infra:start` asserts it (idempotently) from whichever worktree runs first.
 
-## Resolve ports first
+Logs and profiles are not wired into it — application logs go to stdout, so reach for `pitchfork logs` instead.
 
-Several worktrees run their own stack at once, and agents have come one command away from reporting another worktree's data as this one's. Ports are remapped per worktree, and a shell started before a `mise.toml` change carries stale values, so `echo $TEMPO_HTTP_PORT` can print nothing. `mise env` is the authority:
+## Filter by worktree, always
+
+**Every worktree's signals land in the same Tempo and the same Prometheus.** An unfiltered query returns every worktree's data mixed together, and two worktrees on the same commit produce identical span and series names — so an unfiltered result that looks like yours may not be. This is the single most likely way to report the wrong answer here.
+
+What separates them is the `worktree` resource attribute, set from `OTEL_RESOURCE_ATTRIBUTES` in `mise.local.toml` (written by `git:workinit`; the main working tree uses `worktree=main` from `mise.toml`). Get your own value, then filter every query with it:
 
 ```bash
-eval "$(mise env)"
+eval "$(mise env)"                       # authority; a stale shell may have none of these
 TEMPO="http://localhost:$TEMPO_HTTP_PORT"
 PROM="http://localhost:$PROMETHEUS_PORT"
+WT="${OTEL_RESOURCE_ATTRIBUTES#worktree=}"   # e.g. gram-infra-ab12
+```
+
+In TraceQL that is a `resource.worktree` matcher; in PromQL a `worktree` label:
+
+```bash
+curl -s --get "$TEMPO/api/search" \
+  --data-urlencode "q={resource.worktree=\"$WT\"}" \
+  --data-urlencode "start=$S" --data-urlencode "end=$E"
 ```
 
 Grafana UI: `mise run open:grafana`, or `http://localhost:$GRAFANA_PORT` (anonymous admin, no login).
 
-Those ports identify your stack, and `docker ps --filter "publish=$PROMETHEUS_PORT"` names the container behind one (`gram-infra-<slug>-lgtm-1`) when you need to be certain. Daemon state is a separate question — `pitchfork list` tells you whether an emitter is _currently_ running, which explains stale data, but signals nothing about whose data is in Tempo. Traces already ingested stay queryable long after the process that produced them stops, and a stopped daemon prints as `available`, which reads like "fine" at a glance.
+Ports no longer identify a stack — they are the same for everyone, and the container behind them is always `gram-shared-lgtm-1`. Daemon state is a separate question — `pitchfork list` tells you whether an emitter is _currently_ running, which explains stale data, but signals nothing about whose data is in Tempo. Traces already ingested stay queryable long after the process that produced them stops, and a stopped daemon prints as `available`, which reads like "fine" at a glance.
+
+If a search returns nothing, check that you are filtering on a worktree that actually reported (see the table) before assuming the code is uninstrumented.
 
 ## Quick reference
 
 Several of these take a time window; define it once — `S=$(( $(date +%s) - 3600 )); E=$(( $(date +%s) + 60 ))`.
 
-| Goal                         | Command                                                                                                                                                                 |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Which services are reporting | `curl -s --get "$TEMPO/api/v2/search/tag/resource.service.name/values" --data-urlencode "start=$S" --data-urlencode "end=$E"`                                           |
-| Which spans/routes exist     | `curl -s --get "$TEMPO/api/v2/search/tag/name/values" --data-urlencode 'q={resource.service.name="gram-server"}' --data-urlencode "start=$S" --data-urlencode "end=$E"` |
-| Search traces                | `curl -s --get "$TEMPO/api/search" --data-urlencode 'q={…}' --data-urlencode "start=$S" --data-urlencode "end=$E"`                                                      |
-| One trace, all spans         | `curl -s "$TEMPO/api/v2/traces/<traceID>"`                                                                                                                              |
-| Metric names                 | `curl -s "$PROM/api/v1/label/__name__/values"`                                                                                                                          |
-| Labels on a metric           | `curl -s --get "$PROM/api/v1/series" --data-urlencode 'match[]=<metric>'`                                                                                               |
-| Run PromQL                   | `curl -s --get "$PROM/api/v1/query" --data-urlencode 'query=…'`                                                                                                         |
+| Goal                          | Command                                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which worktrees are reporting | `curl -s --get "$TEMPO/api/v2/search/tag/resource.worktree/values" --data-urlencode "start=$S" --data-urlencode "end=$E"`                                               |
+| Which services are reporting  | `curl -s --get "$TEMPO/api/v2/search/tag/resource.service.name/values" --data-urlencode "start=$S" --data-urlencode "end=$E"`                                           |
+| Which spans/routes exist      | `curl -s --get "$TEMPO/api/v2/search/tag/name/values" --data-urlencode 'q={resource.service.name="gram-server"}' --data-urlencode "start=$S" --data-urlencode "end=$E"` |
+| Search traces                 | `curl -s --get "$TEMPO/api/search" --data-urlencode 'q={…}' --data-urlencode "start=$S" --data-urlencode "end=$E"`                                                      |
+| One trace, all spans          | `curl -s "$TEMPO/api/v2/traces/<traceID>"`                                                                                                                              |
+| Metric names                  | `curl -s "$PROM/api/v1/label/__name__/values"`                                                                                                                          |
+| Labels on a metric            | `curl -s --get "$PROM/api/v1/series" --data-urlencode 'match[]=<metric>'`                                                                                               |
+| Run PromQL                    | `curl -s --get "$PROM/api/v1/query" --data-urlencode 'query=…'`                                                                                                         |
 
 ## Traces — Tempo
 
