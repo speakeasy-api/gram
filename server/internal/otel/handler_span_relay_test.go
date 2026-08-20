@@ -148,6 +148,23 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	}
 }
 
+func TestSpanRelayHandlerMetricRecordersIgnoreUnavailableCounters(t *testing.T) {
+	t.Parallel()
+
+	handler := &SpanRelayHandler{
+		logger:       nil,
+		spansDropped: nil,
+		spansFailed:  nil,
+		relay:        nil,
+	}
+	require.NotPanics(t, func() {
+		handler.recordDroppedSpans(t.Context(), 1, relayReasonInvalid)
+	})
+	require.NotPanics(t, func() {
+		handler.recordFailedSpans(t.Context(), 1, relayReasonNetworkError)
+	})
+}
+
 func TestSpanRelayHandlerCountsInvalidAndMissingDestinationDrops(t *testing.T) {
 	t.Parallel()
 

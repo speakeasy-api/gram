@@ -211,10 +211,18 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 }
 
 func (h *SpanRelayHandler) recordDroppedSpans(ctx context.Context, count int, reason relayReason) {
+	if h.spansDropped == nil {
+		return
+	}
+
 	h.spansDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
 func (h *SpanRelayHandler) recordFailedSpans(ctx context.Context, count int, reason relayReason) {
+	if h.spansFailed == nil {
+		return
+	}
+
 	h.spansFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
