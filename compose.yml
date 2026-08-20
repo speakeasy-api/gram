@@ -1,8 +1,9 @@
 # Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME (and
 # `zero:remap-ports` remaps the host ports) so each worktree gets its own stack
-# — postgres, clickhouse, temporal, observability, etc. — without colliding.
-# The one exception is the stateless Presidio analyzer, which is shared across
-# all worktrees; see compose.shared.yml.
+# — postgres, clickhouse, temporal, etc. — without colliding.
+# Services that hold no per-worktree state live in compose.shared.yml instead
+# and run as a single copy for the whole machine: the Presidio analyzer and the
+# LGTM observability stack.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -95,28 +96,6 @@ services:
       timeout: 30s
       retries: 5
 
-  # Tempo only makes a trace searchable once it has idled the trace out and cut
-  # a block — seconds to a minute. Lookup by trace ID is immediate.
-  lgtm:
-    image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
-    restart: unless-stopped
-    ports:
-      - "${GRAFANA_PORT}:3000" # Grafana UI
-      - "${TEMPO_HTTP_PORT}:3200" # Tempo HTTP API
-      - "${LOKI_HTTP_PORT}:3100" # Loki HTTP API
-      - "${PROMETHEUS_PORT}:9090" # Prometheus UI/API
-      - "${OTLP_GRPC_PORT}:4317" # OTLP gRPC receiver
-      - "${OTLP_HTTP_PORT}:4318" # OTLP HTTP receiver
-    volumes:
-      # Runs as root, so wipe this from inside the container rather than sudo:
-      # docker compose exec lgtm sh -c 'rm -rf /data/*'
-      - ./local/lgtm:/data
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-
   litellm:
     profiles: [litellm]
     image: ghcr.io/berriai/litellm:v1.94.0@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe
@@ -160,6 +139,14 @@ services:
   pubsub-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:573.0.0-emulators@sha256:1b083a6a9647024a98d4f38c2b51906a0f61ca36adcba11672b8933544962efe
     restart: unless-stopped
+    environment:
+      # The emulator is a JVM app (cloud-pubsub-emulator-all.jar) launched with
+      # no -Xmx, so its default max heap is 1/4 of container-visible RAM -- the
+      # whole Docker VM, several GB. An emulator serving one developer never
+      # needs that, and the unbounded ceiling is what makes N worktrees
+      # dangerous. `gcloud beta emulators pubsub start` has no pass-through flag
+      # for JVM options, so set the cap through the JVM's own env var.
+      JAVA_TOOL_OPTIONS: -Xmx128m
     ports:
       - "${PUBSUB_EMULATOR_PORT}:8085"
     command:
