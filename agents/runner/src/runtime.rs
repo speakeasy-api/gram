@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_core::{
-    DataRef, Item, ItemKind, MediaPart, Modality, Part, TextPart, ToolCallPart, ToolOutput,
-    ToolResultPart,
+    CancellationController, DataRef, FinishReason, Item, ItemKind, MediaPart, Modality, Part,
+    TextPart, ToolCallPart, ToolOutput, ToolResultPart,
 };
 use agentkit_loop::{
     Agent, LoopDriver, LoopInterrupt, LoopStep, ModelSession, PromptCacheRequest,
@@ -88,6 +88,11 @@ pub struct ConfiguredThread {
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub tokens: TokenRegistry,
     pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
+    /// Broadcasts user interrupts into the thread's agent loop. Bumping the
+    /// generation cancels whatever checkpoint the turn in flight captured at
+    /// its start; a bump while the thread is idle is inert, because the next
+    /// turn checkpoints the new generation.
+    pub cancellation: CancellationController,
 }
 
 impl ConfiguredThread {
@@ -108,6 +113,19 @@ impl ConfiguredThread {
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
         mark_busy(&self.idle_since);
         Ok(())
+    }
+
+    /// Cancels the turn in flight, if any.
+    ///
+    /// Cooperative rather than abortive: the loop races the model stream and
+    /// each tool call against this signal, so it unwinds through agentkit's own
+    /// cancellation path — the partial assistant text stays in the transcript
+    /// and the turn ends with [`FinishReason::Cancelled`] instead of leaving
+    /// the driver mid-turn. The idle clock is NOT touched here; `run_loop`
+    /// marks the thread idle when the cancelled turn actually finishes, so the
+    /// warm-expiry sweep cannot retire a runtime that is still unwinding.
+    pub fn interrupt(&self) {
+        self.cancellation.interrupt();
     }
 }
 
@@ -165,6 +183,17 @@ pub async fn build_host(
     });
 
     Ok(host)
+}
+
+/// Returns a thread's live state, or `None` when this VM holds none for it.
+///
+/// Deliberately non-bootstrapping, unlike [`ensure_thread`]: callers that only
+/// act on a turn already in flight (the interrupt route) must not bring a
+/// thread up as a side effect of asking about it.
+pub fn lookup_thread(host: &RuntimeHost, thread_id: &str) -> Option<Arc<ConfiguredThread>> {
+    host.threads
+        .get(thread_id)
+        .and_then(|entry| entry.value().get().cloned())
 }
 
 /// Snapshot active threads — used by /state and the eviction sweep.
@@ -417,11 +446,18 @@ async fn spawn_thread(
     .with_source(UnknownToolSource);
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
 
+    // One controller per thread: the interrupt route bumps it, and the loop —
+    // model stream, mutators, and tool rounds alike — checks the handle it was
+    // built with. Scoping it to the thread keeps one user's stop from touching
+    // a sibling thread's turn on the same VM.
+    let cancellation = CancellationController::new();
+
     let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(clipped_source)
         .permissions(permissions)
         .resources(fs_resources)
+        .cancellation(cancellation.handle())
         .observer(TracingReporter::new())
         .transcript(transcript);
 
@@ -507,6 +543,7 @@ async fn spawn_thread(
         task_handle: Mutex::new(Some(task_handle)),
         tokens,
         mcp_cmd_tx,
+        cancellation,
     });
     Ok(configured)
 }
@@ -541,8 +578,17 @@ where
         // stamps every exported span.
         let step_span = tracing::info_span!("agent.step", thread_id = %thread_id);
         match driver.next().instrument(step_span).await? {
-            LoopStep::Finished(_turn) => {
-                if let Some(compactor) = &turn_end_compactor {
+            LoopStep::Finished(turn) => {
+                // A cancelled turn skips turn-end compaction. Compaction is a
+                // model call of its own, and spending one right after the user
+                // asked the assistant to stop both delays the thread going idle
+                // and bakes a half-written turn into the summary the next cold
+                // bootstrap replays. The uncompacted transcript is still
+                // correct — compaction is an optimisation, and the next turn's
+                // end runs it over the same history.
+                if turn.finish_reason == FinishReason::Cancelled {
+                    tracing::info!(thread_id = %thread_id, "turn cancelled by user");
+                } else if let Some(compactor) = &turn_end_compactor {
                     compact_at_turn_end(compactor, &driver).await;
                 }
                 mark_idle(&idle_since);
@@ -786,6 +832,7 @@ mod tests {
             task_handle: Mutex::new(Some(handle)),
             tokens: TokenRegistry::new(""),
             mcp_cmd_tx,
+            cancellation: CancellationController::new(),
         });
         let cell = Arc::new(OnceCell::new());
         cell.set(configured)
@@ -858,6 +905,37 @@ mod tests {
             host.seen.get("other:evt-1").is_some(),
             "unrelated idempotency keys must survive eviction"
         );
+    }
+
+    #[tokio::test]
+    async fn lookup_thread_finds_configured_threads_only() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+
+        assert!(lookup_thread(&host, "T").is_some());
+        assert!(
+            lookup_thread(&host, "missing").is_none(),
+            "an unconfigured thread must not be bootstrapped by a lookup"
+        );
+    }
+
+    #[tokio::test]
+    async fn interrupt_cancels_a_checkpoint_taken_before_it() {
+        let host = empty_host();
+        insert_thread(&host, "T", None);
+        let thread = lookup_thread(&host, "T").expect("thread should be configured");
+
+        // The checkpoint stands in for the one the driver captures at turn
+        // start: it must read as cancelled only after the interrupt lands.
+        let in_flight = thread.cancellation.handle().checkpoint();
+        assert!(!in_flight.is_cancelled());
+
+        thread.interrupt();
+        assert!(in_flight.is_cancelled());
+
+        // A turn that starts after the interrupt checkpoints the new
+        // generation, so a stop never leaks into the next turn.
+        assert!(!thread.cancellation.handle().checkpoint().is_cancelled());
     }
 
     fn image_part(url: &str) -> RunnerContentPart {
