@@ -1,4 +1,3 @@
-import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -6,6 +5,9 @@ import type {
   IssuerDuplicateScope,
   RemoteSessionIssuerDuplicateMatch,
 } from "./useIssuerDuplicatePreflight";
+import { CodeBlock } from "@/components/code";
+import { Card } from "@/components/ui/Card";
+import { InfoIcon } from "lucide-react";
 
 // What reusing the existing record gives the operator instead of adding their
 // own. Phrased as what they gain, because duplicating is a legitimate choice and
@@ -25,9 +27,9 @@ function tierRationale(
 
   switch (match.tier) {
     case "platform-level":
-      return "Curated by Speakeasy and kept up to date centrally, so its metadata and setup documentation are maintained for you.";
+      return "It's curated by Speakeasy and kept up to date centrally, so its metadata and setup documentation are maintained for you.";
     case "organization-level":
-      return "Already available to every project in your organization, so reusing it keeps one record to maintain instead of two.";
+      return "It's already available to every project in your organization, so reusing it keeps one record to maintain instead of two.";
     case "project-specific":
       // A project match reaches the organization surfaces too, where it belongs
       // to some OTHER project and "already configured here" would be false.
@@ -36,23 +38,22 @@ function tierRationale(
       if (match.projectName) {
         return "Consolidating onto one record avoids each project maintaining its own metadata and documentation for the same provider.";
       }
-      return "Already configured here, so a second record would double the metadata and documentation you maintain.";
+      return "It's already configured here, so a second record would double the metadata and documentation you maintain.";
   }
 }
 
-// tierLabel names where a match lives. A project-specific match names the
-// project when the caller was told which one, since "Project" alone is not
-// placeable for an organization administrator looking across many.
-function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
+// tierCopy explains where a matching issuer already exists. A project-specific
+// match names the project when the caller was told which one.
+function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
   switch (match.tier) {
     case "platform-level":
-      return "Platform catalog";
+      return "Speakeasy already has an identity provider for this issuer URL.";
     case "organization-level":
-      return "Organization";
+      return "Your organization already has an identity provider for this issuer URL.";
     case "project-specific":
-      return match.projectName
-        ? `Project ${match.projectName}`
-        : "This project";
+      if (match.projectName)
+        return `Project "${match.projectName}" already has an identity provider for this issuer URL.`;
+      return `This project already has an identity provider for this issuer URL.`;
   }
 }
 
@@ -73,7 +74,7 @@ function otherMatchesSentence(
   others: RemoteSessionIssuerDuplicateMatch[],
 ): string {
   const named = others
-    .map((match) => `${matchDisplayName(match)} (${tierLabel(match)})`)
+    .map((match) => `${matchDisplayName(match)} (${tierCopy(match)})`)
     .join(", ");
 
   if (others.length === 1) {
@@ -133,31 +134,36 @@ export function IssuerDuplicateWarning({
   ].filter(Boolean);
 
   return (
-    <Alert variant="warning" dismissible={false}>
-      <Stack gap={2}>
-        <Text small>
-          <strong>{matchDisplayName(primary)}</strong> ({tierLabel(primary)})
-          already uses this issuer URL. {tierRationale(primary, viewerScope)}
+    <Card className="border border-info-foreground">
+      <div className="flex gap-2 items-center">
+        <InfoIcon className="size-5" />
+        <Text>
+          <strong>Existing Issuer Available</strong>
         </Text>
+      </div>
+      <Text small>{tierCopy(primary)}</Text>
+      <CodeBlock className="text-foreground">
+        {matchDisplayName(primary)}
+      </CodeBlock>
+      <Text small>{tierRationale(primary, viewerScope)}</Text>
 
-        {rest.length > 0 && (
-          <Text muted small>
-            {otherMatchesSentence(rest)}
-          </Text>
-        )}
-
+      {rest.length > 0 && (
         <Text muted small>
-          {viewerScope === "platform"
-            ? "You can still continue if the two entries are meant to differ."
-            : "You can still continue. Add your own record when you need different documentation, branding or scopes than the one above."}
+          {otherMatchesSentence(rest)}
         </Text>
+      )}
 
-        {actions.length > 0 && (
-          <Stack direction="horizontal" gap={2}>
-            {actions}
-          </Stack>
-        )}
-      </Stack>
-    </Alert>
+      <Text muted small>
+        {viewerScope === "platform"
+          ? "You can still continue if the two entries are meant to differ."
+          : "You can still continue. Add your own record when you need different documentation, branding or scopes."}
+      </Text>
+
+      {actions.length > 0 && (
+        <Stack direction="horizontal" gap={2}>
+          {actions}
+        </Stack>
+      )}
+    </Card>
   );
 }

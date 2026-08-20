@@ -53,6 +53,7 @@ import {
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
+import { selectExistingClient } from "./selectExistingClient";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
@@ -235,9 +236,12 @@ export function AttachRemoteIdentityProviderSheet({
   // directly (a brand-new issuer never has clients).
   const clientToggleVisible = attachableClients.length > 0;
   const effectiveClientMode: Mode = clientToggleVisible ? clientMode : "new";
-  const selectedClient = attachableClients.find(
-    (candidate) => candidate.id === selectedClientId,
+  const selectedClient = selectExistingClient(
+    attachableClients,
+    selectedClientId,
+    !isLoadingIssuerClients,
   );
+  const effectiveSelectedClientId = selectedClient?.id ?? "";
 
   // The Session Client section stays hidden until an identity provider is
   // determined — an existing one is picked, or a new one's Issuer URL has been
@@ -331,7 +335,7 @@ export function AttachRemoteIdentityProviderSheet({
         // Attach the picked existing client to this user_session_issuer.
         await client.remoteSessionClients.attachUserSessionIssuer({
           attachUserSessionIssuerForm: {
-            id: selectedClientId,
+            id: effectiveSelectedClientId,
             userSessionIssuerId: issuerId,
           },
         });
@@ -565,7 +569,7 @@ export function AttachRemoteIdentityProviderSheet({
       return false;
     }
     // Session client: attach an existing one, or complete the new-client form.
-    if (effectiveClientMode === "select") return !!selectedClientId;
+    if (effectiveClientMode === "select") return !!effectiveSelectedClientId;
     // Manual requires a client_id; DCR mints one; CIMD needs none.
     if (clientType === "manual" && !clientId.trim()) return false;
     return true;
@@ -575,7 +579,7 @@ export function AttachRemoteIdentityProviderSheet({
     slug,
     issuerUrl,
     effectiveClientMode,
-    selectedClientId,
+    effectiveSelectedClientId,
     clientType,
     clientId,
   ]);
@@ -603,7 +607,7 @@ export function AttachRemoteIdentityProviderSheet({
         {clientToggle}
         <SelectExistingClientFields
           clients={attachableClients}
-          selectedClientId={selectedClientId}
+          selectedClientId={effectiveSelectedClientId}
           onChange={setSelectedClientId}
           selectedClient={selectedClient}
         />
