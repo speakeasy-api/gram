@@ -164,13 +164,18 @@ func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentRep
 	{
 		err = json.Unmarshal([]byte(agentReportSessionMovedBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\",\n      \"target_session_id\": \"aaa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.SessionID) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
 		}
 		if utf8.RuneCountInString(body.TargetHarness) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_harness", body.TargetHarness, utf8.RuneCountInString(body.TargetHarness), 64, false))
+		}
+		if body.TargetSessionID != nil {
+			if utf8.RuneCountInString(*body.TargetSessionID) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_session_id", *body.TargetSessionID, utf8.RuneCountInString(*body.TargetSessionID), 256, false))
+			}
 		}
 		if body.SourceSurface != nil {
 			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
@@ -200,10 +205,11 @@ func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentRep
 		}
 	}
 	v := &agent.ReportSessionMovedPayload{
-		SessionID:     body.SessionID,
-		TargetHarness: body.TargetHarness,
-		SourceSurface: body.SourceSurface,
-		Email:         body.Email,
+		SessionID:       body.SessionID,
+		TargetHarness:   body.TargetHarness,
+		TargetSessionID: body.TargetSessionID,
+		SourceSurface:   body.SourceSurface,
+		Email:           body.Email,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber

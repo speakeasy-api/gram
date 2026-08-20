@@ -263,6 +263,11 @@ type ReportSessionMovedPayload struct {
 	SessionID string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string
+	// Native session id minted for the continuation, when the daemon knows it at
+	// launch time (claude-code targets today; Cursor mints ids server-side so
+	// moves there omit it). Lets Gram link the original session and its
+	// continuation.
+	TargetSessionID *string
 	// Harness the session originated in, as detected by the agent (e.g.
 	// claude-code, codex).
 	SourceSurface *string

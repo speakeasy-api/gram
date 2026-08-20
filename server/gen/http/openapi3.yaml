@@ -12140,6 +12140,117 @@ paths:
             x-speakeasy-react-hook:
                 name: ListChats
                 type: query
+    /rpc/chat.listSessionLinks:
+        get:
+            description: List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.
+            operationId: listChatSessionLinks
+            parameters:
+                - allowEmptyValue: true
+                  description: Chat ids to resolve links for.
+                  in: query
+                  name: chat_ids
+                  required: true
+                  schema:
+                    description: Chat ids to resolve links for.
+                    items:
+                        format: uuid
+                        type: string
+                    maxItems: 100
+                    minItems: 1
+                    type: array
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionLinksResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: listSessionLinks chat
+            tags:
+                - chat
+            x-speakeasy-name-override: listSessionLinks
+            x-speakeasy-react-hook:
+                name: ListChatSessionLinks
+                type: query
     /rpc/chat.listSources:
         get:
             description: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
@@ -61173,6 +61284,54 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+        ChatSessionLink:
+            type: object
+            properties:
+                actor_email:
+                    type: string
+                    description: Email of the person who initiated the move, when known.
+                child_captured:
+                    type: boolean
+                    description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
+                child_chat_id:
+                    type: string
+                    description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
+                    format: uuid
+                child_title:
+                    type: string
+                    description: Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.
+                created_at:
+                    type: string
+                    description: When the move was recorded.
+                    format: date-time
+                device_hostname:
+                    type: string
+                    description: Hostname of the machine the move happened on, when known.
+                kind:
+                    type: string
+                    description: Link kind. Currently always 'move'.
+                parent_captured:
+                    type: boolean
+                    description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
+                parent_chat_id:
+                    type: string
+                    description: Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
+                    format: uuid
+                parent_title:
+                    type: string
+                    description: Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.
+                source_surface:
+                    type: string
+                    description: Harness the session originated in, when known.
+                target_harness:
+                    type: string
+                    description: Harness the session was moved to (e.g. cursor, codex, claude-code).
+            required:
+                - parent_captured
+                - child_captured
+                - kind
+                - target_harness
+                - created_at
         ChatSummary:
             type: object
             properties:
@@ -68622,6 +68781,16 @@ components:
             description: Result type for listing remote MCP servers
             required:
                 - remote_mcp_servers
+        ListSessionLinksResult:
+            type: object
+            properties:
+                links:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatSessionLink'
+                    description: Links touching the requested chats, newest first.
+            required:
+                - links
         ListSessionsPayload:
             type: object
             properties:
@@ -73172,6 +73341,10 @@ components:
                     type: string
                     description: Harness the session was moved to (e.g. cursor, codex, claude-code).
                     maxLength: 64
+                target_session_id:
+                    type: string
+                    description: Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.
+                    maxLength: 256
             required:
                 - session_id
                 - target_harness

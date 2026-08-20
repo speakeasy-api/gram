@@ -1783,3 +1783,46 @@ VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
 -- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
 -- its threads behind).
 UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: ListChatSessionLinks :many
+-- Session-lineage edges touching any of the requested chats, either as the
+-- parent (the session that was moved) or the child (the continuation).
+-- Titles resolve through LEFT JOINs because either end may not be captured
+-- yet — a dangling edge still renders as "moved to <harness>". Visibility
+-- mirrors ListChats: an unrestricted caller (both scope params empty) sees
+-- every edge; a restricted caller sees only edges with at least one end on a
+-- chat their scope can read. Each end's title and captured flag are
+-- additionally masked by that end's own visibility, so owning one end of an
+-- edge never reveals the other end's title to a restricted caller.
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+-- The caller's visibility predicate lives in the JOIN conditions, so an end
+-- the caller cannot read joins as NULL — masking its title and reading as
+-- not-captured — indistinguishable from a not-yet-captured end by design.
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR cc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR cc.user_id = @user_id::text)
+WHERE l.project_id = @project_id
+  AND (l.parent_chat_id = ANY (@chat_ids::uuid[]) OR l.child_chat_id = ANY (@chat_ids::uuid[]))
+  AND (
+    (@external_user_id::text = '' AND @user_id::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC;
