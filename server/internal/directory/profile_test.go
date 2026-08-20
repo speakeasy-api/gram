@@ -8,7 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 )
 
-func TestUserProfileUserAttributes(t *testing.T) {
+func TestUserProfileAttributes(t *testing.T) {
 	t.Parallel()
 
 	profile := directory.UserProfile{RawAttributes: map[string]any{

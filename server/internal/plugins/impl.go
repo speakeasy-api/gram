@@ -1184,10 +1184,10 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, err
 		}
 
-		if _, ok := seenURNs[principal.String()]; ok {
+		if _, ok := seenURNs[principal.URN]; ok {
 			continue
 		}
-		seenURNs[principal.String()] = struct{}{}
+		seenURNs[principal.URN] = struct{}{}
 		principals = append(principals, principal)
 	}
 
@@ -1215,34 +1215,34 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		case pluginAssignmentPrincipalStandard:
 			continue
 		case pluginAssignmentPrincipalDirectoryGroup:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
 				continue
 			}
-			groupID, err := directory.ParseGroupPrincipal(principal.String())
+			groupID, err := directory.ParseGroupPrincipal(principal.URN)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.URN)
 			}
 			exists, err := directoryService.GroupExists(ctx, ac.ActiveOrganizationID, groupID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.URN)
 			}
 		case pluginAssignmentPrincipalDirectoryAttribute:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
 				continue
 			}
-			attribute, err := directory.ParseAttributePrincipal(principal.String())
+			attribute, err := directory.ParseAttributePrincipal(principal.URN)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.URN)
 			}
 			exists, err := directoryService.AttributeValueExists(ctx, ac.ActiveOrganizationID, attribute)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.URN)
 			}
 		}
 	}
@@ -1256,7 +1256,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   principal.String(),
+			PrincipalUrn:   principal.URN,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").LogError(ctx, s.logger)
@@ -1265,7 +1265,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 	principalURNs := make([]string, 0, len(principals))
 	for _, principal := range principals {
-		principalURNs = append(principalURNs, principal.String())
+		principalURNs = append(principalURNs, principal.URN)
 	}
 
 	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{

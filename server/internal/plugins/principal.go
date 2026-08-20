@@ -25,11 +25,7 @@ const (
 type pluginAssignmentPrincipal struct {
 	Type pluginAssignmentPrincipalType
 
-	Identifier string
-}
-
-func (p pluginAssignmentPrincipal) String() string {
-	return p.Identifier
+	URN string
 }
 
 func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db database.DBTX, organizationID string, emails []string) (map[string][]string, error) {
@@ -53,21 +49,21 @@ func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db database
 func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizationID, raw string) (pluginAssignmentPrincipal, error) {
 	switch {
 	case raw == urn.PrincipalWildcard:
-		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, Identifier: raw}, nil
+		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, URN: raw}, nil
 	case directory.IsGroupPrincipal(raw):
 		id, err := directory.ParseGroupPrincipal(raw)
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", raw)
 		}
-		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryGroup, Identifier: directory.GroupPrincipal(id)}, nil
+		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryGroup, URN: directory.GroupPrincipal(id)}, nil
 	case directory.IsAttributePrincipal(raw):
 		attribute, err := directory.ParseAttributePrincipal(raw)
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", raw)
 		}
 		return pluginAssignmentPrincipal{
-			Type:       pluginAssignmentPrincipalDirectoryAttribute,
-			Identifier: directory.AttributePrincipal(attribute.Key, attribute.Value),
+			Type: pluginAssignmentPrincipalDirectoryAttribute,
+			URN:  directory.AttributePrincipal(attribute.Key, attribute.Value),
 		}, nil
 	default:
 		normalized := raw
@@ -79,7 +75,7 @@ func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizati
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
 		}
 		if principal.Type != urn.PrincipalTypeRole {
-			return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, Identifier: principal.String()}, nil
+			return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, URN: principal.String()}, nil
 		}
 		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
 			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
@@ -87,6 +83,6 @@ func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizati
 			}
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
 		}
-		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, Identifier: principal.String()}, nil
+		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, URN: principal.String()}, nil
 	}
 }
