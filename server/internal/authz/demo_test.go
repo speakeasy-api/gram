@@ -64,8 +64,8 @@ func TestPrepareContext_demoOrgIgnoresScopeOverrides(t *testing.T) {
 	authCtx.IsAdmin = true
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	ctx = contextvalues.SetAdminOverrideInContext(ctx, "acme-demo")
-	// A scope override must not narrow a demo session either: the demo branch
-	// runs before both the override and admin-impersonation branches.
+	// The demo branch runs before both the override and admin-impersonation
+	// branches, so an override neither widens nor narrows a demo session.
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)

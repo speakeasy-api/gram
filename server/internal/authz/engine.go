@@ -103,7 +103,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// Sessions in the shared demo org (which has no membership rows) get the
 	// full user-visible grant set. This must precede scope and admin overrides
 	// so the set a demo session holds is always the one access.ListGrants
-	// reports for it.
+	// reports.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return GrantsToContext(ctx, DemoScopeGrants()), nil
 	}

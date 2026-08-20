@@ -171,19 +171,16 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
 2. DONE: `authz.Engine.PrepareContext` gives any demo session
    `authz.DemoScopeGrants()` — every user-visible scope, unrestricted,
    `org:admin` and `environment:read` included — for everyone, including
-   admins with the override cookie. It is deliberately the same set
-   `access.listGrants` reports to the dashboard: when enforcement was narrower
-   than what was advertised, demo pages whose handlers require `org:admin`
-   (Costs, Budgets, Organization API Keys, Device Agent) rendered and then
-   403ed. Visitors can mutate demo data; the daily reseed reverts it.
+   admins with the override cookie. It is the same set `access.listGrants`
+   reports to the dashboard, so no page is offered that its handler then
+   refuses. Visitors can mutate demo data; the daily reseed reverts it.
 3. DONE (commit ae256351c1): transcript block lifted for the demo org in
    `chat.LoadChat` via `constants.DemoOrganizationID`.
 4. DONE: `authz.Engine.ShouldEnforce` forces enforcement for the demo org
-   regardless of its RBAC product feature. There is no write guard: demo
-   sessions hold every user-visible scope and mutations are allowed to land,
-   because the daily `gram demo-seed` run deletes and reinserts the org's data
-   wholesale. Keeping the seed idempotent and scoped is therefore what keeps
-   the demo presentable, not an access control.
+   regardless of its RBAC product feature. Mutations by demo sessions are
+   allowed to land: the daily `gram demo-seed` run deletes and reinserts the
+   org's data wholesale, so the seed staying idempotent and scoped — not an
+   access control — is what keeps the demo presentable.
 5. DONE: `ImpersonationBanner` shows "Demo org — sample data" for any session
    whose active org slug is `acme-demo` (cookie no longer required); exit
    switches back to the user's own org via `auth.switchScopes`. Entry points:

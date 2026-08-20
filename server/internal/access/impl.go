@@ -391,8 +391,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// Sessions in the shared demo org have no membership rows. Return the
 	// full user-visible scope set so every dashboard page is browsable in the
 	// demo (page gates like Costs require org:admin). This is the same set
-	// authz.DemoScopeGrants installs on the request context — reporting more
-	// than enforcement honours is what made demo pages render and then 403.
+	// authz.DemoScopeGrants installs on the request context;
 	// TestDemoGrantsMatchEnforcedScopes holds the two together.
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil

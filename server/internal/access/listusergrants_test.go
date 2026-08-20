@@ -34,10 +34,9 @@ var expectedFullAccessScopes = []string{
 }
 
 // TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
-// dashboard against the set authz.Engine.PrepareContext enforces. They are
-// produced by different functions on the same condition, and when they drifted
-// apart the demo org rendered pages (Costs, Budgets, Organization API Keys)
-// whose handlers then returned 403.
+// dashboard against the set authz.Engine.PrepareContext enforces. Different
+// functions produce them on the same condition, and any drift lets the demo
+// org render pages whose handlers then return 403.
 func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
 	t.Parallel()
 
