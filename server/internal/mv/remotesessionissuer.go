@@ -44,6 +44,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		Oidc:                              row.Oidc,
 		Passthrough:                       row.Passthrough,
 		ClientIDMetadataDocumentSupported: row.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               conv.FromNullableUUID(row.TunneledMcpServerID),
 		CreatedAt:                         row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                         row.UpdatedAt.Time.Format(time.RFC3339),
 	}

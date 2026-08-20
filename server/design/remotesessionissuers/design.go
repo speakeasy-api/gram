@@ -606,6 +606,9 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour. Default false.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer. Default false.")
 	Attribute("client_id_metadata_document_supported", Boolean, "When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.")
+	Attribute("tunneled_mcp_server_id", String, "Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("slug", "issuer")
 })
@@ -640,6 +643,9 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("oidc", Boolean)
 	Attribute("passthrough", Boolean)
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
+	// No FormatUUID: the empty string is the "clear the binding" sentinel and
+	// a format check would reject it before the handler runs.
+	Attribute("tunneled_mcp_server_id", String, "Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.")
 
 	Required("id")
 })
@@ -684,6 +690,9 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
+	Attribute("tunneled_mcp_server_id", String, "When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

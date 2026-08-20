@@ -18,6 +18,11 @@ const (
 	ActionTunneledMcpServerUpdate    Action = "tunneled-mcp:update"
 	ActionTunneledMcpServerRotateKey Action = "tunneled-mcp:rotate-key"
 	ActionTunneledMcpServerDelete    Action = "tunneled-mcp:delete"
+
+	// ActionTunneledMcpServerDynamicClientRegistration records a platform
+	// admin running OAuth dynamic client registration through this tunnel —
+	// a request Gram sends into customer infrastructure on their behalf.
+	ActionTunneledMcpServerDynamicClientRegistration Action = "tunneled-mcp:dynamic-client-registration"
 )
 
 type LogTunneledMcpServerCreateEvent struct {
@@ -187,6 +192,54 @@ func (l *Logger) LogTunneledMcpServerDelete(ctx context.Context, dbtx repo.DBTX,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TunneledMcpServerV1})
+}
+
+type LogTunneledMcpServerDynamicClientRegistrationEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	TunneledMcpServerURN  urn.TunneledMcpServer
+	TunneledMcpServerName string
+
+	// RegistrationEndpoint is the upstream RFC 7591 endpoint the registration
+	// request was forwarded to through the tunnel.
+	RegistrationEndpoint string
+}
+
+func (l *Logger) LogTunneledMcpServerDynamicClientRegistration(ctx context.Context, dbtx repo.DBTX, event LogTunneledMcpServerDynamicClientRegistrationEvent) error {
+	metadata, err := marshalAuditPayload(struct {
+		RegistrationEndpoint string `json:"registration_endpoint"`
+	}{RegistrationEndpoint: event.RegistrationEndpoint})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", ActionTunneledMcpServerDynamicClientRegistration, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionTunneledMcpServerDynamicClientRegistration),
+
+		SubjectID:          event.TunneledMcpServerURN.ID.String(),
+		SubjectType:        string(subjectTypeTunneledMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.TunneledMcpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TunneledMcpServerV1})

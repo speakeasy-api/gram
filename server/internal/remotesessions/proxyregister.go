@@ -12,13 +12,19 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // proxyRegisterMaxBodyBytes caps both the inbound request body and the upstream
@@ -31,6 +37,13 @@ type ProxyRegisterRequest struct {
 	RegistrationEndpoint    string  `json:"registration_endpoint"`
 	Scope                   *string `json:"scope,omitempty"`
 	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
+
+	// TunneledMcpServerID routes the registration POST through an MCP tunnel
+	// instead of dialing the registration endpoint from cloud egress, for
+	// authorization servers inside a customer network. Platform admins only;
+	// the handler rejects it for everyone else and audit-logs its use. Callers
+	// use the tunnel bound to the remote session issuer they are registering.
+	TunneledMcpServerID *string `json:"tunneled_mcp_server_id,omitempty"`
 }
 
 type ProxyRegisterResponse struct {
@@ -83,7 +96,11 @@ type DCRResponse struct {
 // registration endpoint were discovered from a persisted resource, never from
 // an MCP or browser input. The returned secret is transient and callers must
 // encrypt it before persistence without returning or logging it.
-func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
+//
+// When request carries a TunneledMcpServerID the POST rides that MCP tunnel
+// (tunnels must be non-nil); authorization of the parameter is the caller's
+// responsibility. Callers that never set it may pass a nil tunnels.
+func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, serverURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
 	if policy == nil || serverURL == nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
@@ -128,12 +145,24 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	// Dynamic registration may return a client secret. Never follow a redirect:
 	// a provider-controlled redirect could resend the registration request to a
 	// different origin or downgrade transport security before the secret can be
-	// encrypted by the caller.
+	// encrypted by the caller. (The tunnel transport below refuses redirects
+	// the same way.)
 	httpClient := policy.Client()
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	resp, err := httpClient.Do(httpReq)
+	var doer httpDoer = httpClient
+	if tunnelID := conv.PtrValOr(request.TunneledMcpServerID, ""); tunnelID != "" {
+		parsed, perr := uuid.Parse(tunnelID)
+		if perr != nil {
+			return ProxyRegisterResponse{}, fmt.Errorf("parse tunneled_mcp_server_id: %w", perr)
+		}
+		doer, err = upstreamHTTPDoer(httpClient, tunnels, uuid.NullUUID{UUID: parsed, Valid: true})
+		if err != nil {
+			return ProxyRegisterResponse{}, fmt.Errorf("select tunnel transport for registration: %w", err)
+		}
+	}
+	resp, err := doer.Do(httpReq)
 	if err != nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("reach registration endpoint: %w", err)
 	}
@@ -186,9 +215,11 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if sessionToken == "" {
 		sessionToken = r.Header.Get(constants.SessionHeader)
 	}
-	if _, err := s.sessions.Authenticate(ctx, sessionToken); err != nil {
+	authedCtx, err := s.sessions.Authenticate(ctx, sessionToken)
+	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authentication required").LogError(ctx, s.logger)
 	}
+	ctx = authedCtx
 
 	if s.policy == nil {
 		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").LogError(ctx, s.logger)
@@ -200,7 +231,34 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
-	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req)
+	// Registration through a tunnel sends a request into customer
+	// infrastructure before any client row exists to hang authorization off,
+	// so v1 keeps it white-glove: platform admins only, validated against a
+	// live tunnel, and audit-logged after the upstream accepts.
+	var tunnel *repo.GetTunneledMcpServerBindingUnscopedRow
+	if conv.PtrValOr(req.TunneledMcpServerID, "") != "" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		if !authCtx.IsAdmin {
+			return oops.E(oops.CodeForbidden, nil, "registering a client through an MCP tunnel requires a platform admin").LogError(ctx, s.logger)
+		}
+		tunnelID, terr := uuid.Parse(*req.TunneledMcpServerID)
+		if terr != nil {
+			return oops.E(oops.CodeBadRequest, terr, "invalid tunneled_mcp_server_id").LogError(ctx, s.logger)
+		}
+		row, terr := repo.New(s.db).GetTunneledMcpServerBindingUnscoped(ctx, tunnelID)
+		if terr != nil {
+			if errors.Is(terr, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, terr, "tunneled MCP server not found").LogError(ctx, s.logger)
+			}
+			return oops.E(oops.CodeUnexpected, terr, "get tunneled mcp server").LogError(ctx, s.logger)
+		}
+		tunnel = &row
+	}
+
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.serverURL, req)
 	if err != nil {
 		if errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint) {
 			return oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, s.logger)
@@ -210,6 +268,22 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, s.logger)
 		}
 		return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider").LogError(ctx, s.logger)
+	}
+
+	if tunnel != nil {
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		if err := s.auditLogger.LogTunneledMcpServerDynamicClientRegistration(ctx, s.db, audit.LogTunneledMcpServerDynamicClientRegistrationEvent{
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             tunnel.ProjectID,
+			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:      authCtx.Email,
+			ActorSlug:             nil,
+			TunneledMcpServerURN:  urn.NewTunneledMcpServer(tunnel.ID),
+			TunneledMcpServerName: tunnel.Name,
+			RegistrationEndpoint:  req.RegistrationEndpoint,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log tunneled dynamic client registration").LogError(ctx, s.logger)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

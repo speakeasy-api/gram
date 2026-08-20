@@ -643,6 +643,7 @@ func newDisconnectChallengeManager(t *testing.T, ti *testInstance) *remotesessio
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

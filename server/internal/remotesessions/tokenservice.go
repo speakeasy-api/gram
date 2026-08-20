@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -501,6 +502,7 @@ func refreshSessionTokens(
 	q *remotesessions_repo.Queries,
 	enc *encryption.Client,
 	policy *guardian.Policy,
+	tunnels *tunnelrouting.HTTPClient,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
@@ -509,6 +511,11 @@ func refreshSessionTokens(
 
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
 		return zero, "", newTokenRefreshError("the identity provider has no token endpoint configured", nil)
+	}
+
+	doer, err := upstreamHTTPDoer(policy.PooledClient(), tunnels, client.TunneledMcpServerID)
+	if err != nil {
+		return zero, "", newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
 	}
 
 	refreshToken, err := enc.Decrypt(sess.RefreshTokenEncrypted.String)
@@ -549,7 +556,7 @@ func refreshSessionTokens(
 		return zero, "", fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := policy.PooledClient().Do(req)
+	resp, err := doer.Do(req)
 	if err != nil {
 		return zero, "", fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

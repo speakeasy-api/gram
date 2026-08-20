@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -78,16 +79,18 @@ type RefreshService struct {
 	db      *pgxpool.Pool
 	enc     *encryption.Client
 	policy  *guardian.Policy
+	tunnels *tunnelrouting.HTTPClient
 	locks   cache.Cache
 	metrics *remotesessionmetrics.Refresh
 }
 
-func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache) *RefreshService {
+func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache) *RefreshService {
 	return &RefreshService{
 		logger:  logger.With(attr.SlogComponent("remotesessions_refresh")),
 		db:      db,
 		enc:     enc,
 		policy:  policy,
+		tunnels: tunnels,
 		locks:   locks,
 		metrics: remotesessionmetrics.NewRefresh(logger, meterProvider),
 	}
@@ -339,7 +342,7 @@ func (s *RefreshService) refresh(
 		return zero, "", fmt.Errorf("load remote_session_client for refresh: %w", err)
 	}
 
-	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, client, sess, resource)
+	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, s.tunnels, client, sess, resource)
 	if refreshErr == nil {
 		// The stamp is permanent, so record which rows the backfill wrote and
 		// what it wrote — the only way to find them again if a value is wrong.
