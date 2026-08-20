@@ -58,6 +58,8 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
           method="post"
           action={organizationDashboardUrl(org.id)}
           target="_blank"
+          // Keep the referrer: noreferrer makes Chromium send Origin: null for
+          // this POST, which the admin CSRF middleware correctly rejects.
           rel="noopener"
         >
           <Button type="submit" variant="outline" size="xs">
