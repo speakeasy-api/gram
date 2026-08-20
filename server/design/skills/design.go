@@ -51,6 +51,7 @@ var _ = Service("skills", func() {
 			})
 			Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 			Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
+			Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 			Required("id", "content")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -112,6 +113,7 @@ var _ = Service("skills", func() {
 			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
 				MaxLength(40)
 			})
+			Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 			Required("id", "name", "display_name", "tags")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -739,6 +741,7 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	})
 	Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 	Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
+	Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 	Required("id", "content")
 })
 
@@ -789,6 +792,7 @@ var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
 	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
 		MaxLength(40)
 	})
+	Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
 	Required("id", "name", "display_name", "tags")
 })
 

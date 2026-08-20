@@ -100,7 +100,7 @@ describe("RecordLayout", () => {
       });
 
       expect(
-        await screen.findByRole("link", { name: /Open in Gram/ }),
+        await screen.findByRole("button", { name: /Open in Dashboard/ }),
       ).toBeTruthy();
       const callout = await screen.findByRole("status");
       expect(callout.textContent).toContain("Trial ends");

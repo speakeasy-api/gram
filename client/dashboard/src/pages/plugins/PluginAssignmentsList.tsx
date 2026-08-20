@@ -1,6 +1,7 @@
 import { MemberFacepile } from "@/components/member-facepile";
 import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import { Users } from "lucide-react";
@@ -18,10 +19,12 @@ export function PluginAssignmentsList({
   assignments,
   roleByUrn,
   memberByUrn,
+  audienceByUrn,
 }: {
   assignments: PluginAssignment[];
   roleByUrn: Map<string, Role>;
   memberByUrn: Map<string, AccessMember>;
+  audienceByUrn: Map<string, PluginAudience>;
 }): JSX.Element {
   const rowAssignments = assignments.filter(
     (a) => !isIndividualMemberPrincipal(a.principalUrn),
@@ -37,6 +40,7 @@ export function PluginAssignmentsList({
           urn={assignment.principalUrn}
           roleByUrn={roleByUrn}
           memberByUrn={memberByUrn}
+          audienceByUrn={audienceByUrn}
         />
       ))}
       {facepileMembers.length > 0 && (

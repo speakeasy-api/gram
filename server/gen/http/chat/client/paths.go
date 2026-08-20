@@ -66,3 +66,8 @@ func SubmitFeedbackChatPath() string {
 func ListSourcesChatPath() string {
 	return "/rpc/chat.listSources"
 }
+
+// ListSessionLinksChatPath returns the URL path to the chat service listSessionLinks HTTP endpoint.
+func ListSessionLinksChatPath() string {
+	return "/rpc/chat.listSessionLinks"
+}

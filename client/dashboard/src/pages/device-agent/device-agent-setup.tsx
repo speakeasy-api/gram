@@ -19,9 +19,14 @@ import { useOrgRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router";
+import {
+  RemoteNetworkAccessStep,
+  RemoteOrganizationDefaultStep,
+  RemoteSetupScriptStep,
+} from "./device-agent-cloud-setup";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -78,8 +83,9 @@ const platformKey = (a: { goos: string; goarch: string }) =>
 // All the per-OS specifics live in this one table.
 // ---------------------------------------------------------------------------
 type OsKey = "macos" | "windows" | "linux";
+type PlatformKey = OsKey | "remote";
 
-const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
+const PLATFORM_ORDER: PlatformKey[] = ["macos", "windows", "linux", "remote"];
 
 // A manifest-supplied version is rendered directly into a copy-paste
 // shell/PowerShell snippet. Quoting alone doesn't make that safe — double
@@ -123,7 +129,7 @@ function psVersionAssign(version: string | null) {
 type BaseOsSpec = {
   label: string;
   tileDesc: string;
-  logo: string;
+  logo?: string;
   // Per-logo size: the Apple/Windows marks fill their square viewBox
   // edge-to-edge, while Tux is a taller, non-square figure — it runs a touch
   // larger (and is object-contain'd) to sit at the same optical size without
@@ -217,6 +223,15 @@ speakeasyd -service start`,
     hasHelperPackage: true,
   },
 };
+
+const REMOTE_PLATFORM_CONFIG: BaseOsSpec = {
+  label: "Remote sessions",
+  tileDesc: "Claude Code on the web",
+};
+
+function platformConfig(platform: PlatformKey): BaseOsSpec {
+  return platform === "remote" ? REMOTE_PLATFORM_CONFIG : OS_CONFIG[platform];
+}
 
 function SubHeading({ children }: { children: React.ReactNode }) {
   return <Text className="mb-2 font-medium">{children}</Text>;
@@ -1047,22 +1062,47 @@ function SetupTab({
 
 type SetupStep = { title: string; body: React.ReactNode };
 
-// buildSteps assembles the ordered setup steps for an OS. macOS installs from
+// buildSteps assembles the ordered setup steps for a platform. Remote sessions
+// have their own cloud-environment flow; local platforms follow the OS-specific
+// installation path below. macOS installs from
 // a signed .pkg (one combined install step, no chmod/move or separate service
 // registration); Windows/Linux still ship raw binaries via a download script,
 // so the list length (and numbering) varies by OS.
-function buildSteps(os: OsKey): SetupStep[] {
-  if (os === "macos") {
+function buildSteps(platform: PlatformKey): SetupStep[] {
+  if (platform === "remote") {
     return [
-      { title: "Download and install the agent", body: <MacInstallStep /> },
-      { title: "Verify it's running", body: <MacVerifyStep /> },
-      { title: "Set the user's identity", body: <IdentityStep os={os} /> },
+      {
+        title: "Configure the shared environment",
+        body: <RemoteNetworkAccessStep />,
+      },
+      {
+        title: "Install and configure the agent",
+        body: <RemoteSetupScriptStep />,
+      },
+      {
+        title: "Make it the organization default",
+        body: <RemoteOrganizationDefaultStep />,
+      },
     ];
   }
 
-  const cfg = OS_CONFIG[os];
+  if (platform === "macos") {
+    return [
+      { title: "Download and install the agent", body: <MacInstallStep /> },
+      { title: "Verify it's running", body: <MacVerifyStep /> },
+      {
+        title: "Set the user's identity",
+        body: <IdentityStep os={platform} />,
+      },
+    ];
+  }
+
+  const cfg = OS_CONFIG[platform];
   const steps: SetupStep[] = [
-    { title: "Download the binaries", body: <DownloadStep os={os} /> },
+    {
+      title: "Download the binaries",
+      body: <DownloadStep os={platform} />,
+    },
   ];
   if (cfg.chmodMove) {
     steps.push({
@@ -1091,32 +1131,32 @@ function buildSteps(os: OsKey): SetupStep[] {
   }
   steps.push({
     title: "Set the user's identity",
-    body: <IdentityStep os={os} />,
+    body: <IdentityStep os={platform} />,
   });
   return steps;
 }
 
-// DeviceAgentSetupSheet walks through the per-OS setup as a sequence of steps,
-// matching the platform-instrumentation sheet used elsewhere in onboarding:
+// DeviceAgentSetupSheet walks through the selected platform as a sequence of
+// steps, matching the platform-instrumentation sheet used elsewhere in onboarding:
 // progress dots up top, one step visible at a time, back/next in the footer.
 function DeviceAgentSetupSheet({
-  os,
+  platform,
   open,
   onOpenChange,
 }: {
-  os: OsKey | null;
+  platform: PlatformKey | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [stepIdx, setStepIdx] = useState(0);
 
-  // Reset to the first step whenever a fresh OS is opened.
+  // Reset to the first step whenever a platform is opened.
   useEffect(() => {
     if (open) setStepIdx(0);
-  }, [open, os]);
+  }, [open, platform]);
 
-  const steps = os ? buildSteps(os) : [];
-  const cfg = os ? OS_CONFIG[os] : null;
+  const steps = platform ? buildSteps(platform) : [];
+  const cfg = platform ? platformConfig(platform) : null;
   const total = steps.length;
   const isLast = stepIdx === total - 1;
 
@@ -1132,7 +1172,7 @@ function DeviceAgentSetupSheet({
       >
         <SheetHeader className="sr-only">
           <SheetTitle>
-            Install the Speakeasy device agent on {cfg?.label}
+            Set up the Speakeasy device agent for {cfg?.label}
           </SheetTitle>
           <SheetDescription>
             Step-by-step setup for the device agent.
@@ -1213,42 +1253,52 @@ function DeviceAgentSetupSheet({
   );
 }
 
-// OsTile is a clickable platform card, styled like the agent-platform tiles in
-// the manual instrumentation step. Clicking it opens the setup sheet.
-function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
-  const cfg = OS_CONFIG[os];
+// PlatformTile is a clickable setup card: logo on top, name and subtitle
+// stacked underneath, so four tiles fit a row without the text wrapping.
+// Local operating systems use their platform marks; Remote sessions uses a
+// cloud icon but opens the same sheet.
+function PlatformTile({
+  platform,
+  onClick,
+}: {
+  platform: PlatformKey;
+  onClick: () => void;
+}) {
+  const cfg = platformConfig(platform);
   return (
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full flex-col items-center gap-3 border p-5 text-center transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
-        <img
-          src={cfg.logo}
-          alt={`${cfg.label} logo`}
-          className={cn(
-            cfg.logoSize ?? "h-8 w-8",
-            "object-contain",
-            cfg.invertLogoInDark && "dark:invert",
-          )}
-        />
+      <div className="bg-secondary flex h-14 w-14 shrink-0 items-center justify-center">
+        {platform === "remote" ? (
+          <Icon name="cloud" className="h-7 w-7" />
+        ) : (
+          <img
+            src={cfg.logo}
+            alt={`${cfg.label} logo`}
+            className={cn(
+              cfg.logoSize ?? "h-8 w-8",
+              "object-contain",
+              cfg.invertLogoInDark && "dark:invert",
+            )}
+          />
+        )}
       </div>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="space-y-1">
         <p className="text-foreground text-sm font-medium">{cfg.label}</p>
         <p className="text-muted-foreground text-xs">{cfg.tileDesc}</p>
       </div>
-      <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
     </button>
   );
 }
 
-// DeviceAgentSetup is the shared device-agent setup UI: pick your OS from the
-// tile grid, then walk the per-OS install + identity steps in a sheet. Rendered
-// both on the standalone Device Agent page and inside the onboarding
-// "Instrument agents" step (Device Agent tab), so setup lives in one place.
+// DeviceAgentSetup is the shared device-agent setup UI: pick a local OS or
+// Remote sessions from the tile grid, then walk its steps in a sheet. Rendered
+// both on the standalone Device Agent page and inside onboarding.
 export function DeviceAgentSetup(): React.JSX.Element {
-  const [sheetOs, setSheetOs] = useState<OsKey | null>(null);
+  const [sheetPlatform, setSheetPlatform] = useState<PlatformKey | null>(null);
 
   return (
     <Page.Section>
@@ -1256,9 +1306,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
           title above the tab strip, so suppress the section-level one. */}
       <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
-        The Speakeasy device agent runs on-device and enforces your org's
-        required AI-tool plugins and MCP configuration, then reports compliance
-        back to Speakeasy.
+        The Speakeasy device agent runs alongside your AI tools, enforces your
+        org&apos;s required plugins and MCP configuration, and reports
+        compliance back to Speakeasy.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
@@ -1273,15 +1323,19 @@ export function DeviceAgentSetup(): React.JSX.Element {
               <strong className="text-foreground font-medium">
                 Fleet (MDM)
               </strong>{" "}
-              path in each platform's walkthrough covers it.
+              path in each local platform&apos;s walkthrough covers it.
             </Text>
           </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {OS_ORDER.map((os) => (
-              <OsTile key={os} os={os} onClick={() => setSheetOs(os)} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {PLATFORM_ORDER.map((platform) => (
+              <PlatformTile
+                key={platform}
+                platform={platform}
+                onClick={() => setSheetPlatform(platform)}
+              />
             ))}
           </div>
 
@@ -1290,10 +1344,10 @@ export function DeviceAgentSetup(): React.JSX.Element {
               and drops anything else, so a Sheet placed as a direct Section
               child never mounts. */}
           <DeviceAgentSetupSheet
-            os={sheetOs}
-            open={sheetOs !== null}
+            platform={sheetPlatform}
+            open={sheetPlatform !== null}
             onOpenChange={(open) => {
-              if (!open) setSheetOs(null);
+              if (!open) setSheetPlatform(null);
             }}
           />
         </div>

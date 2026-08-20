@@ -1,8 +1,9 @@
 import type { FacepileMember } from "@/components/member-facepile";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import { Globe, Mail, Shield, User } from "lucide-react";
+import { Globe, Mail, Shield, Tag, User, UsersRound } from "lucide-react";
 import { z } from "zod";
 
 // A plugin assignment targets a principal identified by a URN. The agent's
@@ -17,8 +18,17 @@ export const WILDCARD_PRINCIPAL = "*";
 const EMAIL_PREFIX = "email:";
 const ROLE_PREFIX = "role:";
 const USER_PREFIX = "user:";
+const DIRECTORY_GROUP_PREFIX = "directory_group:";
+const DIRECTORY_ATTRIBUTE_PREFIX = "directory_attribute:";
 
-export type PrincipalKind = "everyone" | "email" | "role" | "user" | "unknown";
+export type PrincipalKind =
+  | "everyone"
+  | "email"
+  | "role"
+  | "user"
+  | "directory_group"
+  | "directory_attribute"
+  | "unknown";
 
 const principalKindIcon: Record<
   PrincipalKind,
@@ -28,6 +38,8 @@ const principalKindIcon: Record<
   email: Mail,
   role: Shield,
   user: User,
+  directory_group: UsersRound,
+  directory_attribute: Tag,
   unknown: User,
 };
 
@@ -44,12 +56,29 @@ export function describePrincipal(
   urn: string,
   roleByUrn: Map<string, Role>,
   memberByUrn: Map<string, AccessMember>,
+  audienceByUrn: Map<string, PluginAudience> = new Map(),
 ): { kind: PrincipalKind; label: string } {
   if (urn === WILDCARD_PRINCIPAL)
     return { kind: "everyone", label: "Everyone" };
   if (urn === "user:all") return { kind: "everyone", label: "All users" };
   if (urn.startsWith(EMAIL_PREFIX)) {
     return { kind: "email", label: urn.slice(EMAIL_PREFIX.length) };
+  }
+  const audience = audienceByUrn.get(urn);
+  if (audience) {
+    return { kind: audience.kind, label: audience.displayName };
+  }
+  if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) {
+    return {
+      kind: "directory_group",
+      label: `Unavailable directory group (${urn})`,
+    };
+  }
+  if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) {
+    return {
+      kind: "directory_attribute",
+      label: `Unavailable directory attribute (${urn})`,
+    };
   }
   if (urn.startsWith("role:")) {
     return { kind: "role", label: roleByUrn.get(urn)?.name ?? urn };
@@ -97,6 +126,34 @@ export function memberMapByUrn(
   return new Map(members.map((m) => [m.principalUrn, m]));
 }
 
+export function audienceMapByUrn(
+  audiences: PluginAudience[],
+): Map<string, PluginAudience> {
+  return new Map(
+    audiences.map((audience) => [audience.principalUrn, audience]),
+  );
+}
+
+export function memberCountDescription(
+  memberCount: number | undefined,
+): string | undefined {
+  if (memberCount === undefined) return undefined;
+  return `${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+}
+
+export function audienceKindForPrincipal(
+  urn: string,
+  audienceByUrn: Map<string, PluginAudience>,
+): PluginAudience["kind"] | undefined {
+  const audience = audienceByUrn.get(urn);
+  if (audience) return audience.kind;
+  if (urn === WILDCARD_PRINCIPAL) return "everyone";
+  if (urn.startsWith(ROLE_PREFIX)) return "role";
+  if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) return "directory_group";
+  if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) return "directory_attribute";
+  return undefined;
+}
+
 const emailSchema = z.string().email();
 
 // normalizeToPrincipalUrn canonicalizes a raw picker value into a principal URN
@@ -112,7 +169,11 @@ export function normalizeToPrincipalUrn(value: string): string | null {
   // generic mutation error.
   if (
     (trimmed.startsWith(ROLE_PREFIX) && trimmed.length > ROLE_PREFIX.length) ||
-    (trimmed.startsWith(USER_PREFIX) && trimmed.length > USER_PREFIX.length)
+    (trimmed.startsWith(USER_PREFIX) && trimmed.length > USER_PREFIX.length) ||
+    (trimmed.startsWith(DIRECTORY_GROUP_PREFIX) &&
+      trimmed.length > DIRECTORY_GROUP_PREFIX.length) ||
+    (trimmed.startsWith(DIRECTORY_ATTRIBUTE_PREFIX) &&
+      trimmed.length > DIRECTORY_ATTRIBUTE_PREFIX.length)
   ) {
     return trimmed;
   }

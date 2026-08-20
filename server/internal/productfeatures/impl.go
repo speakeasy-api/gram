@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -32,14 +31,14 @@ import (
 
 // Service implements organization feature management operations.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	auth         *auth.Auth
-	authz        *authz.Engine
-	featureCache cache.TypedCacheObject[FeatureCache]
-	audit        *audit.Logger
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *repo.Queries
+	auth          *auth.Auth
+	authz         *authz.Engine
+	featureClient *Client
+	audit         *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,14 +55,14 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("product_features"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
-		logger:       logger,
-		db:           db,
-		repo:         repo.New(db),
-		auth:         auth.New(logger, db, sessions, authzEngine),
-		authz:        authzEngine,
-		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		audit:        auditLogger,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
+		logger:        logger,
+		db:            db,
+		repo:          repo.New(db),
+		auth:          auth.New(logger, db, sessions, authzEngine),
+		authz:         authzEngine,
+		featureClient: NewClient(logger, tracerProvider, db, redisClient),
+		audit:         auditLogger,
 	}
 }
 
@@ -119,7 +118,13 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return nil
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(payload.FeatureName)})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock feature cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	defer releaseFeatureLock()
+
+	dbtx, err := lockConn.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin feature flag transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
@@ -187,19 +192,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
-	cacheEntry := FeatureCache{
-		OrganizationID: orgID,
-		Feature:        Feature(payload.FeatureName),
-		Enabled:        payload.Enabled,
-	}
-
-	if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-		s.logger.WarnContext(ctx, "failed to cache feature flag state",
-			attr.SlogError(cacheErr),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogProductFeatureName(payload.FeatureName),
-		)
-	}
+	s.featureClient.storeFeatureCache(ctx, orgID, Feature(payload.FeatureName), payload.Enabled, "failed to cache feature flag state")
 
 	return nil
 }
@@ -220,7 +213,15 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		return oops.C(oops.CodeBadRequest)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	lockConn, releaseFeatureLocks, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{
+		FeatureRemoteSessionAutoRefresh, FeatureRemoteSessionAutoRefreshEnforced,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session refresh cache state").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+	}
+	defer releaseFeatureLocks()
+
+	dbtx, err := lockConn.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
@@ -269,18 +270,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		{feature: FeatureRemoteSessionAutoRefresh, enabled: visible},
 		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
-		cacheEntry := FeatureCache{
-			OrganizationID: orgID,
-			Feature:        state.feature,
-			Enabled:        state.enabled,
-		}
-		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-			s.logger.WarnContext(ctx, "failed to cache remote session refresh policy",
-				attr.SlogError(cacheErr),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogProductFeatureName(string(state.feature)),
-			)
-		}
+		s.featureClient.storeFeatureCache(ctx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
 	}
 
 	return nil
@@ -292,21 +282,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		return nil, err
 	}
 
-	// Helper function to check if a feature is enabled (cache first, then DB)
 	isEnabled := func(feature Feature) bool {
-		cacheKey := FeatureCacheKey(orgID, feature)
-
-		// Try cache first
-		cached, err := s.featureCache.Get(ctx, cacheKey)
-		if err == nil {
-			return cached.Enabled
-		}
-
-		// Fall back to database
-		enabled, err := s.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: orgID,
-			FeatureName:    string(feature),
-		})
+		enabled, err := s.featureClient.IsFeatureEnabled(ctx, orgID, feature)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to check feature flag",
 				attr.SlogError(err),
@@ -314,20 +291,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 				attr.SlogProductFeatureName(string(feature)),
 			)
 			return false
-		}
-
-		// Cache the result
-		cacheEntry := FeatureCache{
-			OrganizationID: orgID,
-			Feature:        feature,
-			Enabled:        enabled,
-		}
-		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-			s.logger.WarnContext(ctx, "failed to cache feature flag state",
-				attr.SlogError(cacheErr),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogProductFeatureName(string(feature)),
-			)
 		}
 
 		return enabled
@@ -363,6 +326,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
 		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
+		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		DeviceAgent:                             deviceAgent,
 	}, nil
 }

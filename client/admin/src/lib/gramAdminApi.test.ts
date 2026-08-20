@@ -13,6 +13,7 @@ import {
   getProject,
   listOrganizations,
   logout,
+  organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
@@ -24,6 +25,14 @@ import {
 } from "@/lib/gramAdminApi";
 
 describe("toSearchParams", () => {
+  describe("organizationDashboardUrl", () => {
+    it("targets the same-origin handoff endpoint with an encoded organization id", () => {
+      expect(organizationDashboardUrl("org/id & value")).toBe(
+        "/admin/organization.open-dashboard?organization_id=org%2Fid+%26+value",
+      );
+    });
+  });
+
   it("repeats the key for each item of an array", () => {
     const qs = toSearchParams({ type: ["free", "pro"], q: "", page: 2 });
     expect(qs.toString()).toBe("type=free&type=pro&page=2");

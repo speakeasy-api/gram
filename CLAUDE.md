@@ -95,6 +95,12 @@ Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GI
 
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
 
+### Demo org and seed data
+
+We maintain a demo org (`app.getgram.ai/explore-demo`) that customers use to explore the product before their own org is set up. It is reseeded daily from a SQL seed stored in this repo, and the same seed provisions each developer's local org.
+
+When you add a feature or change an existing one, update the demo seed in the same change so the new data shows up in both the demo org and local dev. Activate the `gram-demo-seed` skill (`.agents/skills/gram-demo-seed/SKILL.md`) for the rules and the workflow.
+
 ### Database Migrations
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.

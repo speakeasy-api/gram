@@ -40,6 +40,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/metamcp"
 	_ "github.com/speakeasy-api/gram/server/design/modelkeys"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
+	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/otelforwarding"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/assets"

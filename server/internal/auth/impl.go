@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -56,6 +57,13 @@ const dispositionAssistants = "assistants"
 // nonceTTL is the maximum time a login nonce is valid. Nonces are one-time-use
 // and deleted on consumption; this TTL is a safety net for abandoned flows.
 const nonceTTL = 10 * time.Minute
+
+const supportSessionTTL = 60 * time.Minute
+
+// supportNonceBindingPrefix marks nonce bindings whose login consumed a support
+// handoff. Ordinary bindings retain their existing wire format so callbacks
+// already in flight during a deployment remain valid.
+const supportNonceBindingPrefix = "support:"
 
 // nonceBindingCookie is the name of the HttpOnly cookie that binds a login
 // nonce to the browser session that initiated the OAuth flow. This prevents
@@ -103,25 +111,27 @@ type AssistantsSubscriptionCancelScheduler interface {
 }
 
 type Service struct {
-	tracer              trace.Tracer
-	logger              *slog.Logger
-	db                  *pgxpool.Pool
-	sessions            *sessions.Manager
-	identity            *identity.Resolver
-	cfg                 AuthConfigurations
-	authz               *authz.Engine
-	billing             billing.Repository
-	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
-	posthog             *posthog.Posthog
-	nonceStore          cache.Cache
-	projectsRepo        *projectsRepo.Queries
-	envRepo             *envRepo.Queries
-	orgRepo             *orgRepo.Queries
-	authzProvisioner    *authz.Provisioner
-	organizationSeeder  OrganizationFeatureSeeder
-	trialBundleSeeder   EnterpriseTrialBundleSeeder
-	auditLogger         *audit.Logger
-	trialNotifier       trialemails.Notifier
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	sessions             *sessions.Manager
+	identity             *identity.Resolver
+	cfg                  AuthConfigurations
+	authz                *authz.Engine
+	billing              billing.Repository
+	cancelSubsScheduler  AssistantsSubscriptionCancelScheduler
+	posthog              *posthog.Posthog
+	nonceStore           cache.Cache
+	supportHandoffs      *supporthandoff.Store
+	supportHandoffIssuer *supporthandoff.Issuer
+	projectsRepo         *projectsRepo.Queries
+	envRepo              *envRepo.Queries
+	orgRepo              *orgRepo.Queries
+	authzProvisioner     *authz.Provisioner
+	organizationSeeder   OrganizationFeatureSeeder
+	trialBundleSeeder    EnterpriseTrialBundleSeeder
+	auditLogger          *audit.Logger
+	trialNotifier        trialemails.Notifier
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -154,27 +164,31 @@ func NewService(
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
+	supportHandoffs := supporthandoff.NewStore(nonceStore)
+
 	return &Service{
-		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:              logger,
-		db:                  db,
-		sessions:            sessions,
-		identity:            identityResolver,
-		cfg:                 cfg,
-		authz:               authzEngine,
-		billing:             billingRepo,
-		cancelSubsScheduler: cancelSubsScheduler,
-		posthog:             posthogClient,
-		nonceStore:          nonceStore,
-		projectsRepo:        projectsRepo.New(db),
-		envRepo:             envRepo.New(db),
-		orgRepo:             orgRepo.New(db),
-		authzProvisioner:    authzProvisioner,
-		organizationSeeder:  organizationSeeder,
-		trialBundleSeeder:   trialBundleSeeder,
-		auditLogger:         auditLogger,
-		trialNotifier:       trialNotifier,
-		siteOrigin:          parseSiteOrigin(cfg.SignInRedirectURL),
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:               logger,
+		db:                   db,
+		sessions:             sessions,
+		identity:             identityResolver,
+		cfg:                  cfg,
+		authz:                authzEngine,
+		billing:              billingRepo,
+		cancelSubsScheduler:  cancelSubsScheduler,
+		posthog:              posthogClient,
+		nonceStore:           nonceStore,
+		supportHandoffs:      supportHandoffs,
+		supportHandoffIssuer: supporthandoff.NewIssuer(supportHandoffs),
+		projectsRepo:         projectsRepo.New(db),
+		envRepo:              envRepo.New(db),
+		orgRepo:              orgRepo.New(db),
+		authzProvisioner:     authzProvisioner,
+		organizationSeeder:   organizationSeeder,
+		trialBundleSeeder:    trialBundleSeeder,
+		auditLogger:          auditLogger,
+		trialNotifier:        trialNotifier,
+		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
 
@@ -183,6 +197,8 @@ func FormSignInRedirectURL(siteURL string) string {
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
+	o11y.AttachHandler(mux, http.MethodPost, "/rpc/auth.startSupportSession", oops.ErrHandle(service.logger, service.handleStartSupportSession).ServeHTTP)
+
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
@@ -286,8 +302,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	stateProvided := conv.PtrValOr(payload.State, "") != ""
+	supportExpected := false
 	if stateProvided {
-		if err := s.validateAuthNonce(ctx, payload); err != nil {
+		supportExpected, err = s.validateAuthNonce(ctx, payload)
+		if err != nil {
 			return redirectWithError(authErrCodeLookup, err)
 		}
 	}
@@ -312,6 +330,25 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
+	var supportLogin *supportIntent
+	if state := decodeStateParam(payload); state != nil && state.Nonce != "" {
+		var stored supportIntent
+		err := s.nonceStore.GetAndDelete(ctx, supportIntentKey(state.Nonce), &stored)
+		switch {
+		case err == nil:
+			supportLogin = &stored
+		case errors.Is(err, redisCache.ErrCacheMiss):
+		default:
+			return redirectWithError(authErrInit, fmt.Errorf("consume support login intent: %w", err))
+		}
+	}
+	if supportExpected != (supportLogin != nil) {
+		return redirectWithError(authErrInit, errors.New("support login intent does not match login nonce"))
+	}
+	if supportLogin != nil && supportLogin.OrganizationID == "" {
+		return redirectWithError(authErrInit, errors.New("support login intent is missing an organization"))
+	}
+
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
@@ -331,15 +368,26 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
-	if idpUser.Sub != "" {
-		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
-			return redirectWithError(authErrInit, err)
-		}
-	}
-
 	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
+	}
+
+	// Only a server-issued handoff may establish trusted support state. Legacy
+	// browser-controlled override cookies and headers have no authority.
+	supportOrgID := ""
+	if supportLogin != nil {
+		supportOrgID = supportLogin.OrganizationID
+	}
+
+	if supportOrgID == "" && idpUser.Sub != "" {
+		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
+		if err != nil {
+			return redirectWithError(authErrInit, err)
+		}
 	}
 
 	sessionID, err := sessions.NewSessionID()
@@ -347,11 +395,41 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 	session := sessions.Session{
-		SessionID:            sessionID,
-		UserID:               userID,
-		ActiveOrganizationID: "",
-		WorkOSSessionID:      idpUser.WorkOSSessionID,
-		ImpersonatorEmail:    idpUser.ImpersonatorEmail(),
+		SessionID:             sessionID,
+		UserID:                userID,
+		ActiveOrganizationID:  "",
+		WorkOSSessionID:       idpUser.WorkOSSessionID,
+		ImpersonatorEmail:     idpUser.ImpersonatorEmail(),
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
+	}
+
+	if supportOrgID != "" {
+		isAdmin, err := s.sessions.IsPlatformAdmin(ctx, userID)
+		if err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+		if !isAdmin {
+			return redirectWithError(authErrInit, errors.New("organization support access requires a platform admin"))
+		}
+		orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, supportOrgID)
+		if err != nil {
+			return redirectWithError(authErrInit, errors.New("organization support target not found"))
+		}
+		if orgMetadata.DisabledAt.Valid {
+			return redirectWithError(authErrInit, errors.New("organization support target is disabled"))
+		}
+		session.ActiveOrganizationID = supportOrgID
+		session.SupportOrganizationID = supportOrgID
+		session.SupportExpiresAt = time.Now().Add(supportSessionTTL)
+		if err := s.sessions.StoreSession(ctx, session); err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+		return &gen.CallbackResult{
+			Location:      s.callbackRedirectURL(ctx, payload),
+			SessionToken:  session.SessionID,
+			SessionCookie: session.SessionID,
+		}, nil
 	}
 
 	if len(userInfo.Organizations) == 0 {
@@ -410,40 +488,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
-	// Default to the first org; overridden by the priority chain below.
+	// Redirects may select only one of the user's memberships. They are never
+	// authority for a platform admin to enter a foreign organization.
 	activeOrgID := userInfo.Organizations[0].ID
 	activeOrgSelected := false
-
-	// Priority 1: admin override header — look up org from DB since
-	// the admin may not be a member of the target org.
-	if userInfo.Admin {
-		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-			orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, adminOverride)
-			if err == nil {
-				activeOrgID = orgMeta.ID
-				activeOrgSelected = true
-			}
-		}
+	if org, ok := s.activeOrganizationFromState(payload, userInfo.Organizations); ok {
+		activeOrgID = org.ID
+		activeOrgSelected = true
 	}
 
-	// Priority 2: org slug from the state param (explicit destination URL).
-	// First try the user's own orgs; for admins, fall back to a DB lookup
-	// since they may access orgs they aren't a member of.
-	if !activeOrgSelected {
-		if org, ok := s.activeOrganizationFromState(payload, userInfo.Organizations); ok {
-			activeOrgID = org.ID
-			activeOrgSelected = true
-		} else if userInfo.Admin {
-			if slug := s.organizationSlugFromState(payload); slug != "" {
-				if orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug); err == nil {
-					activeOrgID = orgMeta.ID
-					activeOrgSelected = true
-				}
-			}
-		}
-	}
-
-	// Priority 3: org the user selected in the IDP auth flow (WorkOS AuthKit).
+	// Finally honor the org selected in the IDP auth flow when it is a membership.
 	if !activeOrgSelected && idpUser.OrganizationID != "" {
 		if org, ok := activeOrganizationFromWorkOSID(idpUser.OrganizationID, userInfo.Organizations); ok {
 			activeOrgID = org.ID
@@ -529,6 +583,49 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 	return nil
 }
 
+func (s *Service) StartSupportSession(ctx context.Context, organizationSlug string) (string, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	isAdmin, err := s.sessions.IsPlatformAdmin(ctx, authCtx.UserID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error checking platform administrator").LogError(ctx, s.logger)
+	}
+	if !isAdmin {
+		return "", oops.C(oops.CodeForbidden)
+	}
+
+	slug := strings.TrimSpace(organizationSlug)
+	if slug == "" {
+		return "", oops.E(oops.CodeBadRequest, nil, "organization slug is required")
+	}
+
+	organization, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", oops.E(oops.CodeNotFound, err, "organization not found")
+	}
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error loading organization").LogError(ctx, s.logger)
+	}
+	if organization.DisabledAt.Valid {
+		return "", oops.E(oops.CodeNotFound, nil, "organization not found")
+	}
+
+	token, err := s.supportHandoffIssuer.Issue(ctx, organization.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error starting support session").LogError(ctx, s.logger)
+	}
+
+	query := url.Values{}
+	query.Set("support_handoff", token)
+	query.Set("redirect", "/"+organization.Slug)
+	location := url.URL{Path: "/rpc/auth.login", RawQuery: query.Encode()}
+
+	return location.String(), nil
+}
+
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
 	// A company name means this login started from the sign-up page. Validate
 	// before anything is minted or stored, so a rejected name leaves no orphan
@@ -560,6 +657,15 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		}
 	}
 
+	var supportGrant *supporthandoff.Grant
+	if token := strings.TrimSpace(conv.PtrValOr(payload.SupportHandoff, "")); token != "" {
+		grant, err := s.supportHandoffs.Consume(ctx, token)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired support handoff")
+		}
+		supportGrant = &grant
+	}
+
 	callbackURL := s.buildCallbackURL(ctx)
 
 	nonce, err := generateNonce()
@@ -569,7 +675,11 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// Store the nonce binding (cookie value set by middleware) so the
 	// callback can verify the same browser that started login finishes it.
 	binding := nonceBindingFromContext(ctx)
-	if err := s.nonceStore.Set(ctx, nonceKey(nonce), binding, nonceTTL); err != nil {
+	storedBinding := binding
+	if supportGrant != nil {
+		storedBinding = supportNonceBindingPrefix + binding
+	}
+	if err := s.nonceStore.Set(ctx, nonceKey(nonce), storedBinding, nonceTTL); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").LogError(ctx, s.logger)
 	}
 
@@ -580,6 +690,11 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	if orgName != "" {
 		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName}, nonceTTL); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error storing signup intent").LogError(ctx, s.logger)
+		}
+	}
+	if supportGrant != nil {
+		if err := s.nonceStore.Set(ctx, supportIntentKey(nonce), supportIntent{OrganizationID: supportGrant.OrganizationID}, nonceTTL); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error storing support login intent").LogError(ctx, s.logger)
 		}
 	}
 
@@ -682,6 +797,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if contextvalues.IsSupportSession(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "support sessions cannot switch organizations")
+	}
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
@@ -732,7 +850,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}, nil
 }
 
-// EnterDemo points the current session at the shared read-only demo
+// EnterDemo points the current session at the shared demo
 // organization. Any authenticated user may enter — the demo org has no
 // membership rows, so downstream request auth and grant resolution rely on
 // carve-outs keyed off constants.DemoOrganizationID.
@@ -741,7 +859,6 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-
 	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, constants.DemoOrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -758,6 +875,11 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
 	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	// Entering the shared demo ends support access. Otherwise the support
+	// target would no longer match the active organization and the next
+	// authenticated request would reject the session.
+	existingSession.SupportOrganizationID = ""
+	existingSession.SupportExpiresAt = time.Time{}
 	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
@@ -780,11 +902,13 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
-		SessionID:            *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		UserID:               authCtx.UserID,
-		WorkOSSessionID:      "",
-		ImpersonatorEmail:    "",
+		SessionID:             *authCtx.SessionID,
+		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
+		UserID:                authCtx.UserID,
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
@@ -833,31 +957,22 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			SSOEnabled:         orgMeta.SsoEnabled.Bool,
 			SCIMEnabled:        orgMeta.ScimEnabled.Bool,
 		})
-	} else if userInfo.Admin {
-		// For admins overriding into a foreign org (one not in their own membership list),
-		// return only that org to avoid overloaded returns. When admins are in one of their
-		// own orgs, return all real memberships so the org-switcher works normally.
-		inOwnOrg := false
-		for _, org := range userInfo.Organizations {
-			if org.ID == authCtx.ActiveOrganizationID {
-				inOwnOrg = true
-				break
-			}
+	} else if contextvalues.IsSupportSession(ctx) {
+		// Support sessions cannot switch organizations, so expose only the
+		// active target even when the platform admin is also a member.
+		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error loading support organization").LogError(ctx, s.logger)
 		}
-		if !inOwnOrg {
-			orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
-			if err == nil {
-				userInfo.Organizations = []sessions.Organization{{
-					ID:                 orgMeta.ID,
-					Name:               orgMeta.Name,
-					Slug:               orgMeta.Slug,
-					WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
-					UserWorkspaceSlugs: nil,
-					SSOEnabled:         orgMeta.SsoEnabled.Bool,
-					SCIMEnabled:        orgMeta.ScimEnabled.Bool,
-				}}
-			}
-		}
+		userInfo.Organizations = []sessions.Organization{{
+			ID:                 orgMeta.ID,
+			Name:               orgMeta.Name,
+			Slug:               orgMeta.Slug,
+			WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+			UserWorkspaceSlugs: nil,
+			SSOEnabled:         orgMeta.SsoEnabled.Bool,
+			SCIMEnabled:        orgMeta.ScimEnabled.Bool,
+		}}
 	}
 
 	// Fully unpack the userInfo object
@@ -916,22 +1031,30 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		})
 	}
 
+	supportOverride := contextvalues.IsSupportSession(ctx)
+	supportExpiresAt := ""
+	if supportOverride {
+		supportExpiresAt = session.SupportExpiresAt.UTC().Format(time.RFC3339)
+	}
+
 	return &gen.InfoResult{
-		SessionToken:          *authCtx.SessionID,
-		SessionCookie:         *authCtx.SessionID,
-		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
-		GramAccountType:       authCtx.AccountType,
-		HasActiveSubscription: authCtx.HasActiveSubscription,
-		Whitelisted:           authCtx.Whitelisted,
-		Trial:                 trial,
-		UserID:                userInfo.UserID,
-		UserEmail:             userInfo.Email,
-		UserSignature:         userInfo.UserPylonSignature,
-		UserDisplayName:       userInfo.DisplayName,
-		UserPhotoURL:          userInfo.PhotoURL,
-		IsAdmin:               userInfo.Admin,
-		ImpersonatorEmail:     conv.PtrEmpty(session.ImpersonatorEmail),
-		Organizations:         organizations,
+		SessionToken:                  *authCtx.SessionID,
+		SessionCookie:                 *authCtx.SessionID,
+		ActiveOrganizationID:          authCtx.ActiveOrganizationID,
+		GramAccountType:               authCtx.AccountType,
+		HasActiveSubscription:         authCtx.HasActiveSubscription,
+		Whitelisted:                   authCtx.Whitelisted,
+		Trial:                         trial,
+		UserID:                        userInfo.UserID,
+		UserEmail:                     userInfo.Email,
+		UserSignature:                 userInfo.UserPylonSignature,
+		UserDisplayName:               userInfo.DisplayName,
+		UserPhotoURL:                  userInfo.PhotoURL,
+		IsAdmin:                       userInfo.Admin,
+		ImpersonatorEmail:             conv.PtrEmpty(session.ImpersonatorEmail),
+		OrganizationOverride:          supportOverride,
+		OrganizationOverrideExpiresAt: conv.PtrEmpty(supportExpiresAt),
+		Organizations:                 organizations,
 	}, nil
 }
 
@@ -1383,6 +1506,14 @@ func signupIntentKey(nonce string) string {
 	return "auth:signup_intent:" + nonce
 }
 
+type supportIntent struct {
+	OrganizationID string
+}
+
+func supportIntentKey(nonce string) string {
+	return "auth:support_intent:" + nonce
+}
+
 // validateAuthNonce validates that the OAuth callback was initiated by a Login call
 // that Gram controls, preventing CSRF attacks where an attacker crafts a
 // callback URL with a stolen authorization code. Without this, the state param
@@ -1393,16 +1524,21 @@ func signupIntentKey(nonce string) string {
 // (deleted) here atomically so each nonce is single-use. The stored value is
 // the nonce-binding cookie that was set on the browser during Login — this
 // ties the nonce to the specific browser session, preventing login CSRF.
-func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPayload) error {
+func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPayload) (bool, error) {
 	state := decodeStateParam(payload)
 	if state == nil || state.Nonce == "" {
-		return errors.New("missing or invalid state parameter")
+		return false, errors.New("missing or invalid state parameter")
 	}
 
 	key := nonceKey(state.Nonce)
 	var storedBinding string
 	if err := s.nonceStore.GetAndDelete(ctx, key, &storedBinding); err != nil {
-		return errors.New("invalid or expired login nonce")
+		return false, errors.New("invalid or expired login nonce")
+	}
+
+	supportExpected := strings.HasPrefix(storedBinding, supportNonceBindingPrefix)
+	if supportExpected {
+		storedBinding = strings.TrimPrefix(storedBinding, supportNonceBindingPrefix)
 	}
 
 	// Verify the cookie binding matches what was stored during Login.
@@ -1410,10 +1546,10 @@ func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPa
 	// completing it, preventing login CSRF attacks.
 	cookieBinding := nonceBindingFromContext(ctx)
 	if cookieBinding == "" || subtle.ConstantTimeCompare([]byte(storedBinding), []byte(cookieBinding)) != 1 {
-		return errors.New("login session mismatch: nonce not bound to this browser")
+		return false, errors.New("login session mismatch: nonce not bound to this browser")
 	}
 
-	return nil
+	return supportExpected, nil
 }
 
 // buildCallbackURL constructs the OIDC redirect_uri that the IDP will send the

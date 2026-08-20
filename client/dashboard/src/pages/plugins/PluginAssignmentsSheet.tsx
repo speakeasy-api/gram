@@ -9,17 +9,90 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
+import type {
+  PluginAudience,
+  PluginAudienceKind,
+} from "@gram/client/models/components/pluginaudience.js";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { useSetPluginAssignmentsMutation } from "@gram/client/react-query/setPluginAssignments";
-import { useMembers } from "@gram/client/react-query/members";
-import { useRoles } from "@gram/client/react-query/roles";
 import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  normalizeToPrincipalUrn,
+  audienceKindForPrincipal,
+  audienceMapByUrn,
+  describePrincipal,
+  memberCountDescription,
   principalIcon,
-  WILDCARD_PRINCIPAL,
 } from "./principals";
+
+const audienceGroups: {
+  value: PluginAudienceKind;
+  heading: string;
+  icon: ReturnType<typeof principalIcon>;
+}[] = [
+  { value: "everyone", heading: "Everyone", icon: principalIcon("everyone") },
+  { value: "role", heading: "Roles", icon: principalIcon("role") },
+  {
+    value: "directory_group",
+    heading: "Directory groups",
+    icon: principalIcon("directory_group"),
+  },
+  {
+    value: "directory_attribute",
+    heading: "Directory attributes",
+    icon: principalIcon("directory_attribute"),
+  },
+];
+
+function existingAssignmentOption(
+  urn: string,
+  audienceByUrn: Map<string, PluginAudience>,
+  description: string,
+) {
+  const principal = describePrincipal(urn, new Map(), new Map(), audienceByUrn);
+  return {
+    label: principal.label,
+    value: urn,
+    description,
+    disabled: true,
+  };
+}
+
+function availableAudienceOptions(
+  audienceType: PluginAudienceKind,
+  audiences: PluginAudience[],
+  disabled: boolean,
+) {
+  return audiences
+    .filter((audience) => audience.kind === audienceType)
+    .map((audience) => ({
+      label: audience.displayName,
+      value: audience.principalUrn,
+      description: memberCountDescription(audience.memberCount),
+      disabled,
+    }));
+}
+
+function unavailableAudienceOptions(
+  audienceType: PluginAudienceKind,
+  selected: string[],
+  audienceByUrn: Map<string, PluginAudience>,
+) {
+  return selected
+    .filter(
+      (urn) =>
+        audienceKindForPrincipal(urn, audienceByUrn) === audienceType &&
+        !audienceByUrn.has(urn),
+    )
+    .map((urn) =>
+      existingAssignmentOption(
+        urn,
+        audienceByUrn,
+        "Unavailable. Remove this assignment to stop using it.",
+      ),
+    );
+}
 
 export function PluginAssignmentsSheet({
   pluginId,
@@ -75,12 +148,11 @@ function AssignmentsEditor({
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }): JSX.Element {
-  const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
-  const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
-  const members = useMemo(
-    () => membersData?.members ?? [],
-    [membersData?.members],
+  const audiencesQuery = useAudiences();
+  const { data: audiencesData } = audiencesQuery;
+  const audiences = useMemo(
+    () => audiencesData?.audiences ?? [],
+    [audiencesData?.audiences],
   );
 
   const initialUrns = useMemo(
@@ -89,54 +161,76 @@ function AssignmentsEditor({
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
 
-  // Options provide friendly labels for every principal a plugin can already be
-  // assigned to, so current assignments (seeded via defaultValue) render as
-  // names rather than raw URNs. New emails are added via the creatable input.
-  const options = useMemo(() => {
-    const everyone = {
-      label: "Everyone",
-      value: WILDCARD_PRINCIPAL,
-      icon: principalIcon("everyone"),
-    };
-    const roleOptions = roles.map((role) => ({
-      label: role.name,
-      value: role.principalUrn,
-      icon: principalIcon("role"),
-    }));
-    const memberOptions = members.map((member) => ({
-      label: member.name ? `${member.name} (${member.email})` : member.email,
-      value: member.principalUrn,
-      icon: principalIcon("user"),
-    }));
+  const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
+  const canSelectAudiences =
+    !audiencesQuery.isPending && !audiencesQuery.isError;
+  const availableAudienceGroups = useMemo(
+    () =>
+      audienceGroups.map((group) => ({
+        heading: group.heading,
+        icon: group.icon,
+        options: availableAudienceOptions(
+          group.value,
+          audiences,
+          !canSelectAudiences,
+        ),
+      })),
+    [audiences, canSelectAudiences],
+  );
+  const unavailableAudienceGroups = useMemo(
+    () =>
+      audienceGroups.map((group) => ({
+        heading: group.heading,
+        icon: group.icon,
+        options: unavailableAudienceOptions(
+          group.value,
+          selected,
+          audienceByUrn,
+        ),
+      })),
+    [audienceByUrn, selected],
+  );
+  const options = useMemo(
+    () =>
+      availableAudienceGroups
+        .map((group, index) => ({
+          heading: group.heading,
+          icon: group.icon,
+          options: [
+            ...group.options,
+            ...unavailableAudienceGroups[index]!.options,
+          ],
+        }))
+        .filter((group) => group.options.length > 0),
+    [availableAudienceGroups, unavailableAudienceGroups],
+  );
+  const legacyOptions = useMemo(
+    () =>
+      selected
+        .filter((urn) => !audienceKindForPrincipal(urn, audienceByUrn))
+        .map((urn) =>
+          existingAssignmentOption(
+            urn,
+            audienceByUrn,
+            "Legacy assignment. Remove it to stop using this audience.",
+          ),
+        ),
+    [audienceByUrn, selected],
+  );
 
-    // Surface existing email assignments as their own options so they show the
-    // address as a label and stay selected. Members already cover user: URNs.
-    const knownValues = new Set([
-      everyone.value,
-      ...roleOptions.map((o) => o.value),
-      ...memberOptions.map((o) => o.value),
-    ]);
-    const emailOptions = initialUrns
-      .filter((urn) => urn.startsWith("email:") && !knownValues.has(urn))
-      .map((urn) => ({
-        label: urn.slice("email:".length),
-        value: urn,
-        icon: principalIcon("email"),
-      }));
-
-    return [
-      { heading: "General", options: [everyone] },
-      ...(roleOptions.length
-        ? [{ heading: "Roles", options: roleOptions }]
-        : []),
-      ...(memberOptions.length
-        ? [{ heading: "Users", options: memberOptions }]
-        : []),
-      ...(emailOptions.length
-        ? [{ heading: "Emails", options: emailOptions }]
-        : []),
-    ];
-  }, [roles, members, initialUrns]);
+  const groupedOptions = useMemo(
+    () =>
+      legacyOptions.length > 0
+        ? [
+            ...options,
+            {
+              heading: "Legacy assignments",
+              options: legacyOptions,
+            },
+          ]
+        : options,
+    [legacyOptions, options],
+  );
 
   const mutation = useSetPluginAssignmentsMutation({
     onSuccess: () => {
@@ -149,27 +243,12 @@ function AssignmentsEditor({
   });
 
   const handleSave = () => {
-    // Canonicalize the picked values into principal URNs. Anything that is
-    // neither a known URN nor a valid email (e.g. a typo typed into the picker)
-    // blocks the save so we never persist an assignment that can't deliver.
-    const normalized: string[] = [];
-    const invalid: string[] = [];
-    for (const value of selected) {
-      const urn = normalizeToPrincipalUrn(value);
-      if (urn) normalized.push(urn);
-      else invalid.push(value);
-    }
-    if (invalid.length > 0) {
-      toast.error(`Not a valid role, user, or email: ${invalid.join(", ")}`);
-      return;
-    }
-
     mutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
         setPluginAssignmentsForm: {
           pluginId,
-          principalUrns: Array.from(new Set(normalized)),
+          principalUrns: Array.from(new Set(selected)),
         },
       },
     });
@@ -179,25 +258,33 @@ function AssignmentsEditor({
     <>
       <div className="flex-1 overflow-y-auto px-6 py-4">
         <label className="mb-2 block text-sm font-medium">
-          Assigned principals
+          Assigned audiences
         </label>
         <MultiSelect
-          options={options}
-          defaultValue={initialUrns}
+          options={groupedOptions}
+          defaultValue={selected}
           onValueChange={setSelected}
-          placeholder="Add roles, users, or emails"
-          // Selections here are names and email addresses, so the badge's
-          // default mono/uppercase token styling has to be undone.
+          placeholder="Select audiences"
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
-          creatable
           searchable
           hideSelectAll
           modalPopover
           maxCount={20}
+          popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none [&_[cmdk-group-heading]]:px-0 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-input-wrapper]]:px-0 [&_[cmdk-item]]:py-1 [&_[cmdk-item]]:pl-2 [&_[cmdk-item]]:pr-0 [&_[data-slot=command-group]]:p-0 [&_[data-slot=command-group]+[data-slot=command-group]]:pt-2 [&_[data-slot=command-list]]:p-0"
         />
+        {audiencesQuery.isPending && (
+          <Text muted small className="mt-2">
+            Loading audiences…
+          </Text>
+        )}
+        {audiencesQuery.isError && (
+          <Text small className="mt-2 text-destructive">
+            Unable to load audiences. Close the sheet and try again.
+          </Text>
+        )}
         <Text muted small className="mt-2">
-          Type an email and select “Create” to assign it directly. Role and user
-          assignments deliver once the recipient runs the device agent.
+          Select the specific audiences that should receive this plugin.
+          Assignments apply when a device next syncs.
         </Text>
       </div>
       <SheetFooter className="px-6 pb-6">

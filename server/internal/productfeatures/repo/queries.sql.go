@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const acquireFeatureCacheLock = `-- name: AcquireFeatureCacheLock :exec
+SELECT pg_advisory_lock(hashtextextended('product-feature:' || $1::text || ':' || $2::text, 0))
+`
+
+type AcquireFeatureCacheLockParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Serialize durable feature updates with cache fills and refreshes so an older
+// operation cannot overwrite a newer cache value after the database changes.
+func (q *Queries) AcquireFeatureCacheLock(ctx context.Context, arg AcquireFeatureCacheLockParams) error {
+	_, err := q.db.Exec(ctx, acquireFeatureCacheLock, arg.OrganizationID, arg.FeatureName)
+	return err
+}
+
 const deleteFeature = `-- name: DeleteFeature :one
 UPDATE organization_features
 SET deleted_at = clock_timestamp(),
@@ -147,4 +163,20 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, organizationID s
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const releaseFeatureCacheLock = `-- name: ReleaseFeatureCacheLock :one
+SELECT pg_advisory_unlock(hashtextextended('product-feature:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseFeatureCacheLockParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+func (q *Queries) ReleaseFeatureCacheLock(ctx context.Context, arg ReleaseFeatureCacheLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseFeatureCacheLock, arg.OrganizationID, arg.FeatureName)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }

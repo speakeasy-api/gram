@@ -15,10 +15,10 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -1250,7 +1250,7 @@ func seedDeactivationFixture(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	})
 	require.NoError(t, err)
 
-	_, err = workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	_, err = directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        organizationID,
 		UserID:                conv.ToPGText(gramUserID),
 		WorkosDirectoryUserID: directoryUserID,
@@ -1315,7 +1315,7 @@ func TestBackfillWorkOSOrganization_DeactivatedDirectoryUserDeprovisionsAccess(t
 	err := backfill.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
-	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	_, err = directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
@@ -1417,7 +1417,7 @@ func TestBackfillWorkOSOrganization_RelationshipNewerThanSnapshotNotDeprovisione
 
 	// The directory row is still soft-deleted (directory state is
 	// authoritative for the row itself)...
-	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	_, err = directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	// ...but the postdated relationship survives untouched.

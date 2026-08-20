@@ -2,6 +2,8 @@ amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.
 
 import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
 import "pkl:json"
+// Runtime data and local service configuration are outside source checks.
+exclude = List("local")
 
 // Source the oxfmt step's exclude list from `.oxfmtrc.json` so the two stay in sync.
 // Strip the leading `/` that .oxfmtrc.json uses for repo-root anchoring; hk globs are root-relative.

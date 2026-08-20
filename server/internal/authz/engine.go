@@ -90,19 +90,19 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	// Assistant-token auth has no session but should resolve grants against
-	// the owning user stamped as UserID on the context.
-	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil && !isAssistant {
+	// Assistant-token auth and Platform MCP have no session but should resolve
+	// grants against the owning user stamped as UserID on the context.
+	if authCtx.SessionID == nil && !enforcedWithoutSession(ctx) {
 		return ctx, nil
 	}
 	if authCtx.ActiveOrganizationID == "" {
 		return GrantsToContext(ctx, nil), nil
 	}
 
-	// Sessions in the shared demo org (which has no membership rows) get a
-	// fixed read-only grant set. This must precede scope and admin overrides so
-	// neither can widen a demo session back to write grants.
+	// Sessions in the shared demo org (which has no membership rows) get the
+	// full user-visible grant set. This must precede scope and admin overrides
+	// so the set a demo session holds is always the one access.ListGrants
+	// reports.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return GrantsToContext(ctx, DemoScopeGrants()), nil
 	}
@@ -115,10 +115,8 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// org, so the normal role-resolution path would yield zero grants and
 	// every Require() call would 403. Grant all scopes — matching the
 	// carve-out in access.ListGrants.
-	if authCtx.IsAdmin {
-		if _, ok := contextvalues.GetAdminOverrideFromContext(ctx); ok {
-			return GrantsToContext(ctx, allScopeGrants()), nil
-		}
+	if contextvalues.IsSupportSession(ctx) {
+		return GrantsToContext(ctx, allScopeGrants()), nil
 	}
 
 	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
@@ -607,12 +605,27 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil && !isAssistant {
+	if authCtx.SessionID == nil && !enforcedWithoutSession(ctx) {
 		return false, nil
 	}
 
 	return true, nil
+}
+
+// enforcedWithoutSession reports whether a session-less caller still has to be
+// authorized against the acting user's grants.
+//
+// A missing session normally means an unauthenticated or internal path, which
+// is why it disables enforcement. Two surfaces are session-less by design and
+// act for a real user anyway: assistant-token auth, and the OAuth-authenticated
+// Platform MCP endpoint. Leaving either out would silently turn every scope
+// check they make into a no-op.
+func enforcedWithoutSession(ctx context.Context) bool {
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		return true
+	}
+	surface, ok := contextvalues.GetActingSurface(ctx)
+	return ok && surface == contextvalues.ActingSurfacePlatformMCP
 }
 
 func validateInput(c Check) error {

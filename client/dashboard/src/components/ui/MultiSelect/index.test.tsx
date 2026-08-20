@@ -181,3 +181,59 @@ describe("MultiSelect option descriptions", () => {
     expect(labels.some((label) => label.includes("Manual"))).toBe(false);
   });
 });
+
+describe("MultiSelect disabled selected options", () => {
+  it("allows a selected disabled option to be removed", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[
+          {
+            heading: "Legacy assignments",
+            options: [
+              {
+                label: "Legacy assignment",
+                value: "legacy",
+                disabled: true,
+              },
+            ],
+          },
+        ]}
+        defaultValue={["legacy"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Legacy assignment from selection",
+      }),
+    );
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+});
+
+describe("MultiSelect group icons", () => {
+  it("renders an icon beside a group heading", () => {
+    const GroupIcon = ({ className }: { className?: string }) => (
+      <span data-testid="group-icon" className={className} />
+    );
+    render(
+      <MultiSelect
+        options={[
+          {
+            heading: "Directory groups",
+            icon: GroupIcon,
+            options: [{ label: "Engineering", value: "engineering" }],
+          },
+        ]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Select options"));
+
+    expect(screen.getByTestId("group-icon")).toBeTruthy();
+  });
+});
