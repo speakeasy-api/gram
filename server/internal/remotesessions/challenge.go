@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -149,6 +150,10 @@ type ChallengeManager struct {
 	// per-provider, non-standard requirements (e.g. Google's offline access).
 	// Injected here rather than via a package-global registry.
 	authorizeInterceptors []interceptors.AuthorizeInterceptor
+
+	// metrics carries the unsampled upstream-authorize census that the PKCE
+	// enforcement decision (AIS-566) reads.
+	metrics *remotesessionmetrics.Authorize
 }
 
 func NewChallengeManager(
@@ -179,6 +184,7 @@ func NewChallengeManager(
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
+		metrics: remotesessionmetrics.NewAuthorize(logger, meterProvider),
 	}
 }
 
@@ -207,8 +213,16 @@ type Client struct {
 	// OAuth dance.
 	ClientScope           []string
 	IssuerScopesSupported []string
-	Audience              string
-	Passthrough           bool
+
+	// IssuerCodeChallengeMethodsSupported carries the issuer's stored
+	// code_challenge_methods_supported for flow-time PKCE telemetry. Nil means
+	// the column is NULL (never captured) — distinct from an empty slice
+	// (captured; the issuer advertises no methods), so it must not be run
+	// through nil-collapsing copy idioms.
+	IssuerCodeChallengeMethodsSupported []string
+
+	Audience    string
+	Passthrough bool
 	// LegacyCallbackUrl flips BuildAuthorizationUrl onto the
 	// /oauth/callback redirect_uri (with a JSON state carrying
 	// remote_sessions=true) so a client registered against the old
@@ -239,21 +253,22 @@ func (m *ChallengeManager) ListClients(
 	out := make([]Client, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Client{
-			ID:                    r.ClientID,
-			RemoteSessionIssuerID: r.RemoteSessionIssuerID,
-			ExternalClientID:      r.ExternalClientID,
-			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:            r.IssuerSlug,
-			IssuerName:            conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:     r.IssuerLogoAssetID,
-			IssuerURL:             r.IssuerUrl,
-			AuthorizationEndpoint: conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:           r.ClientScope,
-			IssuerScopesSupported: r.ScopesSupported,
-			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:           r.Passthrough,
-			LegacyCallbackUrl:     r.LegacyCallbackUrl,
+			ID:                                  r.ClientID,
+			RemoteSessionIssuerID:               r.RemoteSessionIssuerID,
+			ExternalClientID:                    r.ExternalClientID,
+			ClientSecretEncrypted:               conv.FromPGText[string](r.ClientSecretEncrypted),
+			IssuerSlug:                          r.IssuerSlug,
+			IssuerName:                          conv.FromPGText[string](r.IssuerName),
+			IssuerLogoAssetID:                   r.IssuerLogoAssetID,
+			IssuerURL:                           r.IssuerUrl,
+			AuthorizationEndpoint:               conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+			TokenEndpoint:                       conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+			ClientScope:                         r.ClientScope,
+			IssuerScopesSupported:               r.ScopesSupported,
+			IssuerCodeChallengeMethodsSupported: r.CodeChallengeMethodsSupported,
+			Audience:                            conv.FromPGTextOrEmpty[string](r.ClientAudience),
+			Passthrough:                         r.Passthrough,
+			LegacyCallbackUrl:                   r.LegacyCallbackUrl,
 		})
 	}
 	return out, nil
@@ -291,23 +306,27 @@ type RemoteSessionState struct {
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
-// `subject`'s remote_session under the given `userSessionIssuerID`. Clients
-// with no non-deleted session are omitted (disconnected). Single round-trip;
-// the caller (consent renderer) then does O(1) lookups per card. Returns an
-// empty map for zero subjects so anonymous-pre-stamp renders are no-ops.
+// `subject`'s remote_session among clientIDs. Clients with no non-deleted
+// session are omitted (disconnected). Single round-trip; the caller
+// (consent renderer) then does O(1) lookups per card. Returns an empty map
+// for a zero subject or an empty client list so anonymous-pre-stamp
+// renders are no-ops.
+//
+// Scope is the client IDs the caller already resolved (ListClients). The
+// stored user_session_issuer_id is provenance from INSERT, not a lookup
+// key, so a grant minted by a different issuer — including one that has
+// since been soft-deleted — is still returned.
 func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
-	projectID uuid.UUID,
-	userSessionIssuerID uuid.UUID,
+	clientIDs []uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
-	if subject.IsZero() {
+	if subject.IsZero() || len(clientIDs) == 0 {
 		return map[uuid.UUID]RemoteSessionState{}, nil
 	}
 	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesForSubject(ctx, remotesessions_repo.ListRemoteSessionStatusesForSubjectParams{
-		SubjectUrn:          subject,
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           projectID,
+		SubjectUrn:             subject,
+		RemoteSessionClientIds: clientIDs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
@@ -347,7 +366,6 @@ var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable re
 func (m *ChallengeManager) RefreshRemoteSession(
 	ctx context.Context,
 	subject urn.SessionSubject,
-	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
 	fallbackResource string,
 ) (RefreshResult, error) {
@@ -363,8 +381,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if session.UserSessionIssuerID != userSessionIssuerID ||
-		!session.RefreshTokenEncrypted.Valid ||
+	if !session.RefreshTokenEncrypted.Valid ||
 		session.RefreshTokenEncrypted.String == "" {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
@@ -385,12 +402,10 @@ func (m *ChallengeManager) RefreshRemoteSession(
 //
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
-func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
+func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (int64, error) {
 	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userSessionIssuerID,
-		ProjectID:             projectID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("disconnect remote session: %w", err)
@@ -410,13 +425,11 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 // SetRemoteSessionAutoRefresh records the subject's consent-screen
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
-func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
+func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, enabled bool) (int64, error) {
 	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
 		AutoRefresh:           enabled,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userSessionIssuerID,
-		ProjectID:             projectID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
@@ -434,6 +447,10 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
+	// Counted at entry, before any validation or the Redis write, so a flow
+	// that dies on an unrelated error here still lands in the census.
+	m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+
 	if client.AuthorizationEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
 	}

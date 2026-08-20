@@ -19,7 +19,7 @@ import (
 type CreateRoleRequestBody struct {
 	// Display name for the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Description of what this role can do.
+	// Optional description of what this role can do.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Scope grants to assign.
 	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
@@ -7276,7 +7276,7 @@ func NewGetRolePayload(id string, apikeyToken *string, sessionToken *string) *ac
 func NewCreateRolePayload(body *CreateRoleRequestBody, apikeyToken *string, sessionToken *string) *access.CreateRolePayload {
 	v := &access.CreateRolePayload{
 		Name:        *body.Name,
-		Description: *body.Description,
+		Description: body.Description,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -7546,9 +7546,6 @@ func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *
 func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Description == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	if body.Grants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))

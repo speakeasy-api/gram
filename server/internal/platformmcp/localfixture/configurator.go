@@ -136,6 +136,11 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 			GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 			ResponseTypesSupported:            []string{"code"},
 			TokenEndpointAuthMethodsSupported: []string{"none"},
+			// Matches what validateMetadata requires the fixture IdP to
+			// advertise. Deliberately absent from validIssuer: rows created
+			// before this column existed hold NULL, and rejecting them would
+			// break existing local environments over a fixture-only field.
+			CodeChallengeMethodsSupported: []string{"S256"},
 		})
 		if err != nil {
 			return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create local fixture issuer: %w", err)

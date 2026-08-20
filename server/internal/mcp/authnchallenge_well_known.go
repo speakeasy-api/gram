@@ -89,8 +89,7 @@ type oauthAuthorizationServerMetadata struct {
 
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
-	// only when the issuer organization's gram-user-session-cimd flag is
-	// on; omitted otherwise.
+	// unless the issuer's admission mode is `disabled`; omitted otherwise.
 	ClientIDMetadataDocumentSupported *bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
@@ -432,11 +431,11 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
-	// Advertised only when the rollout flag is on AND the issuer admits at
-	// least some CIMD client. A `disabled` issuer omits the field: claiming
-	// support while admitting nothing would steer spec-compliant clients
-	// into a guaranteed-failure flow instead of letting them fall back to
-	// dynamic client registration, which is still open on this issuer.
+	// Advertised only when the issuer admits at least some CIMD client. A
+	// `disabled` issuer omits the field: claiming support while admitting
+	// nothing would steer spec-compliant clients into a guaranteed-failure
+	// flow instead of letting them fall back to dynamic client registration,
+	// which is still open on this issuer.
 	//
 	// This is advisory, not a control. The response carries cache headers
 	// (writeJSONMetadata), and clients typically cache authorization-server
@@ -450,7 +449,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
 		)
 	}
-	if mode != admission.ModeDisabled && s.userSessionCIMDEnabled(ctx, s.logger, endpoint) {
+	if mode != admission.ModeDisabled {
 		cimdSupported = conv.PtrEmpty(true)
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{

@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -63,9 +62,6 @@ type testInstance struct {
 	sessionManager      *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	redis               *redis.Client
-	// features is the injectable flag provider wired into the service; tests
-	// flip FlagUserSessionCIMD on it per organization.
-	features *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -111,8 +107,6 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
-	features := &feature.InMemory{}
-
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -127,7 +121,6 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 		ratelimit.NewRedisStore(redisClient),
-		features,
 	)
 
 	return ctx, &testInstance{
@@ -136,7 +129,6 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		sessionManager:      sessionManager,
 		chatSessionsManager: chatSessionsManager,
 		redis:               redisClient,
-		features:            features,
 	}
 }
 

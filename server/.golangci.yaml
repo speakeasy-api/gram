@@ -477,6 +477,7 @@ linters:
         - "(go.temporal.io/sdk/internal.Future).Get("
         - "(github.com/stretchr/testify/mock.Arguments).Error("
 
+        - "github.com/speakeasy-api/gram/server/internal/o11y.LogError("
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("

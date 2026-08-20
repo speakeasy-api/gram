@@ -20,29 +20,19 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { accessCreateRole } from "@gram/client/funcs/accessCreateRole.js";
+import { otelUploadTraces } from "@gram/client/funcs/otelUploadTraces.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await accessCreateRole(gram, {
-    createRoleForm: {
-      description: "swerve hm receptor how",
-      grants: [
-        {
-          scope: "environment:write",
-        },
-      ],
-      name: "<value>",
-    },
-  });
+  const res = await otelUploadTraces(gram);
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    
   } else {
-    console.log("accessCreateRole failed:", res.error);
+    console.log("otelUploadTraces failed:", res.error);
   }
 }
 

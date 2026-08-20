@@ -3472,6 +3472,12 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
 	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
 
 	return res
 }

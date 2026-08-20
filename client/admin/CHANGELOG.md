@@ -1,5 +1,11 @@
 # admin
 
+## 0.2.4
+
+### Patch Changes
+
+- c1eae5f: Bill both customer-facing and platform-initiated inference spend for PAYG organizations.
+
 ## 0.2.3
 
 ### Patch Changes

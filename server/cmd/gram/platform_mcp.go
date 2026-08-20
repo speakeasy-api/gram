@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -59,10 +58,12 @@ type platformMCPConfig struct {
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
 	Registry               *externalmcp.RegistryClient
+	Catalog                *externalmcp.CatalogService
 	GuardianPolicy         *guardian.Policy
 	RemoteChallengeManager *remotesessions.ChallengeManager
 	AuditLogger            *audit.Logger
 	PluginPublisher        *plugins.Service
+	Skills                 platformmcp.SkillsManagement
 	LocalFixture           *platformMCPLocalFixtureConfig
 }
 
@@ -133,14 +134,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
 	fixtureRegistry := config.Registry.WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
-		browserDescriptors, err := loadBrowserPlatformMCPCatalogDescriptors(ctx, config.DB)
+		browserSources, err := loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 		if err != nil {
 			return nil, err
 		}
-		return []platformmcp.RegistryCatalogSource{
-			{Client: config.Registry, Descriptors: browserDescriptors},
-			{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}},
-		}, nil
+		return append(browserSources, platformmcp.RegistryCatalogSource{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}}), nil
 	})
 	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	if err != nil {
@@ -183,6 +181,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -220,6 +219,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/revoke", fixtureOAuth.Handler().ServeHTTP)
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", fixtureMCP.Handler().ServeHTTP)
 
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -238,6 +238,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
+		skillAuthoring,
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -286,16 +287,29 @@ func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.Di
 	)
 }
 
-func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, db *pgxpool.Pool) ([]platformmcp.CatalogDescriptor, error) {
-	browserRegistries, err := externalmcprepo.New(db).ListMCPRegistries(ctx)
+func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *externalmcp.CatalogService) ([]platformmcp.RegistryCatalogSource, error) {
+	if catalog == nil {
+		return nil, errors.New("shared MCP catalogue service is not configured")
+	}
+	sources, err := catalog.Sources(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list browser MCP catalogue registries for Platform MCP: %w", err)
+		return nil, fmt.Errorf("list reviewed MCP catalogue sources for Platform MCP: %w", err)
 	}
-	browserDescriptors := make([]platformmcp.CatalogDescriptor, 0, len(browserRegistries))
-	for _, registry := range browserRegistries {
-		browserDescriptors = append(browserDescriptors, platformmcp.BrowserCatalogDescriptor(externalmcp.Registry{ID: registry.ID, URL: registry.Url}))
+	result := make([]platformmcp.RegistryCatalogSource, 0, len(sources))
+	for _, source := range sources {
+		reader, err := catalog.ReaderFor(source)
+		if err != nil {
+			return nil, fmt.Errorf("resolve reviewed MCP catalogue source %q: %w", source.SourceKey, err)
+		}
+		// Keep the source sequence from CatalogService, which is ordered by
+		// operator-defined priority and source key; grouping through a map would
+		// discard that deterministic composition order.
+		result = append(result, platformmcp.RegistryCatalogSource{
+			Client:      reader,
+			Descriptors: []platformmcp.CatalogDescriptor{platformmcp.BrowserCatalogDescriptor(source.Registry)},
+		})
 	}
-	return browserDescriptors, nil
+	return result, nil
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
@@ -328,8 +342,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		return AssistantSurface{}, fmt.Errorf("create platform mcp authenticator: %w", err)
 	}
 
-	catalog := platformmcp.NewDynamicRegistryCatalog(config.Registry, func(ctx context.Context) ([]platformmcp.CatalogDescriptor, error) {
-		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.DB)
+	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
+		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 	})
 	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	if err != nil {
@@ -358,6 +372,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -404,6 +419,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			return err
 		},
 	)
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -419,6 +435,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		feedback,
 		platformmcp.NewOnboardingService(config.DB),
 		distributions,
+		skillAuthoring,
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)

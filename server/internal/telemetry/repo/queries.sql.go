@@ -2380,21 +2380,29 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 
 // GetTimeSeriesMetricsParams contains the parameters for getting time series metrics.
 type GetTimeSeriesMetricsParams struct {
-	GramProjectID     string
-	TimeStart         int64
-	TimeEnd           int64
-	IntervalSeconds   int64                 // Bucket interval in seconds
-	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
-	ExternalUserID    string                // Optional filter
-	APIKeyID          string                // Optional filter
-	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string                // Optional filter - filters by mcp_server_id
-	EventSource       string                // Optional filter - filters by event_source
-	HookSource        string                // Optional filter - filters by hook_source
-	AccountType       string                // Optional filter - filters by account_type
-	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface (billing.GramHostedHookSourceNames) - platform-side
+	// inference such as the risk-analysis judges, logged under the session
+	// owner's identity but not their usage. Never include the empty string
+	// here: raw-log hook, tool-call, and import rows are legitimately
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
+	ExcludedHookSources []string
+	GramProjectID       string
+	TimeStart           int64
+	TimeEnd             int64
+	IntervalSeconds     int64                 // Bucket interval in seconds
+	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID      string                // Optional filter
+	APIKeyID            string                // Optional filter
+	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	EventSource         string                // Optional filter - filters by event_source
+	HookSource          string                // Optional filter - filters by hook_source
+	AccountType         string                // Optional filter - filters by account_type
+	ExternalOrgID       string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -2461,6 +2469,12 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
+	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
@@ -2502,22 +2516,30 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 
 // GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.
 type GetToolMetricsBreakdownParams struct {
-	GramProjectID     string
-	TimeStart         int64
-	TimeEnd           int64
-	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
-	ExternalUserID    string                // Optional filter
-	APIKeyID          string                // Optional filter
-	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string                // Optional filter - filters by mcp_server_id
-	EventSource       string                // Optional filter - filters by event_source
-	HookSource        string                // Optional filter - filters by hook_source
-	AccountType       string                // Optional filter - filters by account_type
-	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
-	Limit             int
-	SortBy            string // "count" or "failure_rate"
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface (billing.GramHostedHookSourceNames) - platform-side
+	// inference such as the risk-analysis judges, logged under the session
+	// owner's identity but not their usage. Never include the empty string
+	// here: raw-log hook, tool-call, and import rows are legitimately
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
+	ExcludedHookSources []string
+	GramProjectID       string
+	TimeStart           int64
+	TimeEnd             int64
+	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID      string                // Optional filter
+	APIKeyID            string                // Optional filter
+	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	EventSource         string                // Optional filter - filters by event_source
+	HookSource          string                // Optional filter - filters by hook_source
+	AccountType         string                // Optional filter - filters by account_type
+	ExternalOrgID       string                // Optional filter - scopes to a single account by provider org id
+	Limit               int
+	SortBy              string // "count" or "failure_rate"
 }
 
 // GetToolMetricsBreakdown retrieves per-tool aggregated metrics for top tools tables.
@@ -2561,6 +2583,12 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
@@ -2607,20 +2635,28 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 
 // GetOverviewSummaryParams contains the parameters for getting overview summary metrics.
 type GetOverviewSummaryParams struct {
-	GramProjectID     string
-	TimeStart         int64
-	TimeEnd           int64
-	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
-	ExternalUserID    string                // Optional filter
-	APIKeyID          string                // Optional filter
-	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string                // Optional filter - filters by mcp_server_id
-	EventSource       string                // Optional filter - filters by event_source
-	HookSource        string                // Optional filter - filters by hook_source
-	AccountType       string                // Optional filter - filters by account_type
-	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface (billing.GramHostedHookSourceNames) - platform-side
+	// inference such as the risk-analysis judges, logged under the session
+	// owner's identity but not their usage. Never include the empty string
+	// here: raw-log hook, tool-call, and import rows are legitimately
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
+	ExcludedHookSources []string
+	GramProjectID       string
+	TimeStart           int64
+	TimeEnd             int64
+	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID      string                // Optional filter
+	APIKeyID            string                // Optional filter
+	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID         string                // Optional filter - filters by mcp_server_id
+	EventSource         string                // Optional filter - filters by event_source
+	HookSource          string                // Optional filter - filters by hook_source
+	AccountType         string                // Optional filter - filters by account_type
+	ExternalOrgID       string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -2631,7 +2667,7 @@ type GetOverviewSummaryParams struct {
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
 	// A canonical user scope is a user filter even though arg.User stays empty
 	// in fold mode, so it must force the raw path off the unfiltered MV.
-	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
+	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -2751,6 +2787,12 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
@@ -3164,19 +3206,28 @@ func chAny(conditions ...string) string {
 
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
-	GramProjectID    string
-	TimeStart        int64
-	TimeEnd          int64
-	GramDeploymentID string // optional
-	EventSource      string // optional; e.g. "hook"
-	HookSource       string // optional; e.g. "cursor"
-	AccountType      string // optional; e.g. "personal"
-	ExternalOrgID    string // optional; scopes to a single account by provider org id
-	GroupBy          string // "user_id" or "external_user_id"
-	UserIDs          []string
-	SortOrder        string // "asc" or "desc"
-	Cursor           string // user identifier to paginate from
-	Limit            int
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface (billing.GramHostedHookSourceNames), so platform-side
+	// inference logged under an employee's identity never counts as their
+	// usage. Aligns the raw-logs path with the agent-metrics summaries path,
+	// which never ingests those rows. Never include the empty string here.
+	// Ignored when HookSource is set (an explicit source filter overrides
+	// the exclusion) and under external_user_id grouping (an external user's
+	// Gram-hosted completions ARE their usage).
+	ExcludedHookSources []string
+	GramProjectID       string
+	TimeStart           int64
+	TimeEnd             int64
+	GramDeploymentID    string // optional
+	EventSource         string // optional; e.g. "hook"
+	HookSource          string // optional; e.g. "cursor"
+	AccountType         string // optional; e.g. "personal"
+	ExternalOrgID       string // optional; scopes to a single account by provider org id
+	GroupBy             string // "user_id" or "external_user_id"
+	UserIDs             []string
+	SortOrder           string // "asc" or "desc"
+	Cursor              string // user identifier to paginate from
+	Limit               int
 	// MetricsDetail selects how many aggregates to compute: one of the
 	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
 	// first/last activity, input/output token sums, and raw_user_ids — skipping
@@ -3314,6 +3365,14 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result. External
+	// grouping never applies it either: an external user's Gram-hosted
+	// completions ARE their usage, and their only token-bearing rows.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" && arg.GroupBy != "external_user_id" {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
+	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
@@ -3372,16 +3431,24 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 // GetUserMetricsSummaryParams contains the parameters for getting a user's metrics summary.
 type GetUserMetricsSummaryParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	User           UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
-	CanonicalUser  CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
-	ExternalUserID string                // external_user_id (mutually exclusive with User)
-	EventSource    string                // Optional filter - filters by event_source
-	HookSource     string                // Optional filter - filters by hook_source
-	AccountType    string                // Optional filter - filters by account_type
-	ExternalOrgID  string                // Optional filter - scopes to a single account by provider org id
+	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// completion surface (billing.GramHostedHookSourceNames) - platform-side
+	// inference such as the risk-analysis judges, logged under the session
+	// owner's identity but not their usage. Never include the empty string
+	// here: raw-log hook, tool-call, and import rows are legitimately
+	// untagged. Ignored when HookSource is set: an explicit source filter
+	// overrides the exclusion.
+	ExcludedHookSources []string
+	GramProjectID       string
+	TimeStart           int64
+	TimeEnd             int64
+	User                UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
+	CanonicalUser       CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID      string                // external_user_id (mutually exclusive with User)
+	EventSource         string                // Optional filter - filters by event_source
+	HookSource          string                // Optional filter - filters by hook_source
+	AccountType         string                // Optional filter - filters by account_type
+	ExternalOrgID       string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -3459,6 +3526,12 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	// The exclusion is a default, not a veto: a caller naming a specific
+	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// two filters would conjoin into a silently empty result.
+	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
+		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {

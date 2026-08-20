@@ -82,13 +82,13 @@ type RegistryCatalogSource struct {
 	// development-CA-aware client; normal browser-catalogue registries share the
 	// standard client. It is never chosen from Platform MCP input. Every source is
 	// strict: search fails closed rather than presenting a partial reviewed catalog.
-	Client      *externalmcp.RegistryClient
+	Client      externalmcp.RegistryReader
 	Descriptors []CatalogDescriptor
 }
 
 type registryCatalogDescriptor struct {
 	CatalogDescriptor
-	client *externalmcp.RegistryClient
+	client externalmcp.RegistryReader
 }
 
 type RegistryCatalog struct {

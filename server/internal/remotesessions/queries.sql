@@ -25,6 +25,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -49,6 +50,10 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    -- Nullable on purpose: a caller with neither a discovery document nor an
+    -- operator-supplied value passes NULL ("not captured"), which must stay
+    -- distinct from the empty array ("the issuer advertises no methods").
+    @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
     @oidc,
     @passthrough
@@ -75,6 +80,7 @@ INSERT INTO remote_session_issuers (
     grant_types_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
     passthrough
@@ -94,6 +100,7 @@ VALUES (
     @grant_types_supported,
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
+    @code_challenge_methods_supported,
     FALSE,
     FALSE,
     FALSE
@@ -111,6 +118,7 @@ SET
     grant_types_supported = EXCLUDED.grant_types_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
     client_id_metadata_document_supported = FALSE,
     oidc = FALSE,
     passthrough = FALSE,
@@ -309,6 +317,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -329,8 +338,12 @@ RETURNING *;
 -- restates the issuer's full discovered surface, so there is no "leave this
 -- one alone" case: an endpoint the issuer has stopped advertising arrives as
 -- an empty string and is cleared to NULL, and a *_supported array it has
--- stopped advertising arrives as an empty array (those columns are NOT NULL
--- with an empty-array default, so NULL is not a value they can hold).
+-- stopped advertising arrives as an empty array. For the capability arrays
+-- that are NOT NULL with an empty-array default, NULL is not a value they can
+-- hold anyway; for the nullable code_challenge_methods_supported the empty
+-- array is itself load-bearing ("captured; the upstream advertises nothing"),
+-- and a refresh must never write NULL there — NULL is reserved for rows
+-- discovery has not captured yet, and this query is the capture.
 --
 -- Scoping differs from the tier-specific updates by necessity, since one query
 -- serves project-owned, organization-level, and global rows. Rather than the
@@ -369,6 +382,7 @@ SET
     grant_types_supported = @grant_types_supported::text[],
     response_types_supported = @response_types_supported::text[],
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
+    code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -710,12 +724,20 @@ RETURNING *;
 
 -- name: ListRemoteSessionStatusesForSubject :many
 -- Bulk lookup for the consent renderer: returns each non-deleted
--- remote_session for the given subject under a single user_session_issuer,
--- tagged with whether it is still usable. Folds the N per-card lookups into
--- one round-trip. The partial unique index on (subject_urn,
+-- remote_session for the given subject among the supplied clients, tagged
+-- with whether it is still usable. Folds the N per-card lookups into one
+-- round-trip. The partial unique index on (subject_urn,
 -- remote_session_client_id) WHERE deleted IS FALSE means at most one row per
 -- (subject, client), so the result doubles as a per-client map without
 -- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+--
+-- Scope is the client IDs the caller already resolved (ListClients / posted
+-- client_id). Project scoping is intentionally NOT applied: re-joining
+-- user_session_issuers would only repeat that check, and that table is
+-- soft-deleted — ON DELETE CASCADE never fires, so a live grant minted by a
+-- now-deleted issuer would disappear from consent while GetActiveRemoteSession
+-- still finds it. user_session_issuer_id on the row is provenance from INSERT,
+-- not a lookup key.
 --
 -- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
 -- session is usable while the upstream authorization remains valid and its
@@ -746,11 +768,8 @@ SELECT
     ELSE 'expired'
   END)::text AS status
 FROM remote_sessions AS s
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.subject_urn = @subject_urn
-  AND s.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id = @project_id
-  AND usi.deleted IS FALSE
+  AND s.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
   AND s.deleted IS FALSE;
 
 -- name: SetRemoteSessionUpdatedAt :exec
@@ -850,6 +869,7 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_client_user_session_issuers AS link
@@ -916,60 +936,54 @@ RETURNING s.*;
 -- Records the subject's consent-screen auto-refresh choice. Deliberately does
 -- NOT touch updated_at: that column doubles as the refresh CAS token-version
 -- signal and keepalive clock, and a preference toggle must not perturb either.
--- Scoped through the endpoint's user_session_issuer project so the write
--- cannot cross tenant boundaries. A client may be bound to several
--- user_session_issuers; the issuer predicate pins the write to the binding the
--- consent screen displayed (reads filter by issuer the same way).
+-- Scope is the client ID the caller already resolved through the endpoint's
+-- current bindings. Project scoping is intentionally NOT applied: re-joining
+-- user_session_issuers would only repeat that check, and a live grant minted
+-- by a now-soft-deleted issuer must still accept the preference toggle.
 UPDATE remote_sessions AS s
 SET auto_refresh = @auto_refresh
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
-  AND s.user_session_issuer_id = @user_session_issuer_id
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = @project_id
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
 
 -- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 -- Cascade for a revoked user session: tombstones every upstream grant the
--- subject holds through one user session issuer and returns their stored
--- credentials. Scoped through the issuer's project so the write cannot
--- cross tenants.
+-- subject holds in the stored issuer's project and returns their stored
+-- credentials. Join user_session_issuers for that project scope, including a
+-- now-soft-deleted issuer: that table is soft-deleted, ON DELETE CASCADE
+-- never fires, and a live grant still points at the deleted row. Filtering
+-- usi.deleted would skip those grants and silently skip RFC 7009.
 --
 -- A subject's grant is shared by every MCP client it authenticates, because
 -- remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
--- user-session-client column. Revoking one client's session therefore drops
--- the provider link for all of them, which is the intended blast radius: a
--- revoke that left the upstream tokens alive would not be a revoke.
+-- user-session-client column. The stored user_session_issuer_id is provenance
+-- from INSERT, not a lookup key, so a revoke through one issuer in the
+-- project must still tombstone a row minted by another. A revoke that left
+-- the upstream tokens alive would not be a revoke.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
-  AND s.user_session_issuer_id = @user_session_issuer_id
   AND usi.id = s.user_session_issuer_id
   AND usi.project_id = @project_id
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 
 -- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 -- Consent-screen disconnect: soft-deletes the subject's own binding for one
--- upstream client. Subject, client and issuer all derived server-side from
--- the challenge state and the endpoint's bindings, never from the form;
--- scoped through the issuer's project so the write cannot cross tenants.
+-- upstream client. Subject and client are derived server-side from the
+-- challenge state and the endpoint's bindings, never from the form.
 --
 -- Returns the stored credentials it tombstones; the partial unique index on
--- (subject_urn, remote_session_client_id) caps that at one row.
+-- (subject_urn, remote_session_client_id) caps that at one row. Project
+-- scoping is intentionally NOT applied: the acted-on client is already
+-- re-resolved through the endpoint's current bindings, and re-joining
+-- user_session_issuers would hide a live grant minted by a now-soft-deleted
+-- issuer, skipping RFC 7009.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
-  AND s.user_session_issuer_id = @user_session_issuer_id
-  AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = @project_id
-  AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 
@@ -990,15 +1004,39 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 --
 -- Preferences are read, never rewritten, so restoring the opt-in policy
 -- restores each subject's original choice.
+--
+-- A live Gram identity provider bound to this client, plus an unexpired user
+-- session on that issuer, is what keeps the grant eligible. user_session_issuer_id
+-- on the remote_sessions row is provenance from INSERT and is never rewritten
+-- on reconnect, so requiring that exact issuer to still be live would skip a
+-- grant whose minting provider was replaced while another bound issuer still
+-- holds the subject's login.
 
 -- name: ClaimDueRemoteSessionRefreshCandidates :many
 WITH due AS (
-  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  SELECT s.id, s.updated_at, eligible.organization_id, i.token_endpoint
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  JOIN LATERAL (
+    SELECT p.organization_id
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
+    ORDER BY usi.id
+    LIMIT 1
+  ) AS eligible ON TRUE
   WHERE s.deleted IS FALSE
     AND s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -1011,7 +1049,7 @@ WITH due AS (
     AND (
       EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = eligible.organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
           AND orgf.deleted IS FALSE
       )
@@ -1019,24 +1057,11 @@ WITH due AS (
         s.auto_refresh IS TRUE
         AND EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = eligible.organization_id
             AND orgf.feature_name = 'remote_session_auto_refresh'
             AND orgf.deleted IS FALSE
         )
       )
-    )
-    AND EXISTS (
-      SELECT 1 FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = c.id
-        AND link.user_session_issuer_id = s.user_session_issuer_id
-    )
-    AND EXISTS (
-      SELECT 1 FROM user_sessions AS gs
-      WHERE gs.project_id = usi.project_id
-        AND gs.user_session_issuer_id = s.user_session_issuer_id
-        AND gs.subject_urn = s.subject_urn
-        AND gs.deleted IS FALSE
-        AND gs.refresh_expires_at > @now_ts::timestamptz
     )
   ORDER BY s.updated_at, s.id
   LIMIT @limit_value
@@ -1061,10 +1086,7 @@ SELECT sqlc.embed(s)
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
-JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
 WHERE s.id = @id
-  AND p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -1077,7 +1099,7 @@ WHERE s.id = @id
   AND (
     EXISTS (
       SELECT 1 FROM organization_features AS orgf
-      WHERE orgf.organization_id = p.organization_id
+      WHERE orgf.organization_id = @organization_id
         AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
         AND orgf.deleted IS FALSE
     )
@@ -1085,24 +1107,29 @@ WHERE s.id = @id
       s.auto_refresh IS TRUE
       AND EXISTS (
         SELECT 1 FROM organization_features AS orgf
-        WHERE orgf.organization_id = p.organization_id
+        WHERE orgf.organization_id = @organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh'
           AND orgf.deleted IS FALSE
       )
     )
   )
   AND EXISTS (
-    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi
+      ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND link.user_session_issuer_id = s.user_session_issuer_id
-  )
-  AND EXISTS (
-    SELECT 1 FROM user_sessions AS gs
-    WHERE gs.project_id = usi.project_id
-      AND gs.user_session_issuer_id = s.user_session_issuer_id
-      AND gs.subject_urn = s.subject_urn
-      AND gs.deleted IS FALSE
-      AND gs.refresh_expires_at > @now_ts::timestamptz
+      AND p.organization_id = @organization_id
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.project_id = usi.project_id
+          AND gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
   );
 
 -- Organization administrator surface (AIS-119) — cross-project visibility into
@@ -1346,6 +1373,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -1845,6 +1873,7 @@ SET
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),

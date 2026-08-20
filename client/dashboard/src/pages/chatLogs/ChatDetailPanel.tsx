@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronsDown,
   ChevronUp,
+  GitBranch,
   Info,
   Loader2,
   Pin,
@@ -38,6 +39,7 @@ import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -58,14 +60,14 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Switch } from "@/components/ui/Switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
-import { formatChatSource } from "@/lib/formatPlatform";
+import { formatChatSource, formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -123,6 +125,9 @@ interface ChatDetailPanelProps {
   /** Dim non-flagged rows to spotlight findings, without the risk windowing.
    * Use from risk-filtered lists (e.g. Agent Sessions filtered to has_risk). */
   dimNonRisk?: boolean;
+  /** Open a different chat in the panel — used by the Linked-sessions section
+   * to hop to a move's other end. Omitted, linked sessions render unlinked. */
+  onOpenChat?: (chatId: string) => void;
 }
 
 interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
@@ -204,6 +209,7 @@ export function ChatDetailSheet({
   focusedMessageTurn,
   riskFocus,
   dimNonRisk,
+  onOpenChat,
 }: ChatDetailSheetProps): JSX.Element {
   return (
     <Sheet
@@ -230,6 +236,7 @@ export function ChatDetailSheet({
                   focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
+                  onOpenChat={onOpenChat}
                 />
               </ErrorBoundary>
             )}
@@ -346,7 +353,10 @@ function SessionSummary({
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
-                  <HookSourceIcon source={chat.source} className="size-3.5" />
+                  <AgentProviderIcon
+                    source={chat.source}
+                    className="size-3.5"
+                  />
                   {formatChatSource(chat.source, chat)}
                 </span>
               </MetaRow>
@@ -429,7 +439,7 @@ function ChatDetailMetadataBadges({
         <Badge variant="neutral" className="shrink-0 text-[10px]">
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
-              <HookSourceIcon source={chat.source} className="size-3" />
+              <AgentProviderIcon source={chat.source} className="size-3" />
               {formatChatSource(chat.source, chat)}
             </span>
           </Badge.Text>
@@ -786,6 +796,98 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+// SessionLinksSection lists session-lineage edges touching this chat: moves
+// out of it ("Moved to …") and moves that produced it ("Derived from …").
+// Presence-gated — chats with no edges render nothing, so there is no feature
+// flag and no empty state.
+function SessionLinksSection({
+  chatId,
+  onOpenChat,
+}: {
+  chatId: string;
+  onOpenChat?: (chatId: string) => void;
+}) {
+  // throwOnError stays off: this section is optional, and a lineage-endpoint
+  // failure must not take down the whole transcript panel's error boundary.
+  const { data } = useListChatSessionLinks({ chatIds: [chatId] }, undefined, {
+    throwOnError: false,
+  });
+  const links = data?.links ?? [];
+  if (links.length === 0) {
+    return null;
+  }
+
+  const outbound = links.filter((l) => l.parentChatId === chatId);
+  const inbound = links.filter((l) => l.childChatId === chatId);
+
+  const hop = (target: string | undefined, navigable: boolean) =>
+    onOpenChat && navigable && target ? () => onOpenChat(target) : undefined;
+
+  const row = (
+    key: string,
+    label: ReactNode,
+    when: Date,
+    onHop: (() => void) | undefined,
+    detail?: string,
+  ) => (
+    <div key={key} className="flex items-baseline justify-between gap-3 py-1">
+      <span className="min-w-0 truncate text-xs">
+        {onHop ? (
+          <button
+            type="button"
+            onClick={onHop}
+            className="text-foreground cursor-pointer font-medium underline-offset-2 hover:underline"
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="text-foreground font-medium">{label}</span>
+        )}
+        {detail && <span className="text-muted-foreground"> · {detail}</span>}
+      </span>
+      <span
+        className="text-muted-foreground shrink-0 text-xs"
+        title={format(when, "PPpp")}
+      >
+        {formatDistanceToNow(when, { addSuffix: true })}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium">
+        <GitBranch className="size-3.5" aria-hidden />
+        Linked sessions
+      </div>
+      <div className="mt-1">
+        {inbound.map((link, i) =>
+          row(
+            `in-${i}-${link.createdAt.toISOString()}`,
+            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            link.createdAt,
+            hop(link.parentChatId, link.parentCaptured),
+            link.parentCaptured
+              ? (link.actorEmail ?? undefined)
+              : "not yet captured",
+          ),
+        )}
+        {outbound.map((link, i) =>
+          row(
+            `out-${i}-${link.createdAt.toISOString()}`,
+            <>Moved to {formatPlatform(link.targetHarness)}</>,
+            link.createdAt,
+            hop(link.childChatId, link.childCaptured),
+            link.childCaptured
+              ? (link.childTitle ?? undefined)
+              : "not yet captured",
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SessionSummarySection({
   chatId,
   summary,
@@ -914,6 +1016,7 @@ function ChatDetailPanel({
   focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
+  onOpenChat,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
   const { user } = useSession();
@@ -1519,6 +1622,12 @@ function ChatDetailPanel({
           setLocalSummary(nextSummary);
           setLocalSummaryGeneratedAt(generatedAt);
         }}
+      />
+
+      <SessionLinksSection
+        key={`links-${chatId}`}
+        chatId={chatId}
+        onOpenChat={onOpenChat}
       />
 
       {chatLoadHasErrors && (

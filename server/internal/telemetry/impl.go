@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -454,7 +455,17 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		canonicalOrg = params.organizationID
 	}
 
+	// Gram-hosted inference is excluded only for internal (employee)
+	// grouping. External users are the opposite case: their hosted-chat
+	// completions ARE their usage — and their only token-bearing rows, so
+	// excluding them would zero the external surfaces entirely.
+	var excludedHookSources []string
+	if groupBy == "user_id" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	searchParams := repo.SearchUsersParams{
+		ExcludedHookSources:  excludedHookSources,
 		GramProjectID:        params.projectID,
 		TimeStart:            params.timeStart,
 		TimeEnd:              params.timeEnd,
@@ -569,10 +580,11 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	})
 	g.Go(func() error {
 		items, err := s.chRepo.ListEmaillessIdentities(gctx, repo.ListEmaillessIdentitiesParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			ExcludedHookSources: billing.GramHostedHookSourceNames(),
+			GramProjectID:       params.projectID,
+			TimeStart:           params.timeStart,
+			TimeEnd:             params.timeEnd,
+			Limit:               agentMetricsDirectoryCap,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error listing email-less identities")
@@ -1065,6 +1077,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	eg.Go(func() error {
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
+			ExcludedHookSources:  billing.GramHostedHookSourceNames(),
 			GramProjectID:        params.projectID,
 			TimeStart:            params.timeStart,
 			TimeEnd:              params.timeEnd,
@@ -1334,18 +1347,28 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// judges and friends) as their usage. An external user is the opposite
+	// case: their hosted-chat completions ARE their usage — and their only
+	// token-bearing rows, so the exclusion would zero their page.
+	var excludedHookSources []string
+	if userID != "" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		User:           user,
-		CanonicalUser:  canonicalUser,
-		ExternalUserID: externalUserID,
-		EventSource:    conv.PtrValOr(payload.EventSource, ""),
-		HookSource:     conv.PtrValOr(payload.HookSource, ""),
-		AccountType:    conv.PtrValOr(payload.AccountType, ""),
-		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       authCtx.ProjectID.String(),
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		EventSource:         conv.PtrValOr(payload.EventSource, ""),
+		HookSource:          conv.PtrValOr(payload.HookSource, ""),
+		AccountType:         conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:       conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
@@ -1879,6 +1902,20 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
+	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// judges and friends): those completions log under the session owner's
+	// identity but are the platform's spend, not the employee's usage —
+	// counting them made one employee's page show 60M+ judge tokens as their
+	// own. External-user scope keeps them: an external user's hosted-chat
+	// completions ARE their usage, and their only token-bearing rows.
+	// Org-wide views also keep the current semantics (the summaries fast path
+	// cannot express the exclusion; changing org totals is a separate
+	// decision).
+	var excludedHookSources []string
+	if userID != "" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
 
@@ -1889,40 +1926,42 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 
 	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
 	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
 	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         comparisonStart,
-		TimeEnd:           comparisonEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           comparisonStart,
+		TimeEnd:             comparisonEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -1931,21 +1970,22 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	var timeSeries []repo.TimeSeriesBucket
 	if payload.IncludeTimeSeries {
 		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			GramProjectID:     projectID,
-			TimeStart:         timeStart,
-			TimeEnd:           timeEnd,
-			IntervalSeconds:   intervalSeconds,
-			User:              user,
-			CanonicalUser:     canonicalUser,
-			ExternalUserID:    externalUserID,
-			APIKeyID:          apiKeyID,
-			ToolsetSlug:       toolsetSlug,
-			RemoteMCPServerID: remoteMCPServerID,
-			MCPServerID:       mcpServerID,
-			EventSource:       eventSource,
-			HookSource:        hookSource,
-			AccountType:       accountType,
-			ExternalOrgID:     externalOrgID,
+			ExcludedHookSources: excludedHookSources,
+			GramProjectID:       projectID,
+			TimeStart:           timeStart,
+			TimeEnd:             timeEnd,
+			IntervalSeconds:     intervalSeconds,
+			User:                user,
+			CanonicalUser:       canonicalUser,
+			ExternalUserID:      externalUserID,
+			APIKeyID:            apiKeyID,
+			ToolsetSlug:         toolsetSlug,
+			RemoteMCPServerID:   remoteMCPServerID,
+			MCPServerID:         mcpServerID,
+			EventSource:         eventSource,
+			HookSource:          hookSource,
+			AccountType:         accountType,
+			ExternalOrgID:       externalOrgID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -1953,44 +1993,46 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
-		Limit:             10,
-		SortBy:            "count",
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
+		Limit:               10,
+		SortBy:              "count",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
 	}
 
 	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
-		Limit:             10,
-		SortBy:            "failure_rate",
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
+		Limit:               10,
+		SortBy:              "failure_rate",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
