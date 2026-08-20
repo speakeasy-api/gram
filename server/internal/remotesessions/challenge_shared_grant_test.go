@@ -461,6 +461,58 @@ func TestListClients_ResolvesSharedClientAfterMintingIssuerSoftDeleted(t *testin
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
+func TestListClients_ResolvesSharedClientAfterLookupIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantAcrossIssuers(t)
+	err := testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
+		ID:        fx.issuerB,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+
+	// Consent is rendered for a live endpoint issuer. A deleted lookup
+	// issuer has no cards; the surviving minting issuer still lists the
+	// client and can mutate the grant.
+	boundB := listBoundClientIDs(t, ctx, fx, fx.issuerB)
+	require.Empty(t, boundB)
+
+	boundA := listBoundClientIDs(t, ctx, fx, fx.issuerA)
+	requireBoundClient(t, boundA, fx.clientID)
+
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, boundA)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
+
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	n, err = fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+}
+
+func newSharedGrantRefreshHandler(refreshCount *atomic.Int64, accessToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/token" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+		if r.PostForm.Get("grant_type") != "refresh_token" || r.PostForm.Get("refresh_token") != "upstream-refresh" {
+			http.Error(w, "unexpected grant", http.StatusBadRequest)
+			return
+		}
+		refreshCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"` + accessToken + `","token_type":"Bearer","expires_in":7200,"refresh_token":"rotated-refresh"}`))
+	}
+}
+
 func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerFunc) (context.Context, sharedGrantFixture) {
 	t.Helper()
 
@@ -553,12 +605,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	var refreshCount atomic.Int64
-	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v1", func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		refreshCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"rotated-access","token_type":"Bearer","expires_in":7200,"refresh_token":"rotated-refresh"}`))
-	})
+	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v1", newSharedGrantRefreshHandler(&refreshCount, "rotated-access"))
 
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
@@ -575,12 +622,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	t.Parallel()
 
 	var refreshCount atomic.Int64
-	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v2", func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		refreshCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"rotated-after-delete","token_type":"Bearer","expires_in":7200,"refresh_token":"rotated-refresh"}`))
-	})
+	ctx, fx := seedRefreshableSharedGrant(t, "ais-589-refresh-v2", newSharedGrantRefreshHandler(&refreshCount, "rotated-after-delete"))
 	err := testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
 		ID:        fx.issuerA,
 		ProjectID: fx.projectID,
