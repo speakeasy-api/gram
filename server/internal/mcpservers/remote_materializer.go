@@ -35,6 +35,18 @@ func CreateRemoteBackedMCPServer(ctx context.Context, tx pgx.Tx, auditLogger *au
 		return repo.McpServer{}, fmt.Errorf("invalid remote MCP materialization input")
 	}
 
+	var sourceExists bool
+	err := tx.QueryRow(ctx, `
+SELECT TRUE
+FROM remote_mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR KEY SHARE`, input.RemoteMCPServerID, input.ProjectID).Scan(&sourceExists)
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("verify remote MCP source ownership: %w", err)
+	}
+
 	serverID, err := uuid.NewV7()
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
