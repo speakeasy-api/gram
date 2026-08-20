@@ -29,11 +29,20 @@ import {
 const audienceGroups: {
   value: PluginAudienceKind;
   heading: string;
+  icon: ReturnType<typeof principalIcon>;
 }[] = [
-  { value: "everyone", heading: "Everyone" },
-  { value: "role", heading: "Roles" },
-  { value: "directory_group", heading: "Directory groups" },
-  { value: "directory_attribute", heading: "Directory attributes" },
+  { value: "everyone", heading: "Everyone", icon: principalIcon("everyone") },
+  { value: "role", heading: "Roles", icon: principalIcon("role") },
+  {
+    value: "directory_group",
+    heading: "Directory groups",
+    icon: principalIcon("directory_group"),
+  },
+  {
+    value: "directory_attribute",
+    heading: "Directory attributes",
+    icon: principalIcon("directory_attribute"),
+  },
 ];
 
 function existingAssignmentOption(
@@ -46,7 +55,6 @@ function existingAssignmentOption(
     label: principal.label,
     value: urn,
     description,
-    icon: principalIcon(principal.kind),
     disabled: true,
   };
 }
@@ -62,7 +70,6 @@ function availableAudienceOptions(
       label: audience.displayName,
       value: audience.principalUrn,
       description: memberCountDescription(audience.memberCount),
-      icon: principalIcon(audience.kind),
       disabled,
     }));
 }
@@ -161,6 +168,7 @@ function AssignmentsEditor({
     () =>
       audienceGroups.map((group) => ({
         heading: group.heading,
+        icon: group.icon,
         options: availableAudienceOptions(
           group.value,
           audiences,
@@ -173,6 +181,7 @@ function AssignmentsEditor({
     () =>
       audienceGroups.map((group) => ({
         heading: group.heading,
+        icon: group.icon,
         options: unavailableAudienceOptions(
           group.value,
           selected,
@@ -186,6 +195,7 @@ function AssignmentsEditor({
       availableAudienceGroups
         .map((group, index) => ({
           heading: group.heading,
+          icon: group.icon,
           options: [
             ...group.options,
             ...unavailableAudienceGroups[index]!.options,
@@ -213,7 +223,11 @@ function AssignmentsEditor({
       legacyOptions.length > 0
         ? [
             ...options,
-            { heading: "Legacy assignments", options: legacyOptions },
+            {
+              heading: "Legacy assignments",
+              icon: principalIcon("user"),
+              options: legacyOptions,
+            },
           ]
         : options,
     [legacyOptions, options],
@@ -257,6 +271,7 @@ function AssignmentsEditor({
           hideSelectAll
           modalPopover
           maxCount={20}
+          popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none [&_[cmdk-group-heading]]:px-0 [&_[cmdk-group-heading]]:py-0.5 [&_[cmdk-input-wrapper]]:px-0 [&_[cmdk-item]]:px-0 [&_[cmdk-item]]:py-1 [&_[data-slot=command-group]]:p-0 [&_[data-slot=command-list]]:p-0"
         />
         {audiencesQuery.isPending && (
           <Text muted small className="mt-2">

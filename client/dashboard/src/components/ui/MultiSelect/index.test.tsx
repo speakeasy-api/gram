@@ -213,3 +213,27 @@ describe("MultiSelect disabled selected options", () => {
     expect(onValueChange).toHaveBeenCalledWith([]);
   });
 });
+
+describe("MultiSelect group icons", () => {
+  it("renders an icon beside a group heading", () => {
+    const GroupIcon = ({ className }: { className?: string }) => (
+      <span data-testid="group-icon" className={className} />
+    );
+    render(
+      <MultiSelect
+        options={[
+          {
+            heading: "Directory groups",
+            icon: GroupIcon,
+            options: [{ label: "Engineering", value: "engineering" }],
+          },
+        ]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Select options"));
+
+    expect(screen.getByTestId("group-icon")).toBeTruthy();
+  });
+});

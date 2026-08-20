@@ -109,6 +109,8 @@ interface MultiSelectOption {
 interface MultiSelectGroup {
   /** Group heading */
   heading: string;
+  /** Optional icon shown beside the group heading. */
+  icon?: React.ComponentType<{ className?: string }>;
   /** Options in this group */
   options: MultiSelectOption[];
 }
@@ -1291,18 +1293,29 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   </CommandGroup>
                 )}
                 {isGroupedOptions(filteredOptions) ? (
-                  filteredOptions.map((group) => (
-                    <CommandGroup key={group.heading} heading={group.heading}>
-                      {group.options.map((option) => (
-                        <MultiSelectOptionItem
-                          key={option.value}
-                          option={option}
-                          isSelected={selectedValues.includes(option.value)}
-                          onToggle={() => toggleOption(option.value)}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ))
+                  filteredOptions.map((group) => {
+                    const GroupIcon = group.icon;
+                    return (
+                      <CommandGroup
+                        key={group.heading}
+                        heading={
+                          <span className="flex items-center gap-1.5">
+                            {GroupIcon && <GroupIcon className="h-3.5 w-3.5" />}
+                            {group.heading}
+                          </span>
+                        }
+                      >
+                        {group.options.map((option) => (
+                          <MultiSelectOptionItem
+                            key={option.value}
+                            option={option}
+                            isSelected={selectedValues.includes(option.value)}
+                            onToggle={() => toggleOption(option.value)}
+                          />
+                        ))}
+                      </CommandGroup>
+                    );
+                  })
                 ) : (
                   <CommandGroup>
                     {filteredOptions.map((option) => (
