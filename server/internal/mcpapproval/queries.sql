@@ -66,6 +66,19 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of the request's lifecycle status: a
+  -- reopened request's prior decision still stands (its grants keep
+  -- enforcing) until re-decided, and the inventory reports it so clients
+  -- never mistake a pending re-review for an undecided server.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -92,6 +105,17 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision-regardless-of-status join as
+  -- ListApprovalRequestsByTargetKeys, for the request-only rows.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req

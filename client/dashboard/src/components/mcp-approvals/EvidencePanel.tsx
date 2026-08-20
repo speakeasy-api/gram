@@ -1178,7 +1178,13 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
       // A decided review whose decision an admin explicitly displaced from
       // the policy editor. Neutral, not destructive: the history stands and
       // nothing is pending — enforcement just no longer derives from it.
-      return <Badge variant="neutral">Superseded</Badge>;
+      // The default neutral border (softest) washes out against both table
+      // backgrounds, so this one steps up to the theme-aware default border.
+      return (
+        <Badge variant="neutral" className="border-neutral-default">
+          Superseded
+        </Badge>
+      );
     case "unreviewed":
       // "Unreviewed", not "Review requested": this state means a dossier was
       // gathered and nobody has asked for anything — the request states are

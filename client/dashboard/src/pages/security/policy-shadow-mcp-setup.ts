@@ -138,8 +138,8 @@ export function shadowMCPDecisionConflicts({
 
   const conflicts: ShadowMCPDecisionConflict[] = [];
   for (const server of servers) {
-    const status = server.approvalRequest?.status;
-    if (status !== "approved" && status !== "denied") continue;
+    const decision = standingDecisionOf(server.approvalRequest);
+    if (decision === undefined) continue;
 
     const url = server.canonicalServerUrl;
     const has = originalURLs.has(url);
@@ -152,20 +152,43 @@ export function shadowMCPDecisionConflicts({
     if (disposition === "allow_all") removingAllow = !removingAllow;
 
     const contradicted =
-      (removingAllow && status === "approved") ||
-      (!removingAllow && status === "denied");
+      (removingAllow && decision === "approved") ||
+      (!removingAllow && decision === "denied");
     if (!contradicted) continue;
 
     conflicts.push({
       canonicalServerUrl: url,
       serverName: server.serverName,
-      decision: status,
+      decision,
     });
   }
 
   return conflicts.sort((a, b) =>
     a.canonicalServerUrl.localeCompare(b.canonicalServerUrl),
   );
+}
+
+/**
+ * The decision still standing for a review, independent of its lifecycle
+ * status — a reopened request's prior decision keeps enforcing until
+ * re-decided, so an edit contradicting it must still confirm. Prefers the
+ * server-computed standing_decision; a server one release behind omits it,
+ * where the lifecycle status carries the decision except for reopened rows.
+ */
+function standingDecisionOf(
+  request: ShadowMCPInventoryServer["approvalRequest"],
+): "approved" | "denied" | undefined {
+  if (!request) return undefined;
+  if (
+    request.standingDecision === "approved" ||
+    request.standingDecision === "denied"
+  ) {
+    return request.standingDecision;
+  }
+  if (request.status === "approved" || request.status === "denied") {
+    return request.status;
+  }
+  return undefined;
 }
 
 export function shadowMCPSelectionBaselineForUpdate(body: {

@@ -4011,6 +4011,12 @@ type ShadowMCPInventoryApprovalRequestResponseBody struct {
 	// URL-list edit: the history is preserved but no enforcement derives from it
 	// until someone re-decides.
 	Status string `form:"status" json:"status" xml:"status"`
+	// The latest recorded decision still standing for this server, independent of
+	// the request's lifecycle status — a reopened request's prior decision keeps
+	// enforcing until re-decided, and clients checking an edit against standing
+	// intent must read this rather than status. Absent when nothing was ever
+	// decided or the decision was superseded.
+	StandingDecision *string `form:"standing_decision,omitempty" json:"standing_decision,omitempty" xml:"standing_decision,omitempty"`
 	// How many distinct people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
 	// When the daily recheck first found the permission-relevant evidence

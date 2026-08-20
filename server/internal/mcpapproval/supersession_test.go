@@ -7,11 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -28,9 +31,7 @@ func reviewInTx(
 ) shadowmcp.StandingDecisionReview {
 	t.Helper()
 
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 
 	review, err := ti.service.ReviewShadowMCPPolicyURLEdit(ctx, tx, ti.organizationID, ti.projectID, policyID, disposition, desiredAllowed, desiredBlocked)
 	require.NoError(t, err)
@@ -132,9 +133,7 @@ func TestSupersedeShadowMCPDecisions_TransitionsAndAudits(t *testing.T) {
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	require.NoError(t, err)
 
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	review, err := ti.service.ReviewShadowMCPPolicyURLEdit(ctx, tx, ti.organizationID, ti.projectID, policyID, "block_all", []string{}, nil)
 	require.NoError(t, err)
 	require.Len(t, review.Conflicts, 1)
@@ -145,11 +144,10 @@ func TestSupersedeShadowMCPDecisions_TransitionsAndAudits(t *testing.T) {
 
 	require.Equal(t, "superseded", requestStatus(t, ctx, ti, ti.projectID, requestID))
 
-	var audited int
-	require.NoError(t, ti.conn.QueryRow(ctx,
-		"SELECT count(*) FROM audit_logs WHERE action = 'mcp_approval_request:supersede' AND subject_id = $1 AND actor_id = $2",
-		requestID.String(), "user-policy-editor").Scan(&audited))
-	require.Equal(t, 1, audited)
+	audited, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestSupersede)
+	require.NoError(t, err)
+	require.Equal(t, requestID.String(), audited.SubjectID)
+	require.Equal(t, "user-policy-editor", audited.ActorID)
 
 	after := reviewInTx(t, ctx, ti, policyID, "block_all", []string{}, nil)
 	require.Empty(t, after.Conflicts)
@@ -172,9 +170,7 @@ func TestRecordDecision_ReDecideRestoresSupersededRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// A confirmed policy edit displaces the approval and removes its grant.
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	review, err := ti.service.ReviewShadowMCPPolicyURLEdit(ctx, tx, ti.organizationID, ti.projectID, policyID, "block_all", []string{}, nil)
 	require.NoError(t, err)
 	require.Len(t, review.Conflicts, 1)
@@ -239,9 +235,7 @@ func TestReconcileStandingDecisions_SkipsSuperseded(t *testing.T) {
 	require.NoError(t, err)
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "user-policy-editor")
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, ti.service.SupersedeShadowMCPDecisions(ctx, tx, ti.organizationID, ti.projectID, []shadowmcp.StandingDecisionConflict{{
 		RequestID: supersededID,
 		TargetKey: supersededURL,
@@ -251,9 +245,7 @@ func TestReconcileStandingDecisions_SkipsSuperseded(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 
 	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
-	replayTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = replayTx.Rollback(ctx) }()
+	replayTx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, ti.service.ReconcileStandingDecisionsForPolicy(ctx, replayTx, ti.organizationID, ti.projectID, policyID))
 	require.NoError(t, replayTx.Commit(ctx))
 

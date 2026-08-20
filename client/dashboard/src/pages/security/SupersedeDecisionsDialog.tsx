@@ -43,7 +43,7 @@ export function SupersedeDecisionsDialog({
             being enforced until someone re-decides.
           </Dialog.Description>
         </Dialog.Header>
-        <ul className="space-y-2">
+        <ul className="max-h-60 space-y-2 overflow-y-auto">
           {conflicts?.map((conflict) => (
             <li
               key={conflict.canonicalServerUrl}

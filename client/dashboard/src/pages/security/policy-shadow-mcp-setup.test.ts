@@ -228,11 +228,17 @@ describe("shadowMCPDecisionConflicts", () => {
   const server = (
     url: string,
     status: "approved" | "denied" | "requested" | "superseded",
+    standingDecision?: "approved" | "denied",
   ): ShadowMCPInventoryServer =>
     ({
       canonicalServerUrl: url,
       serverName: url.replace("https://", ""),
-      approvalRequest: { id: `req-${url}`, status, requesterCount: 0 },
+      approvalRequest: {
+        id: `req-${url}`,
+        status,
+        standingDecision,
+        requesterCount: 0,
+      },
     }) as ShadowMCPInventoryServer;
 
   const approvedURL = "https://approved.example.com/mcp";
@@ -299,6 +305,23 @@ describe("shadowMCPDecisionConflicts", () => {
       disposition: "block_all",
     });
     expect(conflicts).toEqual([]);
+  });
+
+  it("flags a reopened request whose standing decision still contradicts", () => {
+    // Lifecycle reads requested (someone re-asked), but the prior denial is
+    // still enforced — allow-listing it must confirm superseding it.
+    const reopened = server(
+      "https://reopened.example.com/mcp",
+      "requested",
+      "denied",
+    );
+    const conflicts = shadowMCPDecisionConflicts({
+      servers: [reopened],
+      originalURLs: new Set(),
+      selectedURLs: new Set(["https://reopened.example.com/mcp"]),
+      disposition: "block_all",
+    });
+    expect(conflicts.map((c) => c.decision)).toEqual(["denied"]);
   });
 
   it("returns nothing while the baseline is unknown", () => {

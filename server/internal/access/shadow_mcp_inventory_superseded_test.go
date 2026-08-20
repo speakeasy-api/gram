@@ -64,18 +64,22 @@ func TestService_ShadowMCPInventory_SupersededDecisionCarriesNoVerdict(t *testin
 
 	// Both reviews were approved and both approvals' grants are gone. The
 	// difference is intent: one approval was explicitly superseded by a
-	// policy edit, the other silently drifted.
+	// policy edit, the other silently drifted. The third review was denied
+	// and then reopened by a fresh ask — its denial still stands.
+	reopenedURL := "https://reopened.example.com/mcp"
 	superseded := seedShadowMCPApprovalRequest(t, ctx, ti, organizationID, projectID, supersededURL, "superseded", 0)
 	seedApprovalDecisionRow(t, ctx, ti, organizationID, projectID, superseded.ID, "approved", allUsers)
 	drifted := seedShadowMCPApprovalRequest(t, ctx, ti, organizationID, projectID, driftedURL, "approved", 0)
 	seedApprovalDecisionRow(t, ctx, ti, organizationID, projectID, drifted.ID, "approved", allUsers)
+	reopened := seedShadowMCPApprovalRequest(t, ctx, ti, organizationID, projectID, reopenedURL, "requested", 1)
+	seedApprovalDecisionRow(t, ctx, ti, organizationID, projectID, reopened.ID, "denied", []string{})
 
 	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID.String(),
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, result.Servers, 2)
+	require.Len(t, result.Servers, 3)
 
 	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
 	for _, server := range result.Servers {
@@ -85,6 +89,7 @@ func TestService_ShadowMCPInventory_SupersededDecisionCarriesNoVerdict(t *testin
 	supersededRow := byURL[supersededURL]
 	require.NotNil(t, supersededRow.ApprovalRequest)
 	require.Equal(t, "superseded", supersededRow.ApprovalRequest.Status)
+	require.Nil(t, supersededRow.ApprovalRequest.StandingDecision)
 	require.NotNil(t, supersededRow.AccessSummary)
 	require.Equal(t, shadowMCPAccessStateBlocked, supersededRow.AccessSummary.State)
 	require.Nil(t, supersededRow.AccessSummary.Decision)
@@ -96,6 +101,17 @@ func TestService_ShadowMCPInventory_SupersededDecisionCarriesNoVerdict(t *testin
 	require.NotNil(t, driftedRow.AccessSummary.Decision)
 	require.Equal(t, "approved", *driftedRow.AccessSummary.Decision)
 	require.Equal(t, shadowMCPAccessCoveragePartial, driftedRow.AccessSummary.DecisionCoverage)
+	require.NotNil(t, driftedRow.ApprovalRequest.StandingDecision)
+	require.Equal(t, "approved", *driftedRow.ApprovalRequest.StandingDecision)
+
+	// The reopened review's lifecycle reads requested, but its denial is
+	// still the standing intent — clients checking edits against standing
+	// decisions read this field, not the status.
+	reopenedRow := byURL[reopenedURL]
+	require.NotNil(t, reopenedRow.ApprovalRequest)
+	require.Equal(t, "requested", reopenedRow.ApprovalRequest.Status)
+	require.NotNil(t, reopenedRow.ApprovalRequest.StandingDecision)
+	require.Equal(t, "denied", *reopenedRow.ApprovalRequest.StandingDecision)
 }
 
 // The server detail page reports the superseded review the same way the

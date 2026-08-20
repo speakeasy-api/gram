@@ -3703,6 +3703,7 @@ export function StandardPolicyEditor({
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: (_policy, variables) => {
+      setSupersedeConflicts(null);
       const submittedURLs = shadowMCPSelectionBaselineForUpdate(
         variables.request.updateRiskPolicyRequestBody,
       );
@@ -3912,10 +3913,11 @@ export function StandardPolicyEditor({
         conflicts={supersedeConflicts}
         saving={saving}
         onCancel={() => setSupersedeConflicts(null)}
-        onConfirm={() => {
-          setSupersedeConflicts(null);
-          save({ supersedeDecisions: true });
-        }}
+        // The dialog stays open while the confirmed save runs — its buttons
+        // disable and the confirm label reads "Saving…" — and closes from the
+        // mutation's onSuccess, so a failed save leaves it up to retry or
+        // cancel instead of vanishing under an error toast.
+        onConfirm={() => save({ supersedeDecisions: true })}
       />
       <StepperShell
         header={header}

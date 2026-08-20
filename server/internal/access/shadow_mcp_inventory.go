@@ -46,11 +46,12 @@ const (
 	// restricted rather than blocked.
 	shadowMCPInventoryAudienceEveryone = "everyone"
 
-	shadowMCPInventoryBypassStatusRequested = "requested"
-	shadowMCPInventoryBypassStatusApproved  = "approved"
-	shadowMCPInventoryBypassStatusDenied    = "denied"
-	shadowMCPInventoryBypassStatusRevoked   = "revoked"
-	shadowMCPInventoryBypassTargetKind      = "shadow_mcp_server"
+	shadowMCPInventoryBypassStatusRequested  = "requested"
+	shadowMCPInventoryBypassStatusApproved   = "approved"
+	shadowMCPInventoryBypassStatusDenied     = "denied"
+	shadowMCPInventoryBypassStatusRevoked    = "revoked"
+	shadowMCPInventoryBypassStatusSuperseded = "superseded"
+	shadowMCPInventoryBypassTargetKind       = "shadow_mcp_server"
 
 	shadowMCPInventoryDecisionAllow = "allow"
 	shadowMCPInventoryDecisionDeny  = "deny"
@@ -264,6 +265,18 @@ func (s *Service) shadowMCPRequestOnlyTargets(ctx context.Context, chRepo *telem
 // review with no telemetry behind it: zero usage, zero seen-times (the
 // never-observed sentinel), and the review carried as the row's approval
 // state. Stdio commands have no URL host and no server page.
+// standingDecisionValue derives the standing-decision field from a request's
+// lifecycle status and its latest recorded decision. The decision stands —
+// its grants keep enforcing — whatever the lifecycle says, with one
+// exception: a superseded request's decision was explicitly displaced, so
+// nothing stands until someone re-decides.
+func standingDecisionValue(status string, latestDecision string) *string {
+	if status == shadowMCPInventoryBypassStatusSuperseded || latestDecision == "" {
+		return nil
+	}
+	return conv.PtrEmpty(latestDecision)
+}
+
 func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequestTargetsRow, policyState shadowMCPInventoryPolicyState) *gen.ShadowMCPInventoryServer {
 	targetKind := shadowMCPTargetKindStdioCommand
 	urlHost := ""
@@ -288,6 +301,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 	rowState.ApprovalRequest = &gen.ShadowMCPInventoryApprovalRequest{
 		ID:                request.ID.String(),
 		Status:            request.Status,
+		StandingDecision:  standingDecisionValue(request.Status, request.LatestDecision),
 		RequesterCount:    int(request.RequesterCount),
 		EvidenceChangedAt: conv.PtrEmpty(conv.FromPGTimestamptz(request.EvidenceChangedAt)),
 	}
@@ -1116,6 +1130,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		state.approvalsByURL[row.TargetKey] = &gen.ShadowMCPInventoryApprovalRequest{
 			ID:                row.ID.String(),
 			Status:            row.Status,
+			StandingDecision:  standingDecisionValue(row.Status, row.LatestDecision),
 			RequesterCount:    int(row.RequesterCount),
 			EvidenceChangedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.EvidenceChangedAt)),
 		}

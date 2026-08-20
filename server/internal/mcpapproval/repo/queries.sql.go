@@ -756,6 +756,17 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision-regardless-of-status join as
+  -- ListApprovalRequestsByTargetKeys, for the request-only rows.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -778,6 +789,7 @@ type ListApprovalRequestTargetsRow struct {
 	EvidenceChangedAt pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -802,6 +814,7 @@ func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid
 			&i.EvidenceChangedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err
@@ -914,6 +927,19 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of the request's lifecycle status: a
+  -- reopened request's prior decision still stands (its grants keep
+  -- enforcing) until re-decided, and the inventory reports it so clients
+  -- never mistake a pending re-review for an undecided server.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -938,6 +964,7 @@ type ListApprovalRequestsByTargetKeysRow struct {
 	TargetKey         string
 	Status            string
 	EvidenceChangedAt pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -959,6 +986,7 @@ func (q *Queries) ListApprovalRequestsByTargetKeys(ctx context.Context, arg List
 			&i.TargetKey,
 			&i.Status,
 			&i.EvidenceChangedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err

@@ -58,12 +58,19 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 		return fmt.Errorf("list policy url grants: %w", err)
 	}
 
+	// Keys are canonical URLs, grouping legacy pre-canonical selector
+	// spellings with their canonical form: DesiredURLs and PreserveURLs are
+	// canonical, and comparing them against raw selector values would let a
+	// legacy variant slip past preservation into remove-and-recreate.
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue
+		}
+		if inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(serverURL); ok {
+			serverURL = inventoryURL.CanonicalURL
 		}
 		existing[serverURL] = struct{}{}
 		existingGrants[serverURL] = append(existingGrants[serverURL], grant)
