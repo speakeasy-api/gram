@@ -28,6 +28,6 @@ func principalFromContext(ctx context.Context) (platformmcp.Principal, error) {
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ConnectionID:   "",
 		Generation:     "",
-		ClientID:       "",
+		ClientID:       platformmcp.AssistantClientID,
 	}, nil
 }

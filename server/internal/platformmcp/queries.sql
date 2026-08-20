@@ -775,10 +775,33 @@ LEFT JOIN LATERAL (
     ORDER BY readiness.checked_at DESC, readiness.id DESC
     LIMIT 1
 ) AS readiness ON TRUE
-WHERE m.project_id = @project_id
-  AND m.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
-ORDER BY m.id ASC
+  AND (
+      @query_text::text = ''
+      OR m.id::text ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+  )
+  AND (
+      sqlc.narg(readiness_state)::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = sqlc.narg(readiness_state)::text
+  )
+ORDER BY
+    CASE
+        WHEN @query_text::text <> ''
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
 LIMIT @limit_value;
 
 -- name: GetPlatformMCPInventoryItem :one
@@ -864,7 +887,7 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.project_id = distribution.project_id
  AND registration.deleted IS FALSE
 WHERE distribution.organization_id = @organization_id
-  AND distribution.project_id = @project_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
   AND distribution.registration_id = ANY(@registration_ids::uuid[])
 ORDER BY distribution.registration_id, distribution.id ASC;
 

@@ -3681,11 +3681,34 @@ LEFT JOIN LATERAL (
     ORDER BY readiness.checked_at DESC, readiness.id DESC
     LIMIT 1
 ) AS readiness ON TRUE
-WHERE m.project_id = $6
-  AND m.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND ($6::uuid IS NULL OR m.project_id = $6::uuid)
   AND ($7::uuid IS NULL OR m.id > $7::uuid)
-ORDER BY m.id ASC
-LIMIT $8
+  AND (
+      $8::text = ''
+      OR m.id::text ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $8::text || '%'
+  )
+  AND (
+      $9::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = $9::text
+  )
+ORDER BY
+    CASE
+        WHEN $8::text <> ''
+         AND (m.id::text = $8::text OR LOWER(COALESCE(m.name, '')) = LOWER($8::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($8::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT $10
 `
 
 type ListPlatformMCPInventoryParams struct {
@@ -3694,8 +3717,10 @@ type ListPlatformMCPInventoryParams struct {
 	ConnectionGeneration uuid.NullUUID
 	UserID               pgtype.Text
 	ActingSurface        pgtype.Text
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	AfterMcpID           uuid.NullUUID
+	QueryText            string
+	ReadinessState       pgtype.Text
 	LimitValue           int32
 }
 
@@ -3737,6 +3762,8 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 		arg.ActingSurface,
 		arg.ProjectID,
 		arg.AfterMcpID,
+		arg.QueryText,
+		arg.ReadinessState,
 		arg.LimitValue,
 	)
 	if err != nil {
@@ -3798,14 +3825,14 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.project_id = distribution.project_id
  AND registration.deleted IS FALSE
 WHERE distribution.organization_id = $1
-  AND distribution.project_id = $2
+  AND ($2::uuid IS NULL OR distribution.project_id = $2::uuid)
   AND distribution.registration_id = ANY($3::uuid[])
 ORDER BY distribution.registration_id, distribution.id ASC
 `
 
 type ListPlatformMCPInventoryDistributionsParams struct {
 	OrganizationID  string
-	ProjectID       uuid.UUID
+	ProjectID       uuid.NullUUID
 	RegistrationIds []uuid.UUID
 }
 

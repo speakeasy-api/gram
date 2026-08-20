@@ -53,13 +53,16 @@ type ListProjectsOutput struct {
 }
 
 type FindMCPInput struct {
-	// At most one project selector may be supplied. When neither is supplied,
-	// the organization's Default project is used. The assistant policy injects
-	// project_id and removes both fields from its model-visible schema.
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional AICP project ID; defaults to the organization's Default project"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional AICP project slug; defaults to the organization's Default project"`
-	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search within the selected project"`
+	// At most one project selector may be supplied. Without a selector, an
+	// unfiltered list uses the organization's Default project; a query searches
+	// the organization. The assistant policy injects project_id and removes both
+	// selectors from its model-visible schema.
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional AICP project ID; defaults to the organization's Default project when query is omitted"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional AICP project slug; defaults to the organization's Default project when query is omitted"`
+	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search; without a project selector, searches the organization"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+	Readiness   string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
 }
 
 type MCPSource struct {

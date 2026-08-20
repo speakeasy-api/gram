@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -104,7 +103,7 @@ func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryDistribu
 func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		row.RemoteMcpServerID.Valid, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -113,13 +112,13 @@ func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distribut
 func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		row.RemoteMcpServerID.Valid, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
 }
 
-func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility string, remoteBacked bool, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
+func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	mcp := MCP{
 		ID:               id.String(),
 		ProjectID:        projectID.String(),
@@ -156,8 +155,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		}
 		mcp.Operations = []string{"read", "dashboard_setup"}
 		mcp.DashboardPath = "dashboard_mcp_settings"
-	case remoteBacked:
-		mcp.Model = "dashboard_managed"
+	case model == "dashboard_managed":
+		mcp.Model = model
 		mcp.Source = MCPSource{Kind: "dashboard_source", Provider: "", Reference: ""}
 		mcp.Readiness = MCPReadiness{State: "unsupported", CheckedAt: "", ExpiresAt: ""}
 		mcp.DashboardPath = "dashboard_mcp_settings"
@@ -170,6 +169,13 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	}
 	return mcp
+}
+
+func inventoryModel(remote, tunneled, unproxied uuid.NullUUID) string {
+	if remote.Valid || tunneled.Valid || unproxied.Valid {
+		return "dashboard_managed"
+	}
+	return "legacy"
 }
 
 func inventorySourceKind(sourceKind string) string {
@@ -188,24 +194,4 @@ func timestampString(value time.Time, valid bool) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339)
-}
-
-func matchInventoryQuery(mcps []MCP, query string) []MCP {
-	query = normalizeInventoryQuery(query)
-	exact := make([]MCP, 0, 2)
-	candidates := make([]MCP, 0, 10)
-	for _, mcp := range mcps {
-		if mcp.ID == query || strings.EqualFold(mcp.Name, query) || strings.EqualFold(mcp.Slug, query) {
-			exact = append(exact, mcp)
-		}
-		if strings.Contains(strings.ToLower(mcp.ID), query) || strings.Contains(strings.ToLower(mcp.Name), query) || strings.Contains(strings.ToLower(mcp.Slug), query) {
-			if len(candidates) < 10 {
-				candidates = append(candidates, mcp)
-			}
-		}
-	}
-	if len(exact) == 1 {
-		return exact
-	}
-	return candidates
 }

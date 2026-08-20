@@ -16,6 +16,13 @@ type FindMCP struct {
 	reader platformmcp.Reader
 }
 
+type findMCPInput struct {
+	Query     string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search within the assistant's project"`
+	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+	Readiness string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
+}
+
 func NewFindMCPTool(reader platformmcp.Reader) *FindMCP {
 	return &FindMCP{reader: reader}
 }
@@ -26,7 +33,7 @@ func (t *FindMCP) Descriptor() core.ToolDescriptor {
 		HandlerName: "find_mcp",
 		Name:        platformtools.ToolNameFindMCP,
 		Description: "Find configured MCPs in the assistant's project. Results contain persisted allowlisted inventory facts only.",
-		InputSchema: core.BuildInputSchema[platformmcp.FindMCPInput](),
+		InputSchema: core.BuildInputSchema[findMCPInput](),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
@@ -39,14 +46,12 @@ func (t *FindMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 	if t.reader == nil {
 		return fmt.Errorf("platform reader not configured")
 	}
-	input := platformmcp.FindMCPInput{
-		ProjectID:   "",
-		ProjectSlug: "",
-		Query:       "",
-		Cursor:      "",
-	}
-	if err := core.DecodeInput(payload, &input); err != nil {
+	var assistantInput findMCPInput
+	if err := core.DecodeInput(payload, &assistantInput); err != nil {
 		return err
+	}
+	input := platformmcp.FindMCPInput{
+		Query: assistantInput.Query, Cursor: assistantInput.Cursor, Limit: assistantInput.Limit, Readiness: assistantInput.Readiness,
 	}
 	principal, err := principalFromContext(ctx)
 	if err != nil {

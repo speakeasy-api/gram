@@ -78,11 +78,14 @@ func TestFindMCPToolInjectsAssistantProject(t *testing.T) {
 	ctx := orgAuthContext(t, "org_123", &projectID)
 
 	var out bytes.Buffer
-	require.NoError(t, NewFindMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"another-project","query":"server"}`), &out))
+	require.NoError(t, NewFindMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"another-project","query":"server","limit":12,"readiness":"ready"}`), &out))
 	require.Equal(t, "org_123", reader.principal.OrganizationID)
+	require.Equal(t, platformmcp.AssistantClientID, reader.principal.ClientID)
 	require.Equal(t, projectID.String(), reader.findInput.ProjectID)
 	require.Empty(t, reader.findInput.ProjectSlug)
 	require.Equal(t, "server", reader.findInput.Query)
+	require.Equal(t, 12, reader.findInput.Limit)
+	require.Equal(t, "ready", reader.findInput.Readiness)
 
 	var result platformmcp.FindMCPOutput
 	require.NoError(t, json.Unmarshal(out.Bytes(), &result))
@@ -138,6 +141,14 @@ func TestToolDescriptorsCarrySchemasAndReadOnlyAnnotations(t *testing.T) {
 		},
 		"find_mcp": func() ([]byte, *bool) {
 			d := NewFindMCPTool(reader).Descriptor()
+			var schema struct {
+				Properties map[string]json.RawMessage `json:"properties"`
+			}
+			require.NoError(t, json.Unmarshal(d.InputSchema, &schema))
+			require.NotContains(t, schema.Properties, "project_id")
+			require.NotContains(t, schema.Properties, "project_slug")
+			require.Contains(t, schema.Properties, "limit")
+			require.Contains(t, schema.Properties, "readiness")
 			return d.InputSchema, d.Annotations.ReadOnlyHint
 		},
 		"get_mcp": func() ([]byte, *bool) {

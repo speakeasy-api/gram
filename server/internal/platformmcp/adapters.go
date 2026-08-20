@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -325,9 +326,11 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil {
 		return FindMCPOutput{}, ErrUnavailable
 	}
-	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
-	if err != nil {
-		return FindMCPOutput{}, err
+	if input.ProjectID != "" && input.ProjectSlug != "" {
+		return FindMCPOutput{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
+	}
+	if input.Readiness != "" && !isInventoryReadinessState(input.Readiness) {
+		return FindMCPOutput{}, fmt.Errorf("invalid readiness filter")
 	}
 	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
@@ -338,37 +341,49 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		return FindMCPOutput{}, ErrInventoryCursorInvalid
 	}
 
-	limit := int32(51)
-	afterID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	projectID := uuid.NullUUID{}
+	var cursorProject ResolvedProject
+	if input.ProjectID != "" || input.ProjectSlug != "" || query == "" {
+		cursorProject, err = r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+		if err != nil {
+			return FindMCPOutput{}, err
+		}
+		projectID = uuid.NullUUID{UUID: cursorProject.ID, Valid: true}
+	}
+
+	limit := boundedLimit(input.Limit)
+	afterID := uuid.NullUUID{}
 	if query == "" && input.Cursor != "" {
-		cursor, err := r.inventoryCursor.Decode(input.Cursor, principal, project.ID, query)
+		cursor, err := r.inventoryCursor.Decode(input.Cursor, principal, cursorProject.ID, query)
 		if err != nil {
 			return FindMCPOutput{}, err
 		}
 		afterID = uuid.NullUUID{UUID: cursor, Valid: true}
 	}
 	if query != "" {
-		limit = 200
+		limit = min(limit, 10)
 	}
 	rows, err := r.inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: principal.OrganizationID,
 		ConnectionID:   connectionID, ConnectionGeneration: generation,
 		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
-		ProjectID: project.ID, AfterMcpID: afterID, LimitValue: limit,
+		ProjectID: projectID, AfterMcpID: afterID, QueryText: query, ReadinessState: inventoryText(input.Readiness),
+		LimitValue: int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
 	if err != nil {
-		return FindMCPOutput{}, fmt.Errorf("list platform MCP inventory: %w", err)
+		slog.ErrorContext(ctx, "list platform MCP inventory", "error", err)
+		return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 	}
 	registrationIDs := inventoryRegistrationIDs(rows)
 	byRegistration := map[uuid.UUID][]MCPDistribution{}
 	if len(registrationIDs) > 0 {
 		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       project.ID,
-			RegistrationIds: registrationIDs,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      projectID, RegistrationIds: registrationIDs,
 		})
 		if err != nil {
-			return FindMCPOutput{}, fmt.Errorf("list platform MCP inventory distributions: %w", err)
+			slog.ErrorContext(ctx, "list platform MCP inventory distributions", "error", err)
+			return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 		}
 		byRegistration = inventoryDistributions(distributions)
 	}
@@ -377,16 +392,16 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		mcps = append(mcps, mcpFromInventoryRow(row, byRegistration))
 	}
 	if query != "" {
-		return FindMCPOutput{MCPs: matchInventoryQuery(mcps, query), NextCursor: ""}, nil
+		return FindMCPOutput{MCPs: inventoryQueryResult(mcps, query, limit), NextCursor: ""}, nil
 	}
 	output := FindMCPOutput{MCPs: mcps, NextCursor: ""}
-	if len(output.MCPs) > 50 {
-		last := output.MCPs[49]
-		output.MCPs = output.MCPs[:50]
+	if len(output.MCPs) > limit {
+		last := output.MCPs[limit-1]
+		output.MCPs = output.MCPs[:limit]
 		output.NextCursor, err = r.inventoryCursor.Encode(inventoryCursor{
 			OrganizationID: principal.OrganizationID,
 			Binding:        principalCursorBinding(principal),
-			ProjectID:      project.ID.String(),
+			ProjectID:      cursorProject.ID.String(),
 			Query:          query,
 			AfterMCPID:     last.ID,
 		})
@@ -429,7 +444,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if row.RegistrationID != uuid.Nil {
 		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
 			OrganizationID:  principal.OrganizationID,
-			ProjectID:       projectID,
+			ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
 			RegistrationIds: []uuid.UUID{row.RegistrationID},
 		})
 		if err != nil {
@@ -508,4 +523,27 @@ func inventoryConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, err
 
 func normalizeInventoryQuery(query string) string {
 	return strings.ToLower(strings.Join(strings.Fields(query), " "))
+}
+
+func isInventoryReadinessState(value string) bool {
+	if value == "unknown" || value == "unsupported" {
+		return true
+	}
+	return isReadinessState(ReadinessState(value))
+}
+
+// inventoryQueryResult relies on ListPlatformMCPInventory ordering exact matches
+// before substring candidates. The query intentionally requests one extra row,
+// so inspecting the first two rows distinguishes a unique exact match from an
+// ambiguous exact result without widening the bounded candidate response.
+func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
+	if len(mcps) == 0 {
+		return mcps
+	}
+	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
+		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+			return mcps[:1]
+		}
+	}
+	return mcps[:min(len(mcps), limit)]
 }
