@@ -126,12 +126,17 @@ WHERE workos_directory_user_id = @workos_directory_user_id
   AND deleted_at IS NULL;
 
 -- name: LinkDirectoryUsersToUserByEmail :execrows
-UPDATE directory_users
+UPDATE directory_users AS directory_user
 SET user_id = @user_id,
   updated_at = clock_timestamp()
-WHERE email = @email
-  AND user_id IS NULL
-  AND deleted_at IS NULL;
+FROM organization_user_relationships AS relationship
+WHERE relationship.organization_id = directory_user.organization_id
+  AND relationship.workos_user_id = @workos_user_id
+  AND relationship.deleted IS FALSE
+  AND LOWER(directory_user.email) = @email
+  AND directory_user.user_id IS NULL
+  AND directory_user.deleted IS FALSE
+  AND directory_user.workos_deleted IS FALSE;
 
 -- name: DeleteDirectoryUserByWorkOSID :execrows
 UPDATE directory_users

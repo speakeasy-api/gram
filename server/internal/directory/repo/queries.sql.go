@@ -429,21 +429,27 @@ func (q *Queries) GetUserProfileByUserID(ctx context.Context, arg GetUserProfile
 }
 
 const linkDirectoryUsersToUserByEmail = `-- name: LinkDirectoryUsersToUserByEmail :execrows
-UPDATE directory_users
+UPDATE directory_users AS directory_user
 SET user_id = $1,
   updated_at = clock_timestamp()
-WHERE email = $2
-  AND user_id IS NULL
-  AND deleted_at IS NULL
+FROM organization_user_relationships AS relationship
+WHERE relationship.organization_id = directory_user.organization_id
+  AND relationship.workos_user_id = $2
+  AND relationship.deleted IS FALSE
+  AND LOWER(directory_user.email) = $3
+  AND directory_user.user_id IS NULL
+  AND directory_user.deleted IS FALSE
+  AND directory_user.workos_deleted IS FALSE
 `
 
 type LinkDirectoryUsersToUserByEmailParams struct {
-	UserID pgtype.Text
-	Email  pgtype.Text
+	UserID       pgtype.Text
+	WorkosUserID pgtype.Text
+	Email        pgtype.Text
 }
 
 func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkDirectoryUsersToUserByEmailParams) (int64, error) {
-	result, err := q.db.Exec(ctx, linkDirectoryUsersToUserByEmail, arg.UserID, arg.Email)
+	result, err := q.db.Exec(ctx, linkDirectoryUsersToUserByEmail, arg.UserID, arg.WorkosUserID, arg.Email)
 	if err != nil {
 		return 0, err
 	}
