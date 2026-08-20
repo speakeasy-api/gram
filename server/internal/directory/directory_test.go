@@ -104,7 +104,7 @@ func TestServiceGetUserProfileReturnsLatestProfileAsOneSnapshot(t *testing.T) {
 	require.Equal(t, userID, profile.UserID)
 	require.Equal(t, "directory_user_newer", profile.ExternalID)
 	require.Equal(t, "newer@example.com", profile.Email)
-	require.Equal(t, map[string]any{"department": "Engineering", "level": float64(7)}, profile.Attributes)
+	require.Equal(t, map[string]any{"department": "Engineering", "level": float64(7)}, profile.RawAttributes)
 	require.Equal(t, []directory.Group{{ExternalID: "directory_group_newer", Name: "Engineering"}}, profile.Groups)
 }
 
@@ -167,7 +167,7 @@ func TestServiceGetUserProfileScopesByOrganization(t *testing.T) {
 	profile, err := service.GetUserProfile(ctx, "org_directory_two", userID)
 	require.NoError(t, err)
 	require.Equal(t, "directory_user_two", profile.ExternalID)
-	require.Equal(t, map[string]any{"tenant": "two"}, profile.Attributes)
+	require.Equal(t, map[string]any{"tenant": "two"}, profile.RawAttributes)
 
 	_, err = service.GetUserProfile(ctx, "org_directory_missing", userID)
 	require.ErrorIs(t, err, directory.ErrUserNotFound)
@@ -213,9 +213,10 @@ func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 
 	profile, err := service.GetUserProfile(ctx, organizationID, userID)
 	require.NoError(t, err)
-	require.Contains(t, profile.Attributes, "department_name")
-	require.Nil(t, profile.Attributes["department_name"])
-	require.Equal(t, "Platform Engineer", profile.Attributes["job_title"])
+	require.Contains(t, profile.RawAttributes, "department_name")
+	require.Nil(t, profile.RawAttributes["department_name"])
+	require.Equal(t, "Platform Engineer", profile.RawAttributes["job_title"])
+	require.Equal(t, directory.UserAttributes{JobTitle: "Platform Engineer"}, profile.Attributes())
 	require.NotNil(t, profile.Groups)
 	require.Empty(t, profile.Groups)
 }

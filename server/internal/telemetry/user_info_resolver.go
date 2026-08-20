@@ -26,9 +26,9 @@ const userInfoSnapshotTTL = 5 * time.Minute
 // userInfoSnapshot is the denormalized point-in-time directory state for a
 // resolved user, used to fill the directory-derived parts of a UserInfo.
 type userInfoSnapshot struct {
-	Attributes userAttributes `json:"attributes"`
-	Groups     []string       `json:"groups"`
-	Roles      []string       `json:"roles"`
+	Attributes directory.UserAttributes `json:"attributes"`
+	Groups     []string                 `json:"groups"`
+	Roles      []string                 `json:"roles"`
 }
 
 func (s userInfoSnapshot) AsAttributes() map[attr.Key]any {
@@ -99,7 +99,8 @@ func NewUserInfoResolver(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.
 func (r *UserInfoResolver) Hydrate(ctx context.Context, organizationID string, info UserInfo) (UserInfo, userInfoSnapshot) {
 	info = r.resolveIdentity(ctx, organizationID, info)
 	if info.userID == "" {
-		return info, userInfoSnapshot{Attributes: emptyUserAttributes(), Groups: nil, Roles: nil}
+		var snapshot userInfoSnapshot
+		return info, snapshot
 	}
 	return info, r.resolve(ctx, organizationID, info.userID)
 }
@@ -167,7 +168,7 @@ func (r *UserInfoResolver) resolve(ctx context.Context, organizationID string, u
 }
 
 func (r *UserInfoResolver) load(ctx context.Context, organizationID string, userID string) userInfoSnapshot {
-	snapshot := userInfoSnapshot{Attributes: emptyUserAttributes(), Groups: nil, Roles: nil}
+	var snapshot userInfoSnapshot
 
 	profile, err := directory.NewService(r.db).GetUserProfile(ctx, organizationID, userID)
 	switch {
@@ -179,19 +180,8 @@ func (r *UserInfoResolver) load(ctx context.Context, organizationID string, user
 			attr.SlogError(err), attr.SlogUserID(userID), attr.SlogOrganizationID(organizationID))
 		return snapshot
 	default:
-		// Values come from customer-controlled IdP mappings: accept
-		// non-empty strings only so the ClickHouse JSON column sees
-		// consistent types.
-		snapshot.Attributes = userAttributes{
-			DepartmentName: stringAttribute(profile.Attributes, "department_name"),
-			JobTitle:       stringAttribute(profile.Attributes, "job_title"),
-			EmployeeType:   stringAttribute(profile.Attributes, "employee_type"),
-			DivisionName:   stringAttribute(profile.Attributes, "division_name"),
-			CostCenterName: stringAttribute(profile.Attributes, "cost_center_name"),
-		}
-		for _, group := range profile.Groups {
-			snapshot.Groups = append(snapshot.Groups, group.Name)
-		}
+		snapshot.Attributes = profile.Attributes()
+		snapshot.Groups = profile.GroupNames()
 	}
 
 	roleRows, err := accessrepo.New(r.db).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
@@ -208,12 +198,4 @@ func (r *UserInfoResolver) load(ctx context.Context, organizationID string, user
 	}
 
 	return snapshot
-}
-
-func stringAttribute(payload map[string]any, key string) string {
-	value, ok := payload[key].(string)
-	if !ok {
-		return ""
-	}
-	return value
 }

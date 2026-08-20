@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -17,36 +16,6 @@ import (
 // ErrUserNotFound indicates that no active directory profile is linked to the
 // requested user in the requested organization.
 var ErrUserNotFound = errors.New("directory user not found")
-
-// Group describes an active directory group assigned to a user.
-type Group struct {
-	// ExternalID is the group identifier assigned by the directory provider.
-	ExternalID string `json:"external_id"`
-
-	// Name is the display name supplied by the directory provider.
-	Name string `json:"name"`
-}
-
-// UserProfile is the current directory state associated with a Gram user.
-type UserProfile struct {
-	// ID is the internal identifier for the selected directory user row.
-	ID uuid.UUID
-
-	// UserID is the Gram user identifier linked to the directory profile.
-	UserID string
-
-	// ExternalID is the user identifier assigned by the directory provider.
-	ExternalID string
-
-	// Email is the email supplied by the directory provider.
-	Email string
-
-	// Attributes contains the directory provider's user attributes.
-	Attributes map[string]any
-
-	// Groups contains the active groups assigned to the selected profile.
-	Groups []Group
-}
 
 // Service retrieves directory state from Postgres.
 type Service struct {
@@ -84,11 +53,11 @@ func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID str
 	}
 
 	return &UserProfile{
-		ID:         row.ID,
-		UserID:     conv.FromPGTextOrEmpty[string](row.UserID),
-		ExternalID: row.ExternalID,
-		Email:      conv.FromPGTextOrEmpty[string](row.Email),
-		Attributes: attributes,
-		Groups:     groups,
+		ID:            row.ID,
+		UserID:        conv.FromPGTextOrEmpty[string](row.UserID),
+		ExternalID:    row.ExternalID,
+		Email:         conv.FromPGTextOrEmpty[string](row.Email),
+		RawAttributes: attributes,
+		Groups:        groups,
 	}, nil
 }
