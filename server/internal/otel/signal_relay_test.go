@@ -76,6 +76,44 @@ func TestSignalRelayDestinationDrainsFailedResponses(t *testing.T) {
 	require.Equal(t, int64(1), newConnections.Load())
 }
 
+func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/permanent":
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, "line one\nline two\x07")
+		case "/retryable":
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = io.WriteString(w, "provider-secret-marker")
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	permanentRelay := newSignalRelay(nil, nil, policy, "/permanent", "trace")
+	permanentDestination, err := permanentRelay.newDestination("organization-id", server.URL, nil)
+	require.NoError(t, err)
+
+	err = permanentDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "line one line two ")
+	require.NotContains(t, err.Error(), "\n")
+	require.NotContains(t, err.Error(), "\x07")
+
+	retryableRelay := newSignalRelay(nil, nil, policy, "/retryable", "trace")
+	retryableDestination, err := retryableRelay.newDestination("organization-id", server.URL, nil)
+	require.NoError(t, err)
+
+	err = retryableDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "provider-secret-marker")
+}
+
 func TestClassifyRelayStatusDistinguishesRetryableFailures(t *testing.T) {
 	t.Parallel()
 

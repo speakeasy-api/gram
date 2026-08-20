@@ -261,11 +261,16 @@ func (d *relayDestination) export(ctx context.Context, message proto.Message) er
 
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxRelayErrorBodyBytes))
 	_, _ = io.Copy(io.Discard, response.Body)
+	responseSnippet := guardian.PrintableBodySnippet(responseBody)
 	reason, retryable := classifyRelayStatus(response.StatusCode)
+	responseErr := fmt.Errorf("OTLP %s export returned %s", d.signalName, response.Status)
+	if !retryable && responseSnippet != "" {
+		responseErr = fmt.Errorf("OTLP %s export returned %s: %s", d.signalName, response.Status, responseSnippet)
+	}
 	return &relayExportError{
 		reason:    reason,
 		retryable: retryable,
-		err:       fmt.Errorf("OTLP %s export returned %s: %s", d.signalName, response.Status, responseBody),
+		err:       responseErr,
 	}
 }
 
