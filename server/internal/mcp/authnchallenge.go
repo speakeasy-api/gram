@@ -418,12 +418,12 @@ func (s *Service) BaseURLForRequest(r *http.Request) string {
 // for the issuer.
 //
 // On success: returns the request context stamped with the resolved
-// principal plus a remote_session_issuer_id -> upstream access token map.
-// The map is nil/empty when the issuer has no remote_session_clients
-// bound; otherwise it holds one token per remote_session_issuer the
-// subject has linked. Callers wrap each entry into an oauthTokenInputs,
-// tagged with its remote_session_issuer_id, for downstream tool-dispatch
-// chains.
+// principal plus a remote_session_issuer_id -> upstream token map. The map
+// is nil/empty when the issuer has no remote_session_clients bound;
+// otherwise it holds one qualified entry (token + grant-time RFC 8707
+// resource) per remote_session_issuer the subject has linked. Proxied
+// backends route the entry matching their upstream resource; toolset
+// dispatch wraps entries into oauthTokenInputs.
 //
 // On failure: writes a 401 + WWW-Authenticate to w and returns the
 // CodeUnauthorized error from WriteAuthenticateChallenge. A re-auth
@@ -441,7 +441,7 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, map[uuid.UUID]string, *toolfilter.SessionSelection, error) {
+) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionSelection, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
 		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
@@ -484,7 +484,7 @@ func (s *Service) ApplyIssuerGate(
 	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
 	// when any attached remote session is missing or invalid — which the
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
-	var upstreamTokens map[uuid.UUID]string
+	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
 	if subject != nil {
 		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
 		switch {

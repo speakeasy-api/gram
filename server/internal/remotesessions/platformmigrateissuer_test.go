@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -132,7 +133,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{sourceUUID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 
 	result, err := ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID, targetID.String()))
 	require.NoError(t, err)
@@ -144,7 +145,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 	// client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{targetID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 
 	q := repo.New(ti.conn)
 	activeSessions, err := q.CountActiveRemoteSessionsByClientID(ctx, clientUUID)

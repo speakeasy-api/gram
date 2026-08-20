@@ -132,10 +132,12 @@ type revokeFixture struct {
 	refreshToken string
 	externalCID  string
 
-	// userIssuerID and projectID scope the consent-screen disconnect, which
-	// resolves its target from the challenge state rather than a session id.
-	userIssuerID uuid.UUID
-	projectID    uuid.UUID
+	// userIssuerID, projectID, and organizationID scope the consent-screen
+	// disconnect, which resolves its target from the challenge state rather
+	// than a session id.
+	userIssuerID   uuid.UUID
+	projectID      uuid.UUID
+	organizationID string
 }
 
 // seedRevocableSession creates issuer → client → session with real ciphertext,
@@ -239,14 +241,15 @@ func seedRevocableSession(
 	require.NoError(t, err)
 
 	return revokeFixture{
-		sessionID:    session.ID,
-		subject:      subject,
-		clientID:     client.ID,
-		accessToken:  accessToken,
-		refreshToken: refreshToken,
-		externalCID:  externalCID,
-		userIssuerID: userIssuer,
-		projectID:    *authCtx.ProjectID,
+		sessionID:      session.ID,
+		subject:        subject,
+		clientID:       client.ID,
+		accessToken:    accessToken,
+		refreshToken:   refreshToken,
+		externalCID:    externalCID,
+		userIssuerID:   userIssuer,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
 	}
 }
 
@@ -339,14 +342,15 @@ func seedRevocableClient(
 		require.NoError(t, sessErr)
 
 		fixtures = append(fixtures, revokeFixture{
-			sessionID:    session.ID,
-			subject:      subject,
-			clientID:     client.ID,
-			accessToken:  suffix + "-access",
-			refreshToken: refreshToken,
-			externalCID:  externalCID,
-			userIssuerID: userIssuer,
-			projectID:    *authCtx.ProjectID,
+			sessionID:      session.ID,
+			subject:        subject,
+			clientID:       client.ID,
+			accessToken:    suffix + "-access",
+			refreshToken:   refreshToken,
+			externalCID:    externalCID,
+			userIssuerID:   userIssuer,
+			projectID:      *authCtx.ProjectID,
+			organizationID: authCtx.ActiveOrganizationID,
 		})
 	}
 
@@ -634,7 +638,7 @@ func TestDisconnectRemoteSession_RevokesUpstream(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-revokes", upstream.URL+"/revoke", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.userIssuerID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -661,7 +665,7 @@ func TestDisconnectRemoteSession_NoRevocationEndpointSkipsUpstream(t *testing.T)
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-no-endpoint", "", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.userIssuerID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -684,7 +688,7 @@ func TestDisconnectRemoteSession_UpstreamErrorStillDisconnects(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "disconnect-upstream-500", upstream.URL+"/revoke", "s3cret", true)
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.userIssuerID, fx.clientID)
 	require.NoError(t, err, "an upstream failure must not surface to the consent screen")
 	require.Equal(t, int64(1), n)
 

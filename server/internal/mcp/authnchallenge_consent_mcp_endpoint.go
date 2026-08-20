@@ -317,7 +317,7 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := singleUpstreamToken(tokens)
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
 	}
