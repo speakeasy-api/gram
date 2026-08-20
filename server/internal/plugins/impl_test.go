@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -799,7 +800,7 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryGroupPrincipal(groupID)
+	principal := directory.GroupPrincipal(groupID)
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},
@@ -854,7 +855,7 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 		PrincipalUrns: []string{"directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, plugins.DirectoryAttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
+	require.Equal(t, directory.AttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
@@ -875,7 +876,7 @@ func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePr
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryAttributePrincipal("department", "engineering")
+	principal := directory.AttributePrincipal("department", "engineering")
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},

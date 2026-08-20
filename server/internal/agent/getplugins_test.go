@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
@@ -141,7 +142,7 @@ func TestGetPlugins_DeliversDirectoryGroupAssignmentsToUnlinkedUsers(t *testing.
 	user := seedDirectoryUser(t, ctx, ti.conn, ti.orgID, "user-directory-audience", "Unlinked@Example.com")
 	seedDirectoryGroupMembership(t, ctx, ti.conn, user, group, "user-directory-audience", "group-directory-audience")
 	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "directory-group-tool")
-	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
+	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, directory.GroupPrincipal(group))
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("unlinked@example.com")})
 	require.NoError(t, err)
@@ -161,13 +162,13 @@ func TestGetPlugins_DeliversDirectoryAttributeAssignments(t *testing.T) {
 	audiences, err := plugins.ResolveDirectoryAudiencePrincipalsByEmails(ctx, ti.conn, ti.orgID, []string{email})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
-		plugins.DirectoryAttributePrincipal("department", "Engineering"),
-		plugins.DirectoryAttributePrincipal("manager.email", "lead@example.com"),
+		directory.AttributePrincipal("department", "Engineering"),
+		directory.AttributePrincipal("manager.email", "lead@example.com"),
 	}, audiences[email])
 	departmentPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "department-tool")
-	assignPlugin(t, ctx, ti.conn, departmentPlugin, ti.orgID, plugins.DirectoryAttributePrincipal("department", "Engineering"))
+	assignPlugin(t, ctx, ti.conn, departmentPlugin, ti.orgID, directory.AttributePrincipal("department", "Engineering"))
 	managerPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "manager-tool")
-	assignPlugin(t, ctx, ti.conn, managerPlugin, ti.orgID, plugins.DirectoryAttributePrincipal("manager.email", "lead@example.com"))
+	assignPlugin(t, ctx, ti.conn, managerPlugin, ti.orgID, directory.AttributePrincipal("manager.email", "lead@example.com"))
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
 	require.NoError(t, err)
@@ -195,7 +196,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 		slug  string
 	}{{alpha, "alpha-tool"}, {beta, "beta-tool"}, {gamma, "gamma-tool"}} {
 		plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, assignment.slug)
-		assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(assignment.group))
+		assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, directory.GroupPrincipal(assignment.group))
 	}
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(email)})
@@ -242,7 +243,7 @@ func TestGetPlugins_DirectoryGroupsAreOrganizationScoped(t *testing.T) {
 	user := seedDirectoryUser(t, ctx, ti.conn, "other-org-id", "user-other-org", "directory-user@example.com")
 	seedDirectoryGroupMembership(t, ctx, ti.conn, user, group, "user-other-org", "group-other-org")
 	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "other-org-group-tool")
-	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, plugins.DirectoryGroupPrincipal(group))
+	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, directory.GroupPrincipal(group))
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("directory-user@example.com")})
 	require.NoError(t, err)

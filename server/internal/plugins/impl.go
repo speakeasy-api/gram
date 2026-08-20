@@ -1137,7 +1137,7 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 			Kind:         "directory_group",
 			DisplayName:  group.Name,
 			MemberCount:  &group.MemberCount,
-			PrincipalUrn: DirectoryGroupPrincipal(group.ID),
+			PrincipalUrn: directory.GroupPrincipal(group.ID),
 		})
 	}
 	for _, attribute := range attributes {
@@ -1145,7 +1145,7 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 			Kind:         "directory_attribute",
 			DisplayName:  fmt.Sprintf("%s: %s", attribute.Key, attribute.Value),
 			MemberCount:  &attribute.MemberCount,
-			PrincipalUrn: DirectoryAttributePrincipal(attribute.Key, attribute.Value),
+			PrincipalUrn: directory.AttributePrincipal(attribute.Key, attribute.Value),
 		})
 	}
 
@@ -1206,8 +1206,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	existingPrincipalURNs := make(map[string]struct{}, len(existingAssignments))
 	for _, assignment := range existingAssignments {
 		existingPrincipalURNs[assignment.PrincipalUrn] = struct{}{}
-		if attribute, err := parseDirectoryAttributePrincipal(assignment.PrincipalUrn); err == nil {
-			existingPrincipalURNs[DirectoryAttributePrincipal(attribute.Key, attribute.Value)] = struct{}{}
+		if attribute, err := directory.ParseAttributePrincipal(assignment.PrincipalUrn); err == nil {
+			existingPrincipalURNs[directory.AttributePrincipal(attribute.Key, attribute.Value)] = struct{}{}
 		}
 	}
 	for _, principal := range principals {
@@ -1218,7 +1218,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
 				continue
 			}
-			groupID, err := uuid.Parse(principal.Identifier)
+			groupID, err := directory.ParseGroupPrincipal(principal.String())
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.String())
 			}
@@ -1233,7 +1233,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
 				continue
 			}
-			attribute, err := parseDirectoryAttributePrincipal(principal.String())
+			attribute, err := directory.ParseAttributePrincipal(principal.String())
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.String())
 			}

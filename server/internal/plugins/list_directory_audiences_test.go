@@ -10,8 +10,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 func TestPluginsService_ListAudiences(t *testing.T) {
@@ -99,25 +99,25 @@ func TestPluginsService_ListAudiences(t *testing.T) {
 			Kind:         "directory_group",
 			DisplayName:  "Empty",
 			MemberCount:  &zero,
-			PrincipalUrn: plugins.DirectoryGroupPrincipal(emptyGroupID),
+			PrincipalUrn: directory.GroupPrincipal(emptyGroupID),
 		},
 		{
 			Kind:         "directory_group",
 			DisplayName:  "Engineering",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryGroupPrincipal(groupID),
+			PrincipalUrn: directory.GroupPrincipal(groupID),
 		},
 		{
 			Kind:         "directory_attribute",
 			DisplayName:  "department: engineering",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryAttributePrincipal("department", "engineering"),
+			PrincipalUrn: directory.AttributePrincipal("department", "engineering"),
 		},
 		{
 			Kind:         "directory_attribute",
 			DisplayName:  "title: developer",
 			MemberCount:  &one,
-			PrincipalUrn: plugins.DirectoryAttributePrincipal("title", "developer"),
+			PrincipalUrn: directory.AttributePrincipal("title", "developer"),
 		},
 	}, result.Audiences[2:])
 }

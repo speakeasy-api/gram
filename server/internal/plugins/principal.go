@@ -2,12 +2,9 @@ package plugins
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -16,15 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-const (
-	directoryAttributePrincipalPrefix = "directory_attribute"
-	directoryGroupPrincipalPrefix     = "directory_group"
-)
-
-var ErrParsingDirectoryPrincipal = errors.New("parse directory principal")
-
-type DirectoryAttribute = directory.AttributeValue
 
 type pluginAssignmentPrincipalType uint8
 
@@ -41,56 +29,7 @@ type pluginAssignmentPrincipal struct {
 }
 
 func (p pluginAssignmentPrincipal) String() string {
-	switch p.Type {
-	case pluginAssignmentPrincipalDirectoryGroup:
-		return fmt.Sprintf("%s:%s", directoryGroupPrincipalPrefix, p.Identifier)
-	case pluginAssignmentPrincipalDirectoryAttribute:
-		return fmt.Sprintf("%s:%s", directoryAttributePrincipalPrefix, p.Identifier)
-	default:
-		return p.Identifier
-	}
-}
-
-func DirectoryGroupPrincipal(id uuid.UUID) string {
-	return fmt.Sprintf("%s:%s", directoryGroupPrincipalPrefix, id)
-}
-
-func DirectoryAttributePrincipal(key, value string) string {
-	return fmt.Sprintf("%s:%s:%s", directoryAttributePrincipalPrefix, base64.RawURLEncoding.EncodeToString([]byte(key)), base64.RawURLEncoding.EncodeToString([]byte(value)))
-}
-
-func parseDirectoryGroupPrincipal(principal string) (uuid.UUID, error) {
-	value, ok := strings.CutPrefix(principal, directoryGroupPrincipalPrefix+":")
-	if !ok {
-		return uuid.Nil, fmt.Errorf("%w: expected directory group prefix", ErrParsingDirectoryPrincipal)
-	}
-
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("%w: group id: %w", ErrParsingDirectoryPrincipal, err)
-	}
-
-	return id, nil
-}
-
-func parseDirectoryAttributePrincipal(principal string) (DirectoryAttribute, error) {
-	encoded, ok := strings.CutPrefix(principal, directoryAttributePrincipalPrefix+":")
-	if !ok {
-		return DirectoryAttribute{}, fmt.Errorf("%w: expected directory attribute prefix", ErrParsingDirectoryPrincipal)
-	}
-	key, value, ok := strings.Cut(encoded, ":")
-	if !ok {
-		return DirectoryAttribute{}, fmt.Errorf("%w: missing attribute value", ErrParsingDirectoryPrincipal)
-	}
-	decodedKey, err := base64.RawURLEncoding.DecodeString(key)
-	if err != nil {
-		return DirectoryAttribute{}, fmt.Errorf("%w: attribute key: %w", ErrParsingDirectoryPrincipal, err)
-	}
-	decodedValue, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil {
-		return DirectoryAttribute{}, fmt.Errorf("%w: attribute value: %w", ErrParsingDirectoryPrincipal, err)
-	}
-	return DirectoryAttribute{Key: string(decodedKey), Value: string(decodedValue)}, nil
+	return p.Identifier
 }
 
 func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db database.DBTX, organizationID string, emails []string) (map[string][]string, error) {
@@ -102,10 +41,10 @@ func ResolveDirectoryAudiencePrincipalsByEmails(ctx context.Context, db database
 	principals := make(map[string][]string, len(associations))
 	for email, association := range associations {
 		for _, groupID := range association.GroupIDs {
-			principals[email] = append(principals[email], DirectoryGroupPrincipal(groupID))
+			principals[email] = append(principals[email], directory.GroupPrincipal(groupID))
 		}
 		for _, attribute := range association.Attributes {
-			principals[email] = append(principals[email], DirectoryAttributePrincipal(attribute.Key, attribute.Value))
+			principals[email] = append(principals[email], directory.AttributePrincipal(attribute.Key, attribute.Value))
 		}
 	}
 	return principals, nil
@@ -115,20 +54,20 @@ func (s *Service) parsePluginAssignmentPrincipal(ctx context.Context, organizati
 	switch {
 	case raw == urn.PrincipalWildcard:
 		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalStandard, Identifier: raw}, nil
-	case strings.HasPrefix(raw, directoryGroupPrincipalPrefix+":"):
-		id, err := parseDirectoryGroupPrincipal(raw)
+	case directory.IsGroupPrincipal(raw):
+		id, err := directory.ParseGroupPrincipal(raw)
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", raw)
 		}
-		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryGroup, Identifier: id.String()}, nil
-	case strings.HasPrefix(raw, directoryAttributePrincipalPrefix+":"):
-		attribute, err := parseDirectoryAttributePrincipal(raw)
+		return pluginAssignmentPrincipal{Type: pluginAssignmentPrincipalDirectoryGroup, Identifier: directory.GroupPrincipal(id)}, nil
+	case directory.IsAttributePrincipal(raw):
+		attribute, err := directory.ParseAttributePrincipal(raw)
 		if err != nil {
 			return pluginAssignmentPrincipal{}, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", raw)
 		}
 		return pluginAssignmentPrincipal{
 			Type:       pluginAssignmentPrincipalDirectoryAttribute,
-			Identifier: strings.TrimPrefix(DirectoryAttributePrincipal(attribute.Key, attribute.Value), directoryAttributePrincipalPrefix+":"),
+			Identifier: directory.AttributePrincipal(attribute.Key, attribute.Value),
 		}, nil
 	default:
 		normalized := raw
