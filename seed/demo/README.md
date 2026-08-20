@@ -1,6 +1,6 @@
 # Demo org seed
 
-SQL-first seed for the shared, read-only demo organization — and, retargeted,
+SQL-first seed for the shared demo organization — and, retargeted,
 for your local development organization. The SQL lives in
 `server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
 server binary, and is applied by the `gram demo-seed` subcommand — the SAME
@@ -53,9 +53,9 @@ scope. `TestLocalSpecRewritesEveryDefaultIdentifier` catches that without
 needing a database.
 
 `LocalSpec` identifies the dev-idp's default org, so logging in locally lands
-you inside the seeded data. Unlike the demo org it is a perfectly ordinary
-writable org: none of the demo carve-outs in `authz.Engine` or
-`middleware.DemoOrgWriteGuard` key off it.
+you inside the seeded data. Unlike the demo org it is an ordinary org whose
+grants come from real membership: none of the demo carve-outs in
+`authz.Engine` key off it.
 
 Its `OrgID` is **derived**, not equal to the WorkOS org id:
 `organization_metadata.id` for any organization that came from WorkOS is
@@ -175,19 +175,15 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    `access.listGrants` reports to the dashboard: when enforcement was narrower
    than what was advertised, demo pages whose handlers require `org:admin`
    (Costs, Budgets, Organization API Keys, Device Agent) rendered and then
-   403ed. Read-only-ness comes from the write guard in item 4, not from
-   withholding scopes.
+   403ed. Visitors can mutate demo data; the daily reseed reverts it.
 3. DONE (commit ae256351c1): transcript block lifted for the demo org in
    `chat.LoadChat` via `constants.DemoOrganizationID`.
 4. DONE: `authz.Engine.ShouldEnforce` forces enforcement for the demo org
-   regardless of its RBAC product feature, and
-   `middleware.DemoOrgWriteGuard` (`server/internal/middleware/demo.go`,
-   wired in `start.go`) rejects mutating `/rpc` calls by method-name verb
-   (POST alone is no signal — telemetry/risk reads POST). Since demo sessions
-   hold every scope, this guard is the control that keeps the org read-only,
-   so it fails closed: only verbs in `demoReadOnlyVerbs` pass, and
-   `TestDemoGuardClassifiesEveryRPCVerb` fails when a new endpoint ships a
-   verb classified in neither map.
+   regardless of its RBAC product feature. There is no write guard: demo
+   sessions hold every user-visible scope and mutations are allowed to land,
+   because the daily `gram demo-seed` run deletes and reinserts the org's data
+   wholesale. Keeping the seed idempotent and scoped is therefore what keeps
+   the demo presentable, not an access control.
 5. DONE: `ImpersonationBanner` shows "Demo org — sample data" for any session
    whose active org slug is `acme-demo` (cookie no longer required); exit
    switches back to the user's own org via `auth.switchScopes`. Entry points:

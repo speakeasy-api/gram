@@ -1,4 +1,4 @@
-// Package demoseed provisions the shared read-only demo organization
+// Package demoseed provisions the shared demo organization
 // (constants.DemoOrganizationID). The SQL sources are embedded so the seed
 // versions atomically with the server binary: the daily `gram demo-seed` run
 // always applies the seed that shipped with the current deploy — no

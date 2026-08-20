@@ -55,25 +55,6 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	}
 }
 
-// TestDemoScopeGrantsMatchAllScopeGrants pins the demo set to the same
-// catalogue impersonating platform admins get. Enforcement drifting narrower
-// than what access.ListGrants advertises is the bug this pairing prevents.
-func TestDemoScopeGrantsMatchAllScopeGrants(t *testing.T) {
-	t.Parallel()
-
-	demo := make([]string, 0, len(DemoScopeGrants()))
-	for _, grant := range DemoScopeGrants() {
-		demo = append(demo, string(grant.Scope))
-	}
-
-	all := make([]string, 0, len(allScopeGrants()))
-	for _, grant := range allScopeGrants() {
-		all = append(all, string(grant.Scope))
-	}
-
-	require.ElementsMatch(t, all, demo)
-}
-
 func TestPrepareContext_demoOrgIgnoresScopeOverrides(t *testing.T) {
 	t.Parallel()
 

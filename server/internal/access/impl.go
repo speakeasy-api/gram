@@ -393,8 +393,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// demo (page gates like Costs require org:admin). This is the same set
 	// authz.DemoScopeGrants installs on the request context — reporting more
 	// than enforcement honours is what made demo pages render and then 403.
-	// TestDemoGrantsMatchEnforcedScopes holds the two together. Mutations are
-	// rejected by middleware.DemoOrgWriteGuard, not by withholding scopes.
+	// TestDemoGrantsMatchEnforcedScopes holds the two together.
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}

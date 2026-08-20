@@ -100,9 +100,10 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return GrantsToContext(ctx, nil), nil
 	}
 
-	// Sessions in the shared demo org (which has no membership rows) get a
-	// fixed read-only grant set. This must precede scope and admin overrides so
-	// neither can widen a demo session back to write grants.
+	// Sessions in the shared demo org (which has no membership rows) get the
+	// full user-visible grant set. This must precede scope and admin overrides
+	// so the set a demo session holds is always the one access.ListGrants
+	// reports for it.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return GrantsToContext(ctx, DemoScopeGrants()), nil
 	}

@@ -413,10 +413,9 @@ func allScopeGrants() []Grant {
 // refuses to serve; a narrower enforcement set is what made demo pages 403
 // behind an enabled UI.
 //
-// Scopes are not what keeps the demo organization read-only.
-// middleware.DemoOrgWriteGuard rejects every mutating RPC for a demo session
-// and fails closed on any verb it does not recognise as a read, and the demo
-// org's data is deleted and reseeded daily.
+// Demo visitors can mutate demo data. That is intended: the demo organization
+// is a sandbox, and `gram demo-seed` deletes and reinserts its data daily, so
+// anything a visitor changes is reverted on the next run.
 func DemoScopeGrants() []Grant {
 	return allScopeGrants()
 }
