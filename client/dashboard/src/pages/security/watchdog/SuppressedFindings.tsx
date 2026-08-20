@@ -12,7 +12,7 @@ import { useRiskListDismissedResults } from "@gram/client/react-query/riskListDi
 import { useRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { CategoryLabel } from "../risk-ui";
@@ -49,8 +49,7 @@ export function SuppressedFindings(): JSX.Element | null {
   const [pageIndex, setPageIndex] = useState(0);
   const [openFinding, setOpenFinding] = useState<RiskResult | null>(null);
 
-  const { restore, optimisticallyRestoredIds, forgetRestored } =
-    useDismissFinding();
+  const { restore, optimisticallyRestoredIds } = useDismissFinding();
   const routes = useRoutes();
   const navigate = useNavigate();
   // Opening the session hands off to the same chat sheet the Risk Events log
@@ -102,29 +101,6 @@ export function SuppressedFindings(): JSX.Element | null {
   // report a count the bulk action can't act on.
   const selectable = useMemo(() => results.filter(isRestorable), [results]);
   const selection = useRowSelection(selectable, resultId);
-
-  // Once a fresh first page comes back without a row we were hiding, the
-  // mirror has caught up and the entry has done its job. Expiring it here is
-  // what stops the set from hiding the same finding later, if it gets
-  // suppressed again while this page stays mounted. Scoped to the first page —
-  // which is where a restore leaves the pager — because a row's absence from
-  // some *other* page says nothing about whether the mirror has caught up.
-  const onFirstPage = pageIndex === 0;
-  useEffect(() => {
-    if (showingStalePage || !onFirstPage) return;
-    if (optimisticallyRestoredIds.size === 0) return;
-    const present = new Set(fetchedResults.map(resultId));
-    const settled = [...optimisticallyRestoredIds].filter(
-      (id) => !present.has(id),
-    );
-    if (settled.length > 0) forgetRestored(settled);
-  }, [
-    fetchedResults,
-    showingStalePage,
-    onFirstPage,
-    optimisticallyRestoredIds,
-    forgetRestored,
-  ]);
 
   const nextCursor = listQuery.data?.nextCursor;
   // The server's count still includes anything hidden above, so subtract what

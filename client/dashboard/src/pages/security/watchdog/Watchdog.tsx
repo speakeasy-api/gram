@@ -416,12 +416,15 @@ function WatchdogContent(): JSX.Element {
                   setUrlParam("signal", signal.key)
                 }
               />
-              {/* Everything the list above deliberately omits. Unfiltered and
-                  unwindowed on purpose: it's the audit trail for what is being
-                  hidden, not another view of the current window. */}
-              <SuppressedFindings />
             </>
           )}
+          {/* Everything the list above deliberately omits. Unfiltered and
+              unwindowed on purpose: it's the audit trail for what is being
+              hidden, not another view of the current window — and outside the
+              signals branch on purpose too, since it reads a different endpoint
+              and has its own loading, error, and empty handling. A failed
+              signals query must not take the audit trail down with it. */}
+          <SuppressedFindings />
           {/* Inside Body on purpose: Page.Section slot-extracts only its known
               child components and silently drops anything else, so the drawer
               must live under a slot to render at all. */}

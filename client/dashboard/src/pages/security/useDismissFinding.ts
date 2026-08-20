@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -16,6 +16,14 @@ import { showUndoToast } from "@/lib/toast-undo";
 // selection larger than the server's per-request cap is split into
 // sequential requests here rather than surfaced as a hard UI limit.
 const MAX_BATCH = 500;
+
+// How long a restored id stays hidden from the suppressed listing. That
+// listing is served from the ClickHouse mirror, which lags the write by
+// seconds, so the row can come back on the very refetch the restore triggers.
+// The window only has to outlast that lag: it expires on its own so an id
+// cannot be hidden indefinitely, which would wrongly hide the same finding if
+// it were suppressed again later in the same session.
+export const RESTORE_HIDE_MS = 60_000;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -65,12 +73,9 @@ export function useDismissFinding(): {
   restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
   /** Ids hidden from the suppressed listing because a restore is in flight or
-   * has landed ahead of the mirror. Exposed as the set rather than a predicate
-   * so the listing can also tell the hook which entries have expired. */
+   * has landed ahead of the mirror. Entries expire after RESTORE_HIDE_MS, and
+   * immediately if the finding is suppressed again. */
   optimisticallyRestoredIds: ReadonlySet<string>;
-  /** Drop entries the listing has confirmed are gone, so the set can't
-   * outlive its purpose and hide the finding if it is suppressed again. */
-  forgetRestored: (ids: string[]) => void;
 } {
   const queryClient = useQueryClient();
   const [optimistic, setOptimistic] = useState<Set<string>>(new Set());
@@ -121,6 +126,17 @@ export function useDismissFinding(): {
       return next;
     });
   }, []);
+
+  // Pending expiry timers, cleared on unmount so a restore late in a page's
+  // life can't fire setState after it goes away.
+  const expiryTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      expiryTimers.current.forEach(clearTimeout);
+      expiryTimers.current = [];
+    },
+    [],
+  );
 
   const forgetRestored = useCallback((ids: string[]) => {
     setOptimisticRestored((prev) => {
@@ -183,6 +199,11 @@ export function useDismissFinding(): {
       // that were just restored — without this they would reappear and stay
       // until some later refetch happened to land after the mirror caught up.
       setOptimisticRestored((prev) => new Set([...prev, ...ids]));
+      // Absence from a later listing page proves nothing about the mirror, so
+      // the entries come out on a clock instead.
+      expiryTimers.current.push(
+        setTimeout(() => forgetRestored(ids), RESTORE_HIDE_MS),
+      );
       const { succeededIds, failedIds } = await unsuppress(ids);
       if (succeededIds.length > 0) {
         invalidateLists();
@@ -205,7 +226,7 @@ export function useDismissFinding(): {
       }
       return succeededIds.length > 0;
     },
-    [unsuppress, invalidateLists],
+    [unsuppress, invalidateLists, forgetRestored],
   );
 
   const dismiss = useCallback(
@@ -266,6 +287,5 @@ export function useDismissFinding(): {
     restore,
     isOptimisticallyDismissed,
     optimisticallyRestoredIds: optimisticRestored,
-    forgetRestored,
   };
 }

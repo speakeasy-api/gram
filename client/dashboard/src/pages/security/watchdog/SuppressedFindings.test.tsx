@@ -27,13 +27,9 @@ vi.mock("@/pages/chatLogs/useChatDetailSheet", () => ({
   }),
 }));
 
-/** Ids the hook is optimistically treating as already restored. */
+/** Ids the hook is optimistically treating as already restored. Expiry of
+ * these entries is the hook's own business — see useDismissFinding.test.tsx. */
 const optimisticallyRestored = new Set<string>();
-const forgetRestored = vi.fn((ids: string[]) => {
-  ids.forEach((id) => {
-    optimisticallyRestored.delete(id);
-  });
-});
 
 vi.mock("../useDismissFinding", () => ({
   useDismissFinding: () => ({
@@ -41,7 +37,6 @@ vi.mock("../useDismissFinding", () => ({
     dismiss: vi.fn(),
     isOptimisticallyDismissed: () => false,
     optimisticallyRestoredIds: optimisticallyRestored,
-    forgetRestored,
   }),
 }));
 
@@ -130,6 +125,17 @@ const FILLER_ROWS = Array.from({ length: 6 }, (_, index) =>
   }),
 );
 
+const SHADOW_MCP_ROW = makeResult({
+  id: "shadow-row",
+  ruleId: "unapproved-server",
+  source: "shadow_mcp",
+  suppressedReason: "manual",
+  suppressedAt: new Date("2026-08-06T12:00:00Z"),
+  // Documented carve-out: shadow MCP matches are server identifiers, not
+  // captured content, so the server passes match_redacted through verbatim.
+  matchRedacted: "https://mcp.example.com/sse",
+});
+
 const EXCLUSIONS: RiskExclusion[] = [
   {
     id: "exclusion-1",
@@ -156,7 +162,8 @@ const FIRST_PAGE: Page = {
     ORPHAN_RULE_ROW,
     MANUAL_ROW,
     AUTOMATED_ROW,
-    ...FILLER_ROWS,
+    SHADOW_MCP_ROW,
+    ...FILLER_ROWS.slice(1),
   ],
   nextCursor: "page-2",
   totalCount: 14,
@@ -221,7 +228,6 @@ beforeEach(() => {
   openChat.mockClear();
   refetch.mockClear();
   optimisticallyRestored.clear();
-  forgetRestored.mockClear();
   listState.isPlaceholderData = false;
   listState.isFetching = false;
   listState.isError = false;
@@ -418,33 +424,6 @@ describe("SuppressedFindings", () => {
     expect(screen.getByText("1–8 of 12 suppressed")).toBeTruthy();
   });
 
-  it("stops hiding a restored finding once the listing has caught up", () => {
-    optimisticallyRestored.add("manual-row");
-    // The mirror caught up: a fresh first page no longer carries the row.
-    PAGES[""] = {
-      ...FIRST_PAGE,
-      results: FIRST_PAGE.results.filter((row) => row.id !== "manual-row"),
-      totalCount: 13,
-    };
-
-    const { unmount } = renderSection();
-    expect(forgetRestored).toHaveBeenCalledWith(["manual-row"]);
-    expect(optimisticallyRestored.has("manual-row")).toBe(false);
-    unmount();
-
-    // Suppressed again while the page stayed mounted: it must be listed, not
-    // silently filtered out by a stale optimistic entry.
-    PAGES[""] = FIRST_PAGE;
-    renderSection();
-    expand();
-
-    expect(
-      screen.getByRole("button", {
-        name: `View suppressed finding ${getRuleTitleFallback("generic-api-key")}`,
-      }),
-    ).toBeTruthy();
-  });
-
   it("omits the evidence section when there is no match behind the fingerprint", () => {
     renderSection();
     expand();
@@ -455,6 +434,20 @@ describe("SuppressedFindings", () => {
     expect(panel.queryByText("<redacted len=0>")).toBeNull();
     // The rest of the finding still renders.
     expect(panel.getByText("Suppressed automatically")).toBeTruthy();
+  });
+
+  it("does not claim a shadow MCP identifier is hidden when it is on screen", () => {
+    renderSection();
+    expand();
+    openRow("unapproved-server");
+
+    const panel = drawer();
+    expect(panel.getByText("https://mcp.example.com/sse")).toBeTruthy();
+    // The identifier is fully visible, so any "value stays hidden" line would
+    // contradict what the reader is looking at.
+    expect(panel.queryByText(/can't be revealed/i)).toBeNull();
+    expect(panel.queryByText(/stays hidden/i)).toBeNull();
+    expect(panel.getByText("Server")).toBeTruthy();
   });
 
   it("points a rule-suppressed finding at its rule, not at a restore it cannot offer", () => {
