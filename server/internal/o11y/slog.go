@@ -186,6 +186,16 @@ func NoLogDefer(cb func() error) {
 	_ = cb()
 }
 
+func LogError(ctx context.Context, logger *slog.Logger, err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+
+	logger.ErrorContext(ctx, msg, attr.SlogError(err))
+
+	return err
+}
+
 type pgxLogger struct {
 	logger *slog.Logger
 }
