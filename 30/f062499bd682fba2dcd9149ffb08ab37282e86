@@ -1,0 +1,33 @@
+server/internal/database/models.go
+  s_d8569503ddf9c1::t_0ca4542435999d 1446-1463
+  s_d8569503ddf9c1::t_8e138f8948ed3a 2272-2286
+server/migrations/atlas.sum
+  s_d8569503ddf9c1::t_8f9c88b1c09dd5 361
+server/migrations/20260820164700_session-quarantines.sql
+  s_d8569503ddf9c1::t_8f9c88b1c09dd5 1-25
+server/database/schema.sql
+  s_d8569503ddf9c1::t_f2949fb69fcd9e 67
+  s_d8569503ddf9c1::t_4ddde612f20d1a 4964-4994
+server/internal/organizations/repo/models.go
+  s_d8569503ddf9c1::t_0ca4542435999d 28-45
+server/internal/organizations/repo/queries.sql.go
+  s_d8569503ddf9c1::t_afcc0f97d84c5a 200,240,412,435,444,467,476,499,1240,1267,1281,1307,1609,1648,1680,1715,1745,1786
+server/internal/projects/repo/queries.sql.go
+  s_d8569503ddf9c1::t_d38cded0a8bfdc 191,200-220,244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "30f062499bd682fba2dcd9149ffb08ab37282e86",
+  "prompts": {},
+  "sessions": {
+    "s_d8569503ddf9c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02009-cbbe-7523-85e3-7aa83e894e4c",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
