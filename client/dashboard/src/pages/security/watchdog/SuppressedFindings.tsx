@@ -103,12 +103,19 @@ export function SuppressedFindings(): JSX.Element | null {
   const selection = useRowSelection(selectable, resultId);
 
   const nextCursor = listQuery.data?.nextCursor;
-  // The server's count still includes anything hidden above, so subtract what
-  // this page is hiding — never the whole set, which would double-count once a
-  // refetch has already dropped those rows from the total. Display only: the
-  // cursor stack and pageIndex keep working in server-side terms.
-  const hiddenOnPage = fetchedResults.length - results.length;
-  const total = Math.max((listQuery.data?.totalCount ?? 0) - hiddenOnPage, 0);
+  // The server's count still includes rows we are hiding, so discount them.
+  // Every held id counts, not just the ones on this page: paging away from a
+  // restored row would otherwise let the total jump back up, which reads as
+  // the restore having failed. The cost is the opposite skew — once the mirror
+  // catches up the server total already excludes them while the hold has not
+  // yet expired, so the count can sit low by that many for the rest of the
+  // window. A count that only ever settles downward is the less alarming of
+  // the two. Display only: the cursor stack and pageIndex stay server-side.
+  const serverTotal = listQuery.data?.totalCount ?? 0;
+  const total = Math.max(
+    serverTotal - Math.min(optimisticallyRestoredIds.size, serverTotal),
+    0,
+  );
 
   const restoreIds = (ids: string[]): Promise<boolean> => {
     selection.clear();

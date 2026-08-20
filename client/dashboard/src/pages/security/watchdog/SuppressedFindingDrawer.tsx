@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { CategoryLabel } from "../risk-ui";
 import { getRuleTitleFallback, isShadowMcpSource } from "../risk-utils";
-import { hasRevealableEvent } from "../unmask";
+import { hasRevealableEvent, isRedactionFingerprint } from "../unmask";
 import {
   isRestorable,
   suppressionDetail,
@@ -169,10 +169,11 @@ function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
  */
 function EvidenceSection({ finding }: { finding: RiskResult }): JSX.Element {
   if (!hasRevealableEvent(finding.matchRedacted)) return <></>;
-  const guidance = revealGuidance(finding);
+  const verbatim = isVerbatimIdentifier(finding);
+  const guidance = verbatim ? null : revealGuidance(finding);
   return (
     <div className="space-y-4">
-      <DetailRow label={isShadowMcpSource(finding.source) ? "Server" : "Match"}>
+      <DetailRow label={verbatim ? "Server" : "Match"}>
         <span className="border-border inline-block max-w-full font-mono text-xs break-all">
           {finding.matchRedacted}
         </span>
@@ -187,16 +188,26 @@ function EvidenceSection({ finding }: { finding: RiskResult }): JSX.Element {
 }
 
 /**
+ * Whether the value on screen is the real thing rather than a fingerprint of
+ * it. Shadow MCP is the only source whose match is passed through verbatim (a
+ * server URL or command identifier, not captured content) — but only for rows
+ * written since that carve-out landed. Older ones still carry a redaction
+ * fingerprint, so the source has to be checked together with the value's shape,
+ * or a fingerprint gets labelled as a server and its guidance dropped.
+ */
+function isVerbatimIdentifier(finding: RiskResult): boolean {
+  return (
+    isShadowMcpSource(finding.source) &&
+    !isRedactionFingerprint(finding.matchRedacted)
+  );
+}
+
+/**
  * Why the value stays hidden, and what the reader can do about it — which
  * differs by suppression: restoring is an action they have here, while a rule
  * suppression outlives any single finding and has to be changed at the rule.
- *
- * Shadow MCP gets no line at all: its match is a server identifier the server
- * passes through verbatim, so it is already fully on screen and any talk of a
- * hidden value would contradict what the reader is looking at.
  */
-function revealGuidance(finding: RiskResult): string | null {
-  if (isShadowMcpSource(finding.source)) return null;
+function revealGuidance(finding: RiskResult): string {
   if (suppressionReason(finding) === "rule") {
     return "The matched value stays hidden while an exclusion rule suppresses this finding. Change the rule to surface it again.";
   }

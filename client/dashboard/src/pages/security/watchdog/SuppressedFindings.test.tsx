@@ -136,6 +136,17 @@ const SHADOW_MCP_ROW = makeResult({
   matchRedacted: "https://mcp.example.com/sse",
 });
 
+// A shadow_mcp row written before the passthrough carve-out landed: same
+// source, but the value is still a fingerprint.
+const LEGACY_SHADOW_ROW = makeResult({
+  id: "legacy-shadow-row",
+  ruleId: "legacy-server",
+  source: "shadow_mcp",
+  suppressedReason: "manual",
+  suppressedAt: new Date("2026-08-05T12:00:00Z"),
+  matchRedacted: "<redacted len=31 sha=0f1e2d3c>",
+});
+
 const EXCLUSIONS: RiskExclusion[] = [
   {
     id: "exclusion-1",
@@ -163,7 +174,8 @@ const FIRST_PAGE: Page = {
     MANUAL_ROW,
     AUTOMATED_ROW,
     SHADOW_MCP_ROW,
-    ...FILLER_ROWS.slice(1),
+    LEGACY_SHADOW_ROW,
+    ...FILLER_ROWS.slice(2),
   ],
   nextCursor: "page-2",
   totalCount: 14,
@@ -450,6 +462,19 @@ describe("SuppressedFindings", () => {
     expect(panel.getByText("Server")).toBeTruthy();
   });
 
+  it("treats a legacy shadow MCP fingerprint as redacted, not as an identifier", () => {
+    renderSection();
+    expand();
+    openRow("legacy-server");
+
+    const panel = drawer();
+    // Same source as the row above, but this value is a fingerprint — calling
+    // it a server and dropping the guidance would misdescribe it.
+    expect(panel.getByText("Match")).toBeTruthy();
+    expect(panel.queryByText("Server")).toBeNull();
+    expect(panel.getByText(/can't be revealed/i)).toBeTruthy();
+  });
+
   it("points a rule-suppressed finding at its rule, not at a restore it cannot offer", () => {
     renderSection();
     expand();
@@ -461,6 +486,19 @@ describe("SuppressedFindings", () => {
     ).toBeTruthy();
     // "Restore it first" is impossible here — the drawer offers View rule.
     expect(panel.queryByText(/restore it first/i)).toBeNull();
+  });
+
+  it("keeps the discounted total steady when paging away from a hidden row", () => {
+    optimisticallyRestored.add("manual-row");
+    renderSection();
+    expand();
+    expect(screen.getByText("Suppressed · 13")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    // The hidden row lives on the page we just left, but the count must not
+    // bounce back up — a total that climbs reads as the restore having failed.
+    expect(screen.getByText("Suppressed · 13")).toBeTruthy();
   });
 
   it("locks the rows down while they belong to a page the pager has left", () => {

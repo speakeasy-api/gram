@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -11,18 +11,24 @@ import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRul
 import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
+import {
+  expireRestoredAfter,
+  getRestoredFindings,
+  holdRestored,
+  releaseRestored,
+  subscribeRestoredFindings,
+} from "./restored-findings-store";
 
 // Mirrors maxFalsePositiveBatch in server/internal/risk/false_positive.go — a
 // selection larger than the server's per-request cap is split into
 // sequential requests here rather than surfaced as a hard UI limit.
 const MAX_BATCH = 500;
 
-// How long a restored id stays hidden from the suppressed listing. That
-// listing is served from the ClickHouse mirror, which lags the write by
-// seconds, so the row can come back on the very refetch the restore triggers.
-// The window only has to outlast that lag: it expires on its own so an id
-// cannot be hidden indefinitely, which would wrongly hide the same finding if
-// it were suppressed again later in the same session.
+// How long a restored id stays hidden from the suppressed listing once its
+// write has landed. That listing is served from the ClickHouse mirror, which
+// lags the write by seconds, so the row can come back on the very refetch the
+// restore triggers. The window only has to outlast that lag; it expires on its
+// own so an id can never be hidden indefinitely.
 export const RESTORE_HIDE_MS = 60_000;
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -73,19 +79,24 @@ export function useDismissFinding(): {
   restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
   /** Ids hidden from the suppressed listing because a restore is in flight or
-   * has landed ahead of the mirror. Entries expire after RESTORE_HIDE_MS, and
-   * immediately if the finding is suppressed again. */
+   * has landed ahead of the mirror. Shared across every hook instance (see
+   * restored-findings-store): held for the whole request, then expiring
+   * RESTORE_HIDE_MS after it lands, or immediately if the finding is
+   * suppressed again from anywhere. */
   optimisticallyRestoredIds: ReadonlySet<string>;
 } {
   const queryClient = useQueryClient();
   const [optimistic, setOptimistic] = useState<Set<string>>(new Set());
-  // The mirror image of `optimistic`, and deliberately a separate set: an id
-  // in `optimistic` is hidden from the surfaces that list *live* findings,
+  // The mirror image of `optimistic`, and deliberately kept apart from it: an
+  // id in `optimistic` is hidden from the surfaces that list *live* findings,
   // while an id here is hidden from the one surface that lists *suppressed*
   // ones. Folding them together would make a restore hide the finding from the
-  // active listings it is on its way back into.
-  const [optimisticRestored, setOptimisticRestored] = useState<Set<string>>(
-    new Set(),
+  // active listings it is on its way back into. This half is module-scoped so
+  // every hook instance agrees on it — see restored-findings-store.
+  const optimisticallyRestoredIds = useSyncExternalStore(
+    subscribeRestoredFindings,
+    getRestoredFindings,
+    getRestoredFindings,
   );
 
   const markMutation = useRiskMarkResultsFalsePositiveMutation();
@@ -124,28 +135,6 @@ export function useDismissFinding(): {
         next.delete(id);
       });
       return next;
-    });
-  }, []);
-
-  // Pending expiry timers, cleared on unmount so a restore late in a page's
-  // life can't fire setState after it goes away.
-  const expiryTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(
-    () => () => {
-      expiryTimers.current.forEach(clearTimeout);
-      expiryTimers.current = [];
-    },
-    [],
-  );
-
-  const forgetRestored = useCallback((ids: string[]) => {
-    setOptimisticRestored((prev) => {
-      if (prev.size === 0) return prev;
-      const next = new Set(prev);
-      ids.forEach((id) => {
-        next.delete(id);
-      });
-      return next.size === prev.size ? prev : next;
     });
   }, []);
 
@@ -198,35 +187,28 @@ export function useDismissFinding(): {
       // refetch this restore triggers can still come back carrying the rows
       // that were just restored — without this they would reappear and stay
       // until some later refetch happened to land after the mirror caught up.
-      setOptimisticRestored((prev) => new Set([...prev, ...ids]));
-      // Absence from a later listing page proves nothing about the mirror, so
-      // the entries come out on a clock instead.
-      expiryTimers.current.push(
-        setTimeout(() => forgetRestored(ids), RESTORE_HIDE_MS),
-      );
+      holdRestored(ids);
       const { succeededIds, failedIds } = await unsuppress(ids);
       if (succeededIds.length > 0) {
         invalidateLists();
+        // The clock starts here, not when the request went out: a request that
+        // outlasts the window would otherwise have burned it before the write
+        // ever landed, un-hiding a row the mirror is still serving.
+        expireRestoredAfter(succeededIds, RESTORE_HIDE_MS);
         toast.success(
           `Restored ${succeededIds.length} ${succeededIds.length === 1 ? "finding" : "findings"}`,
         );
       }
       if (failedIds.length > 0) {
         // Still suppressed server-side, so the row belongs back on the list.
-        setOptimisticRestored((prev) => {
-          const next = new Set(prev);
-          failedIds.forEach((id) => {
-            next.delete(id);
-          });
-          return next;
-        });
+        releaseRestored(failedIds);
         toast.error(
           `Failed to restore ${failedIds.length} ${failedIds.length === 1 ? "finding" : "findings"}.`,
         );
       }
       return succeededIds.length > 0;
     },
-    [unsuppress, invalidateLists, forgetRestored],
+    [unsuppress, invalidateLists],
   );
 
   const dismiss = useCallback(
@@ -235,9 +217,10 @@ export function useDismissFinding(): {
       if (ids.length === 0) return;
       addOptimistic(ids);
       // Suppressing a finding that was restored earlier in this session ends
-      // the restore's claim on it: it belongs back on the suppressed listing,
-      // and a stale entry here would hide it there.
-      forgetRestored(ids);
+      // the restore's claim on it: it belongs back on the suppressed listing
+      // now, whichever surface did the restoring and whatever expiry is still
+      // pending for it.
+      releaseRestored(ids);
 
       void runBatched(ids, (batchIds) =>
         markMutation.mutateAsync({
@@ -267,14 +250,7 @@ export function useDismissFinding(): {
         }
       });
     },
-    [
-      markMutation,
-      invalidateLists,
-      undo,
-      addOptimistic,
-      removeOptimistic,
-      forgetRestored,
-    ],
+    [markMutation, invalidateLists, undo, addOptimistic, removeOptimistic],
   );
 
   const isOptimisticallyDismissed = useCallback(
@@ -286,6 +262,6 @@ export function useDismissFinding(): {
     dismiss,
     restore,
     isOptimisticallyDismissed,
-    optimisticallyRestoredIds: optimisticRestored,
+    optimisticallyRestoredIds,
   };
 }
