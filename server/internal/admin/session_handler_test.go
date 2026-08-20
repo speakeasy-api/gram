@@ -142,16 +142,14 @@ func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, re
 	codes := make(chan int, requests)
 	var wg sync.WaitGroup
 	for range requests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 			rec := httptest.NewRecorder()
 			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
 			codes <- rec.Code
-		}()
+		})
 	}
 	close(start)
 	beforeWait()

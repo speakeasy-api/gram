@@ -1,4 +1,5 @@
 import { GlobeIcon } from "lucide-react";
+import { agentProviderIconKind } from "./agent-provider-icon-kind";
 
 // Claude Code logo - official Anthropic Claude icon
 export function ClaudeCodeIcon({
@@ -317,66 +318,43 @@ function BedrockIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
-interface HookSourceIconProps {
+export interface AgentProviderIconProps {
   source?: string;
   className?: string;
 }
 
-export function HookSourceIcon({
+export function AgentProviderIcon({
   source,
   className,
-}: HookSourceIconProps): JSX.Element {
-  const normalizedSource = source?.toLowerCase();
-
-  if (
-    normalizedSource?.includes("claude") ||
-    normalizedSource?.includes("cowork")
-  ) {
-    return <ClaudeCodeIcon className={className} />;
+}: AgentProviderIconProps): JSX.Element {
+  switch (agentProviderIconKind(source)) {
+    case "claude":
+      return <ClaudeCodeIcon className={className} />;
+    case "cursor":
+      return <CursorIcon className={className} />;
+    // ChatGPT shares the OpenAI monoblossom mark with Codex — it is the
+    // ChatGPT product logo; only the label distinguishes the surfaces.
+    case "codex":
+      return <CodexIcon className={className} />;
+    case "opencode":
+      return <OpencodeIcon className={className} />;
+    case "litellm":
+      return (
+        <img src="/icons/platforms/litellm.png" alt="" className={className} />
+      );
+    case "devin":
+      return <DevinIcon className={className} />;
+    case "mistral":
+      return <MistralIcon className={className} />;
+    case "copilot":
+      return <CopilotIcon className={className} />;
+    case "gemini":
+      return <GeminiIcon className={className} />;
+    case "glean":
+      return <GleanIcon className={className} />;
+    case "bedrock":
+      return <BedrockIcon className={className} />;
+    case "unknown":
+      return <GlobeIcon className={className} />;
   }
-  if (normalizedSource?.includes("cursor")) {
-    return <CursorIcon className={className} />;
-  }
-  // ChatGPT shares the OpenAI monoblossom mark with Codex — it is the
-  // ChatGPT product logo; only the label distinguishes the surfaces.
-  if (
-    normalizedSource?.includes("codex") ||
-    normalizedSource?.includes("chatgpt")
-  ) {
-    return <CodexIcon className={className} />;
-  }
-  if (normalizedSource?.includes("opencode")) {
-    return <OpencodeIcon className={className} />;
-  }
-  if (normalizedSource?.includes("litellm")) {
-    return (
-      <img src="/icons/platforms/litellm.png" alt="" className={className} />
-    );
-  }
-  if (normalizedSource?.includes("devin")) {
-    return <DevinIcon className={className} />;
-  }
-  if (normalizedSource?.includes("mistral")) {
-    return <MistralIcon className={className} />;
-  }
-  if (
-    normalizedSource?.includes("copilot") ||
-    normalizedSource?.includes("microsoft")
-  ) {
-    return <CopilotIcon className={className} />;
-  }
-  if (normalizedSource?.includes("gemini")) {
-    return <GeminiIcon className={className} />;
-  }
-  if (normalizedSource?.includes("glean")) {
-    return <GleanIcon className={className} />;
-  }
-  if (
-    normalizedSource?.includes("bedrock") ||
-    normalizedSource?.includes("aws")
-  ) {
-    return <BedrockIcon className={className} />;
-  }
-
-  return <GlobeIcon className={className} />;
 }

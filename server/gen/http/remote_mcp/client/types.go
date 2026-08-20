@@ -25,6 +25,18 @@ type CreateServerRequestBody struct {
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 }
 
+// CreateServerAndMcpServerRequestBody is the type of the "remoteMcp" service
+// "createServerAndMcpServer" endpoint HTTP request body.
+type CreateServerAndMcpServerRequestBody struct {
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The URL of the remote MCP server
+	URL string `form:"url" json:"url" xml:"url"`
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+}
+
 // UpdateServerRequestBody is the type of the "remoteMcp" service
 // "updateServer" endpoint HTTP request body.
 type UpdateServerRequestBody struct {
@@ -117,6 +129,13 @@ type CreateServerResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the remote MCP server was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// CreateServerAndMcpServerResponseBody is the type of the "remoteMcp" service
+// "createServerAndMcpServer" endpoint HTTP response body.
+type CreateServerAndMcpServerResponseBody struct {
+	RemoteMcpServer *RemoteMcpServerResponseBody `form:"remote_mcp_server,omitempty" json:"remote_mcp_server,omitempty" xml:"remote_mcp_server,omitempty"`
+	McpServer       *McpServerResponseBody       `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
 }
 
 // ListServersResponseBody is the type of the "remoteMcp" service "listServers"
@@ -436,6 +455,196 @@ type CreateServerUnexpectedResponseBody struct {
 // CreateServerGatewayErrorResponseBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP response body for the "gateway_error" error.
 type CreateServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerUnauthorizedResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type CreateServerAndMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerForbiddenResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateServerAndMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerBadRequestResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "bad_request" error.
+type CreateServerAndMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerNotFoundResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "not_found" error.
+type CreateServerAndMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerConflictResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "conflict" error.
+type CreateServerAndMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerUnsupportedMediaResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CreateServerAndMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerInvalidResponseBody is the type of the "remoteMcp"
+// service "createServerAndMcpServer" endpoint HTTP response body for the
+// "invalid" error.
+type CreateServerAndMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerInvariantViolationResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type CreateServerAndMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerUnexpectedResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "unexpected" error.
+type CreateServerAndMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateServerAndMcpServerGatewayErrorResponseBody is the type of the
+// "remoteMcp" service "createServerAndMcpServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type CreateServerAndMcpServerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2507,6 +2716,41 @@ type RemoteMcpServerResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// McpServerResponseBody is used to define fields on response body types.
+type McpServerResponseBody struct {
+	// The ID of the MCP server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this MCP server belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The ID of the environment associated with the server
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the remote MCP server used as the backend
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// The ID of the toolset used as the backend
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the unproxied MCP server used as the backend, if any. A server
+	// backed by an unproxied MCP server is never proxied by Gram.
+	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The visibility of the server
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// When the MCP server was created
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the MCP server was last updated
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ProtectedResourceMetadataResponseBody is used to define fields on response
 // body types.
 type ProtectedResourceMetadataResponseBody struct {
@@ -2561,6 +2805,18 @@ type RemoteMcpServerHeaderResponseBody struct {
 // the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
+		Name:          p.Name,
+		URL:           p.URL,
+		TransportType: p.TransportType,
+	}
+	return body
+}
+
+// NewCreateServerAndMcpServerRequestBody builds the HTTP request body from the
+// payload of the "createServerAndMcpServer" endpoint of the "remoteMcp"
+// service.
+func NewCreateServerAndMcpServerRequestBody(p *remotemcp.CreateServerAndMcpServerPayload) *CreateServerAndMcpServerRequestBody {
+	body := &CreateServerAndMcpServerRequestBody{
 		Name:          p.Name,
 		URL:           p.URL,
 		TransportType: p.TransportType,
@@ -2785,6 +3041,166 @@ func NewCreateServerUnexpected(body *CreateServerUnexpectedResponseBody) *goa.Se
 // NewCreateServerGatewayError builds a remoteMcp service createServer endpoint
 // gateway_error error.
 func NewCreateServerGatewayError(body *CreateServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerResultOK builds a "remoteMcp" service
+// "createServerAndMcpServer" endpoint result from a HTTP "OK" response.
+func NewCreateServerAndMcpServerResultOK(body *CreateServerAndMcpServerResponseBody) *remotemcp.CreateServerAndMcpServerResult {
+	v := &remotemcp.CreateServerAndMcpServerResult{}
+	v.RemoteMcpServer = unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(body.RemoteMcpServer)
+	v.McpServer = unmarshalMcpServerResponseBodyToTypesMcpServer(body.McpServer)
+
+	return v
+}
+
+// NewCreateServerAndMcpServerUnauthorized builds a remoteMcp service
+// createServerAndMcpServer endpoint unauthorized error.
+func NewCreateServerAndMcpServerUnauthorized(body *CreateServerAndMcpServerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerForbidden builds a remoteMcp service
+// createServerAndMcpServer endpoint forbidden error.
+func NewCreateServerAndMcpServerForbidden(body *CreateServerAndMcpServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerBadRequest builds a remoteMcp service
+// createServerAndMcpServer endpoint bad_request error.
+func NewCreateServerAndMcpServerBadRequest(body *CreateServerAndMcpServerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerNotFound builds a remoteMcp service
+// createServerAndMcpServer endpoint not_found error.
+func NewCreateServerAndMcpServerNotFound(body *CreateServerAndMcpServerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerConflict builds a remoteMcp service
+// createServerAndMcpServer endpoint conflict error.
+func NewCreateServerAndMcpServerConflict(body *CreateServerAndMcpServerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerUnsupportedMedia builds a remoteMcp service
+// createServerAndMcpServer endpoint unsupported_media error.
+func NewCreateServerAndMcpServerUnsupportedMedia(body *CreateServerAndMcpServerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerInvalid builds a remoteMcp service
+// createServerAndMcpServer endpoint invalid error.
+func NewCreateServerAndMcpServerInvalid(body *CreateServerAndMcpServerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerInvariantViolation builds a remoteMcp service
+// createServerAndMcpServer endpoint invariant_violation error.
+func NewCreateServerAndMcpServerInvariantViolation(body *CreateServerAndMcpServerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerUnexpected builds a remoteMcp service
+// createServerAndMcpServer endpoint unexpected error.
+func NewCreateServerAndMcpServerUnexpected(body *CreateServerAndMcpServerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateServerAndMcpServerGatewayError builds a remoteMcp service
+// createServerAndMcpServer endpoint gateway_error error.
+func NewCreateServerAndMcpServerGatewayError(body *CreateServerAndMcpServerGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4639,6 +5055,28 @@ func ValidateCreateServerResponseBody(body *CreateServerResponseBody) (err error
 	return
 }
 
+// ValidateCreateServerAndMcpServerResponseBody runs the validations defined on
+// CreateServerAndMcpServerResponseBody
+func ValidateCreateServerAndMcpServerResponseBody(body *CreateServerAndMcpServerResponseBody) (err error) {
+	if body.RemoteMcpServer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server", "body"))
+	}
+	if body.McpServer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server", "body"))
+	}
+	if body.RemoteMcpServer != nil {
+		if err2 := ValidateRemoteMcpServerResponseBody(body.RemoteMcpServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpServer != nil {
+		if err2 := ValidateMcpServerResponseBody(body.McpServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateListServersResponseBody runs the validations defined on
 // ListServersResponseBody
 func ValidateListServersResponseBody(body *ListServersResponseBody) (err error) {
@@ -5096,6 +5534,248 @@ func ValidateCreateServerUnexpectedResponseBody(body *CreateServerUnexpectedResp
 // ValidateCreateServerGatewayErrorResponseBody runs the validations defined on
 // createServer_gateway_error_response_body
 func ValidateCreateServerGatewayErrorResponseBody(body *CreateServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerUnauthorizedResponseBody runs the
+// validations defined on createServerAndMcpServer_unauthorized_response_body
+func ValidateCreateServerAndMcpServerUnauthorizedResponseBody(body *CreateServerAndMcpServerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerForbiddenResponseBody runs the validations
+// defined on createServerAndMcpServer_forbidden_response_body
+func ValidateCreateServerAndMcpServerForbiddenResponseBody(body *CreateServerAndMcpServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerBadRequestResponseBody runs the validations
+// defined on createServerAndMcpServer_bad_request_response_body
+func ValidateCreateServerAndMcpServerBadRequestResponseBody(body *CreateServerAndMcpServerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerNotFoundResponseBody runs the validations
+// defined on createServerAndMcpServer_not_found_response_body
+func ValidateCreateServerAndMcpServerNotFoundResponseBody(body *CreateServerAndMcpServerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerConflictResponseBody runs the validations
+// defined on createServerAndMcpServer_conflict_response_body
+func ValidateCreateServerAndMcpServerConflictResponseBody(body *CreateServerAndMcpServerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerUnsupportedMediaResponseBody runs the
+// validations defined on
+// createServerAndMcpServer_unsupported_media_response_body
+func ValidateCreateServerAndMcpServerUnsupportedMediaResponseBody(body *CreateServerAndMcpServerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerInvalidResponseBody runs the validations
+// defined on createServerAndMcpServer_invalid_response_body
+func ValidateCreateServerAndMcpServerInvalidResponseBody(body *CreateServerAndMcpServerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerInvariantViolationResponseBody runs the
+// validations defined on
+// createServerAndMcpServer_invariant_violation_response_body
+func ValidateCreateServerAndMcpServerInvariantViolationResponseBody(body *CreateServerAndMcpServerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerUnexpectedResponseBody runs the validations
+// defined on createServerAndMcpServer_unexpected_response_body
+func ValidateCreateServerAndMcpServerUnexpectedResponseBody(body *CreateServerAndMcpServerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateServerAndMcpServerGatewayErrorResponseBody runs the
+// validations defined on createServerAndMcpServer_gateway_error_response_body
+func ValidateCreateServerAndMcpServerGatewayErrorResponseBody(body *CreateServerAndMcpServerGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7796,6 +8476,65 @@ func ValidateRemoteMcpServerResponseBody(body *RemoteMcpServerResponseBody) (err
 	}
 	if body.URL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMcpServerResponseBody runs the validations defined on
+// McpServerResponseBody
+func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.EnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.UnproxiedMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
