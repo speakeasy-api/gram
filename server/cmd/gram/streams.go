@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"sync"
 	"syscall"
 	"time"
 
@@ -584,19 +585,22 @@ func shutdownPubSubPublishers(
 	closeClient func(context.Context) error,
 	publishers ...publisherStopper,
 ) error {
-	var errs []error
-	for _, publisher := range publishers {
+	stopErrors := make([]error, len(publishers))
+	var stops sync.WaitGroup
+	for i, publisher := range publishers {
 		if publisher == nil {
 			continue
 		}
-		if err := publisher.Stop(ctx); err != nil {
-			errs = append(errs, err)
-		}
+		stops.Go(func() {
+			stopErrors[i] = publisher.Stop(ctx)
+		})
 	}
+	stops.Wait()
+
 	if err := closeClient(ctx); err != nil {
-		errs = append(errs, err)
+		stopErrors = append(stopErrors, err)
 	}
-	return errors.Join(errs...)
+	return errors.Join(stopErrors...)
 }
 
 type receiverGroup struct {

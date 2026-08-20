@@ -3,20 +3,27 @@ package gram
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-type recordingPublisherStopper struct {
-	name  string
-	calls *[]string
-	err   error
+type blockingPublisherStopper struct {
+	started *atomic.Int64
+	release <-chan struct{}
+	err     error
 }
 
-func (r *recordingPublisherStopper) Stop(context.Context) error {
-	*r.calls = append(*r.calls, r.name)
-	return r.err
+func (b *blockingPublisherStopper) Stop(ctx context.Context) error {
+	b.started.Add(1)
+	select {
+	case <-b.release:
+		return b.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testing.T) {
@@ -25,17 +32,30 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 	findingsErr := errors.New("stop findings publisher")
 	spansErr := errors.New("stop spans publisher")
 	closeErr := errors.New("close pubsub client")
-	calls := make([]string, 0, 3)
-	findingsPub := &recordingPublisherStopper{name: "findings", calls: &calls, err: findingsErr}
-	spanPub := &recordingPublisherStopper{name: "spans", calls: &calls, err: spansErr}
+	started := new(atomic.Int64)
+	release := make(chan struct{})
+	findingsPub := &blockingPublisherStopper{started: started, release: release, err: findingsErr}
+	spanPub := &blockingPublisherStopper{started: started, release: release, err: spansErr}
+	var clientClosed atomic.Bool
+	done := make(chan error, 1)
 
-	err := shutdownPubSubPublishers(t.Context(), func(context.Context) error {
-		calls = append(calls, "client")
-		return closeErr
-	}, findingsPub, nil, spanPub)
+	go func() {
+		done <- shutdownPubSubPublishers(t.Context(), func(context.Context) error {
+			clientClosed.Store(true)
+			return closeErr
+		}, findingsPub, nil, spanPub)
+	}()
+
+	require.Eventually(t, func() bool {
+		return started.Load() == 2
+	}, time.Second, time.Millisecond)
+	require.False(t, clientClosed.Load())
+
+	close(release)
+	err := <-done
 
 	require.ErrorIs(t, err, findingsErr)
 	require.ErrorIs(t, err, spansErr)
 	require.ErrorIs(t, err, closeErr)
-	require.Equal(t, []string{"findings", "spans", "client"}, calls)
+	require.True(t, clientClosed.Load())
 }
