@@ -58,7 +58,7 @@ const dispositionAssistants = "assistants"
 // and deleted on consumption; this TTL is a safety net for abandoned flows.
 const nonceTTL = 10 * time.Minute
 
-const supportSessionTTL = 15 * 24 * time.Hour
+const supportSessionTTL = 60 * time.Minute
 
 // supportNonceBindingPrefix marks nonce bindings whose login consumed a support
 // handoff. Ordinary bindings retain their existing wire format so callbacks
