@@ -128,6 +128,11 @@ type e2eInstance struct {
 
 func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOSFetcher) (context.Context, *e2eInstance) {
 	t.Helper()
+	return newE2EAuthServiceWithAccessSeeder(t, userInfo, fetcher, true)
+}
+
+func newE2EAuthServiceWithAccessSeeder(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOSFetcher, seedAccess bool) (context.Context, *e2eInstance) {
+	t.Helper()
 
 	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
@@ -159,8 +164,12 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	}
 
 	authzProvisioner := authz.NewProvisioner(conn)
+	var systemRoleSeeder identity.SystemRoleSeeder
+	if seedAccess {
+		systemRoleSeeder = authzProvisioner
+	}
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, authzProvisioner, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cacheSuffix)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, systemRoleSeeder, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cacheSuffix)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cacheSuffix,
 		idpClient, billingClient, resolver,
@@ -371,6 +380,49 @@ func TestE2E_Callback_NewOrganizationSyncsMemberRoleWithoutAdmin(t *testing.T) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
+}
+
+// TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning is the staging/prod
+// login path: memberships still sync, but RBAC stays on the WorkOS event worker.
+func TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_RBAC_PROD"
+		workosOrgID  = "org_01WORKOS_RBAC_PROD"
+		orgName      = "RBAC Prod Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01RBAC_PROD", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "prod@rbac.example",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthServiceWithAccessSeeder(t, userInfo, fetcher, false)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+	require.Equal(t, expectedOrgID, authCtx.ActiveOrganizationID)
+	require.Empty(t, assignedRoleSlugs(t, ctx, inst.conn, expectedOrgID, authCtx.UserID))
 }
 
 func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {

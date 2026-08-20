@@ -83,8 +83,9 @@ type AuthenticatedUser struct {
 }
 
 // SystemRoleSeeder bootstraps built-in RBAC roles and grants for an
-// organization. Callers inject authz.Provisioner so this leaf package does
-// not import authz.
+// organization. Optional: staging/prod leave this nil so WorkOS events remain
+// the source of truth. Local wiring injects authz.Provisioner so mock-WorkOS
+// login, which does not emit those events, still provisions access.
 type SystemRoleSeeder interface {
 	SeedSystemRoleGrants(ctx context.Context, organizationID string) error
 }
@@ -437,8 +438,9 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 }
 
 // provisionAccessFromMemberships seeds system roles/grants and copies the
-// current WorkOS role slugs into organization_role_assignments. It only
-// assigns roles WorkOS already granted; it does not invent admin access.
+// current WorkOS role slugs into organization_role_assignments. No-op when
+// no seeder is configured. When configured, it only assigns roles WorkOS
+// already granted; it does not invent admin access.
 func (r *Resolver) provisionAccessFromMemberships(ctx context.Context, gramUserID, workosUserID string, members []workos.Member) error {
 	if r.systemRoleSeeder == nil {
 		return nil

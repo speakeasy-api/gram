@@ -716,6 +716,15 @@ func newStartCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			authzProvisioner := authz.NewProvisioner(db)
 
+			// Login-time RBAC heal is local-only. Staging/prod rely on WorkOS
+			// organization events; rewriting assignments on every login would
+			// race that path and can drop custom roles that events have not
+			// materialized yet.
+			var systemRoleSeeder identity.SystemRoleSeeder
+			if c.String("environment") == "local" {
+				systemRoleSeeder = authzProvisioner
+			}
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
@@ -724,7 +733,7 @@ func newStartCommand() *cli.Command {
 				c.String("idp-client-id"),
 				idpClient,
 				workosClient,
-				authzProvisioner,
+				systemRoleSeeder,
 				orgRepo.New(db),
 				userRepo.New(db),
 				pylonClient,
