@@ -271,7 +271,7 @@ function AssignmentsEditor({
           hideSelectAll
           modalPopover
           maxCount={20}
-          popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none [&_[cmdk-group-heading]]:px-0 [&_[cmdk-group-heading]]:py-0.5 [&_[cmdk-input-wrapper]]:px-0 [&_[cmdk-item]]:px-0 [&_[cmdk-item]]:py-1 [&_[data-slot=command-group]]:p-0 [&_[data-slot=command-list]]:p-0"
+          popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none [&_[cmdk-group-heading]]:px-0 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-input-wrapper]]:px-0 [&_[cmdk-item]]:px-0 [&_[cmdk-item]]:py-1 [&_[data-slot=command-group]]:p-0 [&_[data-slot=command-group]+[data-slot=command-group]]:pt-2 [&_[data-slot=command-list]]:p-0"
         />
         {audiencesQuery.isPending && (
           <Text muted small className="mt-2">
