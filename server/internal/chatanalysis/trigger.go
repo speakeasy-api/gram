@@ -28,7 +28,7 @@ func TriggerOrganization(
 	var signalErrs []error
 	for _, projectID := range projectIDs {
 		if err := signaler.Signal(ctx, projectID); err != nil {
-			signalErrs = append(signalErrs, err)
+			signalErrs = append(signalErrs, fmt.Errorf("signal project %s: %w", projectID, err))
 		}
 	}
 	if len(signalErrs) > 0 {
