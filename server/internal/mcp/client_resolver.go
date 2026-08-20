@@ -20,7 +20,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -35,13 +34,12 @@ const (
 	// lookupClientOnly resolves strictly from the database. Used by the
 	// token and consent handlers: by the time they run, the authorize leg
 	// has already persisted any CIMD row, and mid-flow requests (a code
-	// exchange or refresh) must keep working even if the CIMD flag flips
-	// off between legs.
+	// exchange or refresh) must keep working even if the issuer's admission
+	// policy changes between legs.
 	lookupClientOnly clientIDResolveMode = "lookup_only"
 
 	// resolveClientCIMD additionally treats a URL-shaped client_id as a
-	// Client ID Metadata Document reference when the issuer organization's
-	// gram-user-session-cimd flag is on: the row is read, the document
+	// Client ID Metadata Document reference: the row is read, the document
 	// fetched and validated when that row's cache has lapsed, and the row
 	// lazily upserted. Authorize-time only — the consent GET/POST re-resolve
 	// the client by client_id, so the row must exist before the flow leaves
@@ -55,18 +53,8 @@ const (
 // rather than echoing it to the client.
 var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 
-// errCIMDDisabled marks a URL-shaped client_id rejected because the issuer
-// organization's gram-user-session-cimd flag is off. Handlers must render it
-// exactly like an unknown client (invalid_client, "unknown client_id") so
-// the wire response does not leak per-organization flag state; the dedicated
-// sentinel exists so the flag-off path is loggable and is not conflated
-// with pgx.ErrNoRows from a lookup that actually ran.
-var errCIMDDisabled = errors.New("cimd disabled for organization")
-
 // An admission denial surfaces as *admission.DenialError, which carries its
-// own client-facing Description. Unlike errCIMDDisabled — whose wire
-// response is deliberately generic so it cannot be used to probe
-// per-organization flag state — an admission denial is customer-configured
+// own client-facing Description. An admission denial is customer-configured
 // policy rather than a rollout secret, so being explicit is safe and
 // useful.
 
@@ -80,20 +68,12 @@ var errCIMDDisabled = errors.New("cimd disabled for organization")
 //     client-safe code + description (resolveClientCIMD only)
 //   - errCIMDFetchFailed: document fetch failure; log, render generic
 //     (resolveClientCIMD only)
-//   - errCIMDDisabled: URL-shaped client_id while the flag is off; render
-//     as unknown client (resolveClientCIMD only). Deliberately fails closed
-//     even when a previously-resolved row exists, so disabling the flag is
-//     a real off switch for new authorize flows
 //   - pgx.ErrNoRows: unknown client
 //   - anything else: infrastructure failure
 func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string, mode clientIDResolveMode) (*usersessions_repo.UserSessionClient, error) {
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
-		if !s.userSessionCIMDEnabled(ctx, logger, endpoint) {
-			return nil, errCIMDDisabled
-		}
-
 		// Admission runs before the resolver, so a denied client_id costs a
 		// map lookup — no outbound request, no fetch timeout. It also runs
 		// before the length cap inside the resolver, which is why admission
@@ -208,32 +188,6 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 		return nil, fmt.Errorf("lookup user session client: %w", err)
 	}
 	return &row, nil
-}
-
-// userSessionCIMDEnabled evaluates the inbound-CIMD rollout flag for the
-// endpoint's organization. distinctID is the organization ID with no groups
-// (matching the flag's PostHog targeting). Successful evaluations are
-// remembered per organization so a flag-provider outage degrades to the
-// last known state instead of failing closed — this runs on unauthenticated
-// endpoints (/authorize and the well-known metadata), where fail-closed
-// would turn a PostHog outage into an OAuth login outage for every
-// CIMD-enabled organization. Fresh evaluations always win, so flag flips
-// propagate immediately; the map holds one bool per organization that
-// touches the OAuth surface, so growth is bounded by tenant count.
-func (s *Service) userSessionCIMDEnabled(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) bool {
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagUserSessionCIMD, endpoint.OrganizationID, nil)
-	if err != nil {
-		s.cimdOrgFlagMu.RLock()
-		lastKnown, ok := s.cimdOrgFlagLastKnown[endpoint.OrganizationID]
-		s.cimdOrgFlagMu.RUnlock()
-		logger.WarnContext(ctx, "evaluate user session cimd flag", attr.SlogError(err))
-		return ok && lastKnown
-	}
-
-	s.cimdOrgFlagMu.Lock()
-	s.cimdOrgFlagLastKnown[endpoint.OrganizationID] = enabled
-	s.cimdOrgFlagMu.Unlock()
-	return enabled
 }
 
 // admitCIMDClient enforces the issuer's CIMD admission policy against a

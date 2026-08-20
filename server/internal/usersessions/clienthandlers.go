@@ -16,13 +16,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -226,16 +226,30 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeBadRequest, nil, "client was registered via DCR and has no metadata document to refresh").LogError(ctx, logger)
 	}
 
-	// Same flag that gates CIMD resolution on /authorize, evaluated the same
-	// way (per organization, no groups). An org whose flag was turned off
-	// after CIMD rows were created can still see those rows; it cannot make
-	// Gram fetch documents for them.
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagUserSessionCIMD, authCtx.ActiveOrganizationID, nil)
+	// The issuer-level off switch applies to this fetch surface like it does
+	// to /authorize: a `disabled` issuer must not have Gram fetch documents
+	// on its behalf, refresh included. Only `disabled` blocks here — a
+	// presets catalog miss stays refreshable, mirroring the /token asymmetry
+	// where de-listing a client stops new authorize flows without breaking
+	// its existing rows. An unrecognized stored mode fails closed.
+	issuer, err := queries.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        row.UserSessionIssuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "evaluate user session cimd flag").LogError(ctx, logger)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
-	if !enabled {
-		return nil, oops.E(oops.CodeForbidden, nil, "CIMD support is not enabled for this organization").LogError(ctx, logger)
+	mode, recognized := admission.ResolveMode(issuer.ClientIDMetadataAdmissionMode.String, issuer.ClientIDMetadataAdmissionMode.Valid)
+	if !recognized {
+		logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(issuer.ClientIDMetadataAdmissionMode.String),
+		)
+	}
+	if mode == admission.ModeDisabled {
+		return nil, oops.E(oops.CodeForbidden, nil, "CIMD is disabled for this issuer").LogError(ctx, logger)
 	}
 
 	// fetched_at advances on every successful read (a 304 revalidation

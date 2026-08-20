@@ -93,7 +93,8 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	// lookupClientOnly: any CIMD row was persisted at authorize time, and
-	// mid-flow token legs must keep working even if the CIMD flag flips off.
+	// mid-flow token legs must keep working even if the issuer's admission
+	// policy changes between legs.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

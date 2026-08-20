@@ -81,8 +81,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	// URL-shaped client_ids resolve via CIMD here (flag-gated, inside the
-	// resolver). All resolution failures render inline per RFC 6749
+	// URL-shaped client_ids resolve via CIMD here (admission-gated, inside
+	// the resolver). All resolution failures render inline per RFC 6749
 	// §4.1.2.1 — the redirect_uri of an unresolved client cannot be
 	// trusted — and a document fetch failure aborts the request per
 	// draft-ietf-oauth-client-id-metadata-document-02 §5.1 (fail closed,
@@ -109,13 +109,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
-		}
-		if errors.Is(err, errCIMDDisabled) {
-			// Same wire response as an unknown client so the rejection does
-			// not leak per-organization flag state; the log line is what
-			// distinguishes a flag-off rejection during an incident.
-			logger.InfoContext(ctx, "rejecting url-shaped client_id while cimd flag is disabled")
-			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
