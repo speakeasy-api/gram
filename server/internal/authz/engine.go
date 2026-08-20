@@ -90,10 +90,9 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
-	// Assistant-token auth has no session but should resolve grants against
-	// the owning user stamped as UserID on the context.
-	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil && !isAssistant {
+	// Assistant-token auth and Platform MCP have no session but should resolve
+	// grants against the owning user stamped as UserID on the context.
+	if authCtx.SessionID == nil && !enforcedWithoutSession(ctx) {
 		return ctx, nil
 	}
 	if authCtx.ActiveOrganizationID == "" {
@@ -607,12 +606,27 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil && !isAssistant {
+	if authCtx.SessionID == nil && !enforcedWithoutSession(ctx) {
 		return false, nil
 	}
 
 	return true, nil
+}
+
+// enforcedWithoutSession reports whether a session-less caller still has to be
+// authorized against the acting user's grants.
+//
+// A missing session normally means an unauthenticated or internal path, which
+// is why it disables enforcement. Two surfaces are session-less by design and
+// act for a real user anyway: assistant-token auth, and the OAuth-authenticated
+// Platform MCP endpoint. Leaving either out would silently turn every scope
+// check they make into a no-op.
+func enforcedWithoutSession(ctx context.Context) bool {
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		return true
+	}
+	surface, ok := contextvalues.GetActingSurface(ctx)
+	return ok && surface == contextvalues.ActingSurfacePlatformMCP
 }
 
 func validateInput(c Check) error {

@@ -1980,3 +1980,41 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @attempt_id
 )
 ON CONFLICT DO NOTHING;
+
+-- Skill distribution targets. A skill is distributed to an exact existing
+-- plugin or assistant in one project; these reads name what exists so the
+-- resolver can refuse a target that does not, rather than falling back to the
+-- default plugin.
+
+-- name: ListPlatformMCPProjectPlugins :many
+SELECT
+    plugins.id,
+    plugins.name,
+    plugins.slug,
+    COALESCE(plugins.is_default, FALSE) AS is_default
+FROM plugins
+JOIN projects
+  ON projects.id = plugins.project_id
+WHERE plugins.project_id = @project_id
+  AND plugins.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND plugins.deleted IS FALSE
+ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
+LIMIT @result_limit;
+
+-- name: ListPlatformMCPProjectAssistants :many
+SELECT
+    assistants.id,
+    assistants.name
+FROM assistants
+JOIN projects
+  ON projects.id = assistants.project_id
+WHERE assistants.project_id = @project_id
+  AND assistants.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND assistants.deleted IS FALSE
+  AND assistants.status = 'active'
+ORDER BY assistants.name ASC
+LIMIT @result_limit;

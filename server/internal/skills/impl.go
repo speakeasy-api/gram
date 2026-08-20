@@ -285,6 +285,28 @@ func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, proje
 	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
 }
 
+// requireExpectedLatestVersion enforces a caller's optimistic concurrency
+// token. It runs inside the transaction that performs the write, so a skill
+// that moves on between the caller's read and its write is a conflict rather
+// than a silent overwrite of someone else's version.
+//
+// The token names the version the caller believed was current, not a counter:
+// version IDs are what every skill read already returns, so a caller has one
+// without a second lookup.
+func requireExpectedLatestVersion(expected *string, latestVersionID uuid.UUID) error {
+	if expected == nil {
+		return nil
+	}
+	expectedID, err := uuid.Parse(*expected)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+	}
+	if expectedID != latestVersionID {
+		return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
+	}
+	return nil
+}
+
 type distributionTarget struct {
 	channel     string
 	pluginID    uuid.NullUUID
@@ -613,6 +635,26 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
+	if payload.ExpectedLatestVersionID != nil {
+		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+		}
+		if err := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); err != nil {
+			// A retried write that already landed is stale by its own token,
+			// but it is not a lost update: the version it created is current
+			// and carries exactly this content, so it stays the same no-op an
+			// unconditional retry would get.
+			matched, hashErr := queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
+				ProjectID:       *authCtx.ProjectID,
+				SkillID:         skill.ID,
+				CanonicalSha256: parsed.CanonicalSHA256,
+			})
+			if hashErr != nil || matched.ID != state.LatestVersionID {
+				return nil, err
+			}
+		}
+	}
 
 	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
@@ -770,6 +812,11 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
+	}
+	// Metadata edits never create a version, so a retry of a metadata write
+	// that already landed carries the same token and stays valid.
+	if err := requireExpectedLatestVersion(payload.ExpectedLatestVersionID, state.LatestVersionID); err != nil {
+		return nil, err
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{

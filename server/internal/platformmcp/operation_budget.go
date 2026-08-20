@@ -21,6 +21,8 @@ const (
 	RepairOrganizationLimitName       = "platform-mcp-repair-organization"
 	DocsConnectionLimitName           = "platform-mcp-docs-connection"
 	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
+	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
+	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
 )
 
 const (
@@ -101,8 +103,14 @@ type OperationBudgets struct {
 	SetupStart   OperationBudget
 	Repair       OperationBudget
 	Docs         OperationBudget
+	// Skills meters authoring and distribution together. Reads and writes share
+	// one allowance because they are one workflow: a caller reads a skill to
+	// obtain the version token its next write needs, and metering the read
+	// separately would only let a loop spend twice as much reaching the same
+	// write.
+	Skills OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid()
 }

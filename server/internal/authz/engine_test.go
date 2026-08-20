@@ -835,3 +835,38 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enforce)
 }
+
+// A Platform MCP call carries a real user and no browser session. Enforcement
+// keys on the session for every other human-driven surface, so without the
+// surface carve-out every scope check an OAuth-authenticated agent makes would
+// pass regardless of what its user is allowed to do.
+func TestShouldEnforce_platformMCPSurfaceEnforcesWithoutASession(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	authCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_123",
+		UserID:                "user_123",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "pro",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+	}
+
+	unmarked, err := engine.ShouldEnforce(contextvalues.SetAuthContext(t.Context(), authCtx))
+	require.NoError(t, err)
+	require.False(t, unmarked, "a session-less call from an unmarked surface stays unenforced")
+
+	marked, err := engine.ShouldEnforce(contextvalues.SetAuthContext(
+		contextvalues.SetActingSurface(t.Context(), contextvalues.ActingSurfacePlatformMCP),
+		authCtx,
+	))
+	require.NoError(t, err)
+	require.True(t, marked)
+}

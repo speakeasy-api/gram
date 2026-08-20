@@ -35,7 +35,7 @@ type ActingSurface string
 
 const (
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint.
-	SurfacePlatformMCP ActingSurface = "platform_mcp"
+	SurfacePlatformMCP ActingSurface = contextvalues.ActingSurfacePlatformMCP
 	// SurfaceProjectAssistant is the project assistant runtime, which acts
 	// under assistant identity and holds no OAuth connection.
 	SurfaceProjectAssistant ActingSurface = "project_assistant"
@@ -119,15 +119,15 @@ func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, aut
 }
 
 func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService) *Runtime {
-	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, CatalogDescriptor{})
+	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, nil, CatalogDescriptor{})
 }
 
 // NewRuntimeWithLifecycle wires the Platform MCP onboarding lifecycle. Catalogue
 // selection remains server-validated: callers receive only search/inspect
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
-func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *Runtime {
-	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate)
+func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) *Runtime {
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, candidate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
