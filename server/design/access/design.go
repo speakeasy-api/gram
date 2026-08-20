@@ -707,10 +707,10 @@ var ListScopesResult = Type("ListScopesResult", func() {
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {
-	Required("name", "description", "grants")
+	Required("name", "grants")
 
 	Attribute("name", String, "Display name for the role.")
-	Attribute("description", String, "Description of what this role can do.")
+	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
 })

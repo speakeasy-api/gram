@@ -3705,7 +3705,7 @@ examples:
   createRole:
     speakeasy-default-create-role:
       requestBody:
-        application/json: {"description": "swerve hm receptor how", "grants": [{"scope": "environment:write"}], "name": "<value>"}
+        application/json: {"grants": [{"scope": "environment:write"}], "name": "<value>"}
       responses:
         "201":
           application/json: {"created_at": "2024-08-15T08:14:35.208Z", "description": "mmm co-producer instead achieve through decision carefully ah", "grants": [], "id": "<id>", "is_system": false, "member_count": 747343, "name": "<value>", "principal_urn": "<value>", "slug": "<value>", "updated_at": "2024-02-02T13:39:51.749Z"}

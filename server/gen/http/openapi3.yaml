@@ -63052,7 +63052,7 @@ components:
             properties:
                 description:
                     type: string
-                    description: Description of what this role can do.
+                    description: Optional description of what this role can do.
                 grants:
                     type: array
                     items:
@@ -63068,7 +63068,6 @@ components:
                     description: Display name for the role.
             required:
                 - name
-                - description
                 - grants
         CreateServerForm:
             type: object
