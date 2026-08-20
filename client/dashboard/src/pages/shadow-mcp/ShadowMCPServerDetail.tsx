@@ -51,7 +51,7 @@ import {
 import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
 import { useShadowMCPInventoryUsers } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -275,6 +275,7 @@ function TopUsersTable({
     users,
     USERS_PREVIEW_COUNT,
   );
+  const tableId = useId();
 
   if (users.length === 0) {
     return (
@@ -293,26 +294,29 @@ function TopUsersTable({
 
   return (
     <div className="space-y-2">
-      <Table columns={columns}>
-        <Table.Header columns={columns} />
-        <Table.Body
-          columns={columns}
-          data={visible}
-          handleLoadMore={onLoadMore}
-          // While collapsed, don't auto-fetch the next page — expanding is the
-          // signal that the reader wants the whole roster.
-          hasMore={!collapsed && hasMore}
-          isLoading={isLoading}
-          isRowClickable={(user) => Boolean(user.email)}
-          onRowClick={onOpenUser}
-          rowKey={(row) => row.userKey}
-        />
-      </Table>
+      <div id={tableId}>
+        <Table columns={columns}>
+          <Table.Header columns={columns} />
+          <Table.Body
+            columns={columns}
+            data={visible}
+            handleLoadMore={onLoadMore}
+            // While collapsed, don't auto-fetch the next page — expanding is the
+            // signal that the reader wants the whole roster.
+            hasMore={!collapsed && hasMore}
+            isLoading={isLoading}
+            isRowClickable={(user) => Boolean(user.email)}
+            onRowClick={onOpenUser}
+            rowKey={(row) => row.userKey}
+          />
+        </Table>
+      </div>
       {collapsible && (
         <MoreToggle
           expanded={expanded}
           onToggle={toggle}
           collapsedLabel={`Show all ${users.length}${hasMore ? "+" : ""} users`}
+          controlId={tableId}
         />
       )}
     </div>
@@ -595,10 +599,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       </div>
     ) : (
       <TopUsersTable
-        // Remount per server: the collapse state lives in the table, and this
-        // route stays mounted when navigating between servers, so without a
-        // key the next server's roster opens already expanded.
-        key={serverSlug}
+        // Remount per project+server: the collapse state lives in the table,
+        // and this route stays mounted when navigating between servers or
+        // switching projects, so without a key the next roster opens already
+        // expanded.
+        key={`${project.id}/${serverSlug}`}
         hasMore={Boolean(nextUsersCursor)}
         isLoading={isLoadingMoreUsers}
         onLoadMore={loadMoreUsers}

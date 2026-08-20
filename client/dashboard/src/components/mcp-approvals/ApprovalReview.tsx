@@ -567,7 +567,7 @@ function ResearchReports({
           typically several hundred thousand tokens, several minutes per run.
         </p>
       )}
-      {!latest && researchFlag.status !== "disabled" && (
+      {!latest && researchFlag.status === "enabled" && (
         <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
           No research has been run for this server.
         </p>

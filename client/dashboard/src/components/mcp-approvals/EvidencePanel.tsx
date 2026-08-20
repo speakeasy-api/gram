@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Info } from "lucide-react";
+import { useId } from "react";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   MoreToggle,
@@ -220,6 +221,12 @@ function ExposureSection({
       value: <HumanizeDateTime date={new Date(exposure.lastCalled)} />,
     });
   }
+  if (exposure.serverName) {
+    // The name this project knew the server by when the evidence was taken —
+    // on a frozen snapshot nothing else carries it, and it can differ from
+    // the name the page shows today.
+    facts.push({ label: "Known here as", value: exposure.serverName });
+  }
 
   return (
     <EvidenceGroup
@@ -279,7 +286,16 @@ export function EvidenceGroup({
           </Heading>
           {hint && (
             <SimpleTooltip tooltip={hint}>
-              <Info className="text-muted-foreground size-3.5 shrink-0" />
+              {/* A button, not the bare icon: an SVG cannot take focus, and
+                  the tooltip opens on focus as well as hover, so this is what
+                  makes the caveat reachable by keyboard at all. */}
+              <button
+                type="button"
+                aria-label="About this data"
+                className="text-muted-foreground hover:text-foreground inline-flex shrink-0"
+              >
+                <Info className="size-3.5" />
+              </button>
             </SimpleTooltip>
           )}
         </div>
@@ -563,9 +579,10 @@ function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
     scopes,
     SCOPE_PREVIEW_COUNT,
   );
+  const listId = useId();
 
   return (
-    <div className="flex flex-wrap gap-1">
+    <div id={listId} className="flex flex-wrap gap-1">
       {visible.map((scope) => (
         <span
           key={scope}
@@ -579,6 +596,7 @@ function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
           expanded={expanded}
           onToggle={toggle}
           collapsedLabel={`+${scopes.length - SCOPE_PREVIEW_COUNT} more`}
+          controlId={listId}
           className="px-1.5 py-px"
         />
       )}
@@ -702,10 +720,11 @@ function CollapsibleList<T>({
     items,
     previewCount,
   );
+  const listId = useId();
 
   return (
     <div className="border-border border">
-      <ul className="divide-border divide-y">
+      <ul id={listId} className="divide-border divide-y">
         {visible.map((item) => (
           <li key={itemKey(item)} className={itemClassName}>
             {renderItem(item)}
@@ -717,6 +736,7 @@ function CollapsibleList<T>({
           expanded={expanded}
           onToggle={toggle}
           collapsedLabel={`Show all ${items.length} ${noun}`}
+          controlId={listId}
           className="border-border w-full justify-center border-t px-3 py-1"
         />
       )}

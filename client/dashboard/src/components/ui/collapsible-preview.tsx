@@ -38,18 +38,25 @@ export function MoreToggle({
   expanded,
   onToggle,
   collapsedLabel,
+  controlId,
   className,
 }: {
   expanded: boolean;
   onToggle: () => void;
   /** What the control says while the tail is hidden. */
   collapsedLabel: string;
+  /**
+   * The id of the region this toggle expands, for aria-controls — without it
+   * a screen reader hears "expanded" with nothing saying expanded *what*.
+   */
+  controlId?: string;
   className?: string;
 }): JSX.Element {
   return (
     <button
       type="button"
       aria-expanded={expanded}
+      aria-controls={controlId}
       onClick={onToggle}
       className={cn(
         "text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs",
