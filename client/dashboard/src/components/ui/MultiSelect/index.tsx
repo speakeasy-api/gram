@@ -226,6 +226,15 @@ interface MultiSelectProps
   badgeClassName?: string;
 
   /**
+   * Optionally replace a related set of selected values with one compact
+   * summary in the trigger. The values remain selected and available in the
+   * menu; only their trigger representation changes.
+   */
+  collapseSelectedValues?: (
+    selectedValues: string[],
+  ) => { values: string[]; summary: React.ReactNode } | null;
+
+  /**
    * If true, disables the component completely.
    * Optional, defaults to false.
    */
@@ -406,6 +415,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       singleLine = false,
       popoverClassName,
       badgeClassName,
+      collapseSelectedValues,
       disabled = false,
       responsive,
       minWidth,
@@ -860,6 +870,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     };
 
     const widthConstraints = getWidthConstraints();
+    const collapsedSelection = collapseSelectedValues?.(selectedValues);
+    const collapsedValues = new Set(collapsedSelection?.values);
+    const visibleSelectedValues = selectedValues.filter(
+      (value) => !collapsedValues.has(value),
+    );
 
     React.useEffect(() => {
       if (!isPopoverOpen) {
@@ -1005,7 +1020,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     )}
                     style={{}}
                   >
-                    {selectedValues
+                    {collapsedSelection?.summary}
+                    {visibleSelectedValues
                       .slice(0, responsiveSettings.maxCount)
                       .map((value) => {
                         const option = getOptionByValue(value);
@@ -1101,7 +1117,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         );
                       })
                       .filter(Boolean)}
-                    {selectedValues.length > responsiveSettings.maxCount && (
+                    {visibleSelectedValues.length >
+                      responsiveSettings.maxCount && (
                       <Badge
                         className={cn(
                           "text-foreground border-foreground/1 bg-transparent hover:bg-transparent",
@@ -1121,7 +1138,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         }}
                       >
                         {`+ ${
-                          selectedValues.length - responsiveSettings.maxCount
+                          visibleSelectedValues.length -
+                          responsiveSettings.maxCount
                         } more`}
                         <XIcon
                           className={cn(

@@ -103,12 +103,22 @@ export function individualMemberFacepile(
   assignments: PluginAssignment[],
   memberByUrn: Map<string, AccessMember>,
 ): FacepileMember[] {
-  return assignments
-    .filter((a) => isIndividualMemberPrincipal(a.principalUrn))
-    .map((a) => {
-      const member = memberByUrn.get(a.principalUrn);
+  return individualMemberFacepileForUrns(
+    assignments.map((assignment) => assignment.principalUrn),
+    memberByUrn,
+  );
+}
+
+export function individualMemberFacepileForUrns(
+  principalUrns: string[],
+  memberByUrn: Map<string, AccessMember>,
+): FacepileMember[] {
+  return principalUrns
+    .filter(isIndividualMemberPrincipal)
+    .map((principalUrn) => {
+      const member = memberByUrn.get(principalUrn);
       return {
-        id: member?.id ?? a.principalUrn,
+        id: member?.id ?? principalUrn,
         name: member?.name || member?.email || "Unknown member",
         email: member?.email ?? "",
         photoUrl: member?.photoUrl,
