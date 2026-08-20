@@ -36,7 +36,7 @@ const ResizablePanel = ({
   direction = "horizontal",
   useDefaultHandle = true,
   onLayout,
-  resizeTargetMinimumSize = { coarse: 10, fine: 10 },
+  resizeTargetMinimumSize = { coarse: 20, fine: 20 },
   ...props
 }: ResizablePanelProps) => {
   const validChildren = useMemo(
@@ -106,6 +106,7 @@ const DefaultResizeHandle = ({
       onPointerDown={() => setIsResizing(true)}
       onPointerUp={() => setIsResizing(false)}
       onPointerCancel={() => setIsResizing(false)}
+      onLostPointerCapture={() => setIsResizing(false)}
       className={cn(
         "relative border-[1.25px] border-zinc-900/50",
         isResizing && "border-foreground/10",
