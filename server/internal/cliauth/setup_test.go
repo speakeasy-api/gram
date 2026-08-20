@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -33,7 +32,6 @@ func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
-		os.Exit(1)
 	}
 
 	infra = res
@@ -42,7 +40,6 @@ func TestMain(m *testing.M) {
 
 	if err := cleanup(); err != nil {
 		log.Fatalf("cleanup test infrastructure: %v", err)
-		os.Exit(1)
 	}
 
 	os.Exit(code)
@@ -52,7 +49,6 @@ type testInstance struct {
 	service        *cliauth.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
-	redis          *redis.Client
 }
 
 // newTestService wires a cliauth.Service over real test Postgres + Redis and
@@ -90,7 +86,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
-		redis:          redisClient,
 	}
 }
 
