@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -115,10 +118,7 @@ func TestCreateServerAndMcpServer_RequiresLiveProjectInActiveOrganization(t *tes
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	var remoteCount, mcpCount, issuerCount int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&remoteCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&mcpCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&issuerCount))
+	remoteCount, mcpCount, issuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
 	require.Zero(t, remoteCount)
 	require.Zero(t, mcpCount)
 	require.Zero(t, issuerCount)
@@ -131,25 +131,13 @@ func TestCreateServerAndMcpServer_RollsBackAllResourcesWhenMaterializationFails(
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	_, err := ti.conn.Exec(ctx, `
-CREATE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
-BEGIN
-  RAISE EXCEPTION 'test materialization failure';
-END;
-$$ LANGUAGE plpgsql`)
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-CREATE TRIGGER fail_remote_mcp_server_materialization
-BEFORE INSERT ON mcp_servers
-FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()`)
-	require.NoError(t, err)
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.CreateRemoteMCPServerMaterializationFailureFunctionFixture(ctx))
+	require.NoError(t, fixtures.CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx))
 
-	var remoteCount, mcpCount, issuerCount int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&remoteCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&mcpCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&issuerCount))
+	remoteCount, mcpCount, issuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
 
-	_, err = ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+	_, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -160,13 +148,25 @@ FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()`)
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
-	var afterRemoteCount, afterMcpCount, afterIssuerCount int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterRemoteCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_servers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterMcpCount))
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_issuers WHERE project_id = $1`, *authCtx.ProjectID).Scan(&afterIssuerCount))
+	afterRemoteCount, afterMcpCount, afterIssuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
 	require.Equal(t, remoteCount, afterRemoteCount)
 	require.Equal(t, mcpCount, afterMcpCount)
 	require.Equal(t, issuerCount, afterIssuerCount)
+}
+
+func provisionedResourceCounts(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) (int, int, int) {
+	t.Helper()
+
+	remoteServers, err := repo.New(ti.conn).ListServersByProjectID(ctx, projectID)
+	require.NoError(t, err)
+	mcpServers, err := mcpserversrepo.New(ti.conn).ListMCPServersByProjectID(ctx, mcpserversrepo.ListMCPServersByProjectIDParams{ProjectID: projectID})
+	require.NoError(t, err)
+	issuers, err := usersessionsrepo.New(ti.conn).ListUserSessionIssuersByProjectID(ctx, usersessionsrepo.ListUserSessionIssuersByProjectIDParams{
+		ProjectID: projectID, Cursor: uuid.NullUUID{}, LimitValue: 100,
+	})
+	require.NoError(t, err)
+
+	return len(remoteServers), len(mcpServers), len(issuers)
 }
 
 func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {

@@ -55,6 +55,20 @@ WHERE
   project_id = @project_id
   AND deployment_id = @deployment_id;
 
+-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+-- Defines the trigger function used to force atomic remote-MCP provisioning to
+-- fail after it has created the remote source and session issuer.
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql;
+
+-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization();
+
 -- name: ListDeploymentFunctionsResources :many
 SELECT *
 FROM function_resource_definitions

@@ -82,11 +82,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
-	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput{
-		Name:          input.Name,
-		URL:           input.URL,
-		TransportType: input.TransportType,
-	})
+	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput(input))
 	if err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}

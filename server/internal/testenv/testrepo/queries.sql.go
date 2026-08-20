@@ -224,6 +224,32 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql
+`
+
+// Defines the trigger function used to force atomic remote-MCP provisioning to
+// fail after it has created the remote source and session issuer.
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureFunctionFixture)
+	return err
+}
+
+const createRemoteMCPServerMaterializationFailureTriggerFixture = `-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()
+`
+
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureTriggerFixture)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
