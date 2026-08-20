@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateAssistant        goa.Endpoint
 	DeleteAssistant        goa.Endpoint
 	SendMessage            goa.Endpoint
+	InterruptTurn          goa.Endpoint
 	GetManagedAssistant    goa.Endpoint
 	EnsureManagedAssistant goa.Endpoint
 }
@@ -37,6 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateAssistant:        NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
 		DeleteAssistant:        NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
 		SendMessage:            NewSendMessageEndpoint(s, a.APIKeyAuth),
+		InterruptTurn:          NewInterruptTurnEndpoint(s, a.APIKeyAuth),
 		GetManagedAssistant:    NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
 		EnsureManagedAssistant: NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
 	}
@@ -50,6 +52,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateAssistant = m(e.UpdateAssistant)
 	e.DeleteAssistant = m(e.DeleteAssistant)
 	e.SendMessage = m(e.SendMessage)
+	e.InterruptTurn = m(e.InterruptTurn)
 	e.GetManagedAssistant = m(e.GetManagedAssistant)
 	e.EnsureManagedAssistant = m(e.EnsureManagedAssistant)
 }
@@ -261,6 +264,41 @@ func NewSendMessageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.SendMessage(ctx, p)
+	}
+}
+
+// NewInterruptTurnEndpoint returns an endpoint function that calls the method
+// "interruptTurn" of service "assistants".
+func NewInterruptTurnEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*InterruptTurnPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.InterruptTurn(ctx, p)
 	}
 }
 
