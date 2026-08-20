@@ -1,6 +1,7 @@
 mod catalog;
 mod clip;
 mod compaction;
+mod enforce;
 mod errors;
 mod gram_client;
 mod http_layer;

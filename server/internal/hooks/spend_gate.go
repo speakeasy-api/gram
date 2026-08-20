@@ -41,11 +41,12 @@ func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spen
 
 // spendGatedAdapter reports whether a self-reported ingest source adapter
 // has spend enforcement on the unified ingest path: the adapters with a
-// per-provider enforcement surface. Matching is case-insensitive so a case
+// per-provider enforcement surface, plus the reserved assistant adapter
+// used by hosted assistant consult. Matching is case-insensitive so a case
 // variant cannot dodge the gate.
 func spendGatedAdapter(adapter string) bool {
 	switch strings.ToLower(strings.TrimSpace(adapter)) {
-	case "claude", "codex", "cursor":
+	case "claude", "codex", "cursor", "assistant", "assistants":
 		return true
 	default:
 		return false

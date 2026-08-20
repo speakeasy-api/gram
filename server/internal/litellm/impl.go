@@ -215,6 +215,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		SourceAttributes:             sourceAttributes(payload),
 		OutputToolCalls:              nil,
 		OriginatingClient:            attribution.OriginatingClient,
+		AllowReservedAdapter:         false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
@@ -345,6 +346,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		SourceAttributes:             sourceAttributes(payload),
 		OutputToolCalls:              payload.ToolCalls,
 		OriginatingClient:            originatingClient,
+		AllowReservedAdapter:         false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)

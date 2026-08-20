@@ -304,6 +304,41 @@ func TestIngest_SpendGateDeniesClaudeToolCallWithBlockURL(t *testing.T) {
 	assert.Contains(t, *result.Message, "/blocks/")
 }
 
+func TestIngestAuthenticated_SpendGateDeniesAssistantToolCall(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("assistant", "tool.requested", "spend-gate-ingest-assistant")
+	toolName := "bun_run"
+	toolCallID := "call-spend-assistant-1"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"code": "1"},
+		},
+	}
+
+	result, err := ti.service.IngestAuthenticatedWithOptions(ctx, authCtx, payload, AuthenticatedIngestOptions{
+		AllowWarnAcknowledgement:     true,
+		AllowSessionIdentityFallback: false,
+		SourceAttributes:             nil,
+		OutputToolCalls:              nil,
+		OriginatingClient:            "assistant",
+		AllowReservedAdapter:         true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+}
+
 func TestIngest_SpendGateDeniesCodexToolCallWithBlockURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

@@ -408,6 +408,7 @@ type ServiceCore struct {
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
+	hookIngester      HookIngester
 }
 
 func NewServiceCore(
@@ -457,6 +458,7 @@ func NewServiceCore(
 		dashboardIngestor: nil,
 		featureFlags:      nil,
 		turnClassified:    turnClassified,
+		hookIngester:      nil,
 	}
 }
 
@@ -495,6 +497,14 @@ func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
 // grant off (fail closed).
 func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 	s.featureFlags = p
+}
+
+// SetHookIngester wires canonical hook ingest so the runner's tool-call
+// consult can reuse risk-policy and spend-gate enforcement. Set after
+// construction because hooks.Service is created later in server startup.
+// A nil ingester fails open (allow).
+func (s *ServiceCore) SetHookIngester(ingester HookIngester) {
+	s.hookIngester = ingester
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram

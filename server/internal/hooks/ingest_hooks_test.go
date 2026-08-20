@@ -167,6 +167,90 @@ func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
 	require.Contains(t, err.Error(), "unsupported hook schema_version")
 }
 
+func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	payload := canonicalIngestPayload("assistant", "tool.requested", "reserved-adapter")
+	toolName := "bun_run"
+	toolCallID := "call-reserved"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "source.adapter is reserved")
+}
+
+func TestIngestAuthenticated_RejectsReservedAssistantAdapterByDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	payload := canonicalIngestPayload("assistant", "tool.requested", "reserved-adapter-auth")
+	toolName := "bun_run"
+	toolCallID := "call-reserved-auth"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{},
+		},
+	}
+
+	result, err := ti.service.IngestAuthenticated(t.Context(), authCtx, payload)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "source.adapter is reserved")
+}
+
+func TestIngestAuthenticated_AllowsReservedAssistantAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	payload := canonicalIngestPayload("assistant", "tool.requested", sessionID)
+	toolName := "bun_run"
+	toolCallID := "call-assistant-allow"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"code": "1"},
+		},
+	}
+
+	result, err := ti.service.IngestAuthenticatedWithOptions(t.Context(), authCtx, payload, AuthenticatedIngestOptions{
+		AllowWarnAcknowledgement:     true,
+		AllowSessionIdentityFallback: false,
+		SourceAttributes:             nil,
+		OutputToolCalls:              nil,
+		OriginatingClient:            "assistant",
+		AllowReservedAdapter:         true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, messages)
+}
+
 // A keyless request on the optional-auth ingest endpoint is acknowledged
 // without processing: hook senders must stay non-blocking for machines that
 // never signed in, and without credentials there is no org to attribute the

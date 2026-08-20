@@ -19,6 +19,7 @@ use agentkit_tools_core::{
     CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
 };
 use dashmap::DashMap;
+use dashmap::DashSet;
 use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::OnceCell;
@@ -30,6 +31,7 @@ use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor}
 use crate::catalog::{HiddenCatalogSource, UnknownToolSource};
 use crate::clip::ClippedToolSource;
 use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
+use crate::enforce::EnforcingToolSource;
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
@@ -409,17 +411,34 @@ async fn spawn_thread(
     // cache survives catalog churn. UnknownToolSource sits last so a call
     // to an undiscovered or hallucinated name returns a recovery hint
     // instead of a bare not-found.
-    let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
-        mcp_catalog,
-        mcp_cmd_tx.clone(),
-    ))
-    .with_source(native_tools.merge(agentkit_tool_fs::registry()))
-    .with_source(UnknownToolSource);
+    //
+    // Enforcement wraps the hidden catalog (compose-inner MCP calls) and
+    // the outermost clipped source (native / compose / unknown). A shared
+    // call-id set dedupes a direct MCP invoke that would otherwise consult
+    // twice.
+    let consulted = Arc::new(DashSet::new());
+    let hidden_source = EnforcingToolSource::new(
+        HiddenCatalogSource::new(mcp_catalog, mcp_cmd_tx.clone()),
+        host.gram_client.clone(),
+        tokens.clone(),
+        thread_id.clone(),
+        Arc::clone(&consulted),
+    );
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(hidden_source)
+        .with_source(native_tools.merge(agentkit_tool_fs::registry()))
+        .with_source(UnknownToolSource);
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
+    let enforcing_source = EnforcingToolSource::new(
+        clipped_source,
+        host.gram_client.clone(),
+        tokens.clone(),
+        thread_id.clone(),
+        consulted,
+    );
 
     let mut builder = Agent::builder()
         .model(adapter)
-        .add_tool_source(clipped_source)
+        .add_tool_source(enforcing_source)
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
@@ -722,13 +741,12 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
                     .as_deref()
                     .filter(|s| !s.is_empty())
                     .ok_or(RunnerError::MissingToolCallId)?;
-                items.push(Item::new(
-                    ItemKind::Tool,
-                    vec![Part::ToolResult(ToolResultPart::success(
+                items.push(Item::new(ItemKind::Tool, vec![Part::ToolResult(
+                    ToolResultPart::success(
                         call_id,
                         ToolOutput::text(text_with_image_placeholders(&message.content)),
-                    ))],
-                ));
+                    ),
+                )]));
             }
             "system" => {
                 items.push(Item::text(
@@ -929,12 +947,9 @@ mod tests {
             tool_call_id: None,
         }];
         let items = normalize_history(&history).unwrap();
-        assert_eq!(
-            items[0].parts,
-            vec![Part::Text(TextPart::new(
-                "here you go\n[image: https://example.com/out.png]"
-            ))]
-        );
+        assert_eq!(items[0].parts, vec![Part::Text(TextPart::new(
+            "here you go\n[image: https://example.com/out.png]"
+        ))]);
     }
 
     #[test]

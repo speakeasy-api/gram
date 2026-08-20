@@ -10,7 +10,9 @@ use crate::wire::{RunnerMessage, ThreadBootstrap};
 const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
 const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistantMcpAuth.create";
 const RECORD_COMPACTED_GENERATION_PATH: &str = "/rpc/assistants.recordCompactedGeneration";
+const CONSULT_TOOL_CALL_PATH: &str = "/rpc/assistants.consultToolCall";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
+const CONSULT_TIMEOUT: Duration = Duration::from_secs(30);
 // Compaction persistence runs off the loop's critical path, so a longer
 // budget is fine; the post-compaction call body can be sizable and the
 // server walks all rows in a single transaction.
@@ -61,6 +63,36 @@ struct CreateMcpAuthFlowRequest<'a> {
 struct RecordCompactedGenerationRequest<'a> {
     thread_id: &'a str,
     messages: &'a [RunnerMessage],
+}
+
+#[derive(Serialize)]
+struct ConsultToolCallRequest<'a> {
+    thread_id: &'a str,
+    tool_name: &'a str,
+    tool_input: &'a serde_json::Value,
+    tool_call_id: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConsultToolCallResponse {
+    pub decision: String,
+    #[serde(default)]
+    pub message: String,
+}
+
+impl ConsultToolCallResponse {
+    pub fn is_deny(&self) -> bool {
+        self.decision.eq_ignore_ascii_case("deny")
+    }
+
+    pub fn deny_message(&self) -> String {
+        let trimmed = self.message.trim();
+        if trimmed.is_empty() {
+            "Request denied by Speakeasy policy.".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,5 +216,50 @@ impl GramBootstrapClient {
             });
         }
         Ok(())
+    }
+
+    /// Asks the management API whether this tool call may execute. The
+    /// server consults spend-gate and risk-policy enforcement. Callers must
+    /// fail open on transport/decode errors so a control-plane blip does not
+    /// wedge the assistant loop.
+    pub async fn consult_tool_call(
+        &self,
+        thread_id: &str,
+        tool_name: &str,
+        tool_input: &serde_json::Value,
+        tool_call_id: &str,
+        tokens: &TokenRegistry,
+    ) -> Result<ConsultToolCallResponse, GramClientError> {
+        let url = format!(
+            "{}{}",
+            self.base_url.trim_end_matches('/'),
+            CONSULT_TOOL_CALL_PATH
+        );
+        let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
+
+        let resp = self
+            .http
+            .post(&url)
+            .timeout(CONSULT_TIMEOUT)
+            .bearer_auth(&bearer)
+            .json(&ConsultToolCallRequest {
+                thread_id,
+                tool_name,
+                tool_input,
+                tool_call_id,
+            })
+            .send()
+            .await?;
+
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            return Err(GramClientError::Status {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        let parsed: ConsultToolCallResponse = serde_json::from_str(&body)?;
+        Ok(parsed)
     }
 }

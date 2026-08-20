@@ -43,6 +43,12 @@ type AuthenticatedIngestOptions struct {
 	SourceAttributes             map[attr.Key]any
 	OutputToolCalls              []any
 	OriginatingClient            string
+
+	// AllowReservedAdapter lets a trusted in-process caller claim the
+	// reserved assistant adapter so hosted assistant tool calls can reuse
+	// canonical ingest enforcement. Public hook ingest always rejects that
+	// adapter so a client cannot forge assistant attribution.
+	AllowReservedAdapter bool
 }
 
 // ResolvedActor is the exact actor selected by canonical hook attribution.
@@ -65,6 +71,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		SourceAttributes:             nil,
 		OutputToolCalls:              nil,
 		OriginatingClient:            "",
+		AllowReservedAdapter:         false,
 	}
 }
 
@@ -171,7 +178,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
 	}()
 
-	if err := validateCanonicalIngestPayload(payload); err != nil {
+	if err := validateCanonicalIngestPayload(ctx, payload); err != nil {
 		return nil, err
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
@@ -508,7 +515,7 @@ func canonicalSourceUserEmail(payload *gen.IngestPayload) string {
 	return ""
 }
 
-func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
+func validateCanonicalIngestPayload(ctx context.Context, payload *gen.IngestPayload) error {
 	if payload == nil || payload.Source == nil || payload.Event == nil {
 		return oops.E(oops.CodeInvalid, nil, "source and event are required")
 	}
@@ -518,8 +525,9 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	}
 	// The assistant surface is derived from the observation provider, and only
 	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// hook cannot forge assistant-attributed skill activity. Trusted in-process
+	// callers (hosted assistant consult) opt in via AllowReservedAdapter.
+	if isReservedAssistantAdapter(adapter) && !authenticatedIngestOptions(ctx).AllowReservedAdapter {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
@@ -545,7 +553,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	eventType := strings.TrimSpace(payload.Event.Type)
 
 	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
+	// with a per-provider enforcement surface (claude, codex, cursor, and
+	// the reserved assistant adapter used by hosted assistant consult) — the
 	// risk scans below already run adapter-agnostically, and an over-budget
 	// actor is over budget regardless of which agent carries the event.
 	// Adapters are self-reported slugs, so this remains a cooperative-client
@@ -1383,6 +1392,12 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 // server-resolved time for one event — a recomputed fallback or clamp would
 // drift by the handler's processing latency.
 func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) (bool, error) {
+	if payload != nil && payload.Source != nil && isReservedAssistantAdapter(payload.Source.Adapter) {
+		// Hosted assistant transcripts are already captured by the completions
+		// pipeline. Persisting consult events would duplicate tool_calls rows
+		// against the same chat id.
+		return false, nil
+	}
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return false, nil
