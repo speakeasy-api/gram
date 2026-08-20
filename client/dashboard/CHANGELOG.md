@@ -1,5 +1,23 @@
 # dashboard
 
+## 0.111.0
+
+### Minor Changes
+
+- 92c1087: Add a Remote sessions platform walkthrough to Device Agent setup for Anthropic-hosted Claude Code on the web: network access, a verified pinned daemon install with managed enrollment, a SessionStart hook that revives the agent each session, and organization-default guidance.
+- 71931d5: The research agent now persists its per-action trace — every search and page fetch a run made, in order, with the outcome, the injection judge's verdict, and a bounded preview of the untrusted text it saw. The report is a run-level synthesis that drops most of what was read; the trace is what the agent actually did, surfaced on the review page under "what the agent did." No page bodies are stored, only previews, and no new inference is run — the runner already produced this and discarded it.
+- 55032f2: Suppressed findings now live in a collapsible section on the Watchdog page instead of a "False Positives" tab under Risk Policies. The section lists every suppressed finding — exclusion rule, manual dismissal, or automated sweep — with the provenance behind each one, a restore action for manual and automated suppressions (single or bulk), and a link to the rule behind an exclusion-suppressed finding. Clicking a row opens a detail drawer with the finding's details, its redacted match, its session, and the same restore or view-rule action. Suppression copy across the Watchdog now says "Suppress" / "Restore" rather than "Mark as false positive".
+
+### Patch Changes
+
+- c1eae5f: Bill both customer-facing and platform-initiated inference spend for PAYG organizations.
+- b22a844: Stack the Device Agent platform tiles vertically (logo on top, name and subtitle underneath) so all four tiles fit a row without the labels wrapping one word per line, and drop the "Cowork needs separate setup" callout from the onboarding instrument-agents step.
+- 2fe82c3: Allow product-feature APIs to target an authorized organization while preserving active-organization behavior for existing callers.
+- f4a077d: Scope product-feature requests and organization-owned form state to the active organization.
+- a2a67e0: Require an explicit organization for every product-feature API request.
+- e76b4a2: Session moves now record a lineage edge linking the original session to its continuation. The device agent can pass the continuation's session id in `agent.reportSessionMoved`, a new `chat.listSessionLinks` endpoint resolves the edges touching a set of chats, and the Agent Sessions detail panel shows a "Linked sessions" section — "Moved to Cursor" on the original, "Derived from …" on the continuation, with navigation between the two when both are captured.
+- 3f1dcaf: The Shadow MCP inventory now distinguishes a server blocked for everyone from one blocked only for some. A deny-by-default policy scoped to a subset of users (audience type "targeted") no longer reports every server as "Blocked" project-wide; those servers now carry a new `restricted` access state, rendered as an orange "Restricted — Blocked for some users" badge. A denied review is also named as its own reason: "Blocked by policy & review" when a block policy already stops the server and a review also denied it, or "Blocked by review" when an allow-by-default rule blocks it solely because of the review. Servers blocked for everyone still read "Blocked" / "Blocked by policy" as before.
+
 ## 0.110.0
 
 ### Minor Changes
