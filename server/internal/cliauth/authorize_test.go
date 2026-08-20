@@ -42,17 +42,18 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	require.NotEmpty(t, redeemed.ProjectSlug)
 }
 
-// A Speakeasy admin impersonating a customer org via the dev-tools override is
-// refused enrollment outright, even though impersonation grants every RBAC
-// scope (DNO-938): enrolling would bind the admin's device to the customer
-// org's policies and route session transcripts there.
+// A Speakeasy admin impersonating an org via the dev-tools override — the
+// override targeting the session's active org — is refused enrollment
+// outright, even though impersonation grants every RBAC scope (DNO-938):
+// enrolling would bind the admin's device to that org's policies and route
+// session transcripts there.
 func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, mockidp.MockOrgSlug)
 
 	_, challenge := pkcePair(t)
 	_, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
@@ -63,6 +64,29 @@ func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, "impersonating an organization")
+}
+
+// A stale gram_admin_override cookie pointing at some OTHER org must not block
+// an admin enrolling on their own org: the cookie survives switching back, and
+// the refusal only applies when the override targets the active org. The
+// membership backstop still guards genuine parked-impersonation sessions.
+func TestAuthorize_AdminWithStaleOverrideOnOwnOrgSucceeds(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.IsAdmin = true
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+
+	_, challenge := pkcePair(t)
+	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
+		CodeChallenge:       challenge,
+		CodeChallengeMethod: "S256",
+		ProjectSlug:         nil,
+		SessionToken:        nil,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, authorized.Code)
 }
 
 // A stray admin-override cookie on a NON-admin member's session must not block
