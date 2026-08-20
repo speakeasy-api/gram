@@ -926,7 +926,7 @@ JOIN user_session_issuers AS usi ON usi.id = blink.user_session_issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
 WHERE usi.project_id = $3
-  AND (rc.project_id IS NULL OR rc.project_id = $3)
+  AND (rc.project_id = $3 OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
@@ -934,9 +934,10 @@ ORDER BY ri.slug ASC, rs.id ASC
 `
 
 type ListRemoteSessionUpstreamsForSubjectsParams struct {
-	SubjectUrns []string
-	IssuerIds   []uuid.UUID
-	ProjectID   uuid.UUID
+	SubjectUrns    []string
+	IssuerIds      []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID pgtype.Text
 }
 
 type ListRemoteSessionUpstreamsForSubjectsRow struct {
@@ -977,7 +978,12 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // still match, so a row that somehow paired one project's client with another
 // project's issuer stays invisible rather than being read as a shared one.
 func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg ListRemoteSessionUpstreamsForSubjectsParams) ([]ListRemoteSessionUpstreamsForSubjectsRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects, arg.SubjectUrns, arg.IssuerIds, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects,
+		arg.SubjectUrns,
+		arg.IssuerIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}

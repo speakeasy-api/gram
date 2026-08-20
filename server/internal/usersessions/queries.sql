@@ -788,7 +788,7 @@ JOIN user_session_issuers AS usi ON usi.id = blink.user_session_issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
 WHERE usi.project_id = @project_id
-  AND (rc.project_id IS NULL OR rc.project_id = @project_id)
+  AND (rc.project_id = @project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE

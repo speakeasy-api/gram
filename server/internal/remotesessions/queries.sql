@@ -470,7 +470,7 @@ SELECT EXISTS (
   WHERE link.remote_session_client_id = @remote_session_client_id
     AND link.user_session_issuer_id = @user_session_issuer_id
     AND usi.project_id = @project_id
-    AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+    AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
 )::boolean AS bound;
@@ -783,7 +783,7 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE s.subject_urn = @subject_urn
   AND link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
-  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
@@ -969,7 +969,7 @@ WHERE s.subject_urn = @subject_urn
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
-  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
@@ -999,7 +999,7 @@ WHERE s.subject_urn = @subject_urn
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
-  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -1028,7 +1028,7 @@ WHERE s.subject_urn = @subject_urn
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
-  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE

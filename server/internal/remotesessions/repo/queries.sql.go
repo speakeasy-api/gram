@@ -43,7 +43,7 @@ SELECT EXISTS (
   WHERE link.remote_session_client_id = $1
     AND link.user_session_issuer_id = $2
     AND usi.project_id = $3
-    AND (c.project_id = $3 OR (c.project_id IS NULL AND c.organization_id = $4::text))
+    AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
 )::boolean AS bound
@@ -3744,7 +3744,7 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE s.subject_urn = $1
   AND link.user_session_issuer_id = $2
   AND usi.project_id = $3
-  AND (c.project_id = $3 OR (c.project_id IS NULL AND c.organization_id = $4::text))
+  AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -4304,7 +4304,7 @@ WHERE s.subject_urn = $2
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $4
   AND usi.project_id = $5
-  AND (c.project_id = $5 OR (c.project_id IS NULL AND c.organization_id = $6::text))
+  AND (c.project_id = $5 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -4379,7 +4379,7 @@ WHERE s.subject_urn = $1
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $3
   AND usi.project_id = $4
-  AND (c.project_id = $4 OR (c.project_id IS NULL AND c.organization_id = $5::text))
+  AND (c.project_id = $4 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -4482,7 +4482,7 @@ WHERE s.subject_urn = $1
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $2
   AND usi.project_id = $3
-  AND (c.project_id = $3 OR (c.project_id IS NULL AND c.organization_id = $4::text))
+  AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
