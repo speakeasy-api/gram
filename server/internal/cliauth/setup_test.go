@@ -51,10 +51,8 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 }
 
-// newTestService wires a cliauth.Service over real test Postgres + Redis and
-// returns a context carrying an authenticated member session for the mock
-// user/org (seeded by authztest.InitAuthContext) with admin RBAC grants
-// prepared.
+// newTestService wires a cliauth.Service over test Postgres + Redis and returns
+// a context carrying an authenticated member session for the mock user/org.
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -99,9 +97,8 @@ func pkcePair(t *testing.T) (verifier, challenge string) {
 	return verifier, challenge
 }
 
-// authenticateSession stores the given session record and authenticates it,
-// returning a context whose auth context reflects that session. Fixture rows
-// (user, org metadata, membership) must already exist for the referenced ids.
+// authenticateSession stores the session record and authenticates it,
+// returning a context reflecting that session.
 func authenticateSession(t *testing.T, ctx context.Context, ti *testInstance, session sessions.Session) context.Context {
 	t.Helper()
 
@@ -111,8 +108,7 @@ func authenticateSession(t *testing.T, ctx context.Context, ti *testInstance, se
 	return authedCtx
 }
 
-// seedOrgMetadata inserts organization metadata for an org the mock IDP knows
-// nothing about, so sessions can be pointed at it without membership rows.
+// seedOrgMetadata inserts org metadata without any membership rows.
 func seedOrgMetadata(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id, name, slug string) {
 	t.Helper()
 

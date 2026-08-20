@@ -149,51 +149,33 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no resolved email").LogError(ctx, s.logger)
 	}
 
-	// Enrollment binds a physical device to the session's active org — its
-	// policies, plugins, hooks, and session-transcript reporting — and mints a
-	// durable per-user key there. None of that is ever legitimate under an
-	// assumed identity, so every impersonation shape is refused outright.
-	// RBAC cannot carry this: an impersonating admin holds every
-	// scope (see authz.Engine), so the org:read gate below would wave them
-	// through.
-	//
-	// Shape 1: Speakeasy admin impersonating a customer org via the dev-tools
-	// override — same refusal as chat-transcript access in chat.LoadChat, but
-	// scoped to overrides that target THIS session's active org. The
-	// gram_admin_override cookie survives switching back to one's own org, so
-	// an unscoped check would 403 an admin's own-org enrollment for as long as
-	// the stale cookie lives; a stale override pointing elsewhere falls
-	// through, and Shape 3 still catches any genuine parked impersonation.
+	// Enrollment is refused under any form of impersonation: it would bind a
+	// device to the impersonated org's policies and transcript reporting.
+	// RBAC cannot gate this — impersonating admins hold every scope.
+
+	// Admin org-override impersonation. Only refused when the override
+	// targets the active org: the cookie outlives impersonation, and the
+	// membership check below still catches parked sessions.
 	if override, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin && override == authCtx.OrganizationSlug {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating an organization").LogError(ctx, s.logger)
 	}
 
-	// Shape 2: WorkOS user impersonation. The session was minted by an admin
-	// impersonating this user through the IDP; enrolling would hand the
-	// impersonator's device a real key bearing the user's identity. Authorize
-	// only runs under the Session scheme, so a missing session id is a broken
-	// auth context, not a skippable case.
+	// WorkOS user impersonation, recorded on the session. Authorize only runs
+	// under the Session scheme, so a missing session id is a broken context.
 	if authCtx.SessionID == nil || *authCtx.SessionID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no id").LogError(ctx, s.logger)
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
-		// The session authenticated this same request, so a lookup failure
-		// here is infrastructure trouble, not a bad credential. Fail closed.
 		return nil, oops.E(oops.CodeUnexpected, err, "load session").LogError(ctx, s.logger)
 	}
 	if session.ImpersonatorEmail != "" {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
 	}
 
-	// Shape 3 (backstop): a session parked on an org the user is not actually
-	// a member of — an admin session that outlived its override cookie, or
-	// anyone pointed at the shared demo org (which has no membership rows by
-	// design, yet grants org:read to every session). Enrollment requires real
-	// membership in the org the device would report to. Membership is resolved
-	// explicitly (not via HasAccessToOrganization, which folds lookup failures
-	// into "no") so an infra failure surfaces as an unexpected error, never as
-	// a misleading 403.
+	// Backstop: the user must be a real member of the active org (the demo
+	// org has no memberships). Resolved via GetUserInfo so lookup failures
+	// surface as unexpected errors, not a misleading 403.
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load user info").LogError(ctx, s.logger)
