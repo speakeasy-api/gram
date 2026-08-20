@@ -126,6 +126,9 @@ export function ProjectGuideRun({
         onClick: onSwitchJourney,
       }
     : undefined;
+  const isReadyAction =
+    displayState === "ready" &&
+    resolvedPrimaryAction.label === "Start the journey";
 
   const activityLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -286,8 +289,20 @@ export function ProjectGuideRun({
               type="button"
               onClick={resolvedPrimaryAction.onClick}
               disabled={resolvedPrimaryAction.disabled}
-              className="w-full cursor-default bg-[#EDECEA] px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/40 uppercase"
+              aria-label={resolvedPrimaryAction.label}
+              className={cn(
+                "mt-auto flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
+                isReadyAction && !resolvedPrimaryAction.disabled
+                  ? "bg-[#121212] text-[#FAFAFA]"
+                  : "cursor-default bg-[#EDECEA] text-[#121212]/40",
+              )}
             >
+              {isReadyAction && !resolvedPrimaryAction.disabled && (
+                <span
+                  aria-hidden="true"
+                  className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
+                />
+              )}
               {resolvedPrimaryAction.label}
             </button>
           </aside>

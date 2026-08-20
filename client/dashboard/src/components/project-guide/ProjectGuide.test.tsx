@@ -462,6 +462,40 @@ describe("ProjectGuide", () => {
     ).toHaveLength(1);
   });
 
+  it("renders the ready start action with the designed play affordance", () => {
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="not-started"
+        regionId="ready-run"
+        displayState="ready"
+        primaryAction={{ label: "Start the journey", onClick: () => undefined }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    const action = screen.getByRole("button", { name: "Start the journey" });
+    expect((action as HTMLButtonElement).disabled).toBe(false);
+    expect(action.querySelector('[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it("keeps the ready start action disabled without the play affordance", () => {
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="not-started"
+        regionId="disabled-ready-run"
+        displayState="ready"
+        primaryAction={{ label: "Start the journey", disabled: true }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    const action = screen.getByRole("button", { name: "Start the journey" });
+    expect((action as HTMLButtonElement).disabled).toBe(true);
+    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
   it("keeps activity history bounded and scrolls to the latest output", () => {
     const journey = PROJECT_GUIDE_JOURNEYS[1]!;
     const { rerender } = render(
