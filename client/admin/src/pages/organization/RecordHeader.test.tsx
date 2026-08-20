@@ -40,8 +40,7 @@ describe("RecordHeader", () => {
       .getByRole("button", { name: /Open in Dashboard/ })
       .closest("form");
     expect(form?.getAttribute("target")).toBe("_blank");
-    expect(form?.getAttribute("rel")).toContain("noopener");
-    expect(form?.getAttribute("rel")).toContain("noreferrer");
+    expect(form?.getAttribute("rel")).toBe("noopener");
   });
 
   it("identifies the new dashboard tab for assistive technology", async () => {
