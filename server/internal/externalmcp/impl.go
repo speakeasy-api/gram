@@ -334,9 +334,13 @@ func serverDetailsResultFromRegistryDetails(details *ServerDetails) *serverDetai
 
 // fetchServerDetails fetches all server details from the registry in a single HTTP call.
 func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, serverName string) (*serverDetailsResult, error) {
-	reqURL := fmt.Sprintf("%s/v0.1/servers/%s/versions/latest", registry.URL, url.PathEscape(serverName))
+	registryURL, err := reviewedRegistryDetailsURL(registry.URL)
+	if err != nil {
+		return nil, err
+	}
+	requestURL := registryURL.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
