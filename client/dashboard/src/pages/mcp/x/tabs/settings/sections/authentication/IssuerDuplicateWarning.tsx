@@ -57,6 +57,19 @@ function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
   }
 }
 
+function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
+  switch (match.tier) {
+    case "platform-level":
+      return "Platform catalog";
+    case "organization-level":
+      return "Organization";
+    case "project-specific":
+      return match.projectName
+        ? `Project ${match.projectName}`
+        : "This project";
+  }
+}
+
 // matchDisplayName mirrors how issuers are named everywhere else: the display
 // name when it has one, otherwise the slug.
 function matchDisplayName(match: RemoteSessionIssuerDuplicateMatch): string {
@@ -74,7 +87,7 @@ function otherMatchesSentence(
   others: RemoteSessionIssuerDuplicateMatch[],
 ): string {
   const named = others
-    .map((match) => `${matchDisplayName(match)} (${tierCopy(match)})`)
+    .map((match) => `${matchDisplayName(match)} (${tierLabel(match)})`)
     .join(", ");
 
   if (others.length === 1) {
@@ -134,36 +147,38 @@ export function IssuerDuplicateWarning({
   ].filter(Boolean);
 
   return (
-    <Card className="border border-info-foreground">
-      <div className="flex gap-2 items-center">
-        <InfoIcon className="size-5" />
-        <Text>
-          <strong>Existing Issuer Available</strong>
-        </Text>
-      </div>
-      <Text small>{tierCopy(primary)}</Text>
-      <CodeBlock className="text-foreground">
-        {matchDisplayName(primary)}
-      </CodeBlock>
-      <Text small>{tierRationale(primary, viewerScope)}</Text>
+    <div role="alert">
+      <Card className="border border-info-foreground">
+        <div className="flex gap-2 items-center">
+          <InfoIcon className="size-5" />
+          <Text>
+            <strong>Existing Issuer Available</strong>
+          </Text>
+        </div>
+        <Text small>{tierCopy(primary)}</Text>
+        <CodeBlock className="text-foreground">
+          {matchDisplayName(primary)}
+        </CodeBlock>
+        <Text small>{tierRationale(primary, viewerScope)}</Text>
 
-      {rest.length > 0 && (
+        {rest.length > 0 && (
+          <Text muted small>
+            {otherMatchesSentence(rest)}
+          </Text>
+        )}
+
         <Text muted small>
-          {otherMatchesSentence(rest)}
+          {viewerScope === "platform"
+            ? "You can still continue if the two entries are meant to differ."
+            : "You can still continue. Add your own record when you need different documentation, branding or scopes."}
         </Text>
-      )}
 
-      <Text muted small>
-        {viewerScope === "platform"
-          ? "You can still continue if the two entries are meant to differ."
-          : "You can still continue. Add your own record when you need different documentation, branding or scopes."}
-      </Text>
-
-      {actions.length > 0 && (
-        <Stack direction="horizontal" gap={2}>
-          {actions}
-        </Stack>
-      )}
-    </Card>
+        {actions.length > 0 && (
+          <Stack direction="horizontal" gap={2}>
+            {actions}
+          </Stack>
+        )}
+      </Card>
+    </div>
   );
 }
