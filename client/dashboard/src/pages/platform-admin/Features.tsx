@@ -6,6 +6,7 @@ import {
 import {
   invalidateAllProductFeatures,
   useProductFeatures,
+  type ProductFeaturesQueryData,
 } from "@gram/client/react-query/productFeatures.js";
 
 import { Badge } from "@/components/ui/Badge";
@@ -65,69 +66,127 @@ export default function PlatformAdminFeatures(): JSX.Element {
   );
 }
 
-const PRODUCT_FEATURES: {
-  featureName: FeatureName;
-  label: string;
-  description: string;
-  enabledKey:
-    | "authzChallengeLoggingEnabled"
-    | "customerManagedEncryptionKeysEnabled"
-    | "customModelKeysEnabled"
-    | "platformMcpEnabled"
-    | "remoteSessionAutoRefreshEnabled"
-    | "ssoEnabled"
-    | "scimEnabled";
-}[] = [
-  {
-    featureName: FeatureName.AuthzChallengeLogging,
+// Every product feature the SDK exposes gets an entry: either a toggle
+// rendered here, or an explicit note of where else it is administered.
+// Keying the record by FeatureName turns a backend feature added without a
+// decision on this page into a type error instead of a missing toggle.
+type ProductFeatureEntry =
+  | {
+      kind: "toggle";
+      label: string;
+      description: string;
+      enabledKey: keyof ProductFeaturesQueryData;
+    }
+  | { kind: "managed-elsewhere"; where: string };
+
+const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
+  [FeatureName.AiPlatformPushIntegrations]: {
+    kind: "toggle",
+    label: "AI Platform Push Integrations",
+    description:
+      "Allows this organization to provision push integrations for AI platforms.",
+    enabledKey: "aiPlatformPushIntegrationsEnabled",
+  },
+  [FeatureName.AuthzChallengeLogging]: {
+    kind: "toggle",
     label: "Authz Challenge Logging",
     description:
       'Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"',
     enabledKey: "authzChallengeLoggingEnabled",
   },
-  {
-    featureName: FeatureName.CustomerManagedEncryptionKeys,
+  [FeatureName.CustomerManagedEncryptionKeys]: {
+    kind: "toggle",
     label: "Customer-Managed Encryption Keys",
     description:
       "Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality.",
     enabledKey: "customerManagedEncryptionKeysEnabled",
   },
-  {
-    featureName: FeatureName.CustomModelKeys,
+  [FeatureName.CustomModelKeys]: {
+    kind: "toggle",
     label: "Custom Model Provider Keys",
     description:
       "Allows projects in this organization to store OpenRouter API keys for model completions.",
     enabledKey: "customModelKeysEnabled",
   },
-
-  {
-    featureName: FeatureName.PlatformMcp,
+  [FeatureName.PlatformMcp]: {
+    kind: "toggle",
     label: "Platform MCP access",
     description:
       "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
     enabledKey: "platformMcpEnabled",
   },
-
-  {
-    featureName: FeatureName.RemoteSessionAutoRefresh,
+  [FeatureName.RemoteSessionAutoRefresh]: {
+    kind: "toggle",
     label: "Automatic Remote Session Refresh",
     description:
       "Shows the Auto refresh opt-in on remote-session consent screens.",
     enabledKey: "remoteSessionAutoRefreshEnabled",
   },
-  {
-    featureName: FeatureName.Sso,
+  [FeatureName.Sso]: {
+    kind: "toggle",
     label: "SSO",
     description: "Enables WorkOS portal link creation for managing SSO.",
     enabledKey: "ssoEnabled",
   },
-  {
-    featureName: FeatureName.Scim,
+  [FeatureName.Scim]: {
+    kind: "toggle",
     label: "SCIM",
     description: "Enables WorkOS portal link creation for managing SCIM.",
     enabledKey: "scimEnabled",
   },
-];
+
+  // Self-serve org settings own these; a second switch here would compete
+  // with the control the organization already sees.
+  [FeatureName.Logs]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.ToolIoLogs]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.SessionCapture]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.HooksBrowserLogin]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.HooksFailOpen]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.SkillCaptureMetadataOnly]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Skills content upload",
+  },
+  [FeatureName.ConsentToolFiltering]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → consent tool filtering",
+  },
+  // The enforced variant is one arm of a three-state policy
+  // (disabled / user-controlled / enforced) written through
+  // features.setRemoteSessionAutoRefreshPolicy; flipping it on its own here
+  // would desync it from the sibling entitlement.
+  [FeatureName.RemoteSessionAutoRefreshEnforced]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → remote session refresh policy",
+  },
+  // Skills is generally available and the server refuses to disable it, so a
+  // switch would be a lie in one direction.
+  [FeatureName.Skills]: {
+    kind: "managed-elsewhere",
+    where: "always on — enabled with the organization's entitlements",
+  },
+};
+
+const TOGGLEABLE_FEATURES = Object.values(FeatureName)
+  .flatMap((featureName) => {
+    const entry = PRODUCT_FEATURES[featureName];
+    return entry.kind === "toggle" ? [{ featureName, ...entry }] : [];
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 function ProductFeaturesSection({
   organizationId,
@@ -145,7 +204,7 @@ function ProductFeaturesSection({
     organizationId,
   });
   const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
-  const visibleFeatures = PRODUCT_FEATURES.filter(
+  const visibleFeatures = TOGGLEABLE_FEATURES.filter(
     (feature) =>
       feature.featureName !== FeatureName.PlatformMcp ||
       platformMcp.status === "enabled",
