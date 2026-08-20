@@ -34,7 +34,7 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 	// Both the encoded body and, for a compressed one, what it expands to are
 	// capped: the size of an export as sent says nothing about how much of it a
 	// gzip stream unpacks into.
-	reader := io.LimitReader(body, maxOTLPTraceExportBytes+1)
+	reader := io.LimitReader(body, maxOTLPExportBytes+1)
 	switch encoding := strings.ToLower(strings.TrimSpace(conv.PtrValOr(payload.ContentEncoding, ""))); encoding {
 	case "", "identity":
 	case "gzip":
@@ -44,7 +44,7 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 		}
 		defer o11y.NoLogDefer(func() error { return decompressed.Close() })
 
-		reader = io.LimitReader(decompressed, maxOTLPTraceExportBytes+1)
+		reader = io.LimitReader(decompressed, maxOTLPExportBytes+1)
 	default:
 		return oops.E(oops.CodeUnsupportedMedia, nil, "unsupported OTLP content encoding %q", encoding)
 	}
@@ -53,15 +53,15 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "unable to read OTLP trace export").LogError(ctx, logger)
 	}
-	if len(raw) > maxOTLPTraceExportBytes {
-		return oops.E(oops.CodeRequestTooLarge, nil, "OTLP trace export exceeds %d MiB", maxOTLPTraceExportBytes/constants.MiB)
+	if len(raw) > maxOTLPExportBytes {
+		return oops.E(oops.CodeRequestTooLarge, nil, "OTLP trace export exceeds %d MiB", maxOTLPExportBytes/constants.MiB)
 	}
 
 	// Tenancy comes from the authenticated request, never from the export's own
 	// resource attributes: those are producer-controlled and a client could
 	// claim any organization or project it liked.
 	provenance := (&otelv1.InboundSpan_Provenance_builder{
-		Source:         new(otelTracesProvenanceSource),
+		Source:         new(otelProvenanceSource),
 		OrganizationId: &authCtx.ActiveOrganizationID,
 		ProjectId:      new(authCtx.ProjectID.String()),
 	}).Build()

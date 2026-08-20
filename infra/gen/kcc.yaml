@@ -56,6 +56,100 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-log-record
+    name: gram-otel-v1-inbound-log-record
+    spec:
+      definition: |
+        edition = "2024";
+        message InboundLogRecord {
+          reserved 4;
+          fixed64 time_unix_nano = 1;
+          SeverityNumber severity_number = 2;
+          string severity_text = 3;
+          AnyValue body = 5;
+          repeated KeyValue attributes = 6;
+          uint32 dropped_attributes_count = 7;
+          fixed32 flags = 8;
+          bytes trace_id = 9;
+          bytes span_id = 10;
+          fixed64 observed_time_unix_nano = 11;
+          string event_name = 12;
+          string record_id = 1000;
+          Resource resource = 1001;
+          string resource_schema_url = 1002;
+          InstrumentationScope scope = 1003;
+          string scope_schema_url = 1004;
+          Provenance provenance = 1005;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          enum SeverityNumber {
+            SEVERITY_NUMBER_UNSPECIFIED = 0;
+            SEVERITY_NUMBER_TRACE = 1;
+            SEVERITY_NUMBER_TRACE2 = 2;
+            SEVERITY_NUMBER_TRACE3 = 3;
+            SEVERITY_NUMBER_TRACE4 = 4;
+            SEVERITY_NUMBER_DEBUG = 5;
+            SEVERITY_NUMBER_DEBUG2 = 6;
+            SEVERITY_NUMBER_DEBUG3 = 7;
+            SEVERITY_NUMBER_DEBUG4 = 8;
+            SEVERITY_NUMBER_INFO = 9;
+            SEVERITY_NUMBER_INFO2 = 10;
+            SEVERITY_NUMBER_INFO3 = 11;
+            SEVERITY_NUMBER_INFO4 = 12;
+            SEVERITY_NUMBER_WARN = 13;
+            SEVERITY_NUMBER_WARN2 = 14;
+            SEVERITY_NUMBER_WARN3 = 15;
+            SEVERITY_NUMBER_WARN4 = 16;
+            SEVERITY_NUMBER_ERROR = 17;
+            SEVERITY_NUMBER_ERROR2 = 18;
+            SEVERITY_NUMBER_ERROR3 = 19;
+            SEVERITY_NUMBER_ERROR4 = 20;
+            SEVERITY_NUMBER_FATAL = 21;
+            SEVERITY_NUMBER_FATAL2 = 22;
+            SEVERITY_NUMBER_FATAL3 = 23;
+            SEVERITY_NUMBER_FATAL4 = 24;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span
     name: gram-otel-v1-inbound-span
     spec:
@@ -601,6 +695,24 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-log-record-transformer
+      topic_proto_message: gram-otel-v1-inbound-log-record
+    name: gram-otel-v1-inbound-log-record-transformer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-inbound-log-record-transformer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-inbound-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
       topic_proto_message: gram-otel-v1-inbound-span
     name: gram-otel-v1-inbound-span-transformer
@@ -803,6 +915,21 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-authz-v1-challenge-ch-writer
     name: gram-authz-v1-challenge-ch-writer-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-log-record
+    name: gram-otel-v1-inbound-log-record
+    spec:
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-inbound-log-record
+  - labels:
+      dlq_for: gram-otel-v1-inbound-log-record-transformer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-log-record-transformer
+    name: gram-otel-v1-inbound-log-record-transformer-dlq
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator

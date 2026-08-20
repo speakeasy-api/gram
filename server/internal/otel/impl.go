@@ -20,13 +20,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
 
-const maxOTLPTraceExportBytes = 20 * constants.MiB
-const otelTracesProvenanceSource = "speakeasy"
+const maxOTLPExportBytes = 20 * constants.MiB
+const otelProvenanceSource = "speakeasy"
 
 type Service struct {
 	logger        *slog.Logger
 	tracer        trace.Tracer
 	auth          *auth.Auth
+	logPublisher  gcp.Publisher[*otelv1.InboundLogRecord]
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan]
 }
 
@@ -40,11 +41,13 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
+	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 ) *Service {
 	return &Service{
 		logger:        logger,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
 		auth:          auth.New(logger, db, sessions, authzEngine),
+		logPublisher:  logPublisher,
 		spanPublisher: spanPublisher,
 	}
 }

@@ -110,23 +110,31 @@ func TestLogRecordUnmarshalsAsOTLP(t *testing.T) {
 	}).Build()
 
 	raw, err := proto.Marshal(src)
-	require.NoError(t, err, "marshal gram log record")
+	require.NoError(t, err, "marshal canonical gram log record")
 
-	var got otlplogs.LogRecord
-	require.NoError(t, proto.Unmarshal(raw, &got), "unmarshal as OTLP log record")
+	for _, test := range logCopies() {
+		gramRecord := test.newRecord()
+		require.NoError(t, proto.Unmarshal(raw, gramRecord), "%s: unmarshal canonical gram log record", test.name)
 
-	require.Equal(t, uint64(1700000000000000001), got.GetTimeUnixNano())
-	require.Equal(t, uint64(1700000000000000002), got.GetObservedTimeUnixNano())
-	require.Equal(t, otlplogs.SeverityNumber_SEVERITY_NUMBER_ERROR, got.GetSeverityNumber())
-	require.Equal(t, "ERROR", got.GetSeverityText())
-	require.Equal(t, "boom", got.GetBody().GetStringValue())
-	require.Equal(t, uint32(3), got.GetDroppedAttributesCount())
-	require.Equal(t, uint32(1), got.GetFlags())
-	require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId())
-	require.Equal(t, []byte("01234567"), got.GetSpanId())
-	require.Equal(t, "some.event", got.GetEventName())
+		copyRaw, err := proto.Marshal(gramRecord)
+		require.NoError(t, err, "%s: marshal gram log record", test.name)
 
-	requireAttrsSurvived(t, got.GetAttributes())
+		var got otlplogs.LogRecord
+		require.NoError(t, proto.Unmarshal(copyRaw, &got), "%s: unmarshal as OTLP log record", test.name)
+
+		require.Equal(t, uint64(1700000000000000001), got.GetTimeUnixNano(), test.name)
+		require.Equal(t, uint64(1700000000000000002), got.GetObservedTimeUnixNano(), test.name)
+		require.Equal(t, otlplogs.SeverityNumber_SEVERITY_NUMBER_ERROR, got.GetSeverityNumber(), test.name)
+		require.Equal(t, "ERROR", got.GetSeverityText(), test.name)
+		require.Equal(t, "boom", got.GetBody().GetStringValue(), test.name)
+		require.Equal(t, uint32(3), got.GetDroppedAttributesCount(), test.name)
+		require.Equal(t, uint32(1), got.GetFlags(), test.name)
+		require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId(), test.name)
+		require.Equal(t, []byte("01234567"), got.GetSpanId(), test.name)
+		require.Equal(t, "some.event", got.GetEventName(), test.name)
+
+		requireAttrsSurvived(t, got.GetAttributes())
+	}
 }
 
 // requireAttrsSurvived checks that every AnyValue variant crossed with its type
@@ -325,18 +333,25 @@ func TestOTLPLogRecordUnmarshalsAsGram(t *testing.T) {
 	raw, err := proto.Marshal(src)
 	require.NoError(t, err, "marshal OTLP log record")
 
-	var got otelv1.LogRecord
-	require.NoError(t, proto.Unmarshal(raw, &got), "unmarshal as gram log record")
+	for _, test := range logCopies() {
+		gramRecord := test.newRecord()
+		require.NoError(t, proto.Unmarshal(raw, gramRecord), "%s: unmarshal as gram log record", test.name)
 
-	require.Equal(t, uint64(1700000000000000001), got.GetTimeUnixNano())
-	require.Equal(t, uint64(1700000000000000002), got.GetObservedTimeUnixNano())
-	require.Equal(t, otelv1.LogRecord_SEVERITY_NUMBER_WARN, got.GetSeverityNumber())
-	require.Equal(t, "WARN", got.GetSeverityText())
-	require.Equal(t, "hi", got.GetBody().GetStringValue())
-	require.Equal(t, uint32(1), got.GetFlags())
-	require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId())
-	require.Equal(t, []byte("01234567"), got.GetSpanId())
-	require.Equal(t, "some.event", got.GetEventName())
+		copyRaw, err := proto.Marshal(gramRecord)
+		require.NoError(t, err, "%s: marshal gram log record", test.name)
+
+		var got otlplogs.LogRecord
+		require.NoError(t, proto.Unmarshal(copyRaw, &got), "%s: unmarshal round-tripped bytes as OTLP log record", test.name)
+		require.Equal(t, uint64(1700000000000000001), got.GetTimeUnixNano(), test.name)
+		require.Equal(t, uint64(1700000000000000002), got.GetObservedTimeUnixNano(), test.name)
+		require.Equal(t, otlplogs.SeverityNumber_SEVERITY_NUMBER_WARN, got.GetSeverityNumber(), test.name)
+		require.Equal(t, "WARN", got.GetSeverityText(), test.name)
+		require.Equal(t, "hi", got.GetBody().GetStringValue(), test.name)
+		require.Equal(t, uint32(1), got.GetFlags(), test.name)
+		require.Equal(t, []byte("0123456789abcdef"), got.GetTraceId(), test.name)
+		require.Equal(t, []byte("01234567"), got.GetSpanId(), test.name)
+		require.Equal(t, "some.event", got.GetEventName(), test.name)
+	}
 }
 
 // TestGramSpanFieldsSurviveOTLPRoundTrip confirms Gram-only fields at 1000+ are

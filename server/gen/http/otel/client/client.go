@@ -17,6 +17,9 @@ import (
 
 // Client lists the otel service endpoint HTTP clients.
 type Client struct {
+	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
+	LogsDoer goahttp.Doer
+
 	// Traces Doer is the HTTP client used to make requests to the traces endpoint.
 	TracesDoer goahttp.Doer
 
@@ -40,12 +43,37 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		LogsDoer:            doer,
 		TracesDoer:          doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
 		decoder:             dec,
 		encoder:             enc,
+	}
+}
+
+// Logs returns an endpoint that makes HTTP requests to the otel service logs
+// server.
+func (c *Client) Logs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLogsRequest(c.encoder)
+		decodeResponse = DecodeLogsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLogsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LogsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("otel", "logs", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
