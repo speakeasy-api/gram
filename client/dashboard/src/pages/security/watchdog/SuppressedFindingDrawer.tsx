@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { CategoryLabel } from "../risk-ui";
 import { getRuleTitleFallback } from "../risk-utils";
+import { hasRevealableEvent } from "../unmask";
 import {
   isRestorable,
   suppressionDetail,
@@ -159,9 +160,15 @@ function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
  * `excluded_at IS NULL` and `false_positive_at IS NULL`), so the
  * click-to-reveal control the other finding surfaces use would be a button
  * that can never succeed here.
+ *
+ * Findings with nothing behind the fingerprint are skipped entirely, on the
+ * same test the Risk Events cells use: a prompt-based policy records the
+ * judge's verdict rather than a span of the message, and the server redacts
+ * that absent match to a sentinel. Rendering it would show the reader a
+ * placeholder where they'd expect evidence.
  */
 function EvidenceSection({ finding }: { finding: RiskResult }): JSX.Element {
-  if (!finding.matchRedacted) return <></>;
+  if (!hasRevealableEvent(finding.matchRedacted)) return <></>;
   return (
     <div className="space-y-4">
       <DetailRow label="Match">
@@ -170,11 +177,20 @@ function EvidenceSection({ finding }: { finding: RiskResult }): JSX.Element {
         </span>
       </DetailRow>
       <Text small muted>
-        The matched value can't be revealed while the finding is suppressed.
-        Restore it first.
+        {revealGuidance(finding)}
       </Text>
     </div>
   );
+}
+
+/** Why the value stays hidden, and what the reader can do about it — which
+ * differs by suppression: restoring is an action they have here, while a rule
+ * suppression outlives any single finding and has to be changed at the rule. */
+function revealGuidance(finding: RiskResult): string {
+  if (suppressionReason(finding) === "rule") {
+    return "The matched value stays hidden while an exclusion rule suppresses this finding. Change the rule to surface it again.";
+  }
+  return "The matched value can't be revealed while the finding is suppressed. Restore it first.";
 }
 
 function SessionSection({

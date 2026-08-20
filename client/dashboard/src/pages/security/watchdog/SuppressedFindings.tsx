@@ -12,7 +12,7 @@ import { useRiskListDismissedResults } from "@gram/client/react-query/riskListDi
 import { useRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { CategoryLabel } from "../risk-ui";
@@ -49,7 +49,8 @@ export function SuppressedFindings(): JSX.Element | null {
   const [pageIndex, setPageIndex] = useState(0);
   const [openFinding, setOpenFinding] = useState<RiskResult | null>(null);
 
-  const { restore, isOptimisticallyRestored } = useDismissFinding();
+  const { restore, optimisticallyRestoredIds, forgetRestored } =
+    useDismissFinding();
   const routes = useRoutes();
   const navigate = useNavigate();
   // Opening the session hands off to the same chat sheet the Risk Events log
@@ -85,12 +86,16 @@ export function SuppressedFindings(): JSX.Element | null {
   // page up until the requested one lands.
   const showingStalePage = listQuery.isPlaceholderData;
 
+  const fetchedResults = useMemo(
+    () => listQuery.data?.results ?? [],
+    [listQuery.data],
+  );
   const results = useMemo(
     () =>
-      (listQuery.data?.results ?? []).filter(
-        (result) => !isOptimisticallyRestored(result.id),
+      fetchedResults.filter(
+        (result) => !optimisticallyRestoredIds.has(result.id),
       ),
-    [listQuery.data, isOptimisticallyRestored],
+    [fetchedResults, optimisticallyRestoredIds],
   );
   // Rule suppressions carry no restore action, so they stay out of the
   // selection entirely — including out of select-all, which would otherwise
@@ -98,8 +103,36 @@ export function SuppressedFindings(): JSX.Element | null {
   const selectable = useMemo(() => results.filter(isRestorable), [results]);
   const selection = useRowSelection(selectable, resultId);
 
-  const total = listQuery.data?.totalCount ?? 0;
+  // Once a fresh first page comes back without a row we were hiding, the
+  // mirror has caught up and the entry has done its job. Expiring it here is
+  // what stops the set from hiding the same finding later, if it gets
+  // suppressed again while this page stays mounted. Scoped to the first page —
+  // which is where a restore leaves the pager — because a row's absence from
+  // some *other* page says nothing about whether the mirror has caught up.
+  const onFirstPage = pageIndex === 0;
+  useEffect(() => {
+    if (showingStalePage || !onFirstPage) return;
+    if (optimisticallyRestoredIds.size === 0) return;
+    const present = new Set(fetchedResults.map(resultId));
+    const settled = [...optimisticallyRestoredIds].filter(
+      (id) => !present.has(id),
+    );
+    if (settled.length > 0) forgetRestored(settled);
+  }, [
+    fetchedResults,
+    showingStalePage,
+    onFirstPage,
+    optimisticallyRestoredIds,
+    forgetRestored,
+  ]);
+
   const nextCursor = listQuery.data?.nextCursor;
+  // The server's count still includes anything hidden above, so subtract what
+  // this page is hiding — never the whole set, which would double-count once a
+  // refetch has already dropped those rows from the total. Display only: the
+  // cursor stack and pageIndex keep working in server-side terms.
+  const hiddenOnPage = fetchedResults.length - results.length;
+  const total = Math.max((listQuery.data?.totalCount ?? 0) - hiddenOnPage, 0);
 
   const restoreIds = (ids: string[]): Promise<boolean> => {
     selection.clear();
@@ -171,9 +204,12 @@ export function SuppressedFindings(): JSX.Element | null {
             onOpen={setOpenFinding}
           />
           <SuppressedPagination
-            rangeStart={pageIndex * PAGE_SIZE + 1}
-            rangeEnd={pageIndex * PAGE_SIZE + results.length}
-            total={total}
+            label={rangeLabel({
+              showingStalePage,
+              pageStart: pageIndex * PAGE_SIZE,
+              visible: results.length,
+              total,
+            })}
             canGoBack={pageIndex > 0 && !showingStalePage}
             canGoForward={nextCursor !== undefined && !showingStalePage}
             onBack={() => setPageIndex((prev) => prev - 1)}
@@ -462,18 +498,40 @@ function SuppressedRow({
   );
 }
 
-function SuppressedPagination({
-  rangeStart,
-  rangeEnd,
+/**
+ * Which rows the reader is looking at. While a stale page is on screen the
+ * positions are unknowable — pageIndex has moved on but the rows have not — so
+ * the label says so rather than naming a range that belongs to neither page.
+ */
+function rangeLabel({
+  showingStalePage,
+  pageStart,
+  visible,
   total,
+}: {
+  showingStalePage: boolean;
+  /** Zero-based index of this page's first row within the whole listing. */
+  pageStart: number;
+  visible: number;
+  total: number;
+}): string {
+  if (showingStalePage) return "Loading…";
+  // Every row on the page is optimistically hidden — there is no range to name,
+  // but the total still describes what is left elsewhere.
+  if (visible === 0) return `0 of ${total} suppressed`;
+  const start = Math.min(pageStart + 1, total);
+  const end = Math.min(pageStart + visible, total);
+  return `${start}–${end} of ${total} suppressed`;
+}
+
+function SuppressedPagination({
+  label,
   canGoBack,
   canGoForward,
   onBack,
   onForward,
 }: {
-  rangeStart: number;
-  rangeEnd: number;
-  total: number;
+  label: string;
   canGoBack: boolean;
   canGoForward: boolean;
   onBack: () => void;
@@ -482,7 +540,7 @@ function SuppressedPagination({
   return (
     <div className="flex items-center justify-between">
       <Text small muted>
-        {rangeStart}–{rangeEnd} of {total} suppressed
+        {label}
       </Text>
       <div className="flex items-center gap-1">
         <Button

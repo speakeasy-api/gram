@@ -64,7 +64,13 @@ export function useDismissFinding(): {
   dismiss: (results: RiskResult[], reason?: string) => void;
   restore: (ids: string[]) => Promise<boolean>;
   isOptimisticallyDismissed: (id: string) => boolean;
-  isOptimisticallyRestored: (id: string) => boolean;
+  /** Ids hidden from the suppressed listing because a restore is in flight or
+   * has landed ahead of the mirror. Exposed as the set rather than a predicate
+   * so the listing can also tell the hook which entries have expired. */
+  optimisticallyRestoredIds: ReadonlySet<string>;
+  /** Drop entries the listing has confirmed are gone, so the set can't
+   * outlive its purpose and hide the finding if it is suppressed again. */
+  forgetRestored: (ids: string[]) => void;
 } {
   const queryClient = useQueryClient();
   const [optimistic, setOptimistic] = useState<Set<string>>(new Set());
@@ -113,6 +119,17 @@ export function useDismissFinding(): {
         next.delete(id);
       });
       return next;
+    });
+  }, []);
+
+  const forgetRestored = useCallback((ids: string[]) => {
+    setOptimisticRestored((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      ids.forEach((id) => {
+        next.delete(id);
+      });
+      return next.size === prev.size ? prev : next;
     });
   }, []);
 
@@ -196,6 +213,10 @@ export function useDismissFinding(): {
       const ids = results.map((r) => r.id);
       if (ids.length === 0) return;
       addOptimistic(ids);
+      // Suppressing a finding that was restored earlier in this session ends
+      // the restore's claim on it: it belongs back on the suppressed listing,
+      // and a stale entry here would hide it there.
+      forgetRestored(ids);
 
       void runBatched(ids, (batchIds) =>
         markMutation.mutateAsync({
@@ -225,7 +246,14 @@ export function useDismissFinding(): {
         }
       });
     },
-    [markMutation, invalidateLists, undo, addOptimistic, removeOptimistic],
+    [
+      markMutation,
+      invalidateLists,
+      undo,
+      addOptimistic,
+      removeOptimistic,
+      forgetRestored,
+    ],
   );
 
   const isOptimisticallyDismissed = useCallback(
@@ -233,15 +261,11 @@ export function useDismissFinding(): {
     [optimistic],
   );
 
-  const isOptimisticallyRestored = useCallback(
-    (id: string) => optimisticRestored.has(id),
-    [optimisticRestored],
-  );
-
   return {
     dismiss,
     restore,
     isOptimisticallyDismissed,
-    isOptimisticallyRestored,
+    optimisticallyRestoredIds: optimisticRestored,
+    forgetRestored,
   };
 }

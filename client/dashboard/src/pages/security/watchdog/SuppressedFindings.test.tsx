@@ -29,13 +29,19 @@ vi.mock("@/pages/chatLogs/useChatDetailSheet", () => ({
 
 /** Ids the hook is optimistically treating as already restored. */
 const optimisticallyRestored = new Set<string>();
+const forgetRestored = vi.fn((ids: string[]) => {
+  ids.forEach((id) => {
+    optimisticallyRestored.delete(id);
+  });
+});
 
 vi.mock("../useDismissFinding", () => ({
   useDismissFinding: () => ({
     restore,
     dismiss: vi.fn(),
     isOptimisticallyDismissed: () => false,
-    isOptimisticallyRestored: (id: string) => optimisticallyRestored.has(id),
+    optimisticallyRestoredIds: optimisticallyRestored,
+    forgetRestored,
   }),
 }));
 
@@ -79,6 +85,7 @@ const RULE_ROW = makeResult({
   suppressedReason: "rule",
   exclusionId: "exclusion-1",
   suppressedAt: new Date("2026-08-10T12:00:00Z"),
+  matchRedacted: "<redacted len=20 sha=abc12345>",
 });
 
 const ORPHAN_RULE_ROW = makeResult({
@@ -107,6 +114,9 @@ const AUTOMATED_ROW = makeResult({
   ruleId: "private-key",
   suppressedReason: "automated",
   suppressedAt: new Date("2026-08-08T12:00:00Z"),
+  // A prompt-based finding records the judge's verdict, not a span of the
+  // message, so the server fingerprints an empty match.
+  matchRedacted: "<redacted len=0>",
 });
 
 // A rule id of their own so the rows above stay individually addressable by
@@ -211,6 +221,7 @@ beforeEach(() => {
   openChat.mockClear();
   refetch.mockClear();
   optimisticallyRestored.clear();
+  forgetRestored.mockClear();
   listState.isPlaceholderData = false;
   listState.isFetching = false;
   listState.isError = false;
@@ -396,6 +407,69 @@ describe("SuppressedFindings", () => {
     expect(screen.getAllByRole("button", { name: "Restore" })).toHaveLength(7);
   });
 
+  it("discounts optimistically hidden rows from the total and the range", () => {
+    optimisticallyRestored.add("manual-row");
+    optimisticallyRestored.add("automated-row");
+    renderSection();
+    expand();
+
+    // 14 suppressed server-side, two of them hidden here pending the mirror.
+    expect(screen.getByText("Suppressed · 12")).toBeTruthy();
+    expect(screen.getByText("1–8 of 12 suppressed")).toBeTruthy();
+  });
+
+  it("stops hiding a restored finding once the listing has caught up", () => {
+    optimisticallyRestored.add("manual-row");
+    // The mirror caught up: a fresh first page no longer carries the row.
+    PAGES[""] = {
+      ...FIRST_PAGE,
+      results: FIRST_PAGE.results.filter((row) => row.id !== "manual-row"),
+      totalCount: 13,
+    };
+
+    const { unmount } = renderSection();
+    expect(forgetRestored).toHaveBeenCalledWith(["manual-row"]);
+    expect(optimisticallyRestored.has("manual-row")).toBe(false);
+    unmount();
+
+    // Suppressed again while the page stayed mounted: it must be listed, not
+    // silently filtered out by a stale optimistic entry.
+    PAGES[""] = FIRST_PAGE;
+    renderSection();
+    expand();
+
+    expect(
+      screen.getByRole("button", {
+        name: `View suppressed finding ${getRuleTitleFallback("generic-api-key")}`,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("omits the evidence section when there is no match behind the fingerprint", () => {
+    renderSection();
+    expand();
+    openRow("private-key");
+
+    const panel = drawer();
+    expect(panel.queryByText("Match")).toBeNull();
+    expect(panel.queryByText("<redacted len=0>")).toBeNull();
+    // The rest of the finding still renders.
+    expect(panel.getByText("Suppressed automatically")).toBeTruthy();
+  });
+
+  it("points a rule-suppressed finding at its rule, not at a restore it cannot offer", () => {
+    renderSection();
+    expand();
+    openRow("aws-access-token");
+
+    const panel = drawer();
+    expect(
+      panel.getByText(/exclusion rule suppresses this finding/i),
+    ).toBeTruthy();
+    // "Restore it first" is impossible here — the drawer offers View rule.
+    expect(panel.queryByText(/restore it first/i)).toBeNull();
+  });
+
   it("locks the rows down while they belong to a page the pager has left", () => {
     // keepPreviousData holds the old page on screen while the requested one
     // loads, so acting on a row here would act on the wrong page's finding.
@@ -418,6 +492,9 @@ describe("SuppressedFindings", () => {
     expect(
       screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
     ).toBe(true);
+    // pageIndex has moved on but the rows have not, so naming a range would
+    // describe neither page.
+    expect(screen.getByText("Loading…")).toBeTruthy();
 
     openRow("generic-api-key");
     expect(screen.queryByRole("dialog")).toBeNull();
