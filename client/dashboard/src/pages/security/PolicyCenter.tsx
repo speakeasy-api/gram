@@ -629,8 +629,12 @@ function PolicyCenterContent() {
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
   // The Detection Rules tab's create sheet is owned here so the page-level
-  // primary action can open it.
+  // primary action can open it. Leaving the tab closes it — otherwise the
+  // sheet would silently reopen when the tab is next visited.
   const [ruleCreateOpen, setRuleCreateOpen] = useState(false);
+  useEffect(() => {
+    if (activeTab !== "detection-rules") setRuleCreateOpen(false);
+  }, [activeTab]);
 
   // Deep-link support: `?policy=<id>` redirects to that policy's detail page.
   // The command palette uses this since policies have no per-item list route.
@@ -1018,12 +1022,23 @@ function PolicyCenterContent() {
         },
       ]}
     >
-      <InsightsConfig
-        contextInfo={insightsContext}
-        suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
-        title="Policy insights"
-        subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
-      />
+      {/* The dock follows the active tab: the Detection Rules tab took over
+          the standalone page whose URL used to select these suggestions. */}
+      {activeTab === "detection-rules" ? (
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
+          title="Detection rule insights"
+          subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
+        />
+      ) : (
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
+          title="Policy insights"
+          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+        />
+      )}
       {activeTab === "policies" && policiesBody}
       {activeTab === "detection-rules" && (
         <DetectionRulesTab
