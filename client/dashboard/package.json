@@ -82,7 +82,7 @@
     "react-dom": "^19.2.8",
     "react-error-boundary": "^6.1.2",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^2.1.9",
+    "react-resizable-panels": "^4.12.2",
     "react-router": "^8.3.0",
     "recharts": "^3.9.2",
     "remark-gfm": "^4.0.1",

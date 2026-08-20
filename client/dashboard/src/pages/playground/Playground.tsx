@@ -328,7 +328,7 @@ function PlaygroundInner() {
               />
             )}
           </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={35} order={0}>
+          <ResizablePanel.Pane minSize={35}>
             <div className="flex h-full flex-col">
               {!selectedServer && (
                 <div className="flex h-full items-center justify-center">
