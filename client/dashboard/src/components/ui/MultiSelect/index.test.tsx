@@ -184,7 +184,7 @@ describe("MultiSelect option descriptions", () => {
 
 describe("MultiSelect disabled selected options", () => {
   it("allows a selected disabled option to be removed", () => {
-    const onValueChange = vi.fn();
+    const onValueChange = vi.fn<(values: string[]) => void>();
     render(
       <MultiSelect
         options={[
