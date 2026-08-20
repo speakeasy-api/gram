@@ -32,7 +32,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/docker/go-connections v0.6.0
 	github.com/ettle/strcase v0.2.0
-	github.com/exaring/otelpgx v0.10.0
+	github.com/exaring/otelpgx v0.11.1
 	github.com/failsafe-go/failsafe-go v0.9.6
 	github.com/gitleaks/go-gitdiff v0.9.1
 	github.com/go-chi/chi/v5 v5.3.1
