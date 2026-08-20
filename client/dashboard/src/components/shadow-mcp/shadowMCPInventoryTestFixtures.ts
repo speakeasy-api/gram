@@ -36,7 +36,7 @@ export function testAccessSummary(
         decision: undefined,
         decisionCoverage: "none",
       };
-    default:
+    case "none":
       return {
         state: "unenforced",
         allowedFor: "none",
