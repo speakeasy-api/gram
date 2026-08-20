@@ -1,0 +1,50 @@
+server/internal/thirdparty/workos/queries.sql
+  s_146664733c831b::t_b9b6fed116cada 275-278,281-283,286-288
+  s_146664733c831b::t_f64b3f6ea6a38c 263,267-268,270-271,284-285
+  s_146664733c831b::t_00f2adc9dff5b8 255-262,264-266,269,272-274
+  s_146664733c831b::t_adfbae6bb48a42 279-280
+server/internal/agent/impl.go
+  s_146664733c831b::t_b9b6fed116cada 113-117,252,254
+  s_146664733c831b::t_00f2adc9dff5b8 251,253
+  s_146664733c831b::t_f14294350c24d0 36,250
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_146664733c831b::t_6e3285f0f1a4c5 381-477
+server/internal/plugins/audience.go
+  s_146664733c831b::t_f14294350c24d0 1-74
+server/internal/agent/setup_test.go
+  s_146664733c831b::t_e58829db8ee375 231-235,242
+  s_4381c145a71162::t_db2ee561470db6 263
+  s_146664733c831b::t_19d6f592e27b36 32,213-230,236-241,243-262
+server/internal/agent/getplugins_test.go
+  s_146664733c831b::t_19d6f592e27b36 135-141,143,145-148
+  s_4381c145a71162::t_915e89e37849e6 243
+  s_146664733c831b::t_b26e0b23913e93 5,17,149-150,169-189,191-236,238-242
+  s_146664733c831b::t_d9609923efac45 7
+  s_146664733c831b::t_54256260b748a8 142
+  s_146664733c831b::t_e58829db8ee375 151-159,161,163-168
+  s_146664733c831b::t_f14294350c24d0 14,144,160,162,190,237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7a699adb326344ad52fb69e6eb8cf49a092bd0db",
+  "prompts": {},
+  "sessions": {
+    "s_146664733c831b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00edd-cfd5-79c0-8f97-21f359bc9f3e",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    },
+    "s_4381c145a71162": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00eef-563f-7c70-92dc-116b98fb26fe",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

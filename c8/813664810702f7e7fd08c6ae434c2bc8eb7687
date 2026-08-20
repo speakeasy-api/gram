@@ -1,0 +1,23 @@
+server/internal/thirdparty/workos/queries.sql
+  s_5987dba16de244::t_37bb6fc045a6ad 277
+server/internal/agent/getplugins_test.go
+  s_5987dba16de244::t_7841ec71d186d1 159-165
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_5987dba16de244::t_8a61f7d0c8f037 433
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c8813664810702f7e7fd08c6ae434c2bc8eb7687",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

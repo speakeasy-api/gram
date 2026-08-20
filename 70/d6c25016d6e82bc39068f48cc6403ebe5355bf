@@ -1,0 +1,37 @@
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  s_146664733c831b::t_e1fc24d61f8192 3,19,38,45,58,63,65-70,72-78
+  s_146664733c831b::t_b4093be2559734 33-37,39-44,46
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_146664733c831b::t_09632e6d6c35ec 39,94-99,214,223-226,516,544
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_146664733c831b::t_0806337adb9354 2,26-31,110-120
+  s_146664733c831b::t_8d0ce6afcecf1b 6
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_146664733c831b::t_6d13474a80ddc8 3-8,19-20,26-35,44-46,102-105,113-114,116,119-122,124-137,139-140,142,144,162,171-178,182-194,201-204,215-216
+  s_146664733c831b::t_39e71223aec8ad 179-181,195-198,205-207
+  s_146664733c831b::t_75adb9b4e5cdbe 25,36-43,117
+  s_146664733c831b::t_a42640200ac5a1 2,118,123,141
+client/dashboard/src/pages/plugins/principals.ts
+  s_146664733c831b::t_e1fc24d61f8192 3,6,21-22,24-31,41-42,59,67-70,117-120,122-124,140-144
+  s_146664733c831b::t_6d18282dc6d6fa 121
+client/dashboard/src/pages/plugins/PluginAssignmentsList.tsx
+  s_146664733c831b::t_e1fc24d61f8192 4,22,27,43
+client/dashboard/src/components/plugin-detail-sidebar-nav.tsx
+  s_146664733c831b::t_880250b596c1a3 25,36,62,73-76,189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "70d6c25016d6e82bc39068f48cc6403ebe5355bf",
+  "prompts": {},
+  "sessions": {
+    "s_146664733c831b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00edd-cfd5-79c0-8f97-21f359bc9f3e",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
