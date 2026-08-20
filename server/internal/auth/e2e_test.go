@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -158,7 +160,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cacheSuffix)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, authzProvisioner, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cacheSuffix)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cacheSuffix,
 		idpClient, billingClient, resolver,
@@ -253,6 +255,122 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
 	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
 
+}
+
+// TestE2E_Callback_NewOrganizationProvisionsAdminRBACForFirstMember is the
+// AGE-3324 regression: discovering a WorkOS org on login must seed built-in
+// roles/grants and assign the membership's WorkOS role, otherwise org:admin
+// gates block the only member.
+func TestE2E_Callback_NewOrganizationProvisionsAdminRBACForFirstMember(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_RBAC_ADMIN"
+		workosOrgID  = "org_01WORKOS_RBAC_ADMIN"
+		orgName      = "RBAC Admin Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01RBAC_ADMIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "admin@rbac.example",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+	require.Equal(t, expectedOrgID, authCtx.ActiveOrganizationID)
+
+	accessQueries := accessRepo.New(inst.conn)
+	_, err = accessQueries.GetGlobalRoleBySlug(ctx, authz.SystemRoleAdmin)
+	require.NoError(t, err, "built-in admin role must be seeded on login")
+	_, err = accessQueries.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err, "built-in member role must be seeded on login")
+
+	require.Equal(t, []string{authz.SystemRoleAdmin}, assignedRoleSlugs(t, ctx, inst.conn, expectedOrgID, authCtx.UserID))
+
+	roleRows, err := accessQueries.ListMemberRolePrincipalsByUser(ctx, accessRepo.ListMemberRolePrincipalsByUserParams{
+		OrganizationID: expectedOrgID,
+		UserID:         authCtx.UserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, roleRows, 1)
+	adminGrants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedOrgID, roleRows[0].PrincipalUrn)
+	require.NoError(t, err)
+	require.NotEmpty(t, adminGrants, "admin principal grants must be seeded on login")
+
+	require.NoError(t, requirePreparedOrgScope(t, inst.conn, authCtx, authz.ScopeOrgAdmin))
+
+	require.NoError(t, inst.identityResolver.SyncMembershipsFromWorkOS(ctx, authCtx.UserID, workosUserID))
+	require.Equal(t, []string{authz.SystemRoleAdmin}, assignedRoleSlugs(t, ctx, inst.conn, expectedOrgID, authCtx.UserID))
+}
+
+// TestE2E_Callback_NewOrganizationSyncsMemberRoleWithoutAdmin proves login
+// copies the WorkOS role slug and does not invent admin access.
+func TestE2E_Callback_NewOrganizationSyncsMemberRoleWithoutAdmin(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_RBAC_MEMBER"
+		workosOrgID  = "org_01WORKOS_RBAC_MEMBER"
+		orgName      = "RBAC Member Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01RBAC_MEMBER", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "member@rbac.example",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+	require.Equal(t, expectedOrgID, authCtx.ActiveOrganizationID)
+	require.Equal(t, []string{authz.SystemRoleMember}, assignedRoleSlugs(t, ctx, inst.conn, expectedOrgID, authCtx.UserID))
+
+	err = requirePreparedOrgScope(t, inst.conn, authCtx, authz.ScopeOrgAdmin)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 
 func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {
@@ -1480,4 +1598,33 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 	logoutResult, err := inst.service.Logout(ctx, &gen.LogoutPayload{})
 	require.NoError(t, err)
 	assert.Empty(t, logoutResult.SessionCookie)
+}
+
+func assignedRoleSlugs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID string) []string {
+	t.Helper()
+
+	rows, err := accessRepo.New(conn).ListMemberRolePrincipalsByUser(ctx, accessRepo.ListMemberRolePrincipalsByUserParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	require.NoError(t, err)
+	slugs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		slugs = append(slugs, row.RoleSlug)
+	}
+	return slugs
+}
+
+func requirePreparedOrgScope(t *testing.T, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext, scope authz.Scope) error {
+	t.Helper()
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	ctx, err := engine.PrepareContext(contextvalues.SetAuthContext(t.Context(), authCtx))
+	require.NoError(t, err)
+	return engine.Require(ctx, authz.Check{
+		Scope:        scope,
+		ResourceKind: "",
+		ResourceID:   authCtx.ActiveOrganizationID,
+		Dimensions:   nil,
+	})
 }

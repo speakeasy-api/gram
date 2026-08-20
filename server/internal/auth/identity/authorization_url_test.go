@@ -24,6 +24,7 @@ func newURLResolver(t *testing.T, idpBaseURL, idpClientID string) *identity.Reso
 		idpClientID,
 		nil, // idpClient
 		nil, // workosClient
+		nil, // systemRoleSeeder
 		nil, // orgRepo
 		nil, // userRepo
 		nil, // pylon

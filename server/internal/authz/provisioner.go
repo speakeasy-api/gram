@@ -30,6 +30,12 @@ func NewProvisioner(db *pgxpool.Pool) *Provisioner {
 	return &Provisioner{db: db}
 }
 
+// SeedSystemRoleGrants bootstraps the built-in roles and grants for an
+// organization. Idempotent: existing grants are preserved.
+func (p *Provisioner) SeedSystemRoleGrants(ctx context.Context, organizationID string) error {
+	return SeedSystemRoleGrants(ctx, p.db, organizationID)
+}
+
 // ProvisionOrganizationAdmin seeds the built-in roles and grants, then assigns
 // the organization creator to the admin role in the same transaction.
 func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizationID string, admin InitialOrganizationAdmin) error {

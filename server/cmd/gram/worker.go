@@ -749,6 +749,7 @@ func newWorkerCommand() *cli.Command {
 				c.String("idp-client-id"),
 				idpClient,
 				nil, // no WorkOS client in worker
+				nil, // no system-role seeder in worker
 				orgRepo.New(db),
 				userRepo.New(db),
 				pylonClient,

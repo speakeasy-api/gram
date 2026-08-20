@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -81,6 +82,13 @@ type AuthenticatedUser struct {
 	ExternalID        string
 }
 
+// SystemRoleSeeder bootstraps built-in RBAC roles and grants for an
+// organization. Callers inject authz.Provisioner so this leaf package does
+// not import authz.
+type SystemRoleSeeder interface {
+	SeedSystemRoleGrants(ctx context.Context, organizationID string) error
+}
+
 // WorkOSClient is the subset of workos.Client needed for identity resolution:
 // org membership sync, cross-system ID synchronization, and org provisioning.
 type WorkOSClient interface {
@@ -119,17 +127,18 @@ func (u *IDPUserInfo) ImpersonatorEmail() string {
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
 // membership sync, user-info caching, and authorization URL construction.
 type Resolver struct {
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
-	idpBaseURL    string
-	idpClientID   string
-	idpClient     IDPClient
-	workosClient  WorkOSClient
-	orgRepo       *orgRepo.Queries
-	userRepo      *userRepo.Queries
-	pylon         *pylon.Pylon
-	posthog       *posthog.Posthog
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	userInfoCache    cache.TypedCacheObject[sessions.CachedUserInfo]
+	idpBaseURL       string
+	idpClientID      string
+	idpClient        IDPClient
+	workosClient     WorkOSClient
+	systemRoleSeeder SystemRoleSeeder
+	orgRepo          *orgRepo.Queries
+	userRepo         *userRepo.Queries
+	pylon            *pylon.Pylon
+	posthog          *posthog.Posthog
 }
 
 func NewResolver(
@@ -140,6 +149,7 @@ func NewResolver(
 	idpClientID string,
 	idpClient IDPClient,
 	workosClient WorkOSClient,
+	systemRoleSeeder SystemRoleSeeder,
 	orgRepo *orgRepo.Queries,
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
@@ -148,17 +158,18 @@ func NewResolver(
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
 	return &Resolver{
-		logger:        logger,
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/identity"),
-		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, suffix),
-		idpBaseURL:    idpBaseURL,
-		idpClientID:   idpClientID,
-		idpClient:     idpClient,
-		workosClient:  workosClient,
-		orgRepo:       orgRepo,
-		userRepo:      userRepo,
-		pylon:         pylon,
-		posthog:       posthog,
+		logger:           logger,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/identity"),
+		userInfoCache:    cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, suffix),
+		idpBaseURL:       idpBaseURL,
+		idpClientID:      idpClientID,
+		idpClient:        idpClient,
+		workosClient:     workosClient,
+		systemRoleSeeder: systemRoleSeeder,
+		orgRepo:          orgRepo,
+		userRepo:         userRepo,
+		pylon:            pylon,
+		posthog:          posthog,
 	}
 }
 
@@ -381,8 +392,10 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	}, nil
 }
 
-// SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
-// and invalidates cached user info so the next read observes the synced rows.
+// SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships,
+// seeds built-in RBAC roles and grants, syncs the current WorkOS membership
+// role slugs into organization_role_assignments, and invalidates cached user
+// info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
 	if r.workosClient == nil || workosUserID == "" {
 		return nil
@@ -413,10 +426,55 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return fmt.Errorf("set user workos memberships: %w", err)
 	}
 
+	if err := r.provisionAccessFromMemberships(ctx, gramUserID, workosUserID, members); err != nil {
+		return err
+	}
+
 	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
 	return nil
+}
+
+// provisionAccessFromMemberships seeds system roles/grants and copies the
+// current WorkOS role slugs into organization_role_assignments. It only
+// assigns roles WorkOS already granted; it does not invent admin access.
+func (r *Resolver) provisionAccessFromMemberships(ctx context.Context, gramUserID, workosUserID string, members []workos.Member) error {
+	if r.systemRoleSeeder == nil {
+		return nil
+	}
+
+	for _, m := range members {
+		org, err := r.orgRepo.GetOrganizationByWorkosID(ctx, pgtype.Text{String: m.OrganizationID, Valid: true})
+		if err != nil {
+			return fmt.Errorf("lookup org by workos id %q: %w", m.OrganizationID, err)
+		}
+
+		if err := r.systemRoleSeeder.SeedSystemRoleGrants(ctx, org.ID); err != nil {
+			return fmt.Errorf("seed system roles for organization %q: %w", org.ID, err)
+		}
+
+		if err := r.orgRepo.SyncUserOrganizationRoleAssignments(ctx, orgRepo.SyncUserOrganizationRoleAssignmentsParams{
+			OrganizationID:     org.ID,
+			WorkosUserID:       workosUserID,
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosMembershipID: conv.ToPGTextEmpty(m.ID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(membershipUpdatedAt(m)),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+			WorkosRoleSlugs:    m.RoleSlugs,
+		}); err != nil {
+			return fmt.Errorf("sync role assignments for organization %q: %w", org.ID, err)
+		}
+	}
+
+	return nil
+}
+
+func membershipUpdatedAt(m workos.Member) time.Time {
+	if t, err := time.Parse(time.RFC3339, m.UpdatedAt); err == nil {
+		return t.UTC()
+	}
+	return time.Now().UTC()
 }
 
 func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {

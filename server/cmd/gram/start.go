@@ -724,6 +724,7 @@ func newStartCommand() *cli.Command {
 				c.String("idp-client-id"),
 				idpClient,
 				workosClient,
+				authzProvisioner,
 				orgRepo.New(db),
 				userRepo.New(db),
 				pylonClient,

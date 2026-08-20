@@ -60,6 +60,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		"test-client-id",
 		idpClient,
 		nil, // no WorkOS client in tests
+		nil, // no system-role seeder in tests
 		orgRepo.New(db),
 		userRepo.New(db),
 		fakePylon,
