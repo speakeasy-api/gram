@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func TestNewUnsafePolicy(t *testing.T) {
@@ -164,28 +164,177 @@ func TestPolicy_DialerAllowedCIDRBlocksOverridesBlock(t *testing.T) {
 	require.ErrorIs(t, dialer.ControlContext(ctx, "tcp", "10.1.0.5:80", nil), guardian.ErrBlockedIP)
 }
 
-func TestPolicy_ClientWrapsTransportWithOtel(t *testing.T) {
+func TestPolicy_ClientRejectsNonHTTPURL(t *testing.T) {
 	t.Parallel()
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	client := policy.Client()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "ftp://8.8.8.8/file", nil)
+	require.NoError(t, err)
 
-	require.NotNil(t, client)
-	require.NotNil(t, client.Transport)
-
-	_, ok := client.Transport.(*otelhttp.Transport)
-	require.True(t, ok)
+	resp, err := policy.Client().Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.ErrorContains(t, err, "ftp: url scheme not allowed")
 }
 
-func TestPolicy_PooledClientWrapsTransportWithOtel(t *testing.T) {
+func TestPolicy_PooledClientRejectsNonHTTPURL(t *testing.T) {
 	t.Parallel()
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	client := policy.PooledClient()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "file:///etc/passwd", nil)
+	require.NoError(t, err)
 
-	require.NotNil(t, client)
-	require.NotNil(t, client.Transport)
+	resp, err := policy.PooledClient().Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.ErrorContains(t, err, "file: url scheme not allowed")
+}
 
-	_, ok := client.Transport.(*otelhttp.Transport)
-	require.True(t, ok)
+func TestPolicy_ClientRejectsHostnameWithAnyBlockedAddress(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+			LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+				return []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("127.0.0.1")}, nil
+			},
+		})),
+	)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://split.example.com/file", nil)
+	require.NoError(t, err)
+
+	resp, err := policy.Client().Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_PooledClientRejectsHostnameWithAnyBlockedAddress(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+			LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+				return []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("127.0.0.1")}, nil
+			},
+		})),
+	)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://split.example.com/file", nil)
+	require.NoError(t, err)
+
+	resp, err := policy.PooledClient().Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_ClientRejectsHTTPByDefault(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://8.8.8.8/file", nil)
+	require.NoError(t, err)
+
+	resp, err := policy.Client().Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.ErrorContains(t, err, "http: url scheme not allowed")
+}
+
+func TestPolicy_ClientAllowsConfiguredHTTP(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	client := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).Client(
+		guardian.WithAllowedCIDRBlocks("127.0.0.0/8"),
+		guardian.WithAllowedSchemes(" HTTP "),
+	)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestPolicy_UnsafeClientAllowsHTTPByDefault(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := policy.PooledClient().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestPolicy_ClientsReuseValidatedResolutionWhenDialing(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	_, port, err := net.SplitHostPort(server.Listener.Addr().String())
+	require.NoError(t, err)
+
+	var lookups atomic.Int64
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+			LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+				require.Equal(t, "localhost", host)
+				lookups.Add(1)
+				return []net.IP{net.ParseIP("127.0.0.1")}, nil
+			},
+		})),
+	)
+	rawURL := "http://" + net.JoinHostPort("localhost", port)
+	clients := []*guardian.HTTPClient{
+		policy.Client(
+			guardian.WithAllowedCIDRBlocks("127.0.0.0/8"),
+			guardian.WithAllowedSchemes("http"),
+		),
+		policy.PooledClient(
+			guardian.WithAllowedCIDRBlocks("127.0.0.0/8"),
+			guardian.WithAllowedSchemes("http"),
+		),
+	}
+
+	for index, client := range clients {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, rawURL, nil)
+		require.NoError(t, err)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, int64(index+1), lookups.Load())
+	}
 }
 
 func TestDefaultPolicyBlocksPrivateIPs(t *testing.T) {
@@ -314,7 +463,7 @@ func TestPolicy_HTTPClientWithCustomPolicy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that the custom policy blocks the server
-	client := customPolicy.Client()
+	client := customPolicy.Client(guardian.WithAllowedSchemes("http"))
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, serverURL, nil)
 	require.NoError(t, err)
 
@@ -350,7 +499,7 @@ func TestPolicy_PooledHTTPClientWithFakeNetwork(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	client := policy.PooledClient()
+	client := policy.PooledClient(guardian.WithAllowedSchemes("http"))
 
 	// Test successful request to the test server
 	serverURL := fmt.Sprintf("http://%s:%s", host, port)

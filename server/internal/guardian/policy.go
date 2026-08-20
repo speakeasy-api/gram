@@ -4,11 +4,11 @@
 //
 // It addresses these concerns:
 //
-//   - SSRF prevention: outbound connections are checked at the dialer level
-//     against a configurable blocklist of CIDR ranges (all RFC-defined private
-//     and reserved ranges by default). Because the check runs inside
-//     [net.Dialer.ControlContext] after DNS resolution, it cannot be bypassed
-//     by DNS rebinding.
+//   - SSRF prevention: every request URL is resolved and checked against a
+//     configurable blocklist of CIDR ranges (all RFC-defined private and
+//     reserved ranges by default). The selected connection IP is checked again
+//     inside [net.Dialer.ControlContext], preventing DNS rebinding between URL
+//     validation and connection establishment.
 //
 //   - Safe HTTP transports: [net/http.DefaultTransport] and
 //     [net/http.DefaultClient] are package-level globals that any code can
@@ -30,12 +30,13 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
-	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,6 +55,8 @@ var (
 	ErrBadHost   = fmt.Errorf("bad host")
 	ErrBlockedIP = fmt.Errorf("blocked ip")
 )
+
+const defaultDialFallbackDelay = 300 * time.Millisecond
 
 var defaultBlockedCIDRBlocks = []*net.IPNet{
 	// Source: https://www.rfc-editor.org/rfc/rfc5735
@@ -131,9 +134,9 @@ func DefaultRetryConfig() *RetryConfig {
 type httpClientOptions struct {
 	otelHTTPOptions   []otelhttp.Option
 	retryConfig       *RetryConfig
-	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
 	resilience        *resilienceOptions
+	allowedSchemes    map[string]struct{}
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -186,13 +189,40 @@ func WithRetryConfig(config *RetryConfig) func(*httpClientOptions) {
 	}
 }
 
+// WithAllowedSchemes replaces the policy's client URL scheme defaults with
+// HTTPS plus the specified schemes. Scheme names are case-insensitive and
+// surrounding whitespace is ignored. If no non-empty schemes remain, the
+// policy defaults are preserved. The restriction is enforced for every
+// request, including redirects and retry attempts.
+func WithAllowedSchemes(schemes ...string) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		mapped := make(map[string]struct{})
+		for _, scheme := range schemes {
+			scheme = strings.ToLower(strings.TrimSpace(scheme))
+			if scheme == "" {
+				continue
+			}
+			mapped[scheme] = struct{}{}
+		}
+
+		if len(mapped) == 0 {
+			return
+		}
+
+		mapped["https"] = struct{}{}
+
+		o.allowedSchemes = mapped
+	}
+}
+
 type Policy struct {
-	tracerProvider    trace.TracerProvider
-	blockedCIDRBlocks []*net.IPNet
-	resolver          dns.Resolver
-	limiter           Limiter
-	breaker           Breaker
-	tlsRootCAs        *x509.CertPool
+	tracerProvider        trace.TracerProvider
+	blockedCIDRBlocks     []*net.IPNet
+	resolver              dns.Resolver
+	limiter               Limiter
+	breaker               Breaker
+	tlsRootCAs            *x509.CertPool
+	defaultAllowedSchemes map[string]struct{}
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -251,12 +281,13 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 	// no-op defaults make resilience enforcement strictly opt-in via
 	// WithLimiter/WithBreaker.
 	policy := &Policy{
-		tracerProvider:    tracerProvider,
-		blockedCIDRBlocks: blockedCIDRBlocks,
-		resolver:          dns.NewNetResolver(),
-		limiter:           nil,
-		breaker:           nil,
-		tlsRootCAs:        nil,
+		tracerProvider:        tracerProvider,
+		blockedCIDRBlocks:     blockedCIDRBlocks,
+		resolver:              dns.NewNetResolver(),
+		limiter:               nil,
+		breaker:               nil,
+		tlsRootCAs:            nil,
+		defaultAllowedSchemes: nil,
 	}
 
 	for _, option := range options {
@@ -281,9 +312,11 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 }
 
 // NewUnsafePolicy creates a new Policy with the provided disallowed CIDR blocks.
-// It returns an error if any of the CIDR blocks cannot be parsed.
-// Use NewDefaultPolicy for a safe default that blocks common private and
-// reserved IP ranges.
+// Clients built from this policy permit HTTP and HTTPS by default, preserving
+// the unrestricted transport behavior required by local development and tests.
+// It returns an error if any of the CIDR blocks cannot be parsed. Use
+// NewDefaultPolicy for a safe default that blocks common private and reserved
+// IP ranges and permits HTTPS only.
 func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string, options ...func(*Policy)) (*Policy, error) {
 	var disallowedBlocks []*net.IPNet
 	for _, cidr := range disallowedCIDRBlocks {
@@ -294,22 +327,31 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return newPolicy(tracerProvider, disallowedBlocks, options...), nil
+	policy := newPolicy(tracerProvider, disallowedBlocks, options...)
+	policy.defaultAllowedSchemes = map[string]struct{}{
+		"http":  {},
+		"https": {},
+	}
+	return policy, nil
 }
 
-// PooledClient returns an [http.Client] backed by a pooled transport that
-// keeps idle connections alive for reuse. It is appropriate for long-lived
-// clients that make repeated requests to the same host(s). Do not use it for
-// short-lived or one-off requests as idle connections hold open file
-// descriptors until they time out.
+// PooledClient returns an [http.Client] that validates every request URL and
+// uses a pooled transport that keeps idle connections alive for reuse.
+// [NewDefaultPolicy] permits HTTPS requests by default; [NewUnsafePolicy]
+// permits HTTP and HTTPS. Use [WithAllowedSchemes] to replace those defaults.
+// PooledClient is appropriate for long-lived clients that make repeated
+// requests to the same host(s). Do not use it for short-lived or one-off
+// requests as idle connections hold open file descriptors until they time out.
 func (p *Policy) PooledClient(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultPooledTransport(), options...)
 }
 
-// Client returns an [http.Client] that opens a new connection for every
-// request (keepalives disabled). Because connections are never held idle,
-// the client cannot leak file descriptors, making it safe for short-lived
-// or one-off requests where connection reuse is unnecessary.
+// Client returns an [http.Client] that validates every request URL and opens a
+// new connection for every request (keepalives disabled). [NewDefaultPolicy]
+// permits HTTPS requests by default; [NewUnsafePolicy] permits HTTP and HTTPS.
+// Use [WithAllowedSchemes] to replace those defaults. Because connections are
+// never held idle, the client cannot leak file descriptors, making it safe for
+// short-lived or one-off requests where connection reuse is unnecessary.
 func (p *Policy) Client(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultTransport(), options...)
 }
@@ -320,14 +362,18 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		option(&opts)
 	}
 
-	dialOpts := []func(*dialerOptions){}
-	if opts.resolver != nil {
-		dialOpts = append(dialOpts, WithDialerResolver(opts.resolver))
+	if opts.allowedSchemes == nil {
+		opts.allowedSchemes = p.defaultAllowedSchemes
 	}
+	if opts.allowedSchemes == nil {
+		opts.allowedSchemes = map[string]struct{}{"https": {}}
+	}
+
+	dialOpts := []func(*dialerOptions){}
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
-	transport.DialContext = p.Dialer(dialOpts...).DialContext
+	transport.DialContext = p.clientDialContext(dialOpts...)
 
 	// Merge into any existing transport TLS config rather than replacing
 	// it, so a future option that sets client certificates or pinning is
@@ -364,6 +410,14 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 			breaker: p.breaker,
 		}
 	}
+	// URL validation is the outermost transport layer so malformed and blocked
+	// requests do not consume resilience capacity or create outbound spans.
+	roundTripper = &validatingTransport{
+		next:              roundTripper,
+		policy:            p,
+		allowedSchemes:    opts.allowedSchemes,
+		allowedCIDRBlocks: opts.allowedCIDRBlocks,
+	}
 
 	if opts.retryConfig == nil {
 		return &http.Client{Transport: roundTripper}
@@ -396,6 +450,38 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	return retryClient.StandardClient()
+}
+
+type resolvedRequestHost struct {
+	host string
+	ips  []net.IP
+}
+
+type resolvedRequestHostContextKey struct{}
+
+type validatingTransport struct {
+	next              http.RoundTripper
+	policy            *Policy
+	allowedSchemes    map[string]struct{}
+	allowedCIDRBlocks []*net.IPNet
+}
+
+func (t *validatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ips, err := t.policy.validateURL(req.Context(), req.URL, t.allowedSchemes, t.allowedCIDRBlocks)
+	if err != nil {
+		return nil, fmt.Errorf("validate request url: %w", err)
+	}
+
+	ctx := context.WithValue(req.Context(), resolvedRequestHostContextKey{}, resolvedRequestHost{
+		host: req.URL.Hostname(),
+		ips:  ips,
+	})
+	resp, err := t.next.RoundTrip(req.Clone(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("round trip: %w", err)
+	}
+
+	return resp, nil
 }
 
 type dialerOptions struct {
@@ -453,17 +539,162 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
 			}
 
-			// A client-scoped allowlist overrides the blocklist for trusted,
-			// non-user-controlled destinations (e.g. GKE runner pod IPs).
-			for _, block := range opts.allowedCIDRBlocks {
-				if block.Contains(ip) {
-					return nil
+			return p.checkIP(ip, opts.allowedCIDRBlocks)
+		},
+	}
+}
+func (p *Policy) clientDialContext(options ...func(*dialerOptions)) func(context.Context, string, string) (net.Conn, error) {
+	var opts dialerOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	dialer := p.Dialer(options...)
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("%s: split host port: %w: %w", address, ErrBadHost, err)
+		}
+
+		var ips []net.IP
+		if ip := net.ParseIP(host); ip != nil {
+			if err := p.checkIP(ip, opts.allowedCIDRBlocks); err != nil {
+				return nil, err
+			}
+			ips = []net.IP{ip}
+		} else if resolved, ok := ctx.Value(resolvedRequestHostContextKey{}).(resolvedRequestHost); ok &&
+			strings.EqualFold(resolved.host, host) {
+			ips = resolved.ips
+		} else {
+			ips, err = p.resolveHost(ctx, host, opts.allowedCIDRBlocks)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return dialResolvedAddresses(ctx, dialer, network, port, ips)
+	}
+}
+
+type dialResult struct {
+	conn net.Conn
+	err  error
+}
+
+// dialResolvedAddresses races already-validated IPs with the same stagger used
+// by net.Dialer's Happy Eyeballs path. All attempts share the dialer's timeout,
+// so a multi-address host cannot multiply the connection deadline.
+func dialResolvedAddresses(
+	ctx context.Context,
+	dialer *net.Dialer,
+	network string,
+	port string,
+	ips []net.IP,
+) (net.Conn, error) {
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("dial resolved addresses: %w: no addresses", ErrBadHost)
+	}
+
+	ips = interleaveIPFamilies(ips)
+
+	var dialCtx context.Context
+	var cancel context.CancelFunc
+	if dialer.Timeout > 0 {
+		dialCtx, cancel = context.WithTimeout(ctx, dialer.Timeout)
+	} else {
+		dialCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
+	fallbackDelay := dialer.FallbackDelay
+	if fallbackDelay == 0 {
+		fallbackDelay = defaultDialFallbackDelay
+	}
+
+	results := make(chan dialResult, len(ips))
+	for index, ip := range ips {
+		target := net.JoinHostPort(ip.String(), port)
+		go func(delay time.Duration) {
+			if delay > 0 {
+				timer := time.NewTimer(delay)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+				case <-dialCtx.Done():
+					results <- dialResult{conn: nil, err: dialCtx.Err()}
+					return
 				}
 			}
 
-			return p.checkIP(ip)
-		},
+			conn, err := dialer.DialContext(dialCtx, network, target)
+			if err != nil {
+				err = fmt.Errorf("%s: %w", target, err)
+			}
+			results <- dialResult{conn: conn, err: err}
+		}(time.Duration(index) * fallbackDelay)
 	}
+
+	dialErrors := make([]error, 0, len(ips))
+	for remaining := len(ips); remaining > 0; remaining-- {
+		select {
+		case result := <-results:
+			if result.err == nil {
+				cancel()
+				go closeLateDialConnections(results, remaining-1)
+				return result.conn, nil
+			}
+			dialErrors = append(dialErrors, result.err)
+		case <-dialCtx.Done():
+			dialErrors = append(dialErrors, dialCtx.Err())
+			go closeLateDialConnections(results, remaining)
+			return nil, fmt.Errorf("dial resolved addresses: %w", errors.Join(dialErrors...))
+		}
+	}
+
+	return nil, fmt.Errorf("dial resolved addresses: %w", errors.Join(dialErrors...))
+}
+
+func closeLateDialConnections(results <-chan dialResult, remaining int) {
+	for range remaining {
+		result := <-results
+		if result.conn != nil {
+			_ = result.conn.Close()
+		}
+	}
+}
+
+func interleaveIPFamilies(ips []net.IP) []net.IP {
+	if len(ips) < 2 {
+		return ips
+	}
+
+	firstIsIPv4 := ips[0].To4() != nil
+	primary := make([]net.IP, 0, len(ips))
+	secondary := make([]net.IP, 0, len(ips))
+	for _, ip := range ips {
+		if (ip.To4() != nil) == firstIsIPv4 {
+			primary = append(primary, ip)
+		} else {
+			secondary = append(secondary, ip)
+		}
+	}
+	if len(secondary) == 0 {
+		return ips
+	}
+
+	interleaved := make([]net.IP, 0, len(ips))
+	for len(primary) > 0 || len(secondary) > 0 {
+		if len(primary) > 0 {
+			interleaved = append(interleaved, primary[0])
+			primary = primary[1:]
+		}
+		if len(secondary) > 0 {
+			interleaved = append(interleaved, secondary[0])
+			secondary = secondary[1:]
+		}
+	}
+
+	return interleaved
 }
 
 // ValidateHost checks whether the given host is permitted by the policy's
@@ -474,88 +705,121 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // no addresses.
 //
 // ValidateHost is intended for management-time URL validation so that callers
-// reject blocked hosts before persisting them. Runtime enforcement still
-// happens via [Policy.Dialer] regardless.
+// reject blocked hosts before persisting them. [Policy.Client] and
+// [Policy.PooledClient] resolve and validate every request host, then dial the
+// validated IPs directly. Reusing that resolution for the connection avoids a
+// redundant lookup and prevents DNS rebinding between validation and dialing.
 //
 // For hostnames with multiple resolved addresses, ValidateHost fails closed:
-// any single blocked address rejects the host. This is stricter than the
-// runtime [net.Dialer], which only fails when it actually attempts a blocked
-// address. The asymmetry is intentional — validation should not persist a row
-// whose host points anywhere blocked, even if a public address happens to be
-// tried first at dial time.
+// any single blocked address rejects the host.
 func (p *Policy) ValidateHost(ctx context.Context, host string) error {
+	_, err := p.resolveHost(ctx, host, nil)
+	return err
+}
+
+func (p *Policy) resolveHost(ctx context.Context, host string, allowedCIDRBlocks []*net.IPNet) ([]net.IP, error) {
 	if host == "" {
-		return fmt.Errorf("%w: empty host", ErrBadHost)
+		return nil, fmt.Errorf("%w: empty host", ErrBadHost)
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		return p.checkIP(ip)
+		if err := p.checkIP(ip, allowedCIDRBlocks); err != nil {
+			return nil, err
+		}
+		return []net.IP{ip}, nil
 	}
 
 	ips, err := p.resolver.LookupIP(ctx, "ip", host)
 	if err != nil {
-		return fmt.Errorf("%s: lookup ip: %w: %w", host, ErrBadHost, err)
+		return nil, fmt.Errorf("%s: lookup ip: %w: %w", host, ErrBadHost, err)
 	}
 	if len(ips) == 0 {
-		return fmt.Errorf("%s: %w: no addresses", host, ErrBadHost)
+		return nil, fmt.Errorf("%s: %w: no addresses", host, ErrBadHost)
 	}
 
 	for _, ip := range ips {
-		if err := p.checkIP(ip); err != nil {
-			return err
+		if err := p.checkIP(ip, allowedCIDRBlocks); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return ips, nil
 }
 
-// ValidateHTTPURL checks that rawURL is an absolute http or https URL whose
+// ValidateHTTPURL checks that rawURL is an absolute HTTP or HTTPS URL whose
 // host is permitted by the policy's CIDR blocklist. It validates the URL
-// string and resolves the host; it does not connect. Runtime enforcement still
-// happens via [Policy.Dialer] on the subsequent request, including each
-// redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
-// should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
-// the clear.
+// string and resolves the host; it does not connect. Client and PooledClient
+// apply the same host validation before every request and redirect, but permit
+// only HTTPS unless [WithAllowedSchemes] explicitly enables HTTP.
 func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+	return p.validateAbsoluteURL(ctx, rawURL, false)
 }
 
-// ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
-// user-supplied fetch URLs so the request cannot be MITM'd in transit.
+// ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Client and
+// PooledClient enforce this same HTTPS-only policy by default, including on
+// redirects.
 func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+	return p.validateAbsoluteURL(ctx, rawURL, true)
 }
 
-func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, httpsOnly bool) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
 	}
 
-	if !slices.Contains(schemes, u.Scheme) {
-		if len(schemes) == 1 {
-			return nil, fmt.Errorf("url scheme must be %s", schemes[0])
-		}
-		return nil, fmt.Errorf("url scheme must be http or https")
+	allowedSchemes := map[string]struct{}{
+		"https": {},
+	}
+
+	if !httpsOnly {
+		allowedSchemes["http"] = struct{}{}
+	}
+
+	if _, err := p.validateURL(ctx, u, allowedSchemes, nil); err != nil {
+		return nil, err
+	}
+
+	return u, nil
+}
+
+func (p *Policy) validateURL(
+	ctx context.Context,
+	u *url.URL,
+	allowedSchemes map[string]struct{},
+	allowedCIDRBlocks []*net.IPNet,
+) ([]net.IP, error) {
+	if u == nil {
+		return nil, fmt.Errorf("url is nil")
+	}
+
+	if _, allowed := allowedSchemes[u.Scheme]; !allowed {
+		return nil, fmt.Errorf("%s: url scheme not allowed", u.Scheme)
 	}
 
 	if u.Host == "" {
 		return nil, fmt.Errorf("url must include a host")
 	}
 
-	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+	ips, err := p.resolveHost(ctx, u.Hostname(), allowedCIDRBlocks)
+	if err != nil {
 		return nil, fmt.Errorf("validate host: %w", err)
 	}
 
-	return u, nil
+	return ips, nil
 }
 
 // checkIP returns [ErrBlockedIP] if ip falls within any of the policy's
-// blocked CIDR ranges, and nil otherwise. It is the shared CIDR-membership
-// test used by both [Policy.Dialer]'s ControlContext callback and
-// [Policy.ValidateHost], so that runtime and management-time enforcement stay
-// in sync.
-func (p *Policy) checkIP(ip net.IP) error {
+// blocked CIDR ranges unless an allowed block contains it. It is the shared
+// CIDR-membership test used by request validation and [Policy.Dialer]'s
+// ControlContext callback so both enforcement layers stay in sync.
+func (p *Policy) checkIP(ip net.IP, allowedCIDRBlocks []*net.IPNet) error {
+	for _, block := range allowedCIDRBlocks {
+		if block.Contains(ip) {
+			return nil
+		}
+	}
+
 	for _, block := range p.blockedCIDRBlocks {
 		if block.Contains(ip) {
 			return fmt.Errorf("%s: %w", ip, ErrBlockedIP)

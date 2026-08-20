@@ -69,7 +69,7 @@ var _ Orchestrator = (*LocalRunner)(nil)
 
 func NewLocalRunner(logger *slog.Logger, tracerProvider trace.TracerProvider, codeRootDir string, serverURL *url.URL, assetStore assets.BlobStore) *LocalRunner {
 	policy := must.Value(guardian.NewUnsafePolicy(tracerProvider, []string{}))
-	httpClient := policy.PooledClient()
+	httpClient := policy.PooledClient(guardian.WithAllowedSchemes("http"))
 	httpClient.Timeout = 30 * time.Second
 
 	return &LocalRunner{

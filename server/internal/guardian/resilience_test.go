@@ -74,18 +74,20 @@ func TestPolicy_Client_Resilience_BreakerTripsOnServerErrors(t *testing.T) {
 	status.Store(http.StatusInternalServerError)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        3,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        3,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	for i := range 3 {
 		code, err := doRequest(t, t.Context(), client, server.URL)
@@ -109,18 +111,20 @@ func TestPolicy_Client_Resilience_RecoversWhenServerHeals(t *testing.T) {
 	status.Store(http.StatusServiceUnavailable)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        2,
-			Window:               time.Minute,
-			Delay:                25 * time.Millisecond,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        2,
+				Window:               time.Minute,
+				Delay:                25 * time.Millisecond,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	for range 2 {
 		_, err := doRequest(t, t.Context(), client, server.URL)
@@ -151,11 +155,13 @@ func TestPolicy_Client_Resilience_RateLimited(t *testing.T) {
 	status.Store(http.StatusOK)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.PerHour(1),
+			Breaker:   guardian.NoBreaker(),
+		}))
 
 	code, err := doRequest(t, t.Context(), client, server.URL)
 	require.NoError(t, err)
@@ -177,11 +183,13 @@ func TestPolicy_Client_Resilience_SubsetSegmentsRateLimit(t *testing.T) {
 	status.Store(http.StatusOK)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.PerHour(1),
+			Breaker:   guardian.NoBreaker(),
+		}))
 
 	orgA := guardian.WithSubset(t.Context(), "org-a")
 	orgB := guardian.WithSubset(t.Context(), "org-b")
@@ -218,11 +226,13 @@ func TestPolicy_Client_Resilience_SpanPartitionAttributes(t *testing.T) {
 	status.Store(http.StatusOK)
 	server, _ := newStatusServer(t, &status)
 
-	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerSecond(10),
-		Breaker:   guardian.NoBreaker(),
-	}))
+	client := policy.Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.PerSecond(10),
+			Breaker:   guardian.NoBreaker(),
+		}))
 
 	code, err := doRequest(t, guardian.WithSubset(t.Context(), "org-a"), client, server.URL)
 	require.NoError(t, err)
@@ -257,18 +267,20 @@ func TestPolicy_Client_Resilience_BreakerIgnoresSubset(t *testing.T) {
 	status.Store(http.StatusInternalServerError)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        2,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        2,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	orgA := guardian.WithSubset(t.Context(), "org-a")
 	for range 2 {
@@ -289,18 +301,20 @@ func TestPolicy_Client_Resilience_BreakerIncludeSubset(t *testing.T) {
 	status.Store(http.StatusInternalServerError)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        2,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        true,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        2,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        true,
+			},
+		}))
 
 	orgA := guardian.WithSubset(t.Context(), "org-a")
 	for range 2 {
@@ -326,18 +340,20 @@ func TestPolicy_Client_Resilience_ClientErrorsDoNotTrip(t *testing.T) {
 	status.Store(http.StatusNotFound)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        2,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        2,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	// 4xx responses prove the upstream is alive and never open the circuit.
 	for i := range 5 {
@@ -354,18 +370,20 @@ func TestPolicy_Client_Resilience_TooManyRequestsTrips(t *testing.T) {
 	status.Store(http.StatusTooManyRequests)
 	server, _ := newStatusServer(t, &status)
 
-	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        2,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        2,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	// 429 means the upstream is shedding load and counts as failure.
 	for range 2 {
@@ -385,6 +403,7 @@ func TestPolicy_Client_Resilience_RetriesDoNotHammerOpenCircuit(t *testing.T) {
 	server, hits := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(
+		guardian.WithAllowedSchemes("http"),
 		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
 			Partition: nil,
 			Limit:     guardian.NoLimit(),
@@ -428,18 +447,20 @@ func TestPolicy_Client_Resilience_DefaultsAreNoop(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        1,
-			Window:               time.Minute,
-			Delay:                time.Hour,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := policy.Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.PerHour(1),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        1,
+				Window:               time.Minute,
+				Delay:                time.Hour,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	for i := range 5 {
 		code, err := doRequest(t, t.Context(), client, server.URL)
@@ -469,11 +490,13 @@ func TestPolicy_Client_Resilience_WithRedisLimiter(t *testing.T) {
 	// Random resilience name: redis bucket state outlives the test binary,
 	// so a fixed partition would fail on repeated runs (-count) against the
 	// same container.
-	client := policy.Client(guardian.WithResilience(uuid.NewString(), guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
-	}))
+	client := policy.Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience(uuid.NewString(), guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.PerHour(1),
+			Breaker:   guardian.NoBreaker(),
+		}))
 
 	code, err := doRequest(t, t.Context(), client, server.URL)
 	require.NoError(t, err)
@@ -512,18 +535,20 @@ func TestPolicy_Client_Resilience_WithBreaker(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
-		Breaker: guardian.BreakerPolicy{
-			FailureRateThreshold: 1,
-			MinThroughput:        1,
-			Window:               time.Minute,
-			Delay:                time.Minute,
-			SuccessThreshold:     1,
-			IncludeSubset:        false,
-		},
-	}))
+	client := policy.Client(
+		guardian.WithAllowedSchemes("http"),
+		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
+			Partition: nil,
+			Limit:     guardian.NoLimit(),
+			Breaker: guardian.BreakerPolicy{
+				FailureRateThreshold: 1,
+				MinThroughput:        1,
+				Window:               time.Minute,
+				Delay:                time.Minute,
+				SuccessThreshold:     1,
+				IncludeSubset:        false,
+			},
+		}))
 
 	_, err = doRequest(t, t.Context(), client, server.URL)
 	require.ErrorIs(t, err, guardian.ErrCircuitOpen)

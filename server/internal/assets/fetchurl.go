@@ -18,19 +18,14 @@ const (
 )
 
 // outboundFetchClient returns a guardian client that follows at most
-// [fetchURLMaxRedirects] hops and re-validates each redirect target against
-// the SSRF policy before the next request is issued. The dialer remains the
-// last line of defense: even if validation is skipped, ControlContext rejects
-// connections into blocked ranges after DNS resolution.
+// [fetchURLMaxRedirects] hops. Guardian validates every initial and redirected
+// URL against the HTTPS and SSRF policies before issuing its request.
 func outboundFetchClient(policy *guardian.Policy, timeout time.Duration) *guardian.HTTPClient {
 	client := policy.Client()
 	client.Timeout = timeout
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+	client.CheckRedirect = func(_ *http.Request, via []*http.Request) error {
 		if len(via) >= fetchURLMaxRedirects {
 			return fmt.Errorf("stopped after %d redirects", fetchURLMaxRedirects)
-		}
-		if _, err := policy.ValidateHTTPSURL(req.Context(), req.URL.String()); err != nil {
-			return fmt.Errorf("redirect url: %w", err)
 		}
 		return nil
 	}

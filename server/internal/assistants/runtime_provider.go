@@ -102,6 +102,7 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 		gkeClient := httpPolicy.PooledClient(
 			guardian.WithDefaultRetryConfig(),
 			guardian.WithAllowedCIDRBlocks(config.GKE.RunnerCIDRBlocks...),
+			guardian.WithAllowedSchemes("http"),
 		)
 		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, gkeClient, config.GKE)
 	}
@@ -116,6 +117,7 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 		localClient := httpPolicy.PooledClient(
 			guardian.WithDefaultRetryConfig(),
 			guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...),
+			guardian.WithAllowedSchemes("http"),
 		)
 		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newDockerCLIEngine(config.Local.GuestPort), config.Local)
 	}
