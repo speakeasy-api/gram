@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -112,6 +114,132 @@ func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
 	err = retryableDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "provider-secret-marker")
+}
+
+func TestSignalRelayCacheReturnsActiveAndRemovesExpiredDestinations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
+	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	active, activeTransport := newTrackedRelayDestination()
+	expired, expiredTransport := newTrackedRelayDestination()
+	relay.destinationCache["active"] = cachedRelayDestination{
+		destination: active,
+		expiresAt:   now.Add(time.Minute),
+	}
+	relay.destinationCache["expired"] = cachedRelayDestination{
+		destination: expired,
+		expiresAt:   now,
+	}
+
+	got, ok := relay.cachedDestination("active", now)
+	require.True(t, ok)
+	require.Same(t, active, got)
+	require.Zero(t, activeTransport.closeCalls.Load())
+
+	got, ok = relay.cachedDestination("expired", now)
+	require.False(t, ok)
+	require.Nil(t, got)
+	require.NotContains(t, relay.destinationCache, "expired")
+	require.Equal(t, int64(1), expiredTransport.closeCalls.Load())
+}
+
+func TestSignalRelayCacheInsertionPrunesExpiredDestinations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
+	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	expired, expiredTransport := newTrackedRelayDestination()
+	relay.destinationCache["expired"] = cachedRelayDestination{
+		destination: expired,
+		expiresAt:   now,
+	}
+
+	relay.cacheDestination("new", cachedRelayDestination{
+		destination: nil,
+		expiresAt:   now.Add(time.Minute),
+	}, now)
+
+	require.NotContains(t, relay.destinationCache, "expired")
+	require.Contains(t, relay.destinationCache, "new")
+	require.Equal(t, int64(1), expiredTransport.closeCalls.Load())
+}
+
+func TestSignalRelayCacheReplacementClosesOldDestination(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
+	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	oldDestination, oldTransport := newTrackedRelayDestination()
+	newDestination, newTransport := newTrackedRelayDestination()
+	relay.cacheDestination("organization-id", cachedRelayDestination{
+		destination: oldDestination,
+		expiresAt:   now.Add(time.Minute),
+	}, now)
+
+	relay.cacheDestination("organization-id", cachedRelayDestination{
+		destination: newDestination,
+		expiresAt:   now.Add(2 * time.Minute),
+	}, now)
+
+	got, ok := relay.cachedDestination("organization-id", now)
+	require.True(t, ok)
+	require.Same(t, newDestination, got)
+	require.Equal(t, int64(1), oldTransport.closeCalls.Load())
+	require.Zero(t, newTransport.closeCalls.Load())
+}
+
+func TestSignalRelayCacheEvictsEarliestExpiryAtCapacity(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
+	relay := newSignalRelay(nil, nil, nil, "", "trace")
+	oldestDestination, oldestTransport := newTrackedRelayDestination()
+	for i := range relayDestinationCacheMaxEntries {
+		destination := (*relayDestination)(nil)
+		if i == 0 {
+			destination = oldestDestination
+		}
+		relay.destinationCache[fmt.Sprintf("organization-%04d", i)] = cachedRelayDestination{
+			destination: destination,
+			expiresAt:   now.Add(time.Duration(i+1) * time.Second),
+		}
+	}
+
+	relay.cacheDestination("new-organization", cachedRelayDestination{
+		destination: nil,
+		expiresAt:   now.Add(time.Hour),
+	}, now)
+
+	require.Len(t, relay.destinationCache, relayDestinationCacheMaxEntries)
+	require.NotContains(t, relay.destinationCache, "organization-0000")
+	require.Contains(t, relay.destinationCache, "new-organization")
+	require.Equal(t, int64(1), oldestTransport.closeCalls.Load())
+}
+
+type closeIdleTrackingRoundTripper struct {
+	closeCalls atomic.Int64
+}
+
+func (t *closeIdleTrackingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	panic("unexpected HTTP request")
+}
+
+func (t *closeIdleTrackingRoundTripper) CloseIdleConnections() {
+	t.closeCalls.Add(1)
+}
+
+func newTrackedRelayDestination() (*relayDestination, *closeIdleTrackingRoundTripper) {
+	transport := new(closeIdleTrackingRoundTripper)
+	client := new(http.Client)
+	client.Transport = transport
+	return &relayDestination{
+		organizationID: "",
+		endpoint:       "",
+		headers:        nil,
+		httpClient:     client,
+		signalName:     "",
+	}, transport
 }
 
 func TestClassifyRelayStatusDistinguishesRetryableFailures(t *testing.T) {

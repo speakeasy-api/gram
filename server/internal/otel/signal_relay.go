@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	relayDestinationCacheTTL = 60 * time.Second
-	maxRelayErrorBodyBytes   = 4 * 1024
+	relayDestinationCacheTTL        = 60 * time.Second
+	relayDestinationCacheMaxEntries = 1024
+	maxRelayErrorBodyBytes          = 4 * 1024
 )
 
 type relayReason string
@@ -125,9 +126,7 @@ func (r *signalRelay) destinationForOrganization(ctx context.Context, organizati
 			destination: destination,
 			expiresAt:   now.Add(relayDestinationCacheTTL),
 		}
-		r.cacheMu.Lock()
-		r.destinationCache[organizationID] = cached
-		r.cacheMu.Unlock()
+		r.cacheDestination(organizationID, cached, now)
 		return cached, nil
 	})
 	if err != nil {
@@ -208,15 +207,86 @@ func (r *signalRelay) newDestination(
 	}, nil
 }
 
+func (r *signalRelay) cacheDestination(organizationID string, cached cachedRelayDestination, now time.Time) {
+	var evicted []*relayDestination
+
+	r.cacheMu.Lock()
+	if replaced, ok := r.destinationCache[organizationID]; ok {
+		delete(r.destinationCache, organizationID)
+		if replaced.destination != nil && replaced.destination != cached.destination {
+			evicted = append(evicted, replaced.destination)
+		}
+	}
+	for cachedOrganizationID, candidate := range r.destinationCache {
+		if now.Before(candidate.expiresAt) {
+			continue
+		}
+		delete(r.destinationCache, cachedOrganizationID)
+		if candidate.destination != nil {
+			evicted = append(evicted, candidate.destination)
+		}
+	}
+	for len(r.destinationCache) >= relayDestinationCacheMaxEntries {
+		evictOrganizationID := ""
+		var evictCandidate cachedRelayDestination
+		for cachedOrganizationID, candidate := range r.destinationCache {
+			if evictOrganizationID == "" ||
+				candidate.expiresAt.Before(evictCandidate.expiresAt) ||
+				(candidate.expiresAt.Equal(evictCandidate.expiresAt) && cachedOrganizationID < evictOrganizationID) {
+				evictOrganizationID = cachedOrganizationID
+				evictCandidate = candidate
+			}
+		}
+		delete(r.destinationCache, evictOrganizationID)
+		if evictCandidate.destination != nil {
+			evicted = append(evicted, evictCandidate.destination)
+		}
+	}
+	r.destinationCache[organizationID] = cached
+	r.cacheMu.Unlock()
+
+	for _, destination := range evicted {
+		closeIdleRelayDestination(destination)
+	}
+}
+
+func closeIdleRelayDestination(destination *relayDestination) {
+	if destination == nil || destination.httpClient == nil {
+		return
+	}
+	destination.httpClient.CloseIdleConnections()
+}
+
 func (r *signalRelay) cachedDestination(organizationID string, now time.Time) (*relayDestination, bool) {
 	r.cacheMu.RLock()
-	defer r.cacheMu.RUnlock()
-
 	cached, ok := r.destinationCache[organizationID]
-	if !ok || !now.Before(cached.expiresAt) {
+	if !ok {
+		r.cacheMu.RUnlock()
 		return nil, false
 	}
-	return cached.destination, true
+	if now.Before(cached.expiresAt) {
+		r.cacheMu.RUnlock()
+		return cached.destination, true
+	}
+	r.cacheMu.RUnlock()
+
+	// Recheck under the write lock: another goroutine may have refreshed this
+	// organization after the expired read above.
+	r.cacheMu.Lock()
+	cached, ok = r.destinationCache[organizationID]
+	if !ok {
+		r.cacheMu.Unlock()
+		return nil, false
+	}
+	if now.Before(cached.expiresAt) {
+		r.cacheMu.Unlock()
+		return cached.destination, true
+	}
+	delete(r.destinationCache, organizationID)
+	r.cacheMu.Unlock()
+
+	closeIdleRelayDestination(cached.destination)
+	return nil, false
 }
 
 func (d *relayDestination) export(ctx context.Context, message proto.Message) error {
