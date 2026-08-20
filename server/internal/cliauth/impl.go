@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -181,8 +182,17 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	// a member of — an admin session that outlived its override cookie, or
 	// anyone pointed at the shared demo org (which has no membership rows by
 	// design, yet grants org:read to every session). Enrollment requires real
-	// membership in the org the device would report to.
-	if _, _, member := s.sessions.HasAccessToOrganization(ctx, authCtx.ActiveOrganizationID, authCtx.UserID); !member {
+	// membership in the org the device would report to. Membership is resolved
+	// explicitly (not via HasAccessToOrganization, which folds lookup failures
+	// into "no") so an infra failure surfaces as an unexpected error, never as
+	// a misleading 403.
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load user info").LogError(ctx, s.logger)
+	}
+	if !slices.ContainsFunc(userInfo.Organizations, func(org sessions.Organization) bool {
+		return org.ID == authCtx.ActiveOrganizationID
+	}) {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
 	}
 
