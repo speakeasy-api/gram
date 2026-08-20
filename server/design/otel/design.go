@@ -32,7 +32,7 @@ var _ = Service("otel", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("content_encoding:Content-Encoding")
-			Response(StatusAccepted)
+			Response(StatusOK)
 			SkipRequestBodyEncodeDecode()
 		})
 

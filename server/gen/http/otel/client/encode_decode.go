@@ -97,7 +97,7 @@ func DecodeTracesResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			defer resp.Body.Close()
 		}
 		switch resp.StatusCode {
-		case http.StatusAccepted:
+		case http.StatusOK:
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (

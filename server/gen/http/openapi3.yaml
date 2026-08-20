@@ -1778,8 +1778,8 @@ paths:
                     description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
                     type: string
             responses:
-                "202":
-                    description: Accepted response.
+                "200":
+                    description: OK response.
                 "400":
                     content:
                         application/json:
