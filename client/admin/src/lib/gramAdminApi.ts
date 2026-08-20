@@ -542,6 +542,64 @@ export function setOrganizationFeature(input: {
   );
 }
 
+export type AdminChatAnalysisJudge = "work_units" | "business_memory";
+
+export type AdminOrganizationChatAnalysisSettings = {
+  organization_id: string;
+  work_units_enabled: boolean;
+  work_units_daily_cap: number;
+  business_memory_enabled: boolean;
+  business_memory_daily_cap: number;
+  is_default: boolean;
+};
+
+export function getOrganizationChatAnalysisSettings(
+  organizationID: string,
+): Promise<AdminOrganizationChatAnalysisSettings> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationChatAnalysisSettings>(
+    `/admin/organization.chatAnalysisSettings?${qs}`,
+  );
+}
+
+export type AdminChatAnalysisTriggerResult = {
+  projects_signaled: number;
+};
+
+export function triggerOrganizationChatAnalysis(
+  organizationID: string,
+): Promise<AdminChatAnalysisTriggerResult> {
+  return gramAdminMutation<AdminChatAnalysisTriggerResult>(
+    "/admin/organization.chatAnalysisTrigger",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export function setOrganizationChatAnalysisSetting(input: {
+  organizationID: string;
+  judge: AdminChatAnalysisJudge;
+  enabled: boolean;
+  dailyCap: number;
+}): Promise<AdminOrganizationChatAnalysisSettings> {
+  return gramAdminMutation<AdminOrganizationChatAnalysisSettings>(
+    "/admin/organization.chatAnalysisSettings",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        judge: input.judge,
+        enabled: input.enabled,
+        daily_cap: input.dailyCap,
+      }),
+    },
+  );
+}
+
 export function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {

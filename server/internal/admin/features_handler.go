@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"goa.design/goa/v3/security"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"goa.design/goa/v3/security"
 )
 
 // adminOrganizationFeaturesResponse is the response body of GET /admin/organization.features.
@@ -35,14 +34,14 @@ type setAdminOrganizationFeatureRequest struct {
 	Enabled        *bool  `json:"enabled"`
 }
 
-var adminOrganizationFeatures = map[productfeatures.Feature]struct{}{
-	productfeatures.FeatureAuthzChallengeLogging:         {},
-	productfeatures.FeatureCustomerManagedEncryptionKeys: {},
-	productfeatures.FeatureCustomModelKeys:               {},
-	productfeatures.FeaturePlatformMCP:                   {},
-	productfeatures.FeatureRemoteSessionAutoRefresh:      {},
-	productfeatures.FeatureSSO:                           {},
-	productfeatures.FeatureSCIM:                          {},
+var adminOrganizationFeatures = map[string]productfeatures.Feature{
+	string(productfeatures.FeatureAuthzChallengeLogging):         productfeatures.FeatureAuthzChallengeLogging,
+	string(productfeatures.FeatureCustomerManagedEncryptionKeys): productfeatures.FeatureCustomerManagedEncryptionKeys,
+	string(productfeatures.FeatureCustomModelKeys):               productfeatures.FeatureCustomModelKeys,
+	string(productfeatures.FeaturePlatformMCP):                   productfeatures.FeaturePlatformMCP,
+	string(productfeatures.FeatureRemoteSessionAutoRefresh):      productfeatures.FeatureRemoteSessionAutoRefresh,
+	string(productfeatures.FeatureSSO):                           productfeatures.FeatureSSO,
+	string(productfeatures.FeatureSCIM):                          productfeatures.FeatureSCIM,
 }
 
 func (s *Service) authorizeAdminRequest(r *http.Request) (context.Context, error) {
@@ -130,8 +129,8 @@ func (s *Service) handleSetOrganizationFeature(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
-	feature := productfeatures.Feature(body.FeatureName)
-	if _, ok := adminOrganizationFeatures[feature]; !ok || body.Enabled == nil {
+	feature, ok := adminOrganizationFeatures[body.FeatureName]
+	if !ok || body.Enabled == nil {
 		return oops.C(oops.CodeBadRequest)
 	}
 

@@ -1,16 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import type { JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
+  organizationChatAnalysisSettingsQuery,
   organizationFeaturesQuery,
   organizationQuery,
 } from "@/lib/adminQueries";
 import {
   errorMessage,
+  setOrganizationChatAnalysisSetting,
   setOrganizationFeature,
+  triggerOrganizationChatAnalysis,
+  type AdminChatAnalysisJudge,
   type AdminOrganization,
+  type AdminOrganizationChatAnalysisSettings,
   type AdminOrganizationFeatureName,
   type AdminOrganizationFeatures,
 } from "@/lib/gramAdminApi";
@@ -80,6 +88,15 @@ export function FeaturesRoute(): JSX.Element | null {
 }
 
 export function Features({ org }: { org: AdminOrganization }): JSX.Element {
+  return (
+    <div className="space-y-6">
+      <ProductFeatures org={org} />
+      <ChatAnalysis org={org} />
+    </div>
+  );
+}
+
+function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
   const queryClient = useQueryClient();
   const query = organizationFeaturesQuery(org.id);
   const { data, isPending, isError } = useQuery({
@@ -154,7 +171,7 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
   }
 
   return (
-    <>
+    <div>
       {isError && (
         <p className="text-muted-foreground mb-3 text-sm">
           Unable to refresh features; showing the last loaded state.
@@ -205,6 +222,259 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
           })}
         </div>
       </section>
-    </>
+    </div>
+  );
+}
+
+type ChatAnalysisDefinition = {
+  judge: AdminChatAnalysisJudge;
+  enabledKey: "work_units_enabled" | "business_memory_enabled";
+  capKey: "work_units_daily_cap" | "business_memory_daily_cap";
+  label: string;
+  description: string;
+  capLabel: string;
+};
+
+const CHAT_ANALYSIS_CONTROLS: ChatAnalysisDefinition[] = [
+  {
+    judge: "work_units",
+    enabledKey: "work_units_enabled",
+    capKey: "work_units_daily_cap",
+    label: "Work Delivered Chat Analysis",
+    description:
+      "Evaluates work delivered in the organization's quiet chat sessions.",
+    capLabel: "Work delivered daily evaluation cap",
+  },
+  {
+    judge: "business_memory",
+    enabledKey: "business_memory_enabled",
+    capKey: "business_memory_daily_cap",
+    label: "Business Memory Extraction",
+    description:
+      "Extracts reusable glossary entries, procedures, and prior results from quiet chat sessions.",
+    capLabel: "Business memory daily extraction cap",
+  },
+];
+
+function validDailyCap(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const cap = Number(value);
+  return Number.isInteger(cap) && cap >= 0 && cap <= 10_000 ? cap : undefined;
+}
+
+function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
+  const queryClient = useQueryClient();
+  const query = organizationChatAnalysisSettingsQuery(org.id);
+  const { data, isPending, isError } = useQuery({
+    ...query,
+    enabled: !!org.id,
+  });
+  const [caps, setCaps] = useState<Record<AdminChatAnalysisJudge, string>>({
+    work_units: "",
+    business_memory: "",
+  });
+  const [dirtyCaps, setDirtyCaps] = useState<
+    Record<AdminChatAnalysisJudge, boolean>
+  >({
+    work_units: false,
+    business_memory: false,
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    setCaps((current) => ({
+      work_units: dirtyCaps.work_units
+        ? current.work_units
+        : String(data.work_units_daily_cap),
+      business_memory: dirtyCaps.business_memory
+        ? current.business_memory
+        : String(data.business_memory_daily_cap),
+    }));
+  }, [data, dirtyCaps.work_units, dirtyCaps.business_memory]);
+
+  const mutation = useMutation({
+    mutationFn: ({
+      judge,
+      enabled,
+      dailyCap,
+    }: {
+      judge: AdminChatAnalysisJudge;
+      enabled: boolean;
+      dailyCap: number;
+    }) =>
+      setOrganizationChatAnalysisSetting({
+        organizationID: org.id,
+        judge,
+        enabled,
+        dailyCap,
+      }),
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData<AdminOrganizationChatAnalysisSettings>(
+        query.queryKey,
+        updated,
+      );
+      setDirtyCaps((current) => ({
+        ...current,
+        [variables.judge]: false,
+      }));
+    },
+  });
+  const trigger = useMutation({
+    mutationFn: (judge: AdminChatAnalysisJudge) =>
+      triggerOrganizationChatAnalysis(org.id).then((result) => ({
+        ...result,
+        judge,
+      })),
+  });
+
+  if (isPending) {
+    return (
+      <span className="text-muted-foreground text-sm">
+        Loading chat analysis...
+      </span>
+    );
+  }
+  if (!data) {
+    return (
+      <span className="text-muted-foreground text-sm">
+        Unable to load chat analysis settings
+      </span>
+    );
+  }
+
+  return (
+    <div>
+      {isError && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          Unable to refresh chat analysis settings; showing the last loaded
+          state.
+        </p>
+      )}
+      <section className="border-border overflow-hidden rounded-md border">
+        <div className="border-border bg-muted/20 border-b px-4 py-3">
+          <h5 className="text-sm font-medium">Chat analysis</h5>
+          <p className="text-muted-foreground text-sm">
+            Caps are evaluations per UTC day; a cap of 0 disables the pipeline.
+          </p>
+        </div>
+        <div className="divide-border divide-y">
+          {CHAT_ANALYSIS_CONTROLS.map((control) => {
+            const enabled = data[control.enabledKey];
+            const cap = validDailyCap(caps[control.judge]);
+            const capDirty = cap !== undefined && cap !== data[control.capKey];
+            const actionLabel = !enabled
+              ? "Enable"
+              : capDirty
+                ? "Save cap"
+                : "Disable";
+            const rowError =
+              mutation.isError && mutation.variables.judge === control.judge
+                ? errorMessage(mutation.error)
+                : undefined;
+            const triggerError =
+              trigger.isError && trigger.variables === control.judge
+                ? errorMessage(trigger.error)
+                : undefined;
+            const triggerResult =
+              trigger.isSuccess && trigger.data.judge === control.judge
+                ? trigger.data
+                : undefined;
+            return (
+              <div className="px-4 py-3" key={control.judge}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{control.label}</p>
+                      <Badge variant="outline">
+                        {enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {control.description}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Input
+                      className="w-28"
+                      type="number"
+                      min={0}
+                      max={10_000}
+                      step={1}
+                      aria-label={control.capLabel}
+                      value={caps[control.judge]}
+                      disabled={mutation.isPending}
+                      onChange={(event) => {
+                        setCaps((current) => ({
+                          ...current,
+                          [control.judge]: event.target.value,
+                        }));
+                        setDirtyCaps((current) => ({
+                          ...current,
+                          [control.judge]: true,
+                        }));
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant={enabled && !capDirty ? "destructive" : "default"}
+                      disabled={mutation.isPending || cap === undefined}
+                      onClick={() => {
+                        if (cap === undefined) return;
+                        const dailyCap = !enabled && cap === 0 ? 100 : cap;
+                        if (dailyCap !== cap) {
+                          setCaps((current) => ({
+                            ...current,
+                            [control.judge]: String(dailyCap),
+                          }));
+                        }
+                        mutation.mutate({
+                          judge: control.judge,
+                          enabled: !enabled || capDirty,
+                          dailyCap,
+                        });
+                      }}
+                    >
+                      {actionLabel}
+                    </Button>
+                    {enabled && !capDirty && data[control.capKey] > 0 && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={trigger.isPending}
+                        onClick={() => trigger.mutate(control.judge)}
+                      >
+                        {trigger.isPending &&
+                        trigger.variables === control.judge
+                          ? "Running…"
+                          : "Run now"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {cap === undefined && (
+                  <p className="text-destructive mt-1 text-sm">
+                    Cap must be a whole number from 0 to 10,000.
+                  </p>
+                )}
+                {rowError && (
+                  <p className="text-destructive mt-1 text-sm">{rowError}</p>
+                )}
+                {triggerError && (
+                  <p className="text-destructive mt-1 text-sm">
+                    {triggerError}
+                  </p>
+                )}
+                {triggerResult && (
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Triggered {triggerResult.projects_signaled} project
+                    {triggerResult.projects_signaled === 1 ? "" : "s"}.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 }

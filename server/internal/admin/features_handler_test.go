@@ -57,7 +57,7 @@ func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *test
 	result := getAdminOrganizationFeatures(t, handler, sessionID, orgID)
 	require.Equal(t, adminOrganizationFeaturesResponse{}, result)
 
-	for feature := range adminOrganizationFeatures {
+	for _, feature := range adminOrganizationFeatures {
 		body, err := json.Marshal(setAdminOrganizationFeatureRequest{
 			OrganizationID: orgID,
 			FeatureName:    string(feature),

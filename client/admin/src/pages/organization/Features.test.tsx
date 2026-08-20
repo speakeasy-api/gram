@@ -3,7 +3,10 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationFeaturesQuery } from "@/lib/adminQueries";
-import type { AdminOrganizationFeatures } from "@/lib/gramAdminApi";
+import type {
+  AdminOrganizationChatAnalysisSettings,
+  AdminOrganizationFeatures,
+} from "@/lib/gramAdminApi";
 import { Features } from "@/pages/organization/Features";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -11,6 +14,9 @@ import { renderWithApp } from "@/test/harness";
 const mocks = vi.hoisted(() => ({
   getOrganizationFeatures: vi.fn(),
   setOrganizationFeature: vi.fn(),
+  getOrganizationChatAnalysisSettings: vi.fn(),
+  setOrganizationChatAnalysisSetting: vi.fn(),
+  triggerOrganizationChatAnalysis: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -19,6 +25,11 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     getOrganizationFeatures: mocks.getOrganizationFeatures,
     setOrganizationFeature: mocks.setOrganizationFeature,
+    getOrganizationChatAnalysisSettings:
+      mocks.getOrganizationChatAnalysisSettings,
+    setOrganizationChatAnalysisSetting:
+      mocks.setOrganizationChatAnalysisSetting,
+    triggerOrganizationChatAnalysis: mocks.triggerOrganizationChatAnalysis,
   };
 });
 
@@ -32,6 +43,14 @@ const FEATURES: AdminOrganizationFeatures = {
   sso_enabled: true,
   scim_enabled: false,
 };
+const CHAT_ANALYSIS: AdminOrganizationChatAnalysisSettings = {
+  organization_id: ORG.id,
+  work_units_enabled: true,
+  work_units_daily_cap: 25,
+  business_memory_enabled: false,
+  business_memory_daily_cap: 0,
+  is_default: false,
+};
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
@@ -43,6 +62,11 @@ beforeEach(() => {
         [`${featureName}_enabled`]: enabled,
       }),
   );
+  mocks.getOrganizationChatAnalysisSettings.mockResolvedValue(CHAT_ANALYSIS);
+  mocks.setOrganizationChatAnalysisSetting.mockResolvedValue(CHAT_ANALYSIS);
+  mocks.triggerOrganizationChatAnalysis.mockResolvedValue({
+    projects_signaled: 2,
+  });
 });
 
 afterEach(cleanup);
@@ -68,6 +92,140 @@ describe("Features", () => {
     }
     expect(screen.queryByText("Consent tool filtering")).toBeNull();
     expect(mocks.getOrganizationFeatures).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it("shows chat analysis controls beneath product features", async () => {
+    await renderFeatures();
+
+    expect(await screen.findByText("Chat analysis")).toBeTruthy();
+    expect(screen.getByText("Work Delivered Chat Analysis")).toBeTruthy();
+    expect(screen.getByText("Business Memory Extraction")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Caps are evaluations per UTC day; a cap of 0 disables the pipeline.",
+      ),
+    ).toBeTruthy();
+    const runNow = screen.getByRole("button", { name: "Run now" });
+    expect(runNow.previousElementSibling?.textContent).toBe("Disable");
+  });
+
+  it("triggers chat analysis from the enabled row", async () => {
+    await renderFeatures();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run now" }));
+
+    await waitFor(() => {
+      expect(mocks.triggerOrganizationChatAnalysis).toHaveBeenCalledWith(
+        ORG.id,
+      );
+    });
+    expect(await screen.findByText("Triggered 2 projects.")).toBeTruthy();
+  });
+
+  it("enables a disabled zero-cap judge with the default cap", async () => {
+    mocks.setOrganizationChatAnalysisSetting.mockResolvedValue({
+      ...CHAT_ANALYSIS,
+      business_memory_enabled: true,
+      business_memory_daily_cap: 100,
+    });
+    await renderFeatures();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Enable" }));
+
+    await waitFor(() => {
+      expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        judge: "business_memory",
+        enabled: true,
+        dailyCap: 100,
+      });
+    });
+    expect(
+      (
+        screen.getByLabelText(
+          "Business memory daily extraction cap",
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("100");
+  });
+
+  it("saves an integer cap and replaces settings from the response", async () => {
+    mocks.setOrganizationChatAnalysisSetting.mockResolvedValue({
+      ...CHAT_ANALYSIS,
+      work_units_daily_cap: 48,
+      business_memory_daily_cap: 7,
+    });
+    await renderFeatures();
+
+    const input = await screen.findByLabelText(
+      "Work delivered daily evaluation cap",
+    );
+    const otherInput = screen.getByLabelText(
+      "Business memory daily extraction cap",
+    );
+    fireEvent.change(otherInput, { target: { value: "12" } });
+    fireEvent.change(input, { target: { value: "48" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save cap" }));
+
+    await waitFor(() => {
+      expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        judge: "work_units",
+        enabled: true,
+        dailyCap: 48,
+      });
+    });
+    expect((otherInput as HTMLInputElement).value).toBe("12");
+  });
+
+  it("disables an enabled judge with its stored cap", async () => {
+    mocks.setOrganizationChatAnalysisSetting.mockResolvedValue({
+      ...CHAT_ANALYSIS,
+      work_units_enabled: false,
+    });
+    await renderFeatures();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disable" }));
+
+    await waitFor(() => {
+      expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        judge: "work_units",
+        enabled: false,
+        dailyCap: 25,
+      });
+    });
+  });
+
+  it("rejects non-integer and out-of-range caps", async () => {
+    await renderFeatures();
+    const input = await screen.findByLabelText(
+      "Work delivered daily evaluation cap",
+    );
+
+    for (const value of ["", "1.5", "10001", "-1"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(
+        screen.getByText("Cap must be a whole number from 0 to 10,000."),
+      ).toBeTruthy();
+      expect(
+        (screen.getByRole("button", { name: "Disable" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+    }
+    expect(mocks.setOrganizationChatAnalysisSetting).not.toHaveBeenCalled();
+  });
+
+  it("reports a chat analysis mutation failure on its row", async () => {
+    mocks.setOrganizationChatAnalysisSetting.mockRejectedValue(
+      new Error("chat write failed"),
+    );
+    await renderFeatures();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disable" }));
+
+    expect(await screen.findByText("chat write failed")).toBeTruthy();
+    expect(screen.getByText("Enabled")).toBeTruthy();
   });
 
   it("updates an organization feature from its switch", async () => {
