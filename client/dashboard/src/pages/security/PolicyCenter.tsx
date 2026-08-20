@@ -805,7 +805,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    "Page: Control Center, Policies tab.",
+    `Page: Control Center, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
