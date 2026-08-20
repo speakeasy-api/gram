@@ -35,7 +35,7 @@ import {
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
 import { collectFindingsForRules } from "./collect-findings";
-import { DismissFindingsDialog } from "./DismissFindingsDialog";
+import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -122,10 +122,10 @@ function EvidenceRow({
   // so the evidence cell shows the rationale with the audited event dialog
   // behind it instead of a redaction chip over content that may not exist.
   // Judge findings also can't be excluded (their rule id is a constant for
-  // the whole detector), so the row offers only false-positive dismissal.
+  // the whole detector), so the row offers only suppression.
   // Every other detector gets only Exclude: exclusion rules are the reviewed
-  // dismissal path for pattern detectors, and offering both actions side by
-  // side made per-row false-positive marking the path of least resistance.
+  // suppression path for pattern detectors, and offering both actions side by
+  // side made per-row suppression the path of least resistance.
   const judge = isJudgeSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
@@ -172,7 +172,7 @@ function EvidenceRow({
               size="sm"
               onClick={() => onDismiss(result)}
             >
-              <Button.Text>False positive</Button.Text>
+              <Button.Text>Suppress</Button.Text>
             </Button>
           ) : (
             <Button
@@ -200,8 +200,8 @@ export function SignalDrawer({
   onClose,
 }: {
   signal: RiskSignal | null;
-  /** The page's active time window; scopes signal-level dismissal the same
-   * way the list's bulk "Mark as false positive" is scoped. */
+  /** The page's active time window; scopes signal-level suppression the same
+   * way the list's bulk Suppress action is scoped. */
   window: { from?: Date; to?: Date };
   onClose: () => void;
 }): JSX.Element {
@@ -262,9 +262,9 @@ export function SignalDrawer({
     });
   };
 
-  // Judge-backed signals get false-positive dismissal as the signal-level
-  // action instead of an exclusion rule. Same collect-then-confirm shape as
-  // the list's bulk action, scoped to this signal's rule and window.
+  // Judge-backed signals get suppression as the signal-level action instead of
+  // an exclusion rule. Same collect-then-confirm shape as the list's bulk
+  // action, scoped to this signal's rule and window.
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
@@ -430,7 +430,7 @@ export function SignalDrawer({
                               <Loader2 className="size-4 animate-spin" />
                             </Button.LeftIcon>
                           )}
-                          <Button.Text>Mark all as false positive</Button.Text>
+                          <Button.Text>Suppress all</Button.Text>
                         </Button>
                         <Text small muted>
                           Prompt-based findings can't be excluded.
@@ -572,7 +572,7 @@ export function SignalDrawer({
           )}
         </SheetContent>
       </Sheet>
-      <DismissFindingsDialog
+      <SuppressFindingsDialog
         results={pendingDismiss}
         subject="this signal"
         onCancel={() => setPendingDismiss(null)}

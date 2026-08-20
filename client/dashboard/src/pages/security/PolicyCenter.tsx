@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
-import { DismissedFindingsTab } from "./DismissedFindingsTab";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -551,7 +550,11 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
   );
 }
 
-const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
+// Suppressed findings used to be a third tab here; they now live in the
+// Watchdog page's Suppressed section. `tab` is parsed as a string literal
+// union, so a stale `?tab=dismissed` link falls back to "policies" rather
+// than rendering an empty page.
+const POLICY_CENTER_TABS = ["policies", "exclusions"] as const;
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -979,11 +982,6 @@ function PolicyCenterContent() {
           label: "Exclusion rules",
           href: "?tab=exclusions",
         },
-        {
-          value: "dismissed",
-          label: "False Positives",
-          href: "?tab=dismissed",
-        },
       ]}
     >
       <InsightsConfig
@@ -1000,7 +998,6 @@ function PolicyCenterContent() {
           onSheetChange={setExclusionSheet}
         />
       )}
-      {activeTab === "dismissed" && <DismissedFindingsTab />}
 
       {/* View Run Panel */}
       <Sheet
