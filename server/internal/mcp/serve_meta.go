@@ -93,6 +93,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
+	// The version in effect for this exchange is stable regardless of
+	// outcome — this surface always answers ServedMetaServer — so the header
+	// is stamped before the issuer gate and body parsing can bail out.
+	w.Header().Set(mcpversions.HTTPHeader, mcpversions.ServedMetaServer)
+
 	if metaServer.UserSessionIssuerID.Valid {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
 		if err != nil {
@@ -135,10 +140,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, &req, r.Header.Get(mcpversions.HTTPHeader))
-
-	// The version in effect for this exchange is stable regardless of
-	// outcome: this surface always answers ServedMetaServer.
-	w.Header().Set(mcpversions.HTTPHeader, mcpversions.ServedMetaServer)
 
 	switch {
 	case body == nil && err == nil:
@@ -209,6 +210,10 @@ func (s *Service) handleMetaMCPRequest(
 // echo hostile bytes back to the client.
 const unparseableVersionPlaceholder = "(unparseable)"
 
+// metaProtocolVersionMetaKey is the params-level `_meta` member carrying MCP
+// 2026-07-28's per-request protocol-version declaration.
+const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
+
 // validateMetaDeclaredProtocolVersion enforces MCP 2026-07-28's per-request
 // version declaration on the meta surface. A declaration may arrive in the
 // MCP-Protocol-Version header, the params-level
@@ -217,24 +222,30 @@ const unparseableVersionPlaceholder = "(unparseable)"
 // errors naming the supported set. Only a genuinely absent declaration is
 // accepted, for backward compatibility with handshake-based clients per the
 // specification's versioning rules — a declaration that is present but
-// unsanitizable is a malformed value, not an absent one.
+// unsanitizable (or not a string at all) is a malformed value, not an
+// absent one.
 func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) error {
 	headerDeclared := strings.TrimSpace(headerValue) != ""
 	headerVersion := mcpversions.Sanitize(headerValue)
 
-	// Decoded via the documented WireMeta embed rather than
-	// mcprequests.ParseMeta because the raw declaration is needed to tell
-	// "absent" from "present but unsanitizable". Decoding is tolerant by
-	// design: non-object params leave Meta nil, matching ParseMeta.
+	// The _meta member is decoded raw rather than via mcprequests.WireMeta:
+	// telling "absent" from "present but malformed" needs the member's raw
+	// bytes, and WireMeta's tolerant decode zeroes a mis-typed member, which
+	// would silently read here as absent. Non-object params or _meta still
+	// leave the map nil, matching ParseMeta's tolerance.
 	var params struct {
-		Meta *mcprequests.WireMeta `json:"_meta"`
+		Meta map[string]json.RawMessage `json:"_meta"`
 	}
 	if len(req.Params) > 0 {
 		_ = json.Unmarshal(req.Params, &params)
 	}
 	var metaRaw string
-	if params.Meta != nil {
-		metaRaw = params.Meta.ProtocolVersion
+	if raw, ok := params.Meta[metaProtocolVersionMetaKey]; ok {
+		if err := json.Unmarshal(raw, &metaRaw); err != nil {
+			// Present but not a string: a malformed declaration. JSON null
+			// decodes as a no-op and stays "absent".
+			return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		}
 	}
 	metaDeclared := strings.TrimSpace(metaRaw) != ""
 	metaVersion := mcpversions.Sanitize(metaRaw)

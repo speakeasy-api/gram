@@ -1043,8 +1043,10 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	case metaServer != nil:
 		// Meta-backed endpoints have no install page yet (AGE-3299); the
 		// slug is authoritative, so surface not-found rather than falling
-		// through to an unrelated legacy toolset.
-		return nil, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+		// through to an unrelated legacy toolset. Wrapping errToolsetNotFound
+		// is what makes ServeInstallPage render the not-found page instead of
+		// treating this as an unexpected failure.
+		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {

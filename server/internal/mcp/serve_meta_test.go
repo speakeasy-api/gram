@@ -345,6 +345,34 @@ func TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion(t *testing.T) {
 	require.NotContains(t, w.Body.String(), "hostile", "raw declaration bytes must not be echoed")
 }
 
+// TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration pins that a
+// `_meta` protocol-version member that is present but not a string is a
+// malformed declaration — the structured unsupported-version error — rather
+// than silently collapsing to "absent".
+func TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{
+		"_meta": map[string]any{
+			"io.modelcontextprotocol/protocolVersion": 20260728,
+		},
+	}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	envelope := decodeRPCResponse(t, w)
+	require.Contains(t, string(envelope["error"]), "unsupported protocol version")
+	require.Contains(t, string(envelope["error"]), "(unparseable)")
+}
+
 func TestServePublic_MetaEndpoint_ConflictingVersionDeclarations(t *testing.T) {
 	t.Parallel()
 
@@ -391,6 +419,9 @@ func TestServePublic_MetaEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T
 	wwwAuth := w.Header().Get("WWW-Authenticate")
 	expected := `Bearer resource_metadata="` + ti.serverURL.String() + `/.well-known/oauth-protected-resource/mcp/` + slug + `"`
 	require.Equal(t, expected, wwwAuth)
+	// The served-version header is stable regardless of outcome and is
+	// stamped before the issuer gate can bail out.
+	require.Equal(t, mcpversions.ServedMetaServer, w.Header().Get(mcpversions.HTTPHeader))
 }
 
 func TestServeMCPEndpoint_MetaEndpoint_NoXmcpExposure(t *testing.T) {
