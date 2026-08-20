@@ -80,19 +80,18 @@ export function InstrumentAgentsStep({
 
         <TabsContent value="device-agent" className="space-y-4">
           <Alert variant="info">
-            <AlertTitle>Claude Cowork still needs manual setup</AlertTitle>
+            <AlertTitle>Cowork needs separate setup</AlertTitle>
             <AlertDescription>
-              The device agent instruments coding assistants that run on a
-              developer's machine — Cowork runs in Claude.ai's own cloud
-              sandbox, so it isn't covered here.{" "}
+              The Remote sessions tile below covers Claude Code on the web.
+              Cowork isn&apos;t covered by the device agent.{" "}
               <button
                 type="button"
                 onClick={openCoworkManualSetup}
                 className="text-foreground underline underline-offset-2"
               >
                 Set it up manually
-              </button>{" "}
-              alongside your device agent rollout.
+              </button>
+              .
             </AlertDescription>
           </Alert>
           <DeviceAgentSetup />
