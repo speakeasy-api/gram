@@ -12,8 +12,10 @@ export const PINNED_AGENT_VERSION =
 export const RELEASE_SHA256 = /^[0-9a-f]{64}$/;
 
 // Email and token land inside a JSON heredoc the script expands, so beyond
-// shell quoting they must not carry JSON-breaking characters.
-const JSON_SAFE_VALUE = /^[^"\\\s]+$/;
+// shell quoting they must not carry JSON-breaking characters (quotes,
+// backslashes, whitespace, or control characters).
+// eslint-disable-next-line no-control-regex
+const JSON_SAFE_VALUE = /^[^"\\\s\x00-\x1f]+$/;
 
 export type CloudSetupCommandInput = {
   version: string;
@@ -64,7 +66,8 @@ printf '%s  /usr/local/bin/speakeasyd\\n' "$SHA256" | sha256sum -c -
 chmod 0755 /usr/local/bin/speakeasyd
 
 # 2) Managed enrollment: the identity the daemon reads at startup, and the
-#    same file that answers daemonless identity lookups from hooks.
+#    same file that answers daemonless identity lookups from hooks. Everything
+#    in this VM runs as root, so keep the org token root-only.
 install -d -m 0755 /etc/speakeasy
 cat > /etc/speakeasy/managed.json <<JSON
 {
@@ -75,7 +78,7 @@ cat > /etc/speakeasy/managed.json <<JSON
   "hide_ui": true
 }
 JSON
-chmod 0644 /etc/speakeasy/managed.json
+chmod 0600 /etc/speakeasy/managed.json
 
 # 3) SessionStart hook: starts the daemon in each session (Anthropic
 #    snapshots files, not processes). flock holds the lock for the daemon's

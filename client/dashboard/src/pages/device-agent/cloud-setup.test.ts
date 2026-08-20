@@ -41,7 +41,7 @@ describe("buildCloudSetupCommand", () => {
     expect(script).toContain(`EMAIL='remote-session@example.test'`);
     expect(script).toContain(`ORG_TOKEN='spk_org_test_token'`);
     expect(script).toContain(`"auto_update": "disabled"`);
-    expect(script).toContain("chmod 0644 /etc/speakeasy/managed.json");
+    expect(script).toContain("chmod 0600 /etc/speakeasy/managed.json");
   });
 
   it("registers a singleton SessionStart hook that revives the daemon", () => {
@@ -116,6 +116,12 @@ describe("buildCloudSetupCommand", () => {
     ).toThrow(/valid remote session identity email/);
     expect(() =>
       buildCloudSetupCommand({ ...input, orgToken: 'tok"en' }),
+    ).toThrow(/valid org token/);
+    expect(() =>
+      buildCloudSetupCommand({ ...input, email: "bell\x07@example.test" }),
+    ).toThrow(/valid remote session identity email/);
+    expect(() =>
+      buildCloudSetupCommand({ ...input, orgToken: "tok\x01en" }),
     ).toThrow(/valid org token/);
   });
 });
