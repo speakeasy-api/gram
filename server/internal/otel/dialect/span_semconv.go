@@ -23,17 +23,21 @@ func (e SemconvSpan) Content(span *otelv1.InboundSpan) (string, []string, error)
 }
 
 func (e SemconvSpan) SessionID(span *otelv1.InboundSpan) (key string, val string, err error) {
-	return getOneAttr(span, "gen_ai.conversation.id")
+	key, val = getOneAttr(span, "gen_ai.conversation.id")
+	return key, val, nil
 }
 
 func (e SemconvSpan) ExternalUserEmail(span *otelv1.InboundSpan) (key string, val string, err error) {
-	return getOneAttr(span, "user.email")
+	key, val = getOneAttr(span, "user.email")
+	return key, val, nil
 }
 
 func (e SemconvSpan) ExternalUserID(span *otelv1.InboundSpan) (key string, val string, err error) {
-	return getOneAttr(span, "user.id")
+	key, val = getOneAttr(span, "user.id")
+	return key, val, nil
 }
 
 func (e SemconvSpan) ResponseID(span *otelv1.InboundSpan) (key string, val string, err error) {
-	return getOneAttr(span, "gen_ai.response.id")
+	key, val = getOneAttr(span, "gen_ai.response.id")
+	return key, val, nil
 }

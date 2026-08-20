@@ -146,9 +146,7 @@ func TestGetOneAttrSkipsWrongValueTypeAndUsesKeyPriority(t *testing.T) {
 		},
 	}).Build()
 
-	key, value, err := getOneAttr(span, "preferred", "fallback")
-
-	require.NoError(t, err)
+	key, value := getOneAttr(span, "preferred", "fallback")
 	require.Equal(t, "preferred", key)
 	require.Equal(t, "preferred-value", value)
 }
