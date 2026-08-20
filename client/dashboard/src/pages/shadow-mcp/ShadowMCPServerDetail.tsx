@@ -595,6 +595,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       </div>
     ) : (
       <TopUsersTable
+        // Remount per server: the collapse state lives in the table, and this
+        // route stays mounted when navigating between servers, so without a
+        // key the next server's roster opens already expanded.
+        key={serverSlug}
         hasMore={Boolean(nextUsersCursor)}
         isLoading={isLoadingMoreUsers}
         onLoadMore={loadMoreUsers}

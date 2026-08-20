@@ -521,7 +521,7 @@ function ResearchReports({
     // org's money, so a non-admin must not see a button whose click comes
     // back 403.
     headerNote = (
-      <RequireScope scope="org:admin" level="component">
+      <RequireScope scope="org:admin" resourceId={project.id} level="component">
         <Button
           size="sm"
           variant="secondary"
@@ -567,7 +567,7 @@ function ResearchReports({
           typically several hundred thousand tokens, several minutes per run.
         </p>
       )}
-      {!latest && (
+      {!latest && researchFlag.status !== "disabled" && (
         <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
           No research has been run for this server.
         </p>

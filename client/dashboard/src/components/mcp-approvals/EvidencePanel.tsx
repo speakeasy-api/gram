@@ -19,6 +19,7 @@ import type {
   EvidenceCapability,
   EvidenceDocument,
   EvidenceDomain,
+  EvidenceExposure,
   EvidenceIdentity,
   EvidencePackage,
   EvidenceProvenance,
@@ -105,12 +106,21 @@ export function EvidencePanel({
             </EvidenceGroup>
           </>
         ) : (
-          <div className="lg:col-span-2">
+          <>
             <DeclaredCapabilitySection
               capabilities={document.capabilities}
               source={document.capabilitiesSource}
             />
-          </div>
+            {/* Without a traffic table the exposure figures have nowhere else
+                to appear: the review sheet has no summary strip, and a frozen
+                decision snapshot is evidence as it stood, not traffic as it is
+                now. The detail page drops this group because its strip and
+                table already answer it. */}
+            <ExposureSection
+              exposure={document.exposure}
+              identity={document.identity}
+            />
+          </>
         )}
         {/* Maturity and advisories share the last row. Maturity used to span
             the full width so its fact list could run two columns, but with
@@ -154,6 +164,78 @@ const GAPS_SHOWN_BY_THEIR_OWN_GROUP = new Set([
   "catalog_lookup_failed",
   "advisory_lookup_failed",
 ]);
+
+/**
+ * What this project's own traffic says, for the surfaces that do not render a
+ * live traffic table beside it.
+ */
+function ExposureSection({
+  exposure,
+  identity,
+}: {
+  exposure: EvidenceExposure | undefined;
+  identity: EvidenceIdentity;
+}): JSX.Element {
+  if (!exposure) {
+    return (
+      <EvidenceGroup question="Are we already exposed?">
+        <UnknownBlock>
+          {identity.kind === "remote"
+            ? "Usage records could not be gathered."
+            : "No URL to look up in usage records — exposure here is unknowable from traffic."}
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  if (exposure.status === "unseen") {
+    return (
+      <EvidenceGroup question="Are we already exposed?">
+        <AnswerBlock>
+          No one in this project has recorded traffic to this server. Denying it
+          costs nobody an existing workflow.
+        </AnswerBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  const facts: Array<{ label: string; value: React.ReactNode }> = [
+    { label: "People who have called it", value: exposure.userCount ?? 0 },
+    { label: "Recorded calls", value: exposure.callCount ?? 0 },
+  ];
+  if (exposure.firstSeen) {
+    facts.push({
+      label: "First seen here",
+      value: (
+        <HumanizeDateTime
+          date={new Date(exposure.firstSeen)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (exposure.lastCalled) {
+    facts.push({
+      label: "Last called",
+      value: <HumanizeDateTime date={new Date(exposure.lastCalled)} />,
+    });
+  }
+
+  return (
+    <EvidenceGroup
+      question="Are we already exposed?"
+      note={
+        exposure.inUse && (
+          <span className="border-warning border px-2.5 py-1 text-xs">
+            Already in use — a denial changes existing workflows.
+          </span>
+        )
+      }
+    >
+      <FactList facts={facts} />
+    </EvidenceGroup>
+  );
+}
 
 export function EvidenceGroup({
   question,
