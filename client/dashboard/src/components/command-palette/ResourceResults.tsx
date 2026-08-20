@@ -298,7 +298,7 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
   return (
-    <CommandGroup heading="Risk Policies">
+    <CommandGroup heading="Guardrails">
       {policies.map((policy) => (
         <ResultItem
           key={policy.id}
@@ -353,9 +353,10 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
           sublabel={rule.severity}
           icon="scan-search"
           onSelect={() => {
-            // No per-rule route; deep-link opens the rule's sheet by id.
+            // No per-rule route; deep-link opens the rule's sheet by id on
+            // the Guardrails page's Detection Rules tab.
             void navigate(
-              `${routes.detectionRules.href()}?rule=${encodeURIComponent(rule.id)}`,
+              `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
             );
             onNavigate();
           }}
