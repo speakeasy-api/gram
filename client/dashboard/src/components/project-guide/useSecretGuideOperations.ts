@@ -32,29 +32,30 @@ export const SECRET_GUIDE_CLIENTS: Record<
 > = {
   claude: {
     hookSource: "claude-code",
-    installDirectory: "gram-observability-claude",
+    installDirectory: "~/.claude/plugins/",
     label: "Claude Code",
   },
   cursor: {
     hookSource: "cursor",
-    installDirectory: "gram-observability-cursor",
+    installDirectory: "~/.cursor/extensions/",
     label: "Cursor",
   },
   codex: {
     hookSource: "codex",
-    installDirectory: "gram-observability-codex",
+    installDirectory: "~/.codex/plugins/",
     label: "Codex",
   },
   opencode: {
     hookSource: "opencode",
-    installDirectory: ".opencode",
+    installDirectory: ".opencode/",
     label: "OpenCode",
   },
 };
 
 const SECRET_GUIDE_SYNTHETIC_SECRET = "ghp_R2D2C3POLuk3Skywalker1234567890ab";
-const SECRET_GUIDE_PROMPT =
-  "Security test with a synthetic, inert dummy secret: use your local shell tool exactly once to run the command below. Do not use the network or contact any service. Submit the command as a tool request exactly as written:\n\nprintf '%s\\n' 'GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab' >/dev/null";
+const SECRET_GUIDE_PROMPT = `Run this exact command in your shell:
+
+echo "GITHUB_TOKEN=${SECRET_GUIDE_SYNTHETIC_SECRET}"`;
 
 const SECRET_GUIDE_CORRELATION_WINDOW_MS = 60_000;
 
@@ -98,47 +99,16 @@ function shellFilename(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
-function downloadedArchivePath(filename: string): string {
-  return `"$HOME/Downloads"/${shellFilename(filename)}`;
-}
-
 function installDetails(
   client: SecretGuideClient,
   filename: string | undefined,
 ): { command: string; instructions: string } | undefined {
   if (!filename) return undefined;
-  const archive = downloadedArchivePath(filename);
-  const directoryName = SECRET_GUIDE_CLIENTS[client].installDirectory;
-  if (client === "opencode") {
-    return {
-      command: `mkdir -p ${directoryName} && unzip -oq ${archive} -d ${directoryName}`,
-      instructions:
-        "Run this from your project directory. OpenCode discovers the extracted plugin in .opencode/ when it starts.",
-    };
-  }
-  const directory = `"$HOME/${directoryName}"`;
-  const extract = `mkdir -p ${directory} && unzip -oq ${archive} -d ${directory}`;
-
-  switch (client) {
-    case "claude":
-      return {
-        command: `${extract} && claude --plugin-dir ${directory}`,
-        instructions:
-          "This launches Claude Code with the extracted plugin active. Keep that session open for the test, then confirm below.",
-      };
-    case "cursor":
-      return {
-        command: extract,
-        instructions:
-          "After extraction, open Cursor Settings → Plugins → Import, select $HOME/gram-observability-cursor, finish the import, and restart Cursor before confirming.",
-      };
-    case "codex":
-      return {
-        command: `${extract} && bash "$HOME/${directoryName}/install.sh"`,
-        instructions:
-          "The bundled installer registers the marketplace, enables the Codex plugin and hook feature flags, and approves the hooks. Restart Codex before confirming.",
-      };
-  }
+  const { installDirectory, label } = SECRET_GUIDE_CLIENTS[client];
+  return {
+    command: `unzip -oq ${shellFilename(filename)} -d ${installDirectory}`,
+    instructions: `Extract the ZIP into ${installDirectory}, then restart ${label} before confirming below.`,
+  };
 }
 
 async function syntheticSecretRedaction(
@@ -241,7 +211,6 @@ export function useSecretGuideOperations(): {
   policyPending: boolean;
   prompt: string;
   promptCopied: boolean;
-  retryBaseline: () => void;
   retryPolicy: () => void;
   riskEventsHref: string;
   setClient: (client: SecretGuideClient) => void;
@@ -311,11 +280,7 @@ export function useSecretGuideOperations(): {
       throwOnError: false,
     },
   );
-  const telemetryQueryError =
-    tracesQuery.isError ||
-    resultsQuery.isError ||
-    (listening && !tracesQuery.isPending && tracesQuery.data === undefined) ||
-    (listening && !resultsQuery.isPending && resultsQuery.data === undefined);
+  const telemetryQueryError = tracesQuery.isError || resultsQuery.isError;
   const telemetryError = baselineError || telemetryQueryError;
 
   const updateActiveOperation = useCallback(
@@ -393,12 +358,24 @@ export function useSecretGuideOperations(): {
         return;
       }
       if (signal.type === "checkpoint") {
-        if (signal.scope.step === 2) void captureBaseline();
+        if (signal.scope.step === 3) void captureBaseline();
         return;
       }
       updateActiveOperation({ scope: signal.scope, report, paused: false });
+      if (signal.type === "start" && signal.scope.step === 4) {
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message:
+            "Waiting for a new blocked hook and matching secrets risk event.",
+        });
+      }
       if (signal.type === "retry" && signal.scope.step === 4) {
-        retryTelemetry();
+        if (baselineRef.current) {
+          retryTelemetry();
+        } else {
+          void captureBaseline();
+        }
       }
     },
     [captureBaseline, retryTelemetry, updateActiveOperation],
@@ -545,21 +522,13 @@ export function useSecretGuideOperations(): {
     const operation = activeOperation;
     if (!operation || operation.paused || operation.scope.step !== 4) return;
     const currentBaseline = baselineRef.current;
-    if (!currentBaseline) {
-      updateActiveOperation(undefined);
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message:
-          "Could not capture the event baseline before the prompt. Return to the prompt step and try again.",
-      });
+    if (suppressTelemetryError) {
       return;
     }
-    if (
-      suppressTelemetryError ||
-      tracesQuery.isPending ||
-      resultsQuery.isPending
-    ) {
+    if (!currentBaseline) {
+      return;
+    }
+    if (tracesQuery.isPending || resultsQuery.isPending) {
       return;
     }
     if (telemetryError) {
@@ -618,9 +587,6 @@ export function useSecretGuideOperations(): {
     policyPending,
     prompt: SECRET_GUIDE_PROMPT,
     promptCopied,
-    retryBaseline: () => {
-      void captureBaseline();
-    },
     retryPolicy: () => {
       void policiesQuery.refetch();
     },

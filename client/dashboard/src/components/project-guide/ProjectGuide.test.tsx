@@ -164,17 +164,15 @@ function resetSecretOperations(): void {
     clientSelected: true,
     downloadedFilename: "gram-observability.zip",
     handleSignal: vi.fn(),
-    installCommand:
-      'unzip -q "$HOME/Downloads"/gram-observability.zip -d "$HOME/gram-observability-claude" && claude --plugin-dir "$HOME/gram-observability-claude"',
+    installCommand: "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
     installInstructions:
-      "This launches Claude Code with the extracted plugin active. Keep that session open for the test, then confirm below.",
+      "Extract the ZIP into ~/.claude/plugins/, then restart Claude Code before confirming below.",
     markPromptCopied: vi.fn(),
     policyError: false,
     policyPending: false,
     prompt:
-      "Use your local shell tool exactly once for this dummy secret test. Do not use the network. Run: printf '%s\\n' 'GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab' >/dev/null",
+      'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     promptCopied: true,
-    retryBaseline: vi.fn(),
     retryPolicy: vi.fn(),
     riskEventsHref: "/projects/request-project/security/events",
     setClient: vi.fn((client: "claude" | "cursor" | "codex" | "opencode") => {
@@ -360,11 +358,16 @@ describe("ProjectGuide", () => {
       "checkpoint",
     );
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "waiting",
     );
+    expect(screen.queryByText("Your turn · Connect your client")).toBeNull();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Next · Connect your client");
     expect(screen.getByRole("status").textContent).toContain("Listening");
     if (!activeScope) throw new Error("expected waiting operation scope");
     const waitingScope = activeScope;
@@ -387,6 +390,133 @@ describe("ProjectGuide", () => {
       screen.getByRole("heading", { name: "The path is governed." }),
     ).toBeTruthy();
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
+  });
+
+  it("keeps the MCP prompt available while its baseline is unresolved", async () => {
+    mcpOperations.current.activityBaselineReady = false;
+    mcpOperations.current.activityError = true;
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Step complete",
+          });
+        }
+      },
+    );
+    mcpOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/first list the available tools/)).toBeTruthy(),
+    );
+    expect(
+      screen.queryByText(/capturing current activity baseline/i),
+    ).toBeNull();
+    expect(
+      screen.queryByText(/could not capture the current activity baseline/i),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+  });
+
+  it("shows MCP Step 5 waiting guidance only in Activity", async () => {
+    const waitingMessage =
+      "Listening for a new call on the selected governed endpoint";
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Step complete",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "progress",
+            scope: signal.scope,
+            message: waitingMessage,
+          });
+        }
+      },
+    );
+    mcpOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    await waitFor(() =>
+      expect(screen.getByText(/first list the available tools/)).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByText(/first list the available tools/));
+
+    const activity = screen.getByRole("log", { name: "Journey A activity" });
+    await waitFor(() => expect(activity.textContent).toContain(waitingMessage));
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "waiting",
+    );
+    expect(screen.queryByRole("link", { name: "Open Tool Logs" })).toBeNull();
+  });
+
+  it("shows MCP Step 5 operation errors only in Activity", async () => {
+    const listenerError =
+      "Could not check for the new governed call. Retry after checking the client connection.";
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Step complete",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "error",
+            scope: signal.scope,
+            message: listenerError,
+          });
+        }
+      },
+    );
+    mcpOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain(listenerError);
+    expect(
+      document.querySelector('[aria-current="step"]')?.textContent,
+    ).not.toContain(listenerError);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
   it("waits for an agent selection before showing Secret Step 2 as running", () => {
@@ -461,6 +591,9 @@ describe("ProjectGuide", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/Your turn · Add it to your agent/)).toBeNull();
+    expect(
+      screen.getByRole("log", { name: "Journey B activity" }).textContent,
+    ).toContain("Next · Add it to your agent");
   });
 
   it("renders an adapter error and retries through the same operation port", () => {
@@ -571,6 +704,54 @@ describe("ProjectGuide", () => {
 
     const action = screen.getByRole("button", { name: "Start the journey" });
     expect((action as HTMLButtonElement).disabled).toBe(true);
+    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it("styles an enabled checkpoint action as actionable without a play affordance", () => {
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="in-progress"
+        regionId="checkpoint-run"
+        displayState="checkpoint"
+        primaryAction={{
+          label: "I've installed and restarted it",
+          disabled: false,
+        }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    const action = screen.getByRole("button", {
+      name: "I've installed and restarted it",
+    });
+    expect((action as HTMLButtonElement).disabled).toBe(false);
+    expect(action.className).toContain("bg-[#121212]");
+    expect(action.className).toContain("text-[#FAFAFA]");
+    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it("styles a disabled checkpoint action as non-interactive", () => {
+    render(
+      <ProjectGuideRun
+        journey={PROJECT_GUIDE_JOURNEYS[1]!}
+        status="in-progress"
+        regionId="disabled-checkpoint-run"
+        displayState="checkpoint"
+        primaryAction={{
+          label: "I've installed and restarted it",
+          disabled: true,
+        }}
+        onSwitchJourney={() => undefined}
+      />,
+    );
+
+    const action = screen.getByRole("button", {
+      name: "I've installed and restarted it",
+    });
+    expect((action as HTMLButtonElement).disabled).toBe(true);
+    expect(action.className).toContain("bg-[#EDECEA]");
+    expect(action.className).toContain("text-[#121212]/40");
     expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
@@ -922,7 +1103,8 @@ describe("ProjectGuide", () => {
         }),
       ).toBeTruthy(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
 
     expect(
       screen.getByRole("heading", { name: "The path is governed." }),
@@ -995,15 +1177,17 @@ describe("ProjectGuide", () => {
       installPre = screen.getByText((_, element) =>
         Boolean(
           element?.tagName === "PRE" &&
-          element.textContent?.includes("claude --plugin-dir"),
+          element.textContent?.includes(
+            "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
+          ),
         ),
       );
       expect(installPre).toBeTruthy();
     });
     expect(installPre?.className).toContain("min-w-0");
     expect(installPre?.className).toContain("max-w-full");
-    expect(installPre?.className).toContain("overflow-x-auto");
-    expect(installPre?.className).toContain("whitespace-nowrap");
+    expect(installPre?.className).toContain("w-full");
+    expect(installPre?.className).toContain("whitespace-pre-wrap");
     expect(installPre?.closest(".snippet-inner")?.className).toContain(
       "min-w-0",
     );
@@ -1034,13 +1218,30 @@ describe("ProjectGuide", () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.tagName === "PRE" &&
-            element.textContent?.includes("dummy secret"),
+            element.textContent?.match(/Run this exact command in your shell/),
           ),
         ),
       ).toBeTruthy(),
     );
-    expect(screen.getByText(/do not use the network/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    const promptPre = screen.getByText((_, element) =>
+      Boolean(
+        element?.tagName === "PRE" &&
+        element.textContent?.match(/Run this exact command in your shell/),
+      ),
+    );
+    expect(promptPre.className).toContain("min-w-0");
+    expect(promptPre.className).toContain("max-w-full");
+    expect(promptPre.className).toContain("w-full");
+    expect(promptPre.className).toContain("whitespace-pre-wrap");
+    expect(promptPre.closest(".snippet-inner")?.className).toContain("min-w-0");
+    expect(promptPre.closest(".snippet")?.parentElement?.className).toContain(
+      "min-w-0",
+    );
+    expect(
+      screen.getByText(/Run this exact command in your shell/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    fireEvent.click(screen.getByText(/Run this exact command in your shell/));
 
     expect(
       screen.getByRole("heading", { name: "The prompt was denied." }),
@@ -1053,7 +1254,135 @@ describe("ProjectGuide", () => {
     ).toBe("/projects/request-project/security/events");
   });
 
-  it("times out and retries the blocked-secret listener without accepting history", () => {
+  it("keeps the secret prompt visible and reports send failures in the activity log", async () => {
+    const listenerError =
+      "Could not check for the blocked event after the prompt was copied. Retry the step.";
+    secretOperations.current.promptCopied = true;
+
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Step complete",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "error",
+            scope: signal.scope,
+            message: listenerError,
+          });
+        }
+      },
+    );
+    secretOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.tagName === "PRE" &&
+            element.textContent?.match(/Run this exact command in your shell/),
+          ),
+        ),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: "Retry baseline" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("log", { name: "Journey B activity" }).textContent,
+      ).toContain(listenerError),
+    );
+    expect(
+      screen.getByRole("log", { name: "Journey B activity" }).textContent,
+    ).toContain("Prompt copied · listening for the blocked event");
+    expect(
+      document.querySelector('[aria-current="step"]')?.textContent,
+    ).not.toContain(listenerError);
+    expect(
+      screen.queryByText(
+        "Could not capture the hook and risk-event baseline. Retry it before copying the prompt.",
+      ),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("shows Step 5 waiting guidance only in activity before an event exists", async () => {
+    const handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step < 2) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Step complete",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 4) {
+          report({
+            type: "progress",
+            scope: signal.scope,
+            message:
+              "Waiting for a new blocked hook and matching secrets risk event.",
+          });
+        }
+      },
+    );
+    secretOperations.current.handleSignal = handleSignal;
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Run this exact command in your shell/),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByText(/Run this exact command in your shell/));
+
+    const activity = screen.getByRole("log", { name: "Journey B activity" });
+    await waitFor(() =>
+      expect(activity.textContent).toContain(
+        "Waiting for a new blocked hook and matching secrets risk event.",
+      ),
+    );
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "waiting",
+    );
+    expect(screen.queryByRole("link", { name: "Open Risk Events" })).toBeNull();
+  });
+
+  it("times out and retries the blocked-secret listener without accepting history", async () => {
     vi.useFakeTimers();
     const handleSignal = vi.fn(
       (
@@ -1085,15 +1414,24 @@ describe("ProjectGuide", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "I've installed and restarted it" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    vi.useRealTimers();
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Run this exact command in your shell/),
+      ).toBeTruthy(),
+    );
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText(/Run this exact command in your shell/));
 
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "No event seen in 60s. Check the client, then listen again.",
-    );
+    expect(
+      screen.getByRole("log", { name: "Journey B activity" }).textContent,
+    ).toContain("No event seen in 60s. Check the client, then listen again.");
+    expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(handleSignal).toHaveBeenLastCalledWith(
       {
@@ -1134,15 +1472,16 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sent it" }));
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
 
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "No event seen in 60s. Check the client, then listen again.",
-    );
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("No event seen in 60s. Check the client, then listen again.");
+    expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(handleSignal).toHaveBeenLastCalledWith(
       {

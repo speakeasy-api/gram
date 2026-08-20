@@ -30,7 +30,7 @@ export type ProjectGuideRunProps = {
   currentContent?: ReactNode;
   output?: ReactNode;
   eventCard?: ReactNode;
-  primaryAction?: ProjectGuideRunAction;
+  primaryAction?: ProjectGuideRunAction | null;
   listeningElapsedSeconds?: number;
   onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
@@ -127,8 +127,11 @@ export function ProjectGuideRun({
       }
     : undefined;
   const isStartAction =
+    resolvedPrimaryAction !== null &&
     (displayState === "ready" || displayState === "checkpoint") &&
     resolvedPrimaryAction.label === "Start the journey";
+  const isEnabledPrimaryAction =
+    resolvedPrimaryAction !== null && !resolvedPrimaryAction.disabled;
 
   const activityLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -136,7 +139,7 @@ export function ProjectGuideRun({
     if (activityLog) activityLog.scrollTop = activityLog.scrollHeight;
   }, [resolvedOutput]);
 
-  if (isComplete) {
+  if (isComplete && resolvedPrimaryAction) {
     return (
       <section id={regionId} role="region" aria-label={journey.title}>
         <CompletionSummary
@@ -285,26 +288,28 @@ export function ProjectGuideRun({
               </div>
             )}
             {resolvedEventCard}
-            <button
-              type="button"
-              onClick={resolvedPrimaryAction.onClick}
-              disabled={resolvedPrimaryAction.disabled}
-              aria-label={resolvedPrimaryAction.label}
-              className={cn(
-                "mt-auto flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
-                isStartAction && !resolvedPrimaryAction.disabled
-                  ? "bg-[#121212] text-[#FAFAFA]"
-                  : "cursor-default bg-[#EDECEA] text-[#121212]/40",
-              )}
-            >
-              {isStartAction && !resolvedPrimaryAction.disabled && (
-                <span
-                  aria-hidden="true"
-                  className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
-                />
-              )}
-              {resolvedPrimaryAction.label}
-            </button>
+            {resolvedPrimaryAction && (
+              <button
+                type="button"
+                onClick={resolvedPrimaryAction.onClick}
+                disabled={resolvedPrimaryAction.disabled}
+                aria-label={resolvedPrimaryAction.label}
+                className={cn(
+                  "mt-auto flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
+                  isEnabledPrimaryAction
+                    ? "bg-[#121212] text-[#FAFAFA]"
+                    : "cursor-default bg-[#EDECEA] text-[#121212]/40",
+                )}
+              >
+                {isStartAction && !resolvedPrimaryAction.disabled && (
+                  <span
+                    aria-hidden="true"
+                    className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
+                  />
+                )}
+                {resolvedPrimaryAction.label}
+              </button>
+            )}
           </aside>
         </div>
       </motion.div>

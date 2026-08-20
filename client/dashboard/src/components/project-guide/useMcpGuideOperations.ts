@@ -397,6 +397,13 @@ export function useMcpGuideOperations(): {
       }
 
       updateActiveOperation({ scope: signal.scope, report, paused: false });
+      if (signal.type === "start" && signal.scope.step === 4) {
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message: "Listening for a new call on the selected governed endpoint",
+        });
+      }
       if (signal.type === "retry") {
         if (signal.scope.step === 0) workflow.reset();
         if (signal.scope.step === 4) retryActivity();
@@ -532,25 +539,7 @@ export function useMcpGuideOperations(): {
     const operation = activeOperation;
     if (!operation || operation.paused || operation.scope.step !== 4) return;
     const baseline = activityBaselineRef.current;
-    if (!baseline) {
-      updateActiveOperation(undefined);
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message:
-          "Could not capture the activity baseline before the prompt. Return to the prompt step and try again.",
-      });
-      return;
-    }
-    const key = operationKey(operation.scope);
-    if (!progressReportedFor.current.has(key)) {
-      progressReportedFor.current.add(key);
-      operation.report({
-        type: "progress",
-        scope: operation.scope,
-        message: "Listening for a new call on the selected governed endpoint",
-      });
-    }
+    if (!baseline) return;
     if (suppressActivityError || activityQuery.isPending) return;
     if (activityError) {
       updateActiveOperation(undefined);

@@ -249,10 +249,37 @@ export function ProjectGuide({
                         step={currentStep}
                         displayState={displayState}
                         operationProgress={snapshot.context.operationProgress}
-                        checkpoint={snapshot.context.checkpoint?.label}
                         error={snapshot.context.error}
                         mcpOperations={mcpOperations}
                         secretOperations={secretOperations}
+                        onMcpPromptCopied={() => {
+                          mcpOperations.markPromptCopied();
+                          if (
+                            journey.id === "third-party-mcp" &&
+                            currentStep === 3 &&
+                            displayState === "checkpoint"
+                          ) {
+                            send({
+                              type: "USER_CHECKPOINT_COMPLETE",
+                              result:
+                                "Prompt copied · listening for the governed call",
+                            });
+                          }
+                        }}
+                        onSecretPromptCopied={() => {
+                          secretOperations.markPromptCopied();
+                          if (
+                            journey.id === "secret-block" &&
+                            currentStep === 3 &&
+                            displayState === "checkpoint"
+                          ) {
+                            send({
+                              type: "USER_CHECKPOINT_COMPLETE",
+                              result:
+                                "Prompt copied · listening for the blocked event",
+                            });
+                          }
+                        }}
                         onSelectAgent={(client) => {
                           secretOperations.setClient(client);
                           send({ type: "SELECT_AGENT", client });
@@ -308,7 +335,7 @@ function primaryActionFor(
   send: (event: ProjectGuideEvent) => void,
   mcpOperations: McpGuideOperations,
   secretOperations: SecretGuideOperations,
-): ProjectGuideRunAction {
+): ProjectGuideRunAction | null {
   switch (displayState) {
     case "ready":
       return {
@@ -341,19 +368,7 @@ function primaryActionFor(
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 3) {
-        return {
-          label: "Sent it",
-          disabled:
-            !mcpOperations.prompt ||
-            !mcpOperations.promptCopied ||
-            !mcpOperations.activityBaselineReady ||
-            mcpOperations.activityError,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Prompt sent from the configured client",
-            }),
-        };
+        return null;
       }
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
@@ -377,18 +392,7 @@ function primaryActionFor(
         };
       }
       if (journey.id === "secret-block" && currentStep === 3) {
-        return {
-          label: "Sent it",
-          disabled:
-            !secretOperations.promptCopied ||
-            !secretOperations.telemetryBaselineReady ||
-            secretOperations.telemetryError,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Dummy-secret prompt sent from the restarted agent",
-            }),
-        };
+        return null;
       }
       return {
         label: "I've completed this step",
@@ -429,20 +433,22 @@ function ProjectGuideStepContent({
   step,
   displayState,
   operationProgress,
-  checkpoint,
   error,
   mcpOperations,
   secretOperations,
+  onMcpPromptCopied,
+  onSecretPromptCopied,
   onSelectAgent,
 }: {
   journey: JourneyMeta;
   step: number;
   displayState: ProjectGuideDisplayState;
   operationProgress: number | null;
-  checkpoint?: string;
   error: string | null;
   mcpOperations: McpGuideOperations;
   secretOperations: SecretGuideOperations;
+  onMcpPromptCopied: () => void;
+  onSecretPromptCopied: () => void;
   onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element {
   if (journey.id === "third-party-mcp") {
@@ -450,9 +456,9 @@ function ProjectGuideStepContent({
       <ProjectGuideMcpStepContent
         journey={journey}
         step={step}
-        checkpoint={checkpoint}
         error={error}
         operations={mcpOperations}
+        onMcpPromptCopied={onMcpPromptCopied}
       />
     );
   }
@@ -468,14 +474,10 @@ function ProjectGuideStepContent({
         operationProgress={operationProgress}
         error={error}
         operations={secretOperations}
+        onSecretPromptCopied={onSecretPromptCopied}
         onSelectAgent={onSelectAgent}
       />
-      {checkpoint && !(journey.id === "secret-block" && step === 2) && (
-        <p className="font-mono text-[10px] text-[#121212]/50">
-          Your turn · {checkpoint}
-        </p>
-      )}
-      {error && (
+      {error && !(journey.id === "secret-block" && step >= 3) && (
         <p role="alert" className="text-destructive text-[12px]">
           {error}
         </p>
@@ -621,6 +623,7 @@ function SecretStepBody({
   operationProgress,
   error,
   operations,
+  onSecretPromptCopied,
   onSelectAgent,
 }: {
   step: number;
@@ -628,6 +631,7 @@ function SecretStepBody({
   operationProgress: number | null;
   error: string | null;
   operations: SecretGuideOperations;
+  onSecretPromptCopied: () => void;
   onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element | null {
   switch (step) {
@@ -687,62 +691,35 @@ function SecretStepBody({
             code={operations.installCommand}
             language="bash"
             copyable
+            wordWrap
             className="min-w-0 max-w-full"
-            snippetClassName="min-w-0 max-w-full overflow-x-auto whitespace-nowrap"
+            snippetClassName="min-w-0 w-full max-w-full"
           />
         </div>
       );
     case 3:
-      if (operations.telemetryError) {
-        return (
-          <div className="grid gap-2">
-            <p role="alert" className="text-destructive text-[12px]">
-              Could not capture the hook and risk-event baseline.
-            </p>
-            <button
-              type="button"
-              onClick={operations.retryBaseline}
-              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-            >
-              Retry baseline
-            </button>
-          </div>
-        );
-      }
-      if (!operations.telemetryBaselineReady) {
-        return (
-          <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-            Capturing the pre-prompt event baseline
-          </span>
-        );
-      }
       return (
-        <div className="grid gap-2">
-          <span className="font-mono text-[10px] text-[#121212]/50">
-            Copy into {SECRET_GUIDE_CLIENTS[operations.client].label}
-          </span>
-          <CodeSnippet
-            code={operations.prompt}
-            language="text"
-            copyable
-            onSelectOrCopy={operations.markPromptCopied}
-          />
+        <div className="grid min-w-0 gap-2">
+          <div className="grid gap-2">
+            <span className="font-mono text-[10px] text-[#121212]/50">
+              Copy into {SECRET_GUIDE_CLIENTS[operations.client].label}
+            </span>
+            <div className="min-w-0">
+              <CodeSnippet
+                code={operations.prompt}
+                language="text"
+                copyable
+                wordWrap
+                className="min-w-0 w-full max-w-full"
+                snippetClassName="min-w-0 w-full max-w-full"
+                onSelectOrCopy={onSecretPromptCopied}
+              />
+            </div>
+          </div>
         </div>
       );
     case 4:
-      return (
-        <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
-          <span>
-            Waiting for a new blocked hook and matching secrets risk event.
-          </span>
-          <Link
-            to={operations.riskEventsHref}
-            className="text-information-default w-fit underline underline-offset-2"
-          >
-            Open Risk Events
-          </Link>
-        </div>
-      );
+      return null;
     default:
       return null;
   }
@@ -818,28 +795,27 @@ function SecretPluginPhases({
 function ProjectGuideMcpStepContent({
   journey,
   step,
-  checkpoint,
   error,
   operations,
+  onMcpPromptCopied,
 }: {
   journey: JourneyMeta;
   step: number;
-  checkpoint?: string;
   error: string | null;
   operations: McpGuideOperations;
+  onMcpPromptCopied: () => void;
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
       <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
         {journey.stepBlurbs[step]}
       </p>
-      <McpStepBody step={step} operations={operations} />
-      {checkpoint && (
-        <p className="font-mono text-[10px] text-[#121212]/50">
-          Your turn · {checkpoint}
-        </p>
-      )}
-      {error && (
+      <McpStepBody
+        step={step}
+        operations={operations}
+        onMcpPromptCopied={onMcpPromptCopied}
+      />
+      {error && step !== 4 && (
         <p role="alert" className="text-destructive text-[12px]">
           {error}
         </p>
@@ -851,9 +827,11 @@ function ProjectGuideMcpStepContent({
 function McpStepBody({
   step,
   operations,
+  onMcpPromptCopied,
 }: {
   step: number;
   operations: McpGuideOperations;
+  onMcpPromptCopied: () => void;
 }): JSX.Element | null {
   switch (step) {
     case 0:
@@ -863,19 +841,14 @@ function McpStepBody({
     case 2:
       return <McpClientConnection operations={operations} />;
     case 3:
-      return <McpSafePrompt operations={operations} />;
-    case 4:
       return (
-        <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
-          <span>Waiting for a call newer than the prompt baseline.</span>
-          <Link
-            to={operations.toolLogsHref}
-            className="text-information-default w-fit underline underline-offset-2"
-          >
-            Open Tool Logs
-          </Link>
-        </div>
+        <McpSafePrompt
+          operations={operations}
+          onMcpPromptCopied={onMcpPromptCopied}
+        />
       );
+    case 4:
+      return null;
     default:
       return null;
   }
@@ -1063,8 +1036,10 @@ function McpClientConnection({
 
 function McpSafePrompt({
   operations,
+  onMcpPromptCopied,
 }: {
   operations: McpGuideOperations;
+  onMcpPromptCopied: () => void;
 }): JSX.Element {
   if (!operations.prompt) {
     return (
@@ -1074,38 +1049,13 @@ function McpSafePrompt({
     );
   }
 
-  if (operations.activityError) {
-    return (
-      <div className="grid gap-2">
-        <p role="alert" className="text-destructive text-[12px]">
-          Could not capture the current activity baseline.
-        </p>
-        <button
-          type="button"
-          onClick={operations.retryActivity}
-          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-        >
-          Retry activity check
-        </button>
-      </div>
-    );
-  }
-
-  if (!operations.activityBaselineReady) {
-    return (
-      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-        Capturing current activity baseline
-      </span>
-    );
-  }
-
   return (
     <div className="grid gap-2">
       <CodeSnippet
         code={operations.prompt}
         language="text"
         copyable
-        onSelectOrCopy={operations.markPromptCopied}
+        onSelectOrCopy={onMcpPromptCopied}
       />
     </div>
   );

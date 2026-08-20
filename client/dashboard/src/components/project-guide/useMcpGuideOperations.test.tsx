@@ -474,6 +474,93 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("keeps listening while the activity baseline is unresolved", async () => {
+    setExistingServer({ calls: 4 });
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result } = renderHook(() => useMcpGuideOperations());
+    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
+    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    refetchActivity.mockReturnValueOnce(new Promise(() => undefined));
+
+    act(() => {
+      result.current.handleSignal(
+        { type: "checkpoint", scope: promptScope },
+        report,
+      );
+      result.current.handleSignal(
+        { type: "start", scope: listenScope },
+        report,
+      );
+    });
+
+    expect(result.current.prompt).toMatch(/first list the available tools/i);
+    expect(report).toHaveBeenCalledWith({
+      type: "progress",
+      scope: listenScope,
+      message: "Listening for a new call on the selected governed endpoint",
+    });
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "error" }),
+    );
+  });
+
+  it("reports a real activity query failure after the baseline is ready", async () => {
+    setExistingServer({ calls: 4 });
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result, rerender } = renderHook(() => useMcpGuideOperations());
+    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
+    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    refetchActivity.mockResolvedValueOnce({
+      data: {
+        activity: [
+          {
+            lastToolCallAt: new Date("2026-08-19T12:01:00Z"),
+            recentToolCalls: 4,
+            targetId: "linear-governed",
+            targetLabel: "Linear",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 4,
+          },
+        ],
+      },
+      isError: false,
+    });
+
+    act(() => {
+      result.current.handleSignal(
+        { type: "checkpoint", scope: promptScope },
+        report,
+      );
+    });
+    await waitFor(() =>
+      expect(result.current.activityBaselineReady).toBe(true),
+    );
+
+    act(() => {
+      result.current.handleSignal(
+        { type: "start", scope: listenScope },
+        report,
+      );
+    });
+    queryHooks.activity.mockReturnValue({
+      data: undefined,
+      isError: true,
+      isFetching: false,
+      isPending: false,
+      refetch: refetchActivity,
+    });
+    rerender();
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "error",
+        scope: listenScope,
+        message:
+          "Could not check for the new governed call. Retry after checking the client connection.",
+      }),
+    );
+  });
+
   it("captures a fresh baseline after a failed baseline read is retried", async () => {
     setExistingServer({ calls: 2 });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
