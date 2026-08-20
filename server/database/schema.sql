@@ -1735,6 +1735,23 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   -- refresh. Optional, since not all metadata hosts emit one.
   client_id_metadata_etag TEXT,
 
+  -- Client authentication method this client declared at registration (RFC
+  -- 7591) or in its CIMD document, e.g. private_key_jwt. Durable server-side
+  -- state: the token endpoint must be able to tell that a client committed to
+  -- authenticating, or an impersonator could omit the assertion and be
+  -- handled as a public client. NULL means the row predates this column and
+  -- the effective method is derived from the row as it always has been: a
+  -- stored client_secret_hash still requires the matching symmetric secret,
+  -- otherwise the client is public ('none').
+  token_endpoint_auth_method TEXT,
+  -- Where this client's public keys for verifying signed assertions (RFC
+  -- 7523) come from: an inline JWKS document from the client metadata, or a
+  -- remote key set location. At most one may be set (see the source CHECK
+  -- below). The related rule that private_key_jwt requires one of the two is
+  -- conditional on an enum-like value and enforced in application code.
+  client_jwks JSONB,
+  client_jwks_uri TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1759,6 +1776,11 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
       client_id_metadata_uri <> ''
       AND client_id = client_id_metadata_uri
     )
+  ),
+  -- RFC 7591 §2 and the CIMD draft forbid a client from supplying jwks and
+  -- jwks_uri together, since that leaves the authoritative key set undefined.
+  CONSTRAINT user_session_clients_client_jwks_source_check CHECK (
+    num_nonnulls(client_jwks, client_jwks_uri) <= 1
   )
 );
 
