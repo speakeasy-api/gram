@@ -113,6 +113,41 @@ func TestSpanRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 	require.Equal(t, []string{"b-1"}, groupedNames["b"])
 }
 
+func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "internal-organization-id"
+	projectID := "internal-project-id"
+	span := relayTestSpan("test-span", organizationID, projectID)
+	provenance := span.GetProvenance()
+	provenance.SetOrganizationSlug("internal-organization-slug")
+	provenance.SetProjectSlug("internal-project-slug")
+	provenance.SetApiKeyId("internal-api-key-id")
+	provenance.SetApiKeyName("internal-api-key-name")
+
+	request, err := newRelayExportRequest([]*otelv1.Span{span})
+	require.NoError(t, err)
+	require.Len(t, request.GetResourceSpans(), 1)
+	require.Len(t, request.GetResourceSpans()[0].GetScopeSpans(), 1)
+	require.Len(t, request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans(), 1)
+
+	converted := request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans()[0]
+	require.Empty(t, converted.ProtoReflect().GetUnknown())
+
+	encoded, err := proto.Marshal(request)
+	require.NoError(t, err)
+	for _, internalValue := range []string{
+		organizationID,
+		projectID,
+		"internal-organization-slug",
+		"internal-project-slug",
+		"internal-api-key-id",
+		"internal-api-key-name",
+	} {
+		require.NotContains(t, string(encoded), internalValue)
+	}
+}
+
 func TestSpanRelayHandlerCountsInvalidAndMissingDestinationDrops(t *testing.T) {
 	t.Parallel()
 

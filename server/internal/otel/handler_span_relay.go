@@ -347,6 +347,9 @@ func newRelayExportRequest(spans []*otelv1.Span) (*collectortracev1.ExportTraceS
 		if err := transcodeOTLPMessage(span, converted); err != nil {
 			return nil, fmt.Errorf("convert span: %w", err)
 		}
+		// Gram's 1001+ fields become OTLP unknown fields during transcoding.
+		// Resource and scope are rebuilt above; authenticated provenance must not leave Gram.
+		converted.ProtoReflect().SetUnknown(nil)
 		scopeSpans := group.resourceSpans.ScopeSpans[scopeIndex]
 		scopeSpans.Spans = append(scopeSpans.Spans, converted)
 	}
