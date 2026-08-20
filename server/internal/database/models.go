@@ -2124,6 +2124,7 @@ type RemoteSessionIssuer struct {
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
+	TunneledMcpServerID               uuid.NullUUID
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
 	ClientSetupDocumentationUrl       pgtype.Text
