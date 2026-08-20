@@ -1,0 +1,221 @@
+package directory_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+)
+
+func seedOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
+	t.Helper()
+
+	_, err := organizationsrepo.New(conn).UpsertOrganizationMetadata(t.Context(), organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:       organizationID,
+		Name:     organizationID,
+		Slug:     organizationID,
+		WorkosID: conv.ToPGText("workos_" + organizationID),
+	})
+	require.NoError(t, err)
+}
+
+func seedDirectoryUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, externalID, email string, attributes []byte, syncedAt time.Time) directoryrepo.DirectoryUser {
+	t.Helper()
+
+	_, err := directoryrepo.New(conn).UpsertDirectoryUser(t.Context(), directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        organizationID,
+		UserID:                conv.ToPGText(userID),
+		WorkosDirectoryUserID: externalID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            attributes,
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosLastEventID:     conv.ToPGText("event_" + externalID),
+	})
+	require.NoError(t, err)
+
+	row, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(t.Context(), externalID)
+	require.NoError(t, err)
+	return row
+}
+
+func seedDirectoryGroup(t *testing.T, conn *pgxpool.Pool, organizationID, externalID, name string, syncedAt time.Time) directoryrepo.GetDirectoryGroupForMembershipByWorkOSIDRow {
+	t.Helper()
+
+	_, err := directoryrepo.New(conn).UpsertDirectoryGroup(t.Context(), directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         organizationID,
+		WorkosDirectoryGroupID: externalID,
+		Name:                   name,
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(syncedAt),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(syncedAt),
+		WorkosLastEventID:      conv.ToPGText("event_" + externalID),
+	})
+	require.NoError(t, err)
+
+	row, err := directoryrepo.New(conn).GetDirectoryGroupForMembershipByWorkOSID(t.Context(), externalID)
+	require.NoError(t, err)
+	return row
+}
+
+func addUserToGroup(t *testing.T, conn *pgxpool.Pool, user directoryrepo.DirectoryUser, groupExternalID string, groupID directoryrepo.GetDirectoryGroupForMembershipByWorkOSIDRow, syncedAt time.Time) {
+	t.Helper()
+
+	_, err := directoryrepo.New(conn).OpenDirectoryUserGroupMembership(t.Context(), directoryrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        user.ID,
+		DirectoryGroupID:       groupID.ID,
+		WorkosDirectoryUserID:  user.WorkosDirectoryUserID,
+		WorkosDirectoryGroupID: groupExternalID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(syncedAt),
+	})
+	require.NoError(t, err)
+}
+
+func TestServiceGetUserProfileReturnsLatestProfileAsOneSnapshot(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_latest"
+	const userID = "user_directory_latest"
+	seedOrganization(t, conn, organizationID)
+
+	olderTime := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	newerTime := olderTime.Add(time.Hour)
+	older := seedDirectoryUser(t, conn, organizationID, userID, "directory_user_older", "older@example.com", []byte(`{"department":"Older"}`), olderTime)
+	newer := seedDirectoryUser(t, conn, organizationID, userID, "directory_user_newer", "newer@example.com", []byte(`{"department":"Engineering","level":7}`), newerTime)
+
+	olderGroup := seedDirectoryGroup(t, conn, organizationID, "directory_group_older", "Older Group", olderTime)
+	addUserToGroup(t, conn, older, "directory_group_older", olderGroup, olderTime)
+
+	newerGroup := seedDirectoryGroup(t, conn, organizationID, "directory_group_newer", "Engineering", newerTime)
+	addUserToGroup(t, conn, newer, "directory_group_newer", newerGroup, newerTime)
+
+	profile, err := service.GetUserProfile(ctx, organizationID, userID)
+	require.NoError(t, err)
+	require.Equal(t, newer.ID, profile.ID)
+	require.Equal(t, userID, profile.UserID)
+	require.Equal(t, "directory_user_newer", profile.ExternalID)
+	require.Equal(t, "newer@example.com", profile.Email)
+	require.Equal(t, map[string]any{"department": "Engineering", "level": float64(7)}, profile.Attributes)
+	require.Equal(t, []directory.Group{{ExternalID: "directory_group_newer", Name: "Engineering"}}, profile.Groups)
+}
+
+func TestServiceGetUserProfileReturnsOnlyActiveGroupsInStableOrder(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_groups"
+	const userID = "user_directory_groups"
+	seedOrganization(t, conn, organizationID)
+	syncedAt := time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC)
+	user := seedDirectoryUser(t, conn, organizationID, userID, "directory_user_groups", "groups@example.com", []byte(`{}`), syncedAt)
+
+	for externalID, name := range map[string]string{
+		"directory_group_zulu":    "Zulu",
+		"directory_group_alpha":   "Alpha",
+		"directory_group_closed":  "Closed",
+		"directory_group_deleted": "Deleted",
+	} {
+		group := seedDirectoryGroup(t, conn, organizationID, externalID, name, syncedAt)
+		addUserToGroup(t, conn, user, externalID, group, syncedAt)
+	}
+
+	closed, err := directoryrepo.New(conn).GetDirectoryGroupForMembershipByWorkOSID(ctx, "directory_group_closed")
+	require.NoError(t, err)
+	_, err = directoryrepo.New(conn).CloseDirectoryUserGroupMembership(ctx, directoryrepo.CloseDirectoryUserGroupMembershipParams{
+		DirectoryUserID:  user.ID,
+		DirectoryGroupID: closed.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		WorkosDeletedAt:        conv.ToPGTimestamptz(syncedAt.Add(time.Hour)),
+		WorkosLastEventID:      conv.ToPGText("event_delete_group"),
+		WorkosDirectoryGroupID: "directory_group_deleted",
+	})
+	require.NoError(t, err)
+
+	profile, err := service.GetUserProfile(ctx, organizationID, userID)
+	require.NoError(t, err)
+	require.Equal(t, []directory.Group{
+		{ExternalID: "directory_group_alpha", Name: "Alpha"},
+		{ExternalID: "directory_group_zulu", Name: "Zulu"},
+	}, profile.Groups)
+}
+
+func TestServiceGetUserProfileScopesByOrganization(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const userID = "user_directory_tenant"
+	seedOrganization(t, conn, "org_directory_one")
+	seedOrganization(t, conn, "org_directory_two")
+	syncedAt := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
+	seedDirectoryUser(t, conn, "org_directory_one", userID, "directory_user_one", "one@example.com", []byte(`{"tenant":"one"}`), syncedAt)
+	seedDirectoryUser(t, conn, "org_directory_two", userID, "directory_user_two", "two@example.com", []byte(`{"tenant":"two"}`), syncedAt)
+
+	profile, err := service.GetUserProfile(ctx, "org_directory_two", userID)
+	require.NoError(t, err)
+	require.Equal(t, "directory_user_two", profile.ExternalID)
+	require.Equal(t, map[string]any{"tenant": "two"}, profile.Attributes)
+
+	_, err = service.GetUserProfile(ctx, "org_directory_missing", userID)
+	require.ErrorIs(t, err, directory.ErrUserNotFound)
+}
+
+func TestServiceGetUserProfileReturnsEmptyGroups(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_no_groups"
+	const userID = "user_directory_no_groups"
+	seedOrganization(t, conn, organizationID)
+	seedDirectoryUser(t, conn, organizationID, userID, "directory_user_no_groups", "no-groups@example.com", []byte(`{}`), time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC))
+
+	profile, err := service.GetUserProfile(ctx, organizationID, userID)
+	require.NoError(t, err)
+	require.Empty(t, profile.Groups)
+	require.NotNil(t, profile.Groups)
+
+	_, err = service.GetUserProfile(ctx, organizationID, "unknown_user")
+	require.ErrorIs(t, err, directory.ErrUserNotFound)
+}
+
+func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_null_attribute"
+	const userID = "user_directory_null_attribute"
+	seedOrganization(t, conn, organizationID)
+	seedDirectoryUser(
+		t,
+		conn,
+		organizationID,
+		userID,
+		"directory_user_null_attribute",
+		"null-attribute@example.com",
+		[]byte(`{"department_name":null,"job_title":"Platform Engineer"}`),
+		time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC),
+	)
+
+	profile, err := service.GetUserProfile(ctx, organizationID, userID)
+	require.NoError(t, err)
+	require.Contains(t, profile.Attributes, "department_name")
+	require.Nil(t, profile.Attributes["department_name"])
+	require.Equal(t, "Platform Engineer", profile.Attributes["job_title"])
+	require.NotNil(t, profile.Groups)
+	require.Empty(t, profile.Groups)
+}

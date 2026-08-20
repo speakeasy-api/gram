@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -170,45 +169,29 @@ func (r *UserInfoResolver) resolve(ctx context.Context, organizationID string, u
 func (r *UserInfoResolver) load(ctx context.Context, organizationID string, userID string) userInfoSnapshot {
 	snapshot := userInfoSnapshot{Attributes: emptyUserAttributes(), Groups: nil, Roles: nil}
 
-	workosQueries := workosrepo.New(r.db)
-
-	raw, err := workosQueries.GetDirectoryUserAttributesByUserID(ctx, workosrepo.GetDirectoryUserAttributesByUserIDParams{
-		UserID:         conv.ToPGText(userID),
-		OrganizationID: organizationID,
-	})
+	profile, err := directory.NewService(r.db).GetUserProfile(ctx, organizationID, userID)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, directory.ErrUserNotFound):
 		// No directory user for this org/user (no Directory Sync, or the
 		// user was directory-deleted): attributes stay empty.
 	case err != nil:
-		r.logger.WarnContext(ctx, "failed to load directory user attributes for telemetry snapshot",
+		r.logger.WarnContext(ctx, "failed to load directory user profile for telemetry snapshot",
 			attr.SlogError(err), attr.SlogUserID(userID), attr.SlogOrganizationID(organizationID))
 		return snapshot
 	default:
-		payload := unmarshalAttributesPayload(ctx, r.logger, raw)
 		// Values come from customer-controlled IdP mappings: accept
 		// non-empty strings only so the ClickHouse JSON column sees
 		// consistent types.
 		snapshot.Attributes = userAttributes{
-			DepartmentName: stringAttribute(payload, "department_name"),
-			JobTitle:       stringAttribute(payload, "job_title"),
-			EmployeeType:   stringAttribute(payload, "employee_type"),
-			DivisionName:   stringAttribute(payload, "division_name"),
-			CostCenterName: stringAttribute(payload, "cost_center_name"),
+			DepartmentName: stringAttribute(profile.Attributes, "department_name"),
+			JobTitle:       stringAttribute(profile.Attributes, "job_title"),
+			EmployeeType:   stringAttribute(profile.Attributes, "employee_type"),
+			DivisionName:   stringAttribute(profile.Attributes, "division_name"),
+			CostCenterName: stringAttribute(profile.Attributes, "cost_center_name"),
 		}
-	}
-
-	groupRows, err := workosQueries.ListCurrentDirectoryGroupsByUserID(ctx, workosrepo.ListCurrentDirectoryGroupsByUserIDParams{
-		UserID:         conv.ToPGText(userID),
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		r.logger.WarnContext(ctx, "failed to load directory groups for telemetry snapshot",
-			attr.SlogError(err), attr.SlogUserID(userID), attr.SlogOrganizationID(organizationID))
-		return snapshot
-	}
-	for _, row := range groupRows {
-		snapshot.Groups = append(snapshot.Groups, row.Name)
+		for _, group := range profile.Groups {
+			snapshot.Groups = append(snapshot.Groups, group.Name)
+		}
 	}
 
 	roleRows, err := accessrepo.New(r.db).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
@@ -233,16 +216,4 @@ func stringAttribute(payload map[string]any, key string) string {
 		return ""
 	}
 	return value
-}
-
-func unmarshalAttributesPayload(ctx context.Context, logger *slog.Logger, raw []byte) map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		logger.WarnContext(ctx, "failed to unmarshal directory attributes payload", attr.SlogError(err))
-		return nil
-	}
-	return payload
 }

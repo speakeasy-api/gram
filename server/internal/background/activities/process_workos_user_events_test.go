@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -142,7 +143,7 @@ func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "event_directory_user_update", res.LastEventID)
 
-	row, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+	row, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
 	require.NoError(t, err)
 	require.Equal(t, gramOrgID, row.OrganizationID)
 	require.Equal(t, email, row.Email.String)

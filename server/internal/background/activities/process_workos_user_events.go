@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -360,7 +361,7 @@ func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, e
 		return nil
 	}
 
-	if _, err := workosrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, workosrepo.LinkDirectoryUsersToUserByEmailParams{
+	if _, err := directoryrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, directoryrepo.LinkDirectoryUsersToUserByEmailParams{
 		UserID: conv.ToPGText(userID),
 		Email:  conv.ToPGText(email),
 	}); err != nil {
