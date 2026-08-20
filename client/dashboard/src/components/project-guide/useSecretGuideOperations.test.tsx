@@ -18,6 +18,9 @@ const invalidatePolicies = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "request-project",
 }));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "organization-id" }),
+}));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: authFetch }),
 }));
@@ -58,6 +61,8 @@ const POLICY_SCOPE = {
   attempt: 0,
   runId: 1,
 };
+
+const SYNTHETIC_SECRET_REDACTION = "<redacted len=37 sha=61966c81>";
 
 function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
   return {
@@ -393,7 +398,7 @@ describe("useSecretGuideOperations", () => {
         result({
           createdAt: new Date(now + 2_000),
           id: "new-result",
-          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          matchRedacted: SYNTHETIC_SECRET_REDACTION,
           ruleId: "secret.github_pat",
         }),
       ],
@@ -473,7 +478,7 @@ describe("useSecretGuideOperations", () => {
         result({
           createdAt: new Date(now + 2_000),
           id: "matching-result",
-          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          matchRedacted: SYNTHETIC_SECRET_REDACTION,
           ruleId: "secret.github_pat",
         }),
       ],
@@ -534,7 +539,7 @@ describe("useSecretGuideOperations", () => {
         result({
           createdAt: new Date(now - 60_000),
           id: "delayed-old-result",
-          matchRedacted: `ghp_${"*".repeat(31)}ab`,
+          matchRedacted: SYNTHETIC_SECRET_REDACTION,
           ruleId: "secret.github_pat",
         }),
       ],
@@ -595,7 +600,7 @@ describe("useSecretGuideOperations", () => {
         result({
           createdAt: new Date(now + 2_000),
           id: "other-secret-result",
-          match: "ghp_000000000000000000000000000000000",
+          matchRedacted: "<redacted len=37 sha=deadbeef>",
           ruleId: "secret.github_pat",
         }),
       ],

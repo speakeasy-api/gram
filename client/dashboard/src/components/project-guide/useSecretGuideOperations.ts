@@ -5,6 +5,7 @@ import type {
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
+import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { downloadResponse } from "@/pages/plugins/downloadPluginPackage";
@@ -61,6 +62,7 @@ type ActiveOperation = {
 type TelemetryBaseline = {
   capturedAtMs: number;
   client: SecretGuideClient;
+  syntheticSecretRedaction: string;
   traceIds: Set<string>;
   resultIds: Set<string>;
 };
@@ -127,20 +129,30 @@ function installDetails(
   }
 }
 
-function matchesSyntheticSecret(result: RiskResult): boolean {
+async function syntheticSecretRedaction(
+  organizationId: string,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const secret = encoder.encode(SECRET_GUIDE_SYNTHETIC_SECRET);
+  const saltedSecret = encoder.encode(
+    `${organizationId}\0${SECRET_GUIDE_SYNTHETIC_SECRET}`,
+  );
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", saltedSecret);
+  const sha = Array.from(new Uint8Array(digest).slice(0, 4), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return `<redacted len=${secret.byteLength} sha=${sha}>`;
+}
+
+function matchesSyntheticSecret(
+  result: RiskResult,
+  expectedRedaction: string,
+): boolean {
   if (!result.ruleId?.toLowerCase().includes("github")) return false;
   if (result.match !== undefined) {
     return result.match === SECRET_GUIDE_SYNTHETIC_SECRET;
   }
-  const redacted = result.matchRedacted;
-  if (!redacted || redacted.length !== SECRET_GUIDE_SYNTHETIC_SECRET.length) {
-    return false;
-  }
-  return (
-    redacted.startsWith(SECRET_GUIDE_SYNTHETIC_SECRET.slice(0, 4)) &&
-    redacted.endsWith(SECRET_GUIDE_SYNTHETIC_SECRET.slice(-2)) &&
-    /^\*+$/.test(redacted.slice(4, -2))
-  );
+  return result.matchRedacted === expectedRedaction;
 }
 
 function newMatchingResults(
@@ -156,7 +168,7 @@ function newMatchingResults(
           result.createdAt.getTime() > baseline.capturedAtMs &&
           result.policyId === policyId &&
           result.source === "gitleaks" &&
-          matchesSyntheticSecret(result),
+          matchesSyntheticSecret(result, baseline.syntheticSecretRedaction),
       )
       .sort(
         (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
@@ -224,6 +236,7 @@ export function useSecretGuideOperations(): {
   telemetryError: boolean;
 } {
   const gramProject = useProjectSlugForRequests();
+  const organization = useOrganization();
   const { fetch: authFetch } = useFetcher();
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -308,9 +321,10 @@ export function useSecretGuideOperations(): {
     setSuppressTelemetryError(true);
     tracesRequest.listHooksTracesPayload.to = new Date();
     try {
-      const [traces, results] = await Promise.all([
+      const [traces, results, expectedRedaction] = await Promise.all([
         tracesQuery.refetch(),
         resultsQuery.refetch(),
+        syntheticSecretRedaction(organization.id),
       ]);
       if (traces.isError || results.isError || !traces.data || !results.data) {
         setBaselineError(true);
@@ -319,6 +333,7 @@ export function useSecretGuideOperations(): {
       const nextBaseline = {
         capturedAtMs,
         client,
+        syntheticSecretRedaction: expectedRedaction,
         traceIds: new Set(traces.data.traces.map((trace) => trace.traceId)),
         resultIds: new Set(results.data.results.map((result) => result.id)),
       };
@@ -331,7 +346,7 @@ export function useSecretGuideOperations(): {
     } finally {
       setSuppressTelemetryError(false);
     }
-  }, [client, resultsQuery, tracesQuery, tracesRequest]);
+  }, [client, organization.id, resultsQuery, tracesQuery, tracesRequest]);
 
   const retryTelemetry = useCallback(() => {
     setSuppressTelemetryError(true);
