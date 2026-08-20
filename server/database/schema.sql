@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   scim_enabled boolean DEFAULT FALSE,
   sso_enabled boolean DEFAULT FALSE,
+  session_quarantine_fail_closed boolean NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -5042,6 +5043,37 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
 ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
+
+-- Durable session quarantine state for hook-ingest enforcement. Active rows
+-- open a Redis-backed session circuit until an org admin releases them.
+CREATE TABLE IF NOT EXISTS session_quarantines (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  session_id TEXT NOT NULL,
+  risk_policy_id uuid,
+  risk_policy_name TEXT NOT NULL,
+  user_id TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  released_at timestamptz,
+  released_by TEXT,
+
+  CONSTRAINT session_quarantines_pkey PRIMARY KEY (id),
+  CONSTRAINT session_quarantines_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT session_quarantines_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT session_quarantines_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS session_quarantines_active_session_key
+ON session_quarantines (session_id)
+WHERE released_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS session_quarantines_active_idx
+ON session_quarantines (organization_id, project_id, created_at DESC)
+WHERE released_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
