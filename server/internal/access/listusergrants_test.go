@@ -176,11 +176,10 @@ func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// RBAC-enforced org, admin user, admin override set, but NO
-	// organization_users row — mirrors real impersonation.
+	// Validated support context grants full access without a membership row.
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

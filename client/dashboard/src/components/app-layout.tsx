@@ -1,8 +1,4 @@
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth.tsx";
+import { useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
@@ -10,7 +6,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
 import { ShieldAlert } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
@@ -22,6 +18,7 @@ import {
   SidePanelSurface,
 } from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
+import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -61,34 +58,11 @@ export const AppLayout = (): JSX.Element => {
   );
 };
 
-function getAdminOverrideCookie(): string | null {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("gram_admin_override="));
-  if (!match) return null;
-  const value = match.split("=")[1];
-  return value || null;
-}
-
 // The shared demo org isn't a customer org being impersonated — brand it as
-// a demo instead of an impersonation warning. It is entered either through
-// the admin override cookie or session-side via auth.enterDemo (any user),
-// so demo detection keys off the active org slug, not the cookie.
+// a demo instead of an impersonation warning. Detection keys off the active
+// organization so it also works for sessions entered through auth.enterDemo.
 
-/** Banner shows for WorkOS impersonation, admin override, or the demo org. */
-const useShowsImpersonationBanner = (): boolean => {
-  const isAdmin = useIsPlatformAdmin();
-  const organization = useOrganization();
-  const session = useSession();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  return (
-    organization.slug === DEMO_ORG_SLUG ||
-    !!session.impersonatorEmail ||
-    (isAdmin && !!overrideSlug)
-  );
-};
-
-const ImpersonationBanner = () => {
+export const ImpersonationBanner = (): JSX.Element => {
   const organization = useOrganization();
   const session = useSession();
   const client = useSdkClient();
@@ -103,6 +77,9 @@ const ImpersonationBanner = () => {
     actionLabel = "Exit demo";
   } else if (isWorkOSImpersonation) {
     label = `WorkOS impersonation active — signed in as ${session.user.email} in ${organizationLabel}`;
+  } else if (session.organizationOverride) {
+    label = `Support access active for ${organizationLabel}`;
+    actionLabel = "Exit support access";
   }
 
   const exit = () => {
@@ -110,8 +87,8 @@ const ImpersonationBanner = () => {
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
       // Exiting the demo switches back to the org the user came from (stashed
       // by /explore-demo), or their first real org — no logout round-trip.
-      // Falls through to logout otherwise (e.g. admin cookie-impersonation,
-      // or a user with no other org).
+      // Falls through to logout for support/WorkOS sessions and for a demo
+      // user with no other organization.
       const preDemoOrgId = localStorage.getItem(PRE_DEMO_ORG_KEY);
       const ownOrg =
         session.organizations.find(

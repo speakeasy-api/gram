@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 )
 
 func TestService_Login(t *testing.T) {
@@ -343,6 +344,32 @@ func TestService_Login(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, result)
 	})
+}
+
+func TestService_LoginSupportHandoff(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance := newTestAuthService(t, adminMockUserInfo())
+	token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, "support-target-org")
+	require.NoError(t, err)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+	require.NoError(t, err)
+	nonce := nonceFromLocation(t, result.Location)
+
+	parsed, err := url.Parse(result.Location)
+	require.NoError(t, err)
+	stateBytes, err := base64.RawURLEncoding.DecodeString(parsed.Query().Get("state"))
+	require.NoError(t, err)
+	require.NotContains(t, string(stateBytes), token)
+	require.NotContains(t, string(stateBytes), "support-target-org")
+
+	var intent struct{ OrganizationID string }
+	require.NoError(t, instance.nonceStore.Get(ctx, "auth:support_intent:"+nonce, &intent))
+	require.Equal(t, "support-target-org", intent.OrganizationID)
+
+	_, err = instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+	require.Error(t, err, "handoff must be one-time")
 }
 
 func TestService_LoginStoresNormalizedUnicodeOrganizationName(t *testing.T) {
