@@ -263,18 +263,11 @@ export function SignalDrawer({
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
-  // The signal lives in the URL, so back/forward can swap it while the drawer
-  // stays mounted, and a dismissal belongs to the signal it was started from:
-  // surfacing one after a swap would confirm the previous signal's findings
-  // under the new one's name, or leave its action spinning. Bumping the token
-  // makes an in-flight collection drop its result — and its spinner reset —
-  // rather than land on the new selection; the request itself still runs to
-  // completion. Keyed by signal key rather than the signal object, so a list
-  // refetch doesn't discard a live collection.
-  //
-  // Both resets run before paint: a passive effect would let the swap commit
-  // first, painting one frame of the previous selection's dialog or editor
-  // under the new signal's name.
+  // The signal lives in the URL, so back/forward can swap it mid-collection;
+  // bumping the token makes an in-flight collection drop its result instead
+  // of confirming the previous signal's findings under the new one's name.
+  // Keyed by signal key (not object identity) so refetches don't cancel;
+  // useLayoutEffect so the swap can't paint one frame of the old dialog.
   const collectionToken = useRef(0);
   useLayoutEffect(() => {
     collectionToken.current += 1;
@@ -298,20 +291,16 @@ export function SignalDrawer({
     const token = collectionToken.current;
     setCollecting(true);
     try {
-      // Deliberately unwindowed, like the evidence query above: signals exist
-      // by scan time while the list endpoint the collector pages filters by
-      // message event time, so a windowed collection can miss — or come back
-      // empty for — findings the signal itself is displaying (scans of older
-      // messages). "Suppress all" means all of the rule's findings, and the
-      // confirm dialog names the collected count.
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time, so a windowed collection can miss the
+      // very findings the signal displays. See the evidence query above.
       const results = await collectFindingsForRules(client, [signal.ruleId], {
         from: undefined,
         to: undefined,
       });
       if (collectionToken.current !== token) return;
       if (results.length === 0) {
-        // Without this, confirming an empty collection would silently no-op
-        // (dismiss guards empty batches) and the action would look broken.
+        // dismiss() ignores empty batches — fail loudly instead.
         toast.error("No suppressible findings found for this signal.");
         return;
       }
@@ -470,10 +459,8 @@ export function SignalDrawer({
                           <SignalTrend sparkline={signal.sparkline} />
                         </StatCell>
                       </div>
-                      {/* The stats above follow the page's window while the
-                          evidence below is the rule's latest regardless of
-                          it, so the two can legitimately disagree — say so
-                          instead of looking broken. */}
+                      {/* Windowed stats vs unwindowed evidence can disagree
+                          — say so. */}
                       <Text small muted>
                         Counts reflect the page's selected time window.
                       </Text>

@@ -317,12 +317,8 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 	}
 	merged := make(map[string]map[userKey]userStats)
 	for _, row := range rows {
-		// Findings the Users stat does not count are not an "affected user"
-		// here either: the stat's predicate is signalUserNonEmpty —
-		// external_user_id or user_id non-empty — so this skip mirrors it
-		// exactly. Listing skipped rows (as "Unknown user", or named via a
-		// stray stamped email) made the drawer show user rows under a Users
-		// count that excluded them.
+		// Mirror the Users stat's predicate (signalUserNonEmpty): rows it
+		// doesn't count must not appear here as "Unknown user" rows either.
 		if row.ExternalUserID == "" && row.UserID == "" {
 			continue
 		}

@@ -70,17 +70,14 @@ func TestTopScoresDescending(t *testing.T) {
 	require.Equal(t, []float64{8}, topScoresDescending([]float64{8, 8, 8}, 1))
 }
 
-// TestSignalTopUsersByRule_SkipsUnattributed pins the drawer-consistency rule:
-// findings with no user identity at all are not "affected users" — the Users
-// stat counts only non-empty identities, so listing them as "Unknown user"
-// showed a user row under a Users count of zero.
+// TestSignalTopUsersByRule_SkipsUnattributed pins top users to the Users
+// stat's id-based predicate: rows it doesn't count never render as rows.
 func TestSignalTopUsersByRule_SkipsUnattributed(t *testing.T) {
 	t.Parallel()
 
 	rows := []chrepo.RiskSignalUserCount{
 		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 3},
-		// A stray stamped email without any user id is skipped too: the Users
-		// stat's predicate is id-based, and this list mirrors it exactly.
+		// Stamped email without ids: skipped too, the predicate is id-based.
 		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "ghost@example.com", Team: "", Findings: 2},
 		{RuleID: "r1", UserID: "u1", ExternalUserID: "", Email: "alice@example.com", Team: "", Findings: 1},
 	}
