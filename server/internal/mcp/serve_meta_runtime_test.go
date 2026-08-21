@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -218,16 +219,33 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_Dispatches(t *testing
 
 	// The fixture tool has no configured upstream URL, so a fully routed call
 	// reaches the member dispatch, resolves the tool, attempts execution, and
-	// fails there — surfacing the dispatch's own execution error. Routing
-	// failures look different (unknown server / tool not found), so this pins
-	// that the gateway handed the call to the member's tool execution path.
-	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--alpha_tool",
-		"arguments": map[string]any{},
-	})
-	require.Contains(t, string(envelope["error"]), "failed to execute tool call")
-	require.NotContains(t, string(envelope["error"]), "unknown server")
-	require.NotContains(t, string(envelope["error"]), "tool not found")
+	// fails there — surfacing as an internal error. Routing failures look
+	// different (not-found codes, unknown server / tool not found messages),
+	// so this pins that the gateway handed the call to the member's tool
+	// execution path without pinning dispatch-internal message text. The
+	// outer _meta rides along to prove forwarding does not disturb routing.
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name":      member.slug + "--alpha_tool",
+			"arguments": map[string]any{},
+		},
+		"_meta": map[string]any{
+			"io.modelcontextprotocol/clientInfo": map[string]any{"name": "meta-test-client", "version": "1.2.3"},
+		},
+	}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	envelope := decodeRPCResponse(t, w)
+
+	var rpcErr struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["error"], &rpcErr))
+	require.Equal(t, int(oops.MCPCodeInternalError), rpcErr.Code)
+	require.NotContains(t, rpcErr.Message, "unknown server")
+	require.NotContains(t, rpcErr.Message, "tool not found")
 }
 
 func TestServePublic_MetaEndpoint_ExecuteTool_UnknownToolOnKnownMember(t *testing.T) {
@@ -472,8 +490,9 @@ func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testi
 }
 
 // Describe parity with the direct surface's per-tool RBAC filter: an
-// authenticated caller with no tool grants on a private toolset gets an
-// empty catalog, not the schemas the member endpoint would hide.
+// authenticated caller whose tool-scoped connect grant passes the
+// toolset-level gate but names a different tool gets an empty catalog, not
+// the schemas the member endpoint would hide.
 func TestServePublic_MetaEndpoint_DescribeServer_FiltersRBACHiddenTools(t *testing.T) {
 	t.Parallel()
 
@@ -487,14 +506,75 @@ func TestServePublic_MetaEndpoint_DescribeServer_FiltersRBACHiddenTools(t *testi
 
 	setToolsetMcpPrivate(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
 
-	deniedCtx := authztest.WithExactGrants(t, ctx)
-	envelope := callMetaTool(t, deniedCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	otherToolSelector := authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String())
+	otherToolSelector[authz.SelectorKeyTool] = "some_other_tool"
+	partialCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: otherToolSelector,
+	})
+	envelope := callMetaTool(t, partialCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	result := decodeMetaToolResult(t, envelope)
 	var described struct {
 		Tools []any `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
 	require.Empty(t, described.Tools)
+}
+
+// Toolset-level gate parity with ServeToolsetResolved's connection check: an
+// authenticated caller whose grants never name the member's toolset — none
+// at all, or only a per-tool grant on an unrelated toolset — reads the
+// private-toolset member as nonexistent on describe and execute alike.
+func TestServePublic_MetaEndpoint_PrivateToolset_NoConnectGrant_ReadsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+
+	setToolsetMcpPrivate(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
+
+	unrelatedSelector := authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString())
+	unrelatedSelector[authz.SelectorKeyTool] = "alpha_tool"
+	for name, deniedCtx := range map[string]context.Context{
+		"no grants":       authztest.WithExactGrants(t, ctx),
+		"unrelated grant": authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: unrelatedSelector}),
+	} {
+		envelope := callMetaTool(t, deniedCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+		require.Contains(t, string(envelope["error"]), "unknown server", "describe_server with %s", name)
+
+		envelope = callMetaTool(t, deniedCtx, ti, slug, "execute_tool", map[string]any{
+			"name":      member.slug + "--alpha_tool",
+			"arguments": map[string]any{},
+		})
+		require.Contains(t, string(envelope["error"]), "unknown server", "execute_tool with %s", name)
+	}
+}
+
+// A member whose server carries an unrecognized visibility value is filtered
+// from the snapshot (fail closed), even for the owning org.
+func TestServePublic_MetaEndpoint_ListServers_UnknownVisibilityFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	seedHostedMetaMember(t, ctx, ti, meta.ID, "odd member", 1, "experimental", "alpha_tool")
+
+	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
+	result := decodeMetaToolResult(t, envelope)
+	var listed struct {
+		Servers []any `json:"servers"`
+	}
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+	require.Empty(t, listed.Servers)
 }
 
 // Ungated meta endpoints serve anonymously: without the issuer gate no

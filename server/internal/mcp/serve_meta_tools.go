@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -193,6 +194,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	members []metaMember,
 	req *rawRequest,
 	argsRaw json.RawMessage,
+	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
@@ -231,10 +233,13 @@ func (s *Service) handleMetaExecuteToolCall(
 			fmt.Sprintf("server %q requires authentication that this gateway session does not satisfy", member.slug))
 	}
 
+	// The outer request's _meta rides along: the member dispatch serves the
+	// same client, so its telemetry (client identity, protocol declaration)
+	// must see the metadata a direct call would carry.
 	params, err := json.Marshal(toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
-		Meta:      nil,
+		Meta:      meta,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal member tool call params").LogError(ctx, logger)
@@ -439,6 +444,19 @@ func (s *Service) loadMemberToolset(
 	if !toolset.McpIsPublic && !gate.authenticated {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogError(ctx, logger)
+	}
+	if !toolset.McpIsPublic && gate.authenticated {
+		// Toolset-level mcp:connect gate, matching ServeToolsetResolved's
+		// connection check; the gateway maps a denial to nonexistent rather
+		// than Forbidden, per its unauthorized-reads-as-nonexistent rule.
+		// Grants context was prepared in resolveMetaMemberSnapshot.
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogError(ctx, logger)
+			}
+			return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
+		}
 	}
 	return &toolset, toolset.ProjectID, nil
 }

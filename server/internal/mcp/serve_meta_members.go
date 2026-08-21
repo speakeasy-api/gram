@@ -85,12 +85,18 @@ func (s *Service) resolveMetaMemberSnapshot(
 			backend = metaMemberBackendHosted
 		}
 
-		// Private members require mcp:connect (as authorizeProxyBackendAccess);
-		// denied members are filtered, so unauthorized reads as nonexistent.
-		if row.McpServerVisibility == mcpservers.VisibilityPrivate {
+		// Visibility gates exposure and fails closed: public members are open,
+		// private members require mcp:connect (as authorizeProxyBackendAccess)
+		// with denied members filtered so unauthorized reads as nonexistent,
+		// and any other value (malformed or future) is filtered the same way.
+		switch row.McpServerVisibility {
+		case mcpservers.VisibilityPublic:
+		case mcpservers.VisibilityPrivate:
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())); err != nil {
 				continue
 			}
+		default:
+			continue
 		}
 
 		members = append(members, metaMember{

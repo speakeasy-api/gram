@@ -439,7 +439,7 @@ func (s *Service) callMetaServerTool(
 	case metamcp.ToolDescribeTools:
 		return s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	default:
-		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments)
+		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
 }
 
