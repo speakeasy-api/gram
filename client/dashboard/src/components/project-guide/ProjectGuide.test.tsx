@@ -821,7 +821,7 @@ describe("ProjectGuide", () => {
     );
   });
 
-  it("resumes artifact progress without inventing output or an observed event", () => {
+  it("rebuilds the narrative at the artifact resume point", () => {
     statusByJourney.current = {
       "third-party-mcp": "in-progress",
       "secret-block": "not-started",
@@ -835,6 +835,9 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("log", { name: "Journey A activity" }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Server selected");
     expect(screen.getByText("Ready · Connect your client")).toBeTruthy();
     expect(
       screen.queryByText(

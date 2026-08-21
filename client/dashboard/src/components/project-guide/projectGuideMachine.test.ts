@@ -61,9 +61,8 @@ function reachCheckpoint(
     scope: latestScope(signals),
     result: "Server installed",
   });
-  report(service, {
-    type: "success",
-    scope: latestScope(signals),
+  service.send({
+    type: "USER_CHECKPOINT_COMPLETE",
     result: "Endpoint verified",
   });
 }
@@ -111,8 +110,24 @@ describe("project guide coordinator contract", () => {
     ]);
     expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
       kind: "start",
-      message: "Started · Pick a server from the catalog",
+      message: "Started · Pick and set up a server",
     });
+  });
+
+  it("rebuilds the journey narrative at its resume point", () => {
+    const { service } = coordinator();
+
+    service.send({ type: "OPEN", path: "third-party-mcp", resumeStep: 2 });
+
+    expect(
+      service.getSnapshot().context.output.map((entry) => entry.message),
+    ).toEqual([
+      "Server selected",
+      "Next · Connect your client",
+      "Endpoint verified",
+      "Next · Ask the agent to list the tools",
+      "Ready · Ask the agent to list the tools",
+    ]);
   });
 
   it("records automated progress and caps visible output history", () => {
@@ -148,19 +163,14 @@ describe("project guide coordinator contract", () => {
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(2);
     expect(service.getSnapshot().context.checkpoint).toEqual({
       step: 2,
-      label: "Connect your client",
+      label: "Ask the agent to list the tools",
     });
-    expect(signals).toContainEqual({
-      type: "start",
-      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 2 },
-    });
-
     service.send({
       type: "USER_CHECKPOINT_COMPLETE",
       result: "Client connected",
     });
 
-    expect(service.getSnapshot().value).toBe("checkpoint");
+    expect(service.getSnapshot().value).toBe("waiting");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(3);
     expect(
       service.getSnapshot().context.completedByPath["third-party-mcp"],
@@ -199,7 +209,7 @@ describe("project guide coordinator contract", () => {
     });
 
     const { context } = service.getSnapshot();
-    expect(service.getSnapshot().value).toBe("running");
+    expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(context)).toBe(1);
     expect(context.completedByPath["third-party-mcp"]).toEqual([0]);
     expect(context.output.slice(-2).map((entry) => entry.kind)).toEqual([
@@ -208,7 +218,7 @@ describe("project guide coordinator contract", () => {
     ]);
     expect(signals.at(-1)).toEqual({
       type: "start",
-      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 2 },
+      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
     });
   });
 
@@ -309,7 +319,7 @@ describe("project guide coordinator contract", () => {
     ).toEqual([0]);
     expect(signals.at(-1)).toEqual({
       type: "abort",
-      scope: { path: "third-party-mcp", step: 2, attempt: 0, runId: 2 },
+      scope: { path: "third-party-mcp", step: 2, attempt: 0, runId: 1 },
       reason: "rewind",
     });
   });
@@ -363,7 +373,7 @@ describe("project guide coordinator contract", () => {
     const { context } = service.getSnapshot();
     expect(service.getSnapshot().value).toBe("complete");
     expect(context.observedEvent).toEqual(observedEvent);
-    expect(context.completedByPath["third-party-mcp"]).toEqual([0, 1, 2, 3, 4]);
+    expect(context.completedByPath["third-party-mcp"]).toEqual([0, 1, 2, 3]);
     expect(context.output.at(-1)).toMatchObject({
       kind: "result",
       message: "Event received · tools/list",

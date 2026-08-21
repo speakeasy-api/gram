@@ -424,6 +424,22 @@ const JOURNEY_BY_ID = Object.fromEntries(
   PROJECT_GUIDE_JOURNEYS.map((journey) => [journey.id, journey]),
 ) as Record<JourneyId, (typeof PROJECT_GUIDE_JOURNEYS)[number]>;
 
+const NARRATIVE_STEP_RESULTS: Record<JourneyId, readonly string[]> = {
+  "third-party-mcp": [
+    "Server selected",
+    "Endpoint verified",
+    "Client connected",
+    "Governed call recorded",
+  ],
+  "secret-block": [
+    "Secrets policy created",
+    "Observability plugin downloaded",
+    "Observability plugin installed",
+    "Blocked risk event recorded",
+    "Blocked risk event recorded",
+  ],
+};
+
 function initialCoordinatorContext(
   input: ProjectGuideMachineInput,
 ): ProjectGuideMachineContext {
@@ -522,6 +538,33 @@ function appendOutput(
     output: [...context.output, ...output].slice(-PROJECT_GUIDE_OUTPUT_LIMIT),
     nextOutputId: context.nextOutputId + entries.length,
   };
+}
+
+function narrativeOutputFor(
+  path: JourneyId,
+  completedStepCount: number,
+): Array<Omit<ProjectGuideOutputEntry, "id">> {
+  const journey = JOURNEY_BY_ID[path];
+  const completedCount = Math.min(completedStepCount, journey.steps.length);
+  const entries: Array<Omit<ProjectGuideOutputEntry, "id">> = [];
+
+  for (let index = 0; index < completedCount; index += 1) {
+    entries.push({
+      kind: "result",
+      message:
+        NARRATIVE_STEP_RESULTS[path][index] ??
+        `Completed · ${journey.steps[index]}`,
+    });
+    const nextLabel = journey.steps[index + 1];
+    if (nextLabel)
+      entries.push({ kind: "next", message: `Next · ${nextLabel}` });
+  }
+
+  entries.push({
+    kind: "note",
+    message: `Ready · ${journey.steps[completedCount] ?? "Journey complete"}`,
+  });
+  return entries;
 }
 
 function completedThrough(step: number, stepCount: number): number[] {
@@ -641,11 +684,10 @@ export const projectGuideMachine = setup({
         Math.max(context.completedByPath[event.path].length, event.resumeStep),
         pathStepCount(event.path),
       );
-      const currentLabel =
-        JOURNEY_BY_ID[event.path].steps[completed.length] ?? "Journey complete";
-      const readyOutput = appendOutput({ ...context, output: [] }, [
-        { kind: "note", message: `Ready · ${currentLabel}` },
-      ]);
+      const readyOutput = appendOutput(
+        { ...context, output: [] },
+        narrativeOutputFor(event.path, completed.length),
+      );
       return {
         activePath: event.path,
         completedByPath: {
