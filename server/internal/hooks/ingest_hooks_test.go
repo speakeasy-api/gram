@@ -1322,7 +1322,7 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	endPos := int32(6)
 	confidence := float64(1)
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	require.NoError(t, chWriter.HandleBatch(ctx, []*riskv1.Finding{
+	chFailed, chErr := chWriter.ProcessBatch(ctx, []*riskv1.Finding{
 		riskv1.Finding_builder{
 			Id:                new(findingID.String()),
 			RequestId:         new("req-content-part"),
@@ -1343,7 +1343,11 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 			Confidence:        &confidence,
 			DeadLetterReason:  nil,
 		}.Build(),
-	}, nil))
+	})
+	require.NoError(t, chErr)
+	for _, ferr := range chFailed {
+		require.NoError(t, ferr)
+	}
 	require.Len(t, chInserter.rows, 1)
 	require.Empty(t, chInserter.rows[0].ChatMessageID)
 	require.Equal(t, attachmentRow.ID.String(), chInserter.rows[0].ContentPartID)

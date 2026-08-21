@@ -2,6 +2,8 @@ package risk
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -97,7 +98,9 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
 	}
 
-	s.mirrorFalsePositiveToClickHouse(ctx, marked)
+	if err := s.mirrorFalsePositiveToClickHouse(ctx, marked); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
+	}
 
 	return nil
 }
@@ -148,7 +151,9 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
 	}
 
-	s.mirrorFalsePositiveToClickHouse(ctx, restored)
+	if err := s.mirrorFalsePositiveToClickHouse(ctx, restored); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
+	}
 
 	return nil
 }
@@ -161,30 +166,31 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 // state is published twice over during the suppression convergence:
 // excluded_at/excluded_reason=manual/excluded_detail are the converged
 // fields, false_positive_at the legacy one the read paths still filter on.
-// Best-effort and detached from the request: Postgres already committed and
-// remains the source of truth, so a publish failure here only delays when
-// the change is reflected in ClickHouse-backed reads, never the RPC.
-func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []repo.RiskResult) {
+// Synchronous: every publish must ack before the RPC succeeds, so a state
+// change the caller was told about is durably on the topic. Postgres has
+// already committed by the time this runs, so on error the caller reports the
+// failure and a retry of the (idempotent) mark/unmark republishes.
+func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []repo.RiskResult) error {
 	if s.findingsPub == nil || len(rows) == 0 {
-		return
+		return nil
 	}
 
-	detached := context.WithoutCancel(ctx)
-	go func() {
-		results := make([]gcp.PublishResult, 0, len(rows))
-		for _, row := range rows {
-			results = append(results, s.findingsPub.Publish(detached, fpMirrorMessage(row)))
-		}
+	results := make([]gcp.PublishResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, s.findingsPub.Publish(ctx, fpMirrorMessage(row)))
+	}
 
-		for _, res := range results {
-			waitCtx, cancel := context.WithTimeout(detached, 10*time.Second)
-			_, err := res.Get(waitCtx)
-			cancel()
-			if err != nil {
-				s.logger.ErrorContext(detached, "failed to mirror false positive state to clickhouse", attr.SlogError(err))
-			}
-		}
-	}()
+	var errs error
+	for _, res := range results {
+		waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		_, err := res.Get(waitCtx)
+		cancel()
+		errs = errors.Join(errs, err)
+	}
+	if errs != nil {
+		return fmt.Errorf("publish suppression state change: %w", errs)
+	}
+	return nil
 }
 
 // fpMirrorMessage renders one UPDATE ... RETURNING row as the finding message
@@ -193,7 +199,9 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 // user-supplied reason as excluded_detail), all empty on an unmark. An unmark
 // republish deliberately carries no excluded state so the CH writer re-runs
 // its exclusion check and re-stamps rule suppression when an active exclusion
-// still matches, instead of resurfacing the finding.
+// still matches, instead of resurfacing the finding. The event kind marks the
+// message as a state change either way, so read-time dedup ranks it above the
+// finding's scanner copies and a redelivered scanner row cannot undo it.
 func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 	id := row.ID.String()
 	projectID := row.ProjectID.String()
@@ -206,7 +214,9 @@ func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 	var falsePositiveAt string
 	excludedReason := ""
 	excludedDetail := ""
+	eventKind := chrepo.EventKindUnsuppression
 	if row.FalsePositiveAt.Valid {
+		eventKind = chrepo.EventKindSuppression
 		// RFC3339Nano, not RFC3339: the plain layout truncates
 		// clock_timestamp()'s fractional seconds, and the DateTime64(9)
 		// columns this lands in can hold the full precision. The writer's
@@ -240,6 +250,7 @@ func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 		ExcludedReason:    &excludedReason,
 		ExcludedDetail:    &excludedDetail,
 		Surface:           &surface,
+		EventKind:         &eventKind,
 	}.Build()
 }
 

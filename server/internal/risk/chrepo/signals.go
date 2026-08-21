@@ -22,10 +22,10 @@ type RiskSignalWindowParams struct {
 }
 
 // signalFindings is the doubled-window analog of overviewFindings: the same
-// per-id dedup (latest inserted_at wins) and live-finding filters, but scanning
+// per-id dedup (latestCopyOrderSQL) and live-finding filters, but scanning
 // [WideFrom, To) so callers can split current vs previous with *If aggregates.
 func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn").
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).

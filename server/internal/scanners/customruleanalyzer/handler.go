@@ -95,10 +95,15 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 	}, findings)
 
+	// A publish failure nacks the message for redelivery: an acked request must
+	// mean every finding it produced is durably on the topic. The redelivered
+	// message republishes the already-published subset under the same
+	// deterministic ids, so no duplicate ClickHouse rows result.
 	published := 0
+	var publishErr error
 	for _, res := range results {
 		if _, err := res.Get(ctx); err != nil {
-			h.logger.WarnContext(ctx, "failed to publish custom rule finding", attr.SlogError(err))
+			publishErr = errors.Join(publishErr, err)
 			continue
 		}
 		published++
@@ -114,5 +119,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		"rule_ids":        ruleIDs,
 	}))
 
+	if publishErr != nil {
+		return fmt.Errorf("publish custom rule findings: %w", publishErr)
+	}
 	return nil
 }
