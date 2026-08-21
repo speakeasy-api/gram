@@ -2133,6 +2133,55 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPlatformMCPDiagnosticsTarget = `-- name: GetPlatformMCPDiagnosticsTarget :one
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    COALESCE(m.slug, '') AS mcp_slug,
+    COALESCE(toolset.slug, '') AS toolset_slug
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN toolsets AS toolset
+  ON toolset.id = m.toolset_id
+ AND toolset.deleted IS FALSE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPDiagnosticsTargetParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPDiagnosticsTargetRow struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+	McpSlug     string
+	ToolsetSlug string
+}
+
+// Resolves one configured MCP to the identities its telemetry is recorded
+// under: the toolset slug that calls arriving directly at Gram carry, and the
+// MCP slug that appears in the URL an agent-hook-observed client called.
+// Scoped to the organization's own project, so a caller cannot diagnose an MCP
+// it cannot already see through the inventory.
+func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPlatformMCPDiagnosticsTargetParams) (GetPlatformMCPDiagnosticsTargetRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPDiagnosticsTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPDiagnosticsTargetRow
+	err := row.Scan(
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.McpSlug,
+		&i.ToolsetSlug,
+	)
+	return i, err
+}
+
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
 SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
 FROM platform_mcp_distributions AS distribution

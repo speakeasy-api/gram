@@ -1,4 +1,4 @@
-package telemetry
+package overview
 
 import (
 	"context"
@@ -20,22 +20,22 @@ func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
-	result, err := fetchProjectOverviewClickHouse(ctx, reader, projectOverviewClickHouseParams{
-		projectID:       "00000000-0000-0000-0000-000000000001",
-		timeStart:       200,
-		timeEnd:         300,
-		comparisonStart: 100,
-		comparisonEnd:   200,
-		sessionMode:     true,
+	result, err := FetchClickHouse(ctx, reader, Params{
+		ProjectID:       "00000000-0000-0000-0000-000000000001",
+		TimeStart:       200,
+		TimeEnd:         300,
+		ComparisonStart: 100,
+		ComparisonEnd:   200,
+		SessionMode:     true,
 	})
 	require.NoError(t, err)
-	require.Equal(t, uint64(11), result.toolMetrics.TotalToolCalls)
-	require.Equal(t, uint64(7), result.toolMetricsComparison.TotalToolCalls)
-	require.Equal(t, uint64(3), result.activeCounts.ActiveServersCount)
-	require.Equal(t, uint64(4), result.activeCounts.ActiveUsersCount)
-	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.topServers)
-	require.Empty(t, result.topUsers)
-	require.Empty(t, result.llmClients)
+	require.Equal(t, uint64(11), result.ToolMetrics.TotalToolCalls)
+	require.Equal(t, uint64(7), result.ToolMetricsComparison.TotalToolCalls)
+	require.Equal(t, uint64(3), result.ActiveCounts.ActiveServersCount)
+	require.Equal(t, uint64(4), result.ActiveCounts.ActiveUsersCount)
+	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.TopServers)
+	require.Empty(t, result.TopUsers)
+	require.Empty(t, result.LLMClients)
 	require.Equal(t, int32(4), reader.started.Load())
 	require.Equal(t, int32(2), reader.overviewCalls.Load())
 	require.Equal(t, int32(1), reader.activeCountCalls.Load())
@@ -51,22 +51,22 @@ func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testin
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
-	result, err := fetchProjectOverviewClickHouse(ctx, reader, projectOverviewClickHouseParams{
-		projectID:       "00000000-0000-0000-0000-000000000001",
-		timeStart:       200,
-		timeEnd:         300,
-		comparisonStart: 100,
-		comparisonEnd:   200,
-		sessionMode:     false,
+	result, err := FetchClickHouse(ctx, reader, Params{
+		ProjectID:       "00000000-0000-0000-0000-000000000001",
+		TimeStart:       200,
+		TimeEnd:         300,
+		ComparisonStart: 100,
+		ComparisonEnd:   200,
+		SessionMode:     false,
 	})
 	require.NoError(t, err)
-	require.Equal(t, uint64(11), result.toolMetrics.TotalToolCalls)
-	require.Equal(t, uint64(7), result.toolMetricsComparison.TotalToolCalls)
-	require.Equal(t, uint64(3), result.activeCounts.ActiveServersCount)
-	require.Equal(t, uint64(4), result.activeCounts.ActiveUsersCount)
-	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.topServers)
-	require.Equal(t, []repo.TopUser{{UserID: "user", UserType: "external", ActivityCount: 6}}, result.topUsers)
-	require.Equal(t, []repo.LLMClientUsage{{ClientName: "client", ActivityCount: 8}}, result.llmClients)
+	require.Equal(t, uint64(11), result.ToolMetrics.TotalToolCalls)
+	require.Equal(t, uint64(7), result.ToolMetricsComparison.TotalToolCalls)
+	require.Equal(t, uint64(3), result.ActiveCounts.ActiveServersCount)
+	require.Equal(t, uint64(4), result.ActiveCounts.ActiveUsersCount)
+	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.TopServers)
+	require.Equal(t, []repo.TopUser{{UserID: "user", UserType: "external", ActivityCount: 6}}, result.TopUsers)
+	require.Equal(t, []repo.LLMClientUsage{{ClientName: "client", ActivityCount: 8}}, result.LLMClients)
 	require.Equal(t, int32(6), reader.started.Load())
 	require.Equal(t, int32(2), reader.overviewCalls.Load())
 	require.Equal(t, int32(1), reader.activeCountCalls.Load())

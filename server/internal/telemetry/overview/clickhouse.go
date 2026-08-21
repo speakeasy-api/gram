@@ -1,4 +1,10 @@
-package telemetry
+// Package overview is the neutral read path for project overview analytics.
+//
+// It exists so the management telemetry handler and Platform MCP compose the
+// same ClickHouse reads and projection rather than growing a second
+// implementation each: a summary the dashboard shows and a summary an external
+// diagnostic tool reports must not be able to disagree.
+package overview
 
 import (
 	"context"
@@ -9,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type projectOverviewClickHouseReader interface {
+type ClickHouseReader interface {
 	GetOverviewSummary(context.Context, repo.GetOverviewSummaryParams) (*repo.OverviewSummary, error)
 	GetActiveCounts(context.Context, repo.GetActiveCountsParams) (*repo.ActiveCounts, error)
 	GetTopServers(context.Context, repo.GetTopServersParams) ([]repo.TopServer, error)
@@ -17,43 +23,53 @@ type projectOverviewClickHouseReader interface {
 	GetLLMClientBreakdown(context.Context, repo.GetLLMClientBreakdownParams) ([]repo.LLMClientUsage, error)
 }
 
-type projectOverviewClickHouseParams struct {
-	projectID       string
-	timeStart       int64
-	timeEnd         int64
-	comparisonStart int64
-	comparisonEnd   int64
-	sessionMode     bool
+// Params bounds one project overview read: the project, the current window,
+// the equal-length comparison window preceding it, and whether session capture
+// is the organization's metrics mode.
+type Params struct {
+	ProjectID       string
+	TimeStart       int64
+	TimeEnd         int64
+	ComparisonStart int64
+	ComparisonEnd   int64
+	SessionMode     bool
 }
 
-type projectOverviewClickHouseResult struct {
-	toolMetrics           *repo.OverviewSummary
-	toolMetricsComparison *repo.OverviewSummary
-	activeCounts          *repo.ActiveCounts
-	topServers            []repo.TopServer
-	topUsers              []repo.TopUser
-	llmClients            []repo.LLMClientUsage
+// Result is the ClickHouse half of a project overview. TopUsers and LLMClients
+// stay empty in session mode, where those two lists come from PostgreSQL
+// instead; a caller that needs them reads Params.SessionMode rather than
+// treating empty as "no activity".
+type Result struct {
+	ToolMetrics           *repo.OverviewSummary
+	ToolMetricsComparison *repo.OverviewSummary
+	ActiveCounts          *repo.ActiveCounts
+	TopServers            []repo.TopServer
+	TopUsers              []repo.TopUser
+	LLMClients            []repo.LLMClientUsage
 }
 
-func fetchProjectOverviewClickHouse(
+// FetchClickHouse runs a project overview's ClickHouse lanes concurrently and
+// returns them together. It performs no authorization and no gating; a caller
+// establishes both before reading.
+func FetchClickHouse(
 	ctx context.Context,
-	reader projectOverviewClickHouseReader,
-	params projectOverviewClickHouseParams,
-) (projectOverviewClickHouseResult, error) {
-	var result projectOverviewClickHouseResult
+	reader ClickHouseReader,
+	params Params,
+) (Result, error) {
+	var result Result
 	// clickhouse.Conn is a connection pool: concurrent queries acquire separate
 	// transports and remain bounded by the pool's MaxOpenConns setting.
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
 		var queryErr error
-		result.toolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+		result.ToolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
 			// Org-scope read: Gram-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
-			GramProjectID:       params.projectID,
-			TimeStart:           params.timeStart,
-			TimeEnd:             params.timeEnd,
+			GramProjectID:       params.ProjectID,
+			TimeStart:           params.TimeStart,
+			TimeEnd:             params.TimeEnd,
 			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},
 			CanonicalUser:       repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
 			ExternalUserID:      "",
@@ -74,13 +90,13 @@ func fetchProjectOverviewClickHouse(
 
 	eg.Go(func() error {
 		var queryErr error
-		result.toolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+		result.ToolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
 			// Org-scope read: Gram-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
-			GramProjectID:       params.projectID,
-			TimeStart:           params.comparisonStart,
-			TimeEnd:             params.comparisonEnd,
+			GramProjectID:       params.ProjectID,
+			TimeStart:           params.ComparisonStart,
+			TimeEnd:             params.ComparisonEnd,
 			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},
 			CanonicalUser:       repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""},
 			ExternalUserID:      "",
@@ -101,14 +117,14 @@ func fetchProjectOverviewClickHouse(
 
 	eg.Go(func() error {
 		var queryErr error
-		result.activeCounts, queryErr = reader.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
-			GramProjectID:  params.projectID,
-			TimeStart:      params.timeStart,
-			TimeEnd:        params.timeEnd,
+		result.ActiveCounts, queryErr = reader.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
+			GramProjectID:  params.ProjectID,
+			TimeStart:      params.TimeStart,
+			TimeEnd:        params.TimeEnd,
 			ExternalUserID: "",
 			APIKeyID:       "",
 			ToolsetSlug:    "",
-			SessionMode:    params.sessionMode,
+			SessionMode:    params.SessionMode,
 		})
 		if queryErr != nil {
 			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving active server counts")
@@ -118,10 +134,10 @@ func fetchProjectOverviewClickHouse(
 
 	eg.Go(func() error {
 		var queryErr error
-		result.topServers, queryErr = reader.GetTopServers(egCtx, repo.GetTopServersParams{
-			GramProjectID:  params.projectID,
-			TimeStart:      params.timeStart,
-			TimeEnd:        params.timeEnd,
+		result.TopServers, queryErr = reader.GetTopServers(egCtx, repo.GetTopServersParams{
+			GramProjectID:  params.ProjectID,
+			TimeStart:      params.TimeStart,
+			TimeEnd:        params.TimeEnd,
 			ExternalUserID: "",
 			APIKeyID:       "",
 			ToolsetSlug:    "",
@@ -133,13 +149,13 @@ func fetchProjectOverviewClickHouse(
 		return nil
 	})
 
-	if !params.sessionMode {
+	if !params.SessionMode {
 		eg.Go(func() error {
 			var queryErr error
-			result.topUsers, queryErr = reader.GetTopUsers(egCtx, repo.GetTopUsersParams{
-				GramProjectID:  params.projectID,
-				TimeStart:      params.timeStart,
-				TimeEnd:        params.timeEnd,
+			result.TopUsers, queryErr = reader.GetTopUsers(egCtx, repo.GetTopUsersParams{
+				GramProjectID:  params.ProjectID,
+				TimeStart:      params.TimeStart,
+				TimeEnd:        params.TimeEnd,
 				ExternalUserID: "",
 				APIKeyID:       "",
 				ToolsetSlug:    "",
@@ -154,10 +170,10 @@ func fetchProjectOverviewClickHouse(
 
 		eg.Go(func() error {
 			var queryErr error
-			result.llmClients, queryErr = reader.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
-				GramProjectID:  params.projectID,
-				TimeStart:      params.timeStart,
-				TimeEnd:        params.timeEnd,
+			result.LLMClients, queryErr = reader.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
+				GramProjectID:  params.ProjectID,
+				TimeStart:      params.TimeStart,
+				TimeEnd:        params.TimeEnd,
 				ExternalUserID: "",
 				APIKeyID:       "",
 				ToolsetSlug:    "",
@@ -171,7 +187,7 @@ func fetchProjectOverviewClickHouse(
 	}
 
 	if err := eg.Wait(); err != nil {
-		return projectOverviewClickHouseResult{}, fmt.Errorf("fetch project overview ClickHouse data: %w", err)
+		return Result{}, fmt.Errorf("fetch project overview ClickHouse data: %w", err)
 	}
 
 	return result, nil

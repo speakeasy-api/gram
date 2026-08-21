@@ -1548,6 +1548,7 @@ func newStartCommand() *cli.Command {
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
 				Skills:                 skillsService,
+				Telemetry:              telemetryrepo.New(chDB),
 				LocalFixture:           platformFixture,
 			})
 			if err != nil {
