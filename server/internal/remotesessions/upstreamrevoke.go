@@ -62,10 +62,9 @@ const (
 	// when it expires are counted and logged rather than silently dropped.
 	bulkRevokeTimeout = 30 * time.Second
 
-	// bulkRevokeConcurrency caps in-flight POSTs within one batch. Every session
-	// on a client shares that client's issuer, so the whole batch lands on a
-	// single upstream host and an unbounded fan-out would read as a burst from
-	// Gram against one customer's identity provider.
+	// bulkRevokeConcurrency caps in-flight POSTs within one batch. A batch can
+	// span several clients' upstream hosts, but an unbounded fan-out would
+	// still read as a burst from Gram against a customer's identity provider.
 	bulkRevokeConcurrency = 8
 )
 
@@ -83,11 +82,12 @@ type UpstreamRevoker struct {
 
 	// client is built once and shared by every revocation. Guardian's pooled
 	// transport is meant for exactly this — a long-lived client making repeated
-	// requests to the same hosts — and a bulk revoke is the case it pays off on,
-	// since every session in a batch shares one issuer. Constructing one per
-	// call instead would open a connection per session and hold each idle until
-	// it timed out, which is the file-descriptor leak PooledClient's own
-	// documentation warns against.
+	// requests to the same hosts — and a bulk revoke is the case it pays off
+	// on: even a batch spanning several clients' issuers repeats each host, and
+	// the pool amortizes every repeat. Constructing one per call instead would
+	// open a connection per session and hold each idle until it timed out,
+	// which is the file-descriptor leak PooledClient's own documentation warns
+	// against.
 	client *guardian.HTTPClient
 
 	metrics *remotesessionmetrics.Revoke
@@ -222,8 +222,8 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 // RevokeDetached. Two bounds on top of that, because a batch is unbounded in a
 // way a single revoke is not:
 //
-//   - bulkRevokeConcurrency in flight at once. The batch shares one issuer, so
-//     the fan-out is aimed at a single upstream host.
+//   - bulkRevokeConcurrency in flight at once. A batch can span multiple
+//     clients' hosts, so the cap bounds the total fan-out, not one host's.
 //   - bulkRevokeTimeout across the whole batch, with each session still holding
 //     its own upstreamRevokeTimeout inside it. Without the per-session bound one
 //     unresponsive upstream would hold a concurrency slot for the entire batch
@@ -278,6 +278,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 		return
 	}
 
+	// Attribution is best-effort: a batch can span clients, log the first.
 	r.logger.WarnContext(ctx, "upstream revoke: batch budget exhausted before every session was attempted",
 		attr.SlogRemoteSessionClientID(creds[0].RemoteSessionClientID.String()),
 		attr.SlogRemoteSessionRevokeDroppedCount(dropped),

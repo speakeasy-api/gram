@@ -310,7 +310,7 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.UpstreamResource)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
