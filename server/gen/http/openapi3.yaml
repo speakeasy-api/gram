@@ -10105,6 +10105,102 @@ paths:
             tags:
                 - assistants
             x-speakeasy-name-override: getManaged
+    /rpc/assistants.interruptTurn:
+        post:
+            description: 'Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation''s thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.'
+            operationId: interruptAssistantTurn
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InterruptTurnRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InterruptTurnResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: interruptTurn assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: interruptTurn
+            x-speakeasy-react-hook:
+                name: InterruptAssistantTurn
+                type: mutation
     /rpc/assistants.list:
         get:
             description: List assistants for the current project.
@@ -69838,6 +69934,37 @@ components:
             required:
                 - version
                 - created_at
+        InterruptTurnRequestBody:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                    description: The assistant whose conversation should stop generating.
+                    format: uuid
+                chat_id:
+                    type: string
+                    description: The conversation to stop, as returned by sendMessage.
+                    format: uuid
+            required:
+                - assistant_id
+                - chat_id
+        InterruptTurnResult:
+            type: object
+            properties:
+                cancelled_queued:
+                    type: integer
+                    description: How many turns were dropped from the conversation's queue before any runtime claimed them.
+                    format: int64
+                interrupted:
+                    type: boolean
+                    description: Whether a turn in flight on the assistant runtime was cancelled.
+                stopped:
+                    type: boolean
+                    description: Whether the call stopped anything. False means nothing was generating — the reply had already finished, or the conversation never started a turn.
+            required:
+                - stopped
+                - interrupted
+                - cancelled_queued
         IssuerConvergenceCandidate:
             type: object
             properties:

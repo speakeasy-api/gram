@@ -86,6 +86,10 @@ const (
 	eventStatusProcessing = "processing"
 	eventStatusCompleted  = "completed"
 	eventStatusFailed     = "failed"
+	// eventStatusCancelled marks a queued turn the user stopped before any
+	// runner claimed it. Terminal like completed/failed: no admission query
+	// matches it, so the turn is never dispatched.
+	eventStatusCancelled = "cancelled"
 
 	// maxEventAttempts caps how many times a single event will be retried
 	// against a live runtime before it's marked terminally failed. Prevents
