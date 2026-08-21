@@ -457,12 +457,16 @@ func (q *Queries) ListJsonWebKeySets(ctx context.Context, organizationID string)
 }
 
 const listJsonWebKeys = `-- name: ListJsonWebKeys :many
-SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
-FROM json_web_keys
-WHERE json_web_key_set_id = $1
-  AND organization_id = $2
-  AND (deleted IS FALSE OR ($3::boolean AND state = 'revoked'))
-ORDER BY id DESC
+SELECT k.id, k.organization_id, k.project_id, k.json_web_key_set_id, k.external_key_id, k.external_key_version, k.state, k.kid, k.public_jwk, k.activated_at, k.retired_at, k.revoked_at, k.created_at, k.updated_at, k.deleted_at, k.deleted
+FROM json_web_keys AS k
+JOIN json_web_key_sets AS s
+  ON s.organization_id = k.organization_id
+ AND s.id = k.json_web_key_set_id
+WHERE k.json_web_key_set_id = $1
+  AND k.organization_id = $2
+  AND s.deleted IS FALSE
+  AND (k.deleted IS FALSE OR ($3::boolean AND k.state = 'revoked'))
+ORDER BY k.id DESC
 `
 
 type ListJsonWebKeysParams struct {
@@ -474,8 +478,10 @@ type ListJsonWebKeysParams struct {
 // Lists a set's keys. Revoked keys are always also soft-deleted (revocation is
 // how a kid leaves the published set), so the default listing filters deleted
 // and include_revoked re-admits exactly the revoked rows to surface revocation
-// history. Keys deleted by a set cascade never appear here because the set
-// lookup 404s first.
+// history. The parent-set join is belt and braces: the caller 404s on a
+// missing set first and the cascade soft-deletes keys with their set, but
+// key listings filter the parent's deleted flag themselves rather than trust
+// every caller to.
 func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams) ([]JsonWebKey, error) {
 	rows, err := q.db.Query(ctx, listJsonWebKeys, arg.JsonWebKeySetID, arg.OrganizationID, arg.IncludeRevoked)
 	if err != nil {

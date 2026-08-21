@@ -2,11 +2,9 @@ package mv
 
 import (
 	"encoding/json"
-	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 
 	jwks "github.com/speakeasy-api/gram/server/gen/json_web_key_sets"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	repo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 )
 
@@ -17,8 +15,8 @@ func BuildJsonWebKeySetView(set repo.JsonWebKeySet) *jwks.JSONWebKeySet {
 		OrganizationID: set.OrganizationID,
 		ExternalKeyID:  set.ExternalKeyID.String(),
 		Name:           set.Name,
-		CreatedAt:      set.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      set.UpdatedAt.Time.Format(time.RFC3339),
+		CreatedAt:      conv.FromPGTimestamptz(set.CreatedAt),
+		UpdatedAt:      conv.FromPGTimestamptz(set.UpdatedAt),
 	}
 }
 
@@ -44,11 +42,11 @@ func BuildJsonWebKeyView(key repo.JsonWebKey) *jwks.JSONWebKey {
 		Kid:             key.Kid,
 		KeyState:        key.State,
 		PublicJwk:       json.RawMessage(key.PublicJwk),
-		ActivatedAt:     formatOptionalTimestamptz(key.ActivatedAt),
-		RetiredAt:       formatOptionalTimestamptz(key.RetiredAt),
-		RevokedAt:       formatOptionalTimestamptz(key.RevokedAt),
-		CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
+		ActivatedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(key.ActivatedAt)),
+		RetiredAt:       conv.PtrEmpty(conv.FromPGTimestamptz(key.RetiredAt)),
+		RevokedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(key.RevokedAt)),
+		CreatedAt:       conv.FromPGTimestamptz(key.CreatedAt),
+		UpdatedAt:       conv.FromPGTimestamptz(key.UpdatedAt),
 	}
 }
 
@@ -59,13 +57,4 @@ func BuildJsonWebKeyListView(keys []repo.JsonWebKey) []*jwks.JSONWebKey {
 		result[i] = BuildJsonWebKeyView(key)
 	}
 	return result
-}
-
-func formatOptionalTimestamptz(ts pgtype.Timestamptz) *string {
-	if !ts.Valid {
-		return nil
-	}
-
-	formatted := ts.Time.Format(time.RFC3339)
-	return &formatted
 }

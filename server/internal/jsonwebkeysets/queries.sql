@@ -132,15 +132,21 @@ RETURNING *;
 -- Lists a set's keys. Revoked keys are always also soft-deleted (revocation is
 -- how a kid leaves the published set), so the default listing filters deleted
 -- and include_revoked re-admits exactly the revoked rows to surface revocation
--- history. Keys deleted by a set cascade never appear here because the set
--- lookup 404s first.
+-- history. The parent-set join is belt and braces: the caller 404s on a
+-- missing set first and the cascade soft-deletes keys with their set, but
+-- key listings filter the parent's deleted flag themselves rather than trust
+-- every caller to.
 -- name: ListJsonWebKeys :many
-SELECT *
-FROM json_web_keys
-WHERE json_web_key_set_id = @json_web_key_set_id
-  AND organization_id = @organization_id
-  AND (deleted IS FALSE OR (@include_revoked::boolean AND state = 'revoked'))
-ORDER BY id DESC;
+SELECT k.*
+FROM json_web_keys AS k
+JOIN json_web_key_sets AS s
+  ON s.organization_id = k.organization_id
+ AND s.id = k.json_web_key_set_id
+WHERE k.json_web_key_set_id = @json_web_key_set_id
+  AND k.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND (k.deleted IS FALSE OR (@include_revoked::boolean AND k.state = 'revoked'))
+ORDER BY k.id DESC;
 
 -- name: GetJsonWebKey :one
 SELECT *
