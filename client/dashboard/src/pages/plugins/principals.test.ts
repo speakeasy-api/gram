@@ -164,6 +164,15 @@ describe("plugin audience selection", () => {
     ).toEqual(["directory_group:example"]);
   });
 
+  it("retains every targeted audience when another is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["role:organization:abc"],
+        ["role:organization:abc", "user:u-123"],
+      ),
+    ).toEqual(["role:organization:abc", "user:u-123"]);
+  });
+
   it("keeps an existing mixed assignment removable without rewriting it", () => {
     expect(
       selectMutuallyExclusivePluginAudiences(["*", "user:u-123"], ["*"]),

@@ -29,7 +29,6 @@ import {
   individualMemberFacepileForUrns,
   isIndividualMemberPrincipal,
   isIndividualUserAssignmentPrincipal,
-  isEveryoneAssignmentPrincipal,
   memberMapByUrn,
   memberCountDescription,
   principalIcon,
@@ -214,7 +213,6 @@ function AssignmentsEditor({
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
-  const hasEveryoneAssignment = selected.some(isEveryoneAssignmentPrincipal);
 
   const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
   const canSelectAudiences =
@@ -228,11 +226,10 @@ function AssignmentsEditor({
         options: availableAudienceOptions(
           group.value,
           audiences,
-          !canSelectAudiences ||
-            (group.value !== "everyone" && hasEveryoneAssignment),
+          !canSelectAudiences,
         ),
       })),
-    [audiences, canSelectAudiences, hasEveryoneAssignment],
+    [audiences, canSelectAudiences],
   );
   const unavailableAudienceGroups = useMemo(
     () =>
@@ -254,9 +251,8 @@ function AssignmentsEditor({
         label: member.email,
         value: member.principalUrn,
         description: member.name || undefined,
-        disabled: hasEveryoneAssignment,
       })),
-    [hasEveryoneAssignment, members],
+    [members],
   );
   const unavailableUserOptions = useMemo(
     () =>
