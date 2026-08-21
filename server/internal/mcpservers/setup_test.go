@@ -92,7 +92,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc)
+	svc := mcpservers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, testenv.NewEncryptionClient(t), guardianPolicy)
 
 	return ctx, &testInstance{
 		service:        svc,

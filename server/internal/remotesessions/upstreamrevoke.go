@@ -187,6 +187,41 @@ func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo
 	return creds, nil
 }
 
+// SoftDeleteOrphanedClientSessions tombstones the remote_sessions of every
+// client whose only live binding belongs to userSessionIssuerID, inside the
+// caller's transaction, and returns the credentials to hand to
+// [UpstreamRevoker.RevokeAllDetached] once that transaction commits. Call it
+// after the issuer is tombstoned but while its binding rows still exist. The
+// client-row locks serialize concurrent deletes of sibling issuers sharing a
+// client, which could otherwise both see the other's binding as live and both
+// skip the cascade.
+func (r *UpstreamRevoker) SoftDeleteOrphanedClientSessions(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	q := repo.New(tx)
+
+	if _, err := q.LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, userSessionIssuerID); err != nil {
+		return nil, fmt.Errorf("lock remote session clients bound to user session issuer: %w", err)
+	}
+
+	clientIDs, err := q.ListRemoteSessionClientsOrphanedByUserSessionIssuer(ctx, repo.ListRemoteSessionClientsOrphanedByUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list remote session clients orphaned by user session issuer: %w", err)
+	}
+
+	var creds []RevokedCredentials
+	for _, clientID := range clientIDs {
+		rows, err := q.SoftDeleteRemoteSessionsByClientID(ctx, clientID)
+		if err != nil {
+			return nil, fmt.Errorf("soft delete remote sessions for orphaned client %s: %w", clientID, err)
+		}
+		creds = append(creds, revokedCredentials(rows)...)
+	}
+	return creds, nil
+}
+
 // RevokeDetached runs the upstream revocation for an already-soft-deleted
 // session, off the caller's cancellation and under its own deadline.
 //

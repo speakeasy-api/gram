@@ -491,6 +491,40 @@ SELECT EXISTS (
     AND usi.deleted IS FALSE
 )::boolean AS bound;
 
+-- name: LockRemoteSessionClientsBoundToUserSessionIssuer :many
+-- Serializes concurrent deletes of sibling issuers sharing a client, which
+-- could otherwise each see the other's binding as live and both skip the
+-- orphan cascade. Ordered so overlapping lock sets acquire deadlock-free.
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+ORDER BY c.id
+FOR UPDATE OF c;
+
+-- name: ListRemoteSessionClientsOrphanedByUserSessionIssuer :many
+-- Clients whose only live binding belongs to this issuer: once its bindings
+-- go, no live issuer can reach their sessions. Tenancy mirrors
+-- CheckRemoteSessionClientBindingForUserSessionIssuer. The target issuer's own
+-- deleted flag is ignored (tombstoned first, same tx); sibling bindings count
+-- only while their issuer is live.
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS sibling
+    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
+    WHERE sibling.remote_session_client_id = link.remote_session_client_id
+      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
+      AND sibling_usi.deleted IS FALSE
+  );
+
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c

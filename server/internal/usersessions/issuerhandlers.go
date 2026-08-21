@@ -344,6 +344,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
+	// Must run before the binding delete below removes the rows it reads.
+	orphanCreds, err := s.revoker.SoftDeleteOrphanedClientSessions(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete remote sessions orphaned by user session issuer").LogError(ctx, logger)
+	}
+
 	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
 		ctx,
 		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
@@ -382,6 +388,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
 	return nil
 }
