@@ -30,6 +30,28 @@ export type PrincipalKind =
   | "directory_attribute"
   | "unknown";
 
+export function isEveryoneAssignmentPrincipal(urn: string): boolean {
+  return urn === WILDCARD_PRINCIPAL || urn === "user:all";
+}
+
+// Plugin delivery to everyone subsumes every targeted audience. New picker
+// selections therefore stay unambiguous, while existing unavailable assignments
+// remain removable from their chips.
+export function selectMutuallyExclusivePluginAudiences(
+  previous: string[],
+  next: string[],
+): string[] {
+  const previousValues = new Set(previous);
+  const addedValues = next.filter((value) => !previousValues.has(value));
+  const addedEveryone = addedValues.find(isEveryoneAssignmentPrincipal);
+
+  if (addedEveryone) return [addedEveryone];
+  if (addedValues.some((value) => !isEveryoneAssignmentPrincipal(value))) {
+    return next.filter((value) => !isEveryoneAssignmentPrincipal(value));
+  }
+  return next;
+}
+
 const principalKindIcon: Record<
   PrincipalKind,
   React.ComponentType<{ className?: string }>
@@ -164,7 +186,7 @@ export function audienceKindForPrincipal(
 ): PluginAudience["kind"] | undefined {
   const audience = audienceByUrn.get(urn);
   if (audience) return audience.kind;
-  if (urn === WILDCARD_PRINCIPAL) return "everyone";
+  if (isEveryoneAssignmentPrincipal(urn)) return "everyone";
   if (urn.startsWith(ROLE_PREFIX)) return "role";
   if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) return "directory_group";
   if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) return "directory_attribute";

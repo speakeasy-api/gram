@@ -7,9 +7,11 @@ import {
   audienceMapByUrn,
   describePrincipal,
   isIndividualUserAssignmentPrincipal,
+  isEveryoneAssignmentPrincipal,
   memberMapByUrn,
   normalizeToPrincipalUrn,
   roleMapByUrn,
+  selectMutuallyExclusivePluginAudiences,
 } from "./principals";
 
 const role = {
@@ -140,5 +142,36 @@ describe("isIndividualUserAssignmentPrincipal", () => {
       true,
     );
     expect(isIndividualUserAssignmentPrincipal("user:all")).toBe(false);
+  });
+});
+
+describe("plugin audience selection", () => {
+  it("clears targeted audiences when everyone is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["role:organization:abc", "user:u-123", "legacy:target"],
+        ["role:organization:abc", "user:u-123", "legacy:target", "*"],
+      ),
+    ).toEqual(["*"]);
+  });
+
+  it("clears everyone when a targeted audience is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["*"],
+        ["*", "directory_group:example"],
+      ),
+    ).toEqual(["directory_group:example"]);
+  });
+
+  it("keeps an existing mixed assignment removable without rewriting it", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(["*", "user:u-123"], ["*"]),
+    ).toEqual(["*"]);
+  });
+
+  it("recognizes both principals that target everyone", () => {
+    expect(isEveryoneAssignmentPrincipal("*")).toBe(true);
+    expect(isEveryoneAssignmentPrincipal("user:all")).toBe(true);
   });
 });

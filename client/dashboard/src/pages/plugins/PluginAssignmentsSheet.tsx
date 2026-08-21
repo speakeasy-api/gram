@@ -29,9 +29,11 @@ import {
   individualMemberFacepileForUrns,
   isIndividualMemberPrincipal,
   isIndividualUserAssignmentPrincipal,
+  isEveryoneAssignmentPrincipal,
   memberMapByUrn,
   memberCountDescription,
   principalIcon,
+  selectMutuallyExclusivePluginAudiences,
 } from "./principals";
 
 const COLLAPSE_MEMBER_ASSIGNMENTS_AT = 5;
@@ -212,6 +214,7 @@ function AssignmentsEditor({
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
+  const hasEveryoneAssignment = selected.some(isEveryoneAssignmentPrincipal);
 
   const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
   const canSelectAudiences =
@@ -225,10 +228,11 @@ function AssignmentsEditor({
         options: availableAudienceOptions(
           group.value,
           audiences,
-          !canSelectAudiences,
+          !canSelectAudiences ||
+            (group.value !== "everyone" && hasEveryoneAssignment),
         ),
       })),
-    [audiences, canSelectAudiences],
+    [audiences, canSelectAudiences, hasEveryoneAssignment],
   );
   const unavailableAudienceGroups = useMemo(
     () =>
@@ -250,8 +254,9 @@ function AssignmentsEditor({
         label: member.email,
         value: member.principalUrn,
         description: member.name || undefined,
+        disabled: hasEveryoneAssignment,
       })),
-    [members],
+    [hasEveryoneAssignment, members],
   );
   const unavailableUserOptions = useMemo(
     () =>
@@ -356,6 +361,10 @@ function AssignmentsEditor({
     });
   };
 
+  const handleSelectionChange = (next: string[]) => {
+    setSelected(selectMutuallyExclusivePluginAudiences(selected, next));
+  };
+
   return (
     <>
       <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -365,7 +374,7 @@ function AssignmentsEditor({
         <MultiSelect
           options={groupedOptions}
           defaultValue={selected}
-          onValueChange={setSelected}
+          onValueChange={handleSelectionChange}
           placeholder="Select audiences"
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
           searchable
