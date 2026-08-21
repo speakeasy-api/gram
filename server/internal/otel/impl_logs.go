@@ -160,6 +160,9 @@ func validateLogRecord(record *otelv1.InboundLogRecord) error {
 	if record.GetRecordId() == "" {
 		return errors.New("log record ID is required")
 	}
+	if size := proto.Size(record); size > maxOTLPLogRecordBytes {
+		return fmt.Errorf("log record exceeds maximum size of %d bytes: got %d bytes", maxOTLPLogRecordBytes, size)
+	}
 	if size := len(record.GetTraceId()); size != 0 && size != otlpTraceIDSize {
 		return fmt.Errorf("trace ID must be empty or %d bytes, got %d", otlpTraceIDSize, size)
 	}

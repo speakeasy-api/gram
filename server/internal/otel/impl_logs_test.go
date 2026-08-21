@@ -75,7 +75,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 		logPublisher:  publisher,
 		spanPublisher: nil,
 	}
-	projectID := uuid.New()
+	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
 
 	err = service.Logs(ctx, &gen.LogsPayload{
@@ -94,7 +94,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 	require.Equal(t, "producer.scope", published.GetScope().GetName())
 	require.Equal(t, "scope-schema", published.GetScopeSchemaUrl())
 	require.Equal(t, otelProvenanceSource, published.GetProvenance().GetSource())
-	require.Equal(t, "organization-id", published.GetProvenance().GetOrganizationId())
+	require.Equal(t, testLogOrganizationID, published.GetProvenance().GetOrganizationId())
 	require.Equal(t, projectID.String(), published.GetProvenance().GetProjectId())
 	_, err = uuid.Parse(published.GetRecordId())
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestLogsRejectsInvalidExportBeforePublishing(t *testing.T) {
 		logPublisher:  publisher,
 		spanPublisher: nil,
 	}
-	projectID := uuid.New()
+	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
 
 	err = service.Logs(ctx, &gen.LogsPayload{
@@ -138,9 +138,63 @@ func TestLogsRejectsInvalidExportBeforePublishing(t *testing.T) {
 	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
 }
 
+func TestLogsRejectsRecordOverMaximumSizeBeforePublishing(t *testing.T) {
+	t.Parallel()
+
+	request := &collectorlogsv1.ExportLogsServiceRequest{
+		ResourceLogs: []*logsv1.ResourceLogs{{
+			ScopeLogs: []*logsv1.ScopeLogs{{
+				LogRecords: []*logsv1.LogRecord{{
+					Body: &commonv1.AnyValue{
+						Value: &commonv1.AnyValue_BytesValue{BytesValue: make([]byte, maxOTLPLogRecordBytes)},
+					},
+				}},
+			}},
+		}},
+	}
+	body, err := proto.Marshal(request)
+	require.NoError(t, err)
+
+	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
+	service := &Service{
+		logger:        testenv.NewLogger(t),
+		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
+		auth:          nil,
+		logPublisher:  publisher,
+		spanPublisher: nil,
+	}
+	projectID := uuid.MustParse(testLogProjectID)
+	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
+
+	err = service.Logs(ctx, &gen.LogsPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ContentEncoding:  nil,
+	}, io.NopCloser(bytes.NewReader(body)))
+
+	require.ErrorContains(t, err, "invalid OTLP log export")
+	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+func TestValidateLogRecordAcceptsRecordBelowMaximumSize(t *testing.T) {
+	t.Parallel()
+
+	recordID := "record-id"
+	record := (&otelv1.InboundLogRecord_builder{
+		RecordId: &recordID,
+		Body: (&otelv1.InboundLogRecord_AnyValue_builder{
+			BytesValue: make([]byte, maxOTLPLogRecordBytes-1024),
+		}).Build(),
+	}).Build()
+
+	require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
+	require.NoError(t, validateLogRecord(record))
+}
+
 func testOTELAuthContext(projectID uuid.UUID) *contextvalues.AuthContext {
 	return &contextvalues.AuthContext{
-		ActiveOrganizationID:  "organization-id",
+		ActiveOrganizationID:  testLogOrganizationID,
 		UserID:                "",
 		ExternalUserID:        "",
 		APIKeyID:              "",

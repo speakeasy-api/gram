@@ -8,12 +8,23 @@ import (
 	"time"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 )
 
-const meterLogEnricherDuration = "gram.otel_log_enricher.duration"
+const (
+	meterLogEnricherDuration = "gram.otel_log_enricher.duration"
+
+	maxLogRelayExportBytes = 4 * constants.MiB
+
+	// logRelayEnvelopeHeadroom reserves space for OTLP export wrappers and all
+	// enrichments added between ingestion and destination delivery.
+	logRelayEnvelopeHeadroom = 256 * constants.KiB
+
+	maxOTLPLogRecordBytes = maxLogRelayExportBytes - logRelayEnvelopeHeadroom
+)
 
 type LogEnricher interface {
 	Name() string

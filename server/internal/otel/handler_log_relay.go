@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -31,7 +30,6 @@ const (
 	meterLogRelayRecordsFailed  = "gram.otel_relay.log_records_failed"
 
 	logRelayExportConcurrency = 32
-	maxLogRelayExportBytes    = 4 * constants.MiB
 
 	gramLogPrivateFieldStart protowire.Number = 1000
 )
@@ -56,11 +54,6 @@ type logRelayMessage struct {
 
 type logProvenanceGroup struct {
 	key      logProvenanceKey
-	messages []logRelayMessage
-}
-
-type logRelayDelivery struct {
-	request  *collectorlogsv1.ExportLogsServiceRequest
 	messages []logRelayMessage
 }
 
@@ -132,7 +125,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 	destinations := make(map[string]destinationResult)
 	type destinationDelivery struct {
 		destination *relayDestination
-		delivery    logRelayDelivery
+		batch       rightSizedProtoBatch[logRelayMessage, *collectorlogsv1.ExportLogsServiceRequest]
 	}
 	deliveries := make([]destinationDelivery, 0, len(groups))
 
@@ -161,14 +154,21 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 			continue
 		}
 
-		groupDeliveries, dropped := splitLogRelayMessages(provenanceGroup.messages)
-		if len(dropped) > 0 {
-			h.recordDroppedLogs(ctx, len(dropped), relayReasonInvalid)
+		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxLogRelayExportBytes, buildLogRelayExport)
+		if err != nil {
+			h.recordDroppedLogs(ctx, len(provenanceGroup.messages), relayReasonInvalid)
+			logger.ErrorContext(
+				ctx,
+				"build log relay exports",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+			)
+			continue
 		}
-		for _, delivery := range groupDeliveries {
+		for _, batch := range batches {
 			deliveries = append(deliveries, destinationDelivery{
 				destination: result.destination,
-				delivery:    delivery,
+				batch:       batch,
 			})
 		}
 	}
@@ -177,7 +177,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 	exportGroup.SetLimit(logRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if err := item.destination.exportWithLimit(ctx, item.delivery.request, maxLogRelayExportBytes); err != nil {
+			if err := item.destination.exportWithLimit(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {
@@ -186,12 +186,12 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 				}
 
 				if retryable {
-					h.recordFailedLogs(ctx, len(item.delivery.messages), reason)
-					for _, message := range item.delivery.messages {
+					h.recordFailedLogs(ctx, len(item.batch.items), reason)
+					for _, message := range item.batch.items {
 						message.fail(err)
 					}
 				} else {
-					h.recordDroppedLogs(ctx, len(item.delivery.messages), reason)
+					h.recordDroppedLogs(ctx, len(item.batch.items), reason)
 				}
 
 				logger.ErrorContext(
@@ -264,27 +264,12 @@ func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, in
 	return groups, invalid
 }
 
-func splitLogRelayMessages(messages []logRelayMessage) (deliveries []logRelayDelivery, dropped []logRelayMessage) {
-	if len(messages) == 0 {
-		return nil, nil
-	}
-
+func buildLogRelayExport(messages []logRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 	records := make([]*otelv1.LogRecord, len(messages))
 	for i, message := range messages {
 		records[i] = message.record
 	}
-	request, err := newLogRelayExportRequest(records)
-	if err == nil && proto.Size(request) <= maxLogRelayExportBytes {
-		return []logRelayDelivery{{request: request, messages: messages}}, nil
-	}
-	if len(messages) == 1 {
-		return nil, messages
-	}
-
-	middle := len(messages) / 2
-	leftDeliveries, leftDropped := splitLogRelayMessages(messages[:middle])
-	rightDeliveries, rightDropped := splitLogRelayMessages(messages[middle:])
-	return append(leftDeliveries, rightDeliveries...), append(leftDropped, rightDropped...)
+	return newLogRelayExportRequest(records)
 }
 
 func removeGramLogFields(record *logsv1.LogRecord) error {

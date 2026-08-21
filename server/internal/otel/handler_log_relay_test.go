@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -68,22 +69,22 @@ func TestLogRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	destinationA := cacheLogRelayTestDestination(t, handler, "org-a", server.URL, map[string]string{"X-Customer": "a"})
-	cacheLogRelayTestDestination(t, handler, "org-b", server.URL, map[string]string{"X-Customer": "b"})
+	destinationA := cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, map[string]string{"X-Customer": "a"})
+	cacheLogRelayTestDestination(t, handler, testLogOtherOrganizationID, server.URL, map[string]string{"X-Customer": "b"})
 	require.Equal(t, 10*time.Second, destinationA.httpClient.Timeout)
 
 	messages, failures := logRelayTestMessages(
-		relayTestLogRecord("a-1", "org-a", "project-1", 0),
-		relayTestLogRecord("a-2", "org-a", "project-1", 0),
-		relayTestLogRecord("a-3", "org-a", "project-2", 0),
-		relayTestLogRecord("b-1", "org-b", "project-1", 0),
+		relayTestLogRecord("a-1", testLogOrganizationID, testLogProjectID, 0),
+		relayTestLogRecord("a-2", testLogOrganizationID, testLogProjectID, 0),
+		relayTestLogRecord("a-3", testLogOrganizationID, testLogOtherProjectID, 0),
+		relayTestLogRecord("b-1", testLogOtherOrganizationID, testLogProjectID, 0),
 	)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	for _, failure := range failures {
 		require.NoError(t, failure)
 	}
 
-	messages, failures = logRelayTestMessages(relayTestLogRecord("a-4", "org-a", "project-1", 0))
+	messages, failures = logRelayTestMessages(relayTestLogRecord("a-4", testLogOrganizationID, testLogProjectID, 0))
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.NoError(t, failures[0])
 
@@ -110,6 +111,73 @@ func TestLogRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 	require.Equal(t, []string{"b-1"}, groupedBodies["b"])
 }
 
+func TestLogRelayHandlerRightSizesLargeBatchWithoutMixingOrganizations(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
+
+	type organizationSpec struct {
+		customer       string
+		organizationID string
+		projectID      string
+		recordCount    int
+	}
+	specs := []organizationSpec{
+		{customer: "a", organizationID: testLogOrganizationID, projectID: testLogProjectID, recordCount: 5},
+		{customer: "b", organizationID: testLogOtherOrganizationID, projectID: testLogOtherProjectID, recordCount: 4},
+		{customer: "c", organizationID: testLogThirdOrganizationID, projectID: testLogThirdProjectID, recordCount: 7},
+	}
+
+	recordBodyBytes := maxOTLPLogRecordBytes / 3
+	expectedNames := make(map[string][]string, len(specs))
+	records := make([]*otelv1.LogRecord, 0, 16)
+	for _, spec := range specs {
+		cacheLogRelayTestDestination(t, handler, spec.organizationID, server.URL, map[string]string{"X-Customer": spec.customer})
+		for index := range spec.recordCount {
+			name := fmt.Sprintf("%s-%d", spec.customer, index)
+			record := relayTestLogRecord(name, spec.organizationID, spec.projectID, recordBodyBytes)
+			require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
+			records = append(records, record)
+			expectedNames[spec.customer] = append(expectedNames[spec.customer], name)
+		}
+	}
+
+	messages, failures := logRelayTestMessages(records...)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	deliveredNames := make(map[string][]string, len(specs))
+	batchSizes := make(map[string][]int, len(specs))
+	requests := capture.snapshot()
+	require.Len(t, requests, 7)
+	for _, captured := range requests {
+		require.NoError(t, captured.err)
+		require.LessOrEqual(t, captured.bodySize, maxLogRelayExportBytes)
+		names := relayRequestLogEventNames(captured.request)
+		require.NotEmpty(t, names)
+		for _, name := range names {
+			require.Contains(t, expectedNames[captured.customer], name)
+		}
+		deliveredNames[captured.customer] = append(deliveredNames[captured.customer], names...)
+		batchSizes[captured.customer] = append(batchSizes[captured.customer], len(names))
+	}
+
+	for customer, expected := range expectedNames {
+		slices.Sort(expected)
+		slices.Sort(deliveredNames[customer])
+		slices.Sort(batchSizes[customer])
+		require.Equal(t, expected, deliveredNames[customer])
+	}
+	require.Equal(t, []int{2, 3}, batchSizes["a"])
+	require.Equal(t, []int{1, 3}, batchSizes["b"])
+	require.Equal(t, []int{1, 3, 3}, batchSizes["c"])
+}
+
 func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 	t.Parallel()
 
@@ -117,20 +185,27 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheLogRelayTestDestination(t, handler, "org-a", server.URL, nil)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, nil)
 
-	largeBodyBytes := maxLogRelayExportBytes/2 + 128*1024
-	messages, failures := logRelayTestMessages(
-		relayTestLogRecord("large-1", "org-a", "project-1", largeBodyBytes),
-		relayTestLogRecord("large-2", "org-a", "project-1", largeBodyBytes),
-	)
+	recordBodyBytes := maxOTLPLogRecordBytes / 2
+	records := []*otelv1.LogRecord{
+		relayTestLogRecord("large-1", testLogOrganizationID, testLogProjectID, recordBodyBytes),
+		relayTestLogRecord("large-2", testLogOrganizationID, testLogProjectID, recordBodyBytes),
+		relayTestLogRecord("large-3", testLogOrganizationID, testLogProjectID, recordBodyBytes),
+		relayTestLogRecord("large-4", testLogOrganizationID, testLogProjectID, recordBodyBytes),
+		relayTestLogRecord("large-5", testLogOrganizationID, testLogProjectID, recordBodyBytes),
+	}
+	for _, record := range records {
+		require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
+	}
+	messages, failures := logRelayTestMessages(records...)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	for _, failure := range failures {
 		require.NoError(t, failure)
 	}
 
 	requests := capture.snapshot()
-	require.Len(t, requests, 2)
+	require.Len(t, requests, 3)
 	deliveredRecords := 0
 	for _, captured := range requests {
 		require.NoError(t, captured.err)
@@ -141,27 +216,7 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 			}
 		}
 	}
-	require.Equal(t, 2, deliveredRecords)
-}
-
-func TestLogRelayHandlerDropsSingleRecordOverFourMiB(t *testing.T) {
-	t.Parallel()
-
-	var requests atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheLogRelayTestDestination(t, handler, "org-a", server.URL, nil)
-
-	messages, failures := logRelayTestMessages(
-		relayTestLogRecord("oversized", "org-a", "project-1", maxLogRelayExportBytes),
-	)
-	require.NoError(t, handler.handleBatch(t.Context(), messages))
-	require.NoError(t, failures[0])
-	require.Zero(t, requests.Load())
+	require.Equal(t, len(records), deliveredRecords)
 }
 
 func TestLogRelayDestinationRejectsRequestOverFourMiB(t *testing.T) {
@@ -174,9 +229,9 @@ func TestLogRelayDestinationRejectsRequestOverFourMiB(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	destination := cacheLogRelayTestDestination(t, handler, "org-a", server.URL, nil)
+	destination := cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, nil)
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{
-		relayTestLogRecord("oversized", "org-a", "project-1", maxLogRelayExportBytes),
+		relayTestLogRecord("oversized", testLogOrganizationID, testLogProjectID, maxLogRelayExportBytes),
 	})
 	require.NoError(t, err)
 
@@ -196,10 +251,10 @@ func TestLogRelayHandlerFailsMessagesForRetryableDestination(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheLogRelayTestDestination(t, handler, "org-a", server.URL, nil)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, nil)
 
 	messages, failures := logRelayTestMessages(
-		relayTestLogRecord("failed", "org-a", "project-1", 0),
+		relayTestLogRecord("failed", testLogOrganizationID, testLogProjectID, 0),
 	)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.ErrorContains(t, failures[0], "503 Service Unavailable")
@@ -209,7 +264,7 @@ func TestLogRelayHandlerFailsMessagesForRetryableDestination(t *testing.T) {
 func TestNewLogRelayExportRequestDiscardsGramOnlyFields(t *testing.T) {
 	t.Parallel()
 
-	record := relayTestLogRecord("visible", "internal-organization-id", "internal-project-id", 0)
+	record := relayTestLogRecord("visible", testLogOrganizationID, testLogProjectID, 0)
 	futureOTLPField := protowire.AppendTag(nil, 13, protowire.BytesType)
 	futureOTLPField = protowire.AppendString(futureOTLPField, "future-otlp-value")
 	futureGramField := protowire.AppendTag(nil, 1006, protowire.BytesType)
@@ -229,8 +284,8 @@ func TestNewLogRelayExportRequestDiscardsGramOnlyFields(t *testing.T) {
 	require.NoError(t, err)
 	for _, internalValue := range []string{
 		"record-visible",
-		"internal-organization-id",
-		"internal-project-id",
+		testLogOrganizationID,
+		testLogProjectID,
 		"internal-future-value",
 	} {
 		require.NotContains(t, string(encoded), internalValue)
@@ -295,6 +350,7 @@ func relayTestLogRecord(body, organizationID, projectID string, bodyBytes int) *
 	return (&otelv1.LogRecord_builder{
 		RecordId:          &recordID,
 		Body:              recordBody,
+		EventName:         &body,
 		Resource:          (&otelv1.LogRecord_Resource_builder{Attributes: nil}).Build(),
 		ResourceSchemaUrl: &resourceSchemaURL,
 		Scope: (&otelv1.LogRecord_InstrumentationScope_builder{
@@ -319,4 +375,16 @@ func relayRequestLogBodies(request *collectorlogsv1.ExportLogsServiceRequest) []
 		}
 	}
 	return bodies
+}
+
+func relayRequestLogEventNames(request *collectorlogsv1.ExportLogsServiceRequest) []string {
+	var names []string
+	for _, resourceLogs := range request.GetResourceLogs() {
+		for _, scopeLogs := range resourceLogs.GetScopeLogs() {
+			for _, record := range scopeLogs.GetLogRecords() {
+				names = append(names, record.GetEventName())
+			}
+		}
+	}
+	return names
 }
