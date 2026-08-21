@@ -11,8 +11,15 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+// dashboardAssistantSourceKind is assistant_threads.source_kind for
+// conversations that arrived through the Gram dashboard assistant sidebar.
+// Those chats are core dashboard functionality rather than a sold artifact,
+// so they are out of scope for risk analysis.
+const dashboardAssistantSourceKind = triggers.DefinitionSlugDashboard
 
 // FetchUnanalyzed retrieves all active policies for a project and the batch
 // of chat message IDs that have not yet been marked as analyzed
@@ -81,18 +88,39 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		}, nil
 	}
 
+	skippedMessages, err := queries.MarkDashboardAssistantMessagesRiskAnalyzed(ctx, repo.MarkDashboardAssistantMessagesRiskAnalyzedParams{
+		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:        args.IDLowerBound,
+		DashboardSourceKind: dashboardAssistantSourceKind,
+		BatchLimit:          args.BatchLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mark dashboard assistant messages analyzed: %w", err)
+	}
+	skippedContentParts, err := queries.MarkDashboardAssistantContentPartsRiskAnalyzed(ctx, repo.MarkDashboardAssistantContentPartsRiskAnalyzedParams{
+		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:        args.IDLowerBound,
+		DashboardSourceKind: dashboardAssistantSourceKind,
+		BatchLimit:          args.BatchLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mark dashboard assistant content parts analyzed: %w", err)
+	}
+
 	messageIDs, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
-		ProjectID:    uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound: args.IDLowerBound,
-		BatchLimit:   args.BatchLimit,
+		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:        args.IDLowerBound,
+		DashboardSourceKind: dashboardAssistantSourceKind,
+		BatchLimit:          args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
 	contentPartIDs, err := queries.FetchUnanalyzedContentPartIDs(ctx, repo.FetchUnanalyzedContentPartIDsParams{
-		ProjectID:    uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound: args.IDLowerBound,
-		BatchLimit:   args.BatchLimit,
+		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:        args.IDLowerBound,
+		DashboardSourceKind: dashboardAssistantSourceKind,
+		BatchLimit:          args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed content part IDs: %w", err)
@@ -102,6 +130,8 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		attribute.Int("risk.unanalyzed_count", len(messageIDs)+len(contentPartIDs)),
 		attribute.Int("risk.unanalyzed_message_count", len(messageIDs)),
 		attribute.Int("risk.unanalyzed_content_part_count", len(contentPartIDs)),
+		attribute.Int("risk.dashboard_messages_skipped", int(skippedMessages)),
+		attribute.Int("risk.dashboard_content_parts_skipped", int(skippedContentParts)),
 		attribute.Int("risk.active_policies", len(policies)),
 	)
 

@@ -486,7 +486,7 @@ func (q *Queries) CreateAssistantForTest(ctx context.Context, arg CreateAssistan
 
 const createAssistantThreadForTest = `-- name: CreateAssistantThreadForTest :one
 INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
-VALUES ($1, $2, $3, $4, 'test')
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id
 `
 
@@ -495,6 +495,7 @@ type CreateAssistantThreadForTestParams struct {
 	ProjectID     uuid.UUID
 	CorrelationID string
 	ChatID        uuid.UUID
+	SourceKind    string
 }
 
 func (q *Queries) CreateAssistantThreadForTest(ctx context.Context, arg CreateAssistantThreadForTestParams) (uuid.UUID, error) {
@@ -503,6 +504,7 @@ func (q *Queries) CreateAssistantThreadForTest(ctx context.Context, arg CreateAs
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+		arg.SourceKind,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -1063,21 +1065,37 @@ FROM chat_content_parts ccp
 WHERE ccp.project_id = $1
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= $2
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_threads at
+    WHERE at.chat_id = ccp.chat_id
+      AND at.project_id = $1
+      AND at.deleted IS FALSE
+      AND at.source_kind = $3
+  )
 ORDER BY ccp.id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type FetchUnanalyzedContentPartIDsParams struct {
-	ProjectID    uuid.NullUUID
-	IDLowerBound uuid.UUID
-	BatchLimit   int32
+	ProjectID           uuid.NullUUID
+	IDLowerBound        uuid.UUID
+	DashboardSourceKind string
+	BatchLimit          int32
 }
 
 // Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 // (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
-// unanalyzed sweep for non-turn content.
+// unanalyzed sweep for non-turn content. In-dashboard assistant conversations
+// (assistant_threads.source_kind = @dashboard_source_kind) are out of scope:
+// the project assistant is core dashboard functionality, not a sold artifact.
 func (q *Queries) FetchUnanalyzedContentPartIDs(ctx context.Context, arg FetchUnanalyzedContentPartIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, fetchUnanalyzedContentPartIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
+	rows, err := q.db.Query(ctx, fetchUnanalyzedContentPartIDs,
+		arg.ProjectID,
+		arg.IDLowerBound,
+		arg.DashboardSourceKind,
+		arg.BatchLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,14 +1120,23 @@ FROM chat_messages cm
 WHERE cm.project_id = $1
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= $2
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_threads at
+    WHERE at.chat_id = cm.chat_id
+      AND at.project_id = $1
+      AND at.deleted IS FALSE
+      AND at.source_kind = $3
+  )
 ORDER BY cm.id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type FetchUnanalyzedMessageIDsParams struct {
-	ProjectID    uuid.NullUUID
-	IDLowerBound uuid.UUID
-	BatchLimit   int32
+	ProjectID           uuid.NullUUID
+	IDLowerBound        uuid.UUID
+	DashboardSourceKind string
+	BatchLimit          int32
 }
 
 // Scans the partial index chat_messages_risk_analyzed_at_null_idx
@@ -1117,8 +1144,19 @@ type FetchUnanalyzedMessageIDsParams struct {
 // zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 // bound computed from the configured lookback) further limits the scan to
 // recent messages, reusing the same partial index ordering.
+//
+// In-dashboard assistant conversations (assistant_threads.source_kind =
+// @dashboard_source_kind) are out of scope: the project assistant is core
+// dashboard functionality, not a sold artifact, and scanning it produces
+// meta-findings when it is used to investigate other risk results. Sold
+// surfaces (Slack, Teams, ...) stay in the sweep.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
+	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs,
+		arg.ProjectID,
+		arg.IDLowerBound,
+		arg.DashboardSourceKind,
+		arg.BatchLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1601,6 +1639,25 @@ func (q *Queries) GetChatMessageForUnmask(ctx context.Context, arg GetChatMessag
 	return i, err
 }
 
+const getChatMessageRiskAnalyzedAtForTest = `-- name: GetChatMessageRiskAnalyzedAtForTest :one
+SELECT risk_analyzed_at
+FROM chat_messages
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetChatMessageRiskAnalyzedAtForTestParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetChatMessageRiskAnalyzedAtForTest(ctx context.Context, arg GetChatMessageRiskAnalyzedAtForTestParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getChatMessageRiskAnalyzedAtForTest, arg.ID, arg.ProjectID)
+	var risk_analyzed_at pgtype.Timestamptz
+	err := row.Scan(&risk_analyzed_at)
+	return risk_analyzed_at, err
+}
+
 const getChatUserAccountEmailForUnmask = `-- name: GetChatUserAccountEmailForUnmask :one
 SELECT ua.email
 FROM chats c
@@ -1676,6 +1733,25 @@ func (q *Queries) GetContentPartBatch(ctx context.Context, arg GetContentPartBat
 		return nil, err
 	}
 	return items, nil
+}
+
+const getContentPartRiskAnalyzedAtForTest = `-- name: GetContentPartRiskAnalyzedAtForTest :one
+SELECT risk_analyzed_at
+FROM chat_content_parts
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetContentPartRiskAnalyzedAtForTestParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetContentPartRiskAnalyzedAtForTest(ctx context.Context, arg GetContentPartRiskAnalyzedAtForTestParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getContentPartRiskAnalyzedAtForTest, arg.ID, arg.ProjectID)
+	var risk_analyzed_at pgtype.Timestamptz
+	err := row.Scan(&risk_analyzed_at)
+	return risk_analyzed_at, err
 }
 
 const getCustomDetectionRule = `-- name: GetCustomDetectionRule :one
@@ -4194,6 +4270,95 @@ type MarkContentPartsRiskAnalyzedParams struct {
 func (q *Queries) MarkContentPartsRiskAnalyzed(ctx context.Context, arg MarkContentPartsRiskAnalyzedParams) error {
 	_, err := q.db.Exec(ctx, markContentPartsRiskAnalyzed, arg.ContentPartIds, arg.ProjectID)
 	return err
+}
+
+const markDashboardAssistantContentPartsRiskAnalyzed = `-- name: MarkDashboardAssistantContentPartsRiskAnalyzed :execrows
+UPDATE chat_content_parts
+SET risk_analyzed_at = clock_timestamp()
+WHERE chat_content_parts.project_id = $1
+  AND chat_content_parts.id IN (
+    SELECT ccp.id
+    FROM chat_content_parts ccp
+    WHERE ccp.project_id = $1
+      AND ccp.risk_analyzed_at IS NULL
+      AND ccp.id >= $2
+      AND EXISTS (
+        SELECT 1
+        FROM assistant_threads at
+        WHERE at.chat_id = ccp.chat_id
+          AND at.project_id = $1
+          AND at.deleted IS FALSE
+          AND at.source_kind = $3
+      )
+    ORDER BY ccp.id DESC
+    LIMIT $4
+  )
+`
+
+type MarkDashboardAssistantContentPartsRiskAnalyzedParams struct {
+	ProjectID           uuid.NullUUID
+	IDLowerBound        uuid.UUID
+	DashboardSourceKind string
+	BatchLimit          int32
+}
+
+func (q *Queries) MarkDashboardAssistantContentPartsRiskAnalyzed(ctx context.Context, arg MarkDashboardAssistantContentPartsRiskAnalyzedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markDashboardAssistantContentPartsRiskAnalyzed,
+		arg.ProjectID,
+		arg.IDLowerBound,
+		arg.DashboardSourceKind,
+		arg.BatchLimit,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markDashboardAssistantMessagesRiskAnalyzed = `-- name: MarkDashboardAssistantMessagesRiskAnalyzed :execrows
+UPDATE chat_messages
+SET risk_analyzed_at = clock_timestamp()
+WHERE chat_messages.project_id = $1
+  AND chat_messages.id IN (
+    SELECT cm.id
+    FROM chat_messages cm
+    WHERE cm.project_id = $1
+      AND cm.risk_analyzed_at IS NULL
+      AND cm.id >= $2
+      AND EXISTS (
+        SELECT 1
+        FROM assistant_threads at
+        WHERE at.chat_id = cm.chat_id
+          AND at.project_id = $1
+          AND at.deleted IS FALSE
+          AND at.source_kind = $3
+      )
+    ORDER BY cm.id DESC
+    LIMIT $4
+  )
+`
+
+type MarkDashboardAssistantMessagesRiskAnalyzedParams struct {
+	ProjectID           uuid.NullUUID
+	IDLowerBound        uuid.UUID
+	DashboardSourceKind string
+	BatchLimit          int32
+}
+
+// Stamp risk_analyzed_at on in-dashboard assistant messages so they leave
+// the unanalyzed partial index without being scanned. Bounded by the same
+// lookback and batch limit as FetchUnanalyzedMessageIDs.
+func (q *Queries) MarkDashboardAssistantMessagesRiskAnalyzed(ctx context.Context, arg MarkDashboardAssistantMessagesRiskAnalyzedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markDashboardAssistantMessagesRiskAnalyzed,
+		arg.ProjectID,
+		arg.IDLowerBound,
+		arg.DashboardSourceKind,
+		arg.BatchLimit,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markMessagesRiskAnalyzed = `-- name: MarkMessagesRiskAnalyzed :exec
