@@ -1,6 +1,6 @@
 # Private Network Ingress for Gram-Hosted MCP Servers
 
-**Status:** Proposed — pending Phase 0 spike
+**Status:** Proposed — Phase 0 spike ran 2026-08-21: core assumptions validated (see appendix); two secondary checks outstanding
 **Provider:** Tailscale is the first (and MVP-only) supported provider; the data model, gateway, and API are provider-neutral. A fuller multi-provider RFC lives in the internal RFCs database (Notion).
 **Scope:** Ingress-side network controls (who can reach a Gram-hosted MCP server). Egress (Gram reaching customer-private upstreams over an overlay network) is explicitly out of scope; the existing tunnel feature covers that direction.
 
@@ -276,6 +276,33 @@ Fallback positions (worth documenting regardless — they are the day-1 answer f
 3. TLS posture on the overlay: ts.net HTTPS (requires the customer to enable MagicDNS + HTTPS) vs plain HTTP over WireGuard. MVP: prefer HTTPS, warn on fallback — needs PM sign-off.
 4. Multiple nodes/networks per org (staging vs prod)? MVP: one per org (unique index); relaxing later mirrors how custom domains might go multi.
 5. Local-dev story: `customdomains.Middleware` short-circuits on `env == "local"`; netingress middleware should still be exercisable locally against a dev network — needs a dev-flag design. (The Phase 0 spike's local Headscale setup is a candidate answer.)
+
+## Appendix — Phase 0 spike results (2026-08-21)
+
+Method: throwaway binary (gitignored `scratch/`, separate Go module so `tailscale.com` never touched the root `go.sum`) running N `tsnet.Server` instances in one process against a personal test tailnet on the real Tailscale control plane. Each node used the Postgres-backed `ipn.StateStore` (`network_node_state` shape above) in a dedicated scratch database, with a fresh `os.MkdirTemp` `Dir` on every run (simulating emptyDir loss). RSS measured via `ps` after `runtime.GC`.
+
+| Metric                         | Measured                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| `tailscale.com` version        | v1.102.3                                                                        |
+| Process baseline RSS           | 20.6 MB                                                                         |
+| RSS @ 1 / 3 / 10 nodes         | 36.8 / 44.4 / 69.7 MB                                                           |
+| Marginal RSS per node          | ≈ 4.9 MB amortized (first node ≈ 16 MB incl. shared init)                       |
+| Goroutines per node            | ≈ 91                                                                            |
+| Time-to-up per node            | 1.6–2.2 s (fresh join and resume alike)                                         |
+| Same-device resume             | 3/3 after `kill -9`, node keys identical, `Dir` wiped, state from Postgres only |
+| Auth-key use on resume         | none — tsnet ignores `AuthKey` when the `Store` holds a profile                 |
+| Per-request identity (`WhoIs`) | login, display name, and device name attested end-to-end over the tailnet       |
+
+Findings vs. the design's assumptions:
+
+- **StateStore assumption CONFIRMED — the go/no-go criterion.** Unclean death (`SIGKILL`) + ephemeral `Dir` + Postgres-only state resumes the _same tailnet device_ in under 2 s, with no re-auth and no duplicate device. Stateless containers work; no PVC fallback needed.
+- **The memory estimate was ~10× pessimistic.** Estimated 30–100 MB/node; measured ≈ 5 MB/node marginal at idle. Even 1,000 org nodes ≈ ~5 GB — the dedicated-deployment decision stands for isolation reasons, not memory pressure.
+- **Single-use auth keys are a footgun confirmed in practice:** the first node consumes the key and the second join fails with "invalid key". The UI/docs must require a _reusable_ key or (better) OAuth-minted keys.
+- Caveats: idle-state numbers (no sustained proxy traffic — netstack buffers grow under load); direct WireGuard path on one LAN (DERP-relayed performance untested); `CapMap` arrives empty unless the customer's ACLs define capability grants (mechanism confirmed present in the WhoIs response).
+
+**Not yet validated** (needs tailnet-admin setup; tracked to close out the spike): ts.net HTTPS cert issuance and cert-cache `Dir`-loss behavior (needs MagicDNS + HTTPS enabled on the test tailnet — open question 1); OAuth client → tagged auth-key minting via the Tailscale API.
+
+**Verdict: GO on the core architecture.** The two outstanding checks affect TLS posture and credential UX, not feasibility.
 
 ## Key files referenced
 
