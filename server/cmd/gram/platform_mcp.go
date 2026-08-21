@@ -183,7 +183,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -272,7 +273,7 @@ func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupRes
 }
 
 func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platformmcp.LifecycleMetadataService, error) {
-	return platformmcp.NewLifecycleMetadataService(config.DB, config.AuditLogger, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
+	return platformmcp.NewLifecycleMetadataService(config.DB, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
 		name := input.Name
 		return mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, config.AuditLogger, existing, mcpservers.LifecycleUpdateInput{
 			OrganizationID:        input.OrganizationID,
@@ -402,7 +403,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -418,7 +420,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
-		return AssistantSurface{}, fmt.Errorf("create local Platform MCP lifecycle metadata service: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP lifecycle metadata service: %w", err)
 	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).

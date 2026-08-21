@@ -315,7 +315,6 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 					return "available_dcr"
 				}
 				available = true
-				break
 			}
 		}
 	}
@@ -475,7 +474,7 @@ func directRemoteQueryCredentialKey(key string) bool {
 		return true
 	}
 	switch normalized {
-	case "access_token", "api_key", "apikey", "authorization", "credential", "key", "password", "secret", "signature", "sig", "token", "client_secret":
+	case "access_token", "api_key", "apikey", "x_api_key", "xapikey", "authorization", "credential", "key", "password", "secret", "signature", "sig", "token", "client_secret":
 		return true
 	default:
 		return false

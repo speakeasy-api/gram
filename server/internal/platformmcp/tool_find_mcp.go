@@ -27,7 +27,7 @@ func registerFindMCPTool(reg *Registrar, reader Reader, cursorKeyMaterial string
 		}
 		output, err := reader.FindMCP(ctx, principal, input)
 		if err != nil {
-			return nil, FindMCPOutput{}, fmt.Errorf("find configured MCPs: %w", err)
+			return nil, FindMCPOutput{}, ErrUnavailable
 		}
 		return nil, output, nil
 	})

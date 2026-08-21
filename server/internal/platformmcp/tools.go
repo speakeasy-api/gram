@@ -160,6 +160,9 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	if registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
 		registerUnavailableCandidateInspectionTool(reg)
+	} else if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
+		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
 	} else {
 		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
 		if catalog == nil {
