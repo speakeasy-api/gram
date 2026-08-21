@@ -13,6 +13,7 @@ import {
   asString,
   isCatalogBrowseSearch,
 } from "@/elements/components/assistant-ui/tool-search-result.helpers";
+import { useIsCollapsedToolRun } from "@/elements/contexts/CollapsedToolRunContext";
 import { useElements } from "@/elements/hooks/useElements";
 import { appendToken } from "@/elements/lib/tool-mentions";
 
@@ -209,8 +210,9 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * runs it: the mention is sent as a turn of its own, so the search doubles as
  * a launcher.
  *
- * Only a browse search draws the card (see `isCatalogBrowseSearch`); a
- * discovery search renders the generic tool row instead.
+ * Only a browse search draws the card (see `isCatalogBrowseSearch`), and only
+ * where the card can render outside its run's collapsible; anything else
+ * renders the generic tool row instead.
  *
  * It goes through the model rather than calling the tool directly because the
  * tools live in the assistant's runtime, not in the page — and most of them
@@ -221,6 +223,7 @@ export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
   const { status, result, args, toolCallId } = props;
   const aui = useAui();
   const { config } = useElements();
+  const isCollapsedRun = useIsCollapsedToolRun();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
 
   // A model often searches several times before it answers, and every search
@@ -255,8 +258,12 @@ export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
   // connected server — belongs to the generic tool card, which already renders
   // those states. A host that replaced that card keeps it here: declining is
   // the common path now that discovery searches take it.
+  //
+  // A browse that could not be hoisted out of its run declines too. The
+  // catalog is an answer, and an answer folded into a disclosure is worse than
+  // no card at all — inside the run this is one more call among the mechanics.
   const Fallback = config.components?.ToolFallback ?? ToolFallback;
-  if (!payload) {
+  if (!payload || isCollapsedRun) {
     return <Fallback {...props} />;
   }
   if (!isLastBrowse) return null;

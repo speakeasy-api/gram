@@ -1,5 +1,6 @@
 import { useAuiState } from "@assistant-ui/react";
 import { useMemo, useRef, type FC, type PropsWithChildren } from "react";
+import { CollapsedToolRunProvider } from "@/elements/contexts/CollapsedToolRunContext";
 import { useElements } from "@/elements/hooks/useElements";
 import { humanizeToolName } from "@/elements/lib/humanize";
 import {
@@ -226,7 +227,13 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
         status={status}
         defaultExpanded={defaultExpanded}
       >
-        {children}
+        {/* Marked collapsed for the whole subtree, not just when the
+            disclosure is shut: the group keeps its children mounted and
+            hidden, so a card in here is one the reader has to go looking
+            for. A built-in renders its fallback instead. */}
+        <CollapsedToolRunProvider value={true}>
+          {children}
+        </CollapsedToolRunProvider>
       </ToolUIGroup>
       {excerpts.length > 0 && (
         <DocsCitations excerpts={excerpts} className="mt-2 border" />
