@@ -54,13 +54,20 @@ func fetchUserEnrichment(
 			return cached.Enrichment, nil
 		}
 
-		resolved, loadErr := loadUserEnrichment(ctx, replicaDB, organizationID, email)
-		cacheErr := enrichmentCache.Store(ctx, cachedUserEnrichment{
+		resolved, err := loadUserEnrichment(ctx, replicaDB, organizationID, email)
+		if err != nil {
+			return resolved, err
+		}
+
+		err = enrichmentCache.Store(ctx, cachedUserEnrichment{
 			OrganizationID: organizationID,
 			EmailHash:      emailHash,
 			Enrichment:     resolved,
 		})
-		return resolved, errors.Join(loadErr, cacheErr)
+		if err != nil {
+			return resolved, fmt.Errorf("cache user enrichment: %w", err)
+		}
+		return resolved, nil
 	})
 	resolved, ok := value.(userEnrichment)
 	if !ok {

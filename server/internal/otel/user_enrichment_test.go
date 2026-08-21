@@ -111,16 +111,23 @@ func TestFetchUserEnrichmentReturnsEmptyWithoutMatchingUser(t *testing.T) {
 	require.Empty(t, got)
 }
 
-func TestFetchUserEnrichmentReturnsLookupFailure(t *testing.T) {
+func TestFetchUserEnrichmentDoesNotCacheLookupFailure(t *testing.T) {
 	t.Parallel()
+
+	const organizationID = "organization-id"
+	const email = "user@example.invalid"
 
 	db := newTestDatabase(t)
 	db.Close()
-	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), cache.NoopCache, cache.SuffixNone)
+	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), testenv.NewMemoryCache(), cache.SuffixNone)
 	loads := singleflight.Group{}
 
-	got, err := fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
+	got, err := fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, organizationID, email)
 
+	require.Error(t, err)
+	require.Empty(t, got)
+
+	got, err = fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, organizationID, email)
 	require.Error(t, err)
 	require.Empty(t, got)
 }
