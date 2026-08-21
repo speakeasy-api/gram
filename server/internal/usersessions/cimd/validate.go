@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -207,27 +208,18 @@ func IsLoopbackRedirectURI(u *url.URL) bool {
 // validateJWKSPublicOnly rejects a jwks member containing private or
 // symmetric key material (-02 §4.1 — new in -02). A public metadata document
 // carrying a private key would let anyone impersonate the client, so the
-// whole document is invalid. Detection keys on the JWK members that only
-// appear on non-public keys: "d" (RSA / EC / OKP private component) and "k"
-// (symmetric oct key).
+// whole document is invalid. The screening itself is the shared
+// jwks.ValidatePublicOnly; this wrapper maps its sentinels onto this
+// package's metric reasons and client-safe OAuth wire errors.
 func validateJWKSPublicOnly(raw json.RawMessage) error {
-	if raw == nil {
+	switch err := jwks.ValidatePublicOnly(raw); {
+	case err == nil:
 		return nil
-	}
-
-	var jwks struct {
-		Keys []map[string]json.RawMessage `json:"keys"`
-	}
-	if err := json.Unmarshal(raw, &jwks); err != nil {
+	case errors.Is(err, jwks.ErrPrivateKeyMaterial):
+		return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
+	case errors.Is(err, jwks.ErrSymmetricKeyMaterial):
+		return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
+	default:
 		return oauthValidationError(reasonJWKSInvalid, "invalid_client_metadata", "jwks is not a valid JWK Set")
 	}
-	for _, key := range jwks.Keys {
-		if _, ok := key["d"]; ok {
-			return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
-		}
-		if _, ok := key["k"]; ok {
-			return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
-		}
-	}
-	return nil
 }
