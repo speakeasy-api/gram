@@ -251,6 +251,8 @@ server/internal/hooks/shadow_mcp_request_link.go
   s_d8569503ddf9c1::t_36aa81ba62e8e2 86-88
 server/internal/risk/shadow_mcp_offline_bypass_integration_test.go
   s_d8569503ddf9c1::t_4cdd39ff25271f 118-120
+seed/demo/PAGES.md
+  s_1b89b64f839d5a::t_5a48e075e9e294 12
 ---
 {
   "schema_version": "authorship/3.0.0",
