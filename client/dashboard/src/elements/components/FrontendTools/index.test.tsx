@@ -14,12 +14,9 @@ const makeTool = (): AssistantTool =>
 
 describe("FrontendTools", () => {
   it("survives a tool set that grows between renders", () => {
-    // The assistant onboarding tools are gated on RBAC grants, and `hasScope`
-    // returns false until the grants query resolves. So the first render after
-    // a hard page load sees a trimmed set and a later render sees the full one.
-    // Calling each tool inline ran its hooks inside FrontendTools' own hook
-    // list, so that growth threw "Rendered more hooks than during the previous
-    // render" and crashed the page.
+    // Not hypothetical: the assistant onboarding tools are gated on RBAC
+    // grants, and `hasScope` returns false until the grants query resolves, so
+    // a hard page load renders a trimmed set before the full one.
     const { rerender } = render(<FrontendTools tools={{ a: makeTool() }} />);
 
     expect(() =>
