@@ -1298,10 +1298,16 @@ const getAssistantThreadSourceKind = `-- name: GetAssistantThreadSourceKind :one
 SELECT source_kind
 FROM assistant_threads
 WHERE id = $1
+  AND project_id = $2
 `
 
-func (q *Queries) GetAssistantThreadSourceKind(ctx context.Context, threadID uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getAssistantThreadSourceKind, threadID)
+type GetAssistantThreadSourceKindParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetAssistantThreadSourceKind(ctx context.Context, arg GetAssistantThreadSourceKindParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAssistantThreadSourceKind, arg.ThreadID, arg.ProjectID)
 	var source_kind string
 	err := row.Scan(&source_kind)
 	return source_kind, err

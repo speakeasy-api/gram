@@ -191,7 +191,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	// has mid-turn; the reverse error only costs a non-dashboard thread its
 	// tools on an organization that is already on the variant, and neither
 	// error can reach an organization that is not.
-	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID)
+	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID, *authCtx.ProjectID)
 	dashboardScoped := !resolvedSourceKind || sourceKind == bgtriggers.DefinitionSlugDashboard
 
 	variant := feature.VariantAssistantToolsLegacy
@@ -215,8 +215,15 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 // threadSourceKind reads the surface the calling thread was opened from,
 // reporting false when it cannot be read — a thread deleted mid-turn, or a
 // database blip.
-func (s *Service) threadSourceKind(ctx context.Context, threadID uuid.UUID) (string, bool) {
-	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, threadID)
+//
+// Scoped to the request's project so a thread id belonging to another project
+// cannot decide which toolset this one is served, even though the id comes
+// from a signed principal rather than the request body.
+func (s *Service) threadSourceKind(ctx context.Context, threadID, projectID uuid.UUID) (string, bool) {
+	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, assistantrepo.GetAssistantThreadSourceKindParams{
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
 		return "", false
