@@ -174,9 +174,11 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		GramProjectID: input.ProjectID,
 		TimeStart:     start,
 		TimeEnd:       end,
-		// Carried so the active-server count is aggregated the same way the
-		// dashboard aggregates it for this organization's metrics mode.
-		SessionMode: sessionMode,
+		// SessionMode is deliberately left false. It switches only the
+		// active-user expression, and under session capture that value is
+		// replaced below by the PostgreSQL chat-participant count; the
+		// active-server count it does not affect at all.
+		SessionMode: false,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active counts: %w", err)
