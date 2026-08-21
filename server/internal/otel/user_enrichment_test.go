@@ -141,14 +141,53 @@ func TestFetchUserEnrichmentBoundsLookupDuration(t *testing.T) {
 
 	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), cache.NoopCache, cache.SuffixNone)
 	loads := singleflight.Group{}
+	lookupCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
 
-	got, err := fetchUserEnrichment(t.Context(), blockingUserEnrichmentDB{}, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
+	got, err := fetchUserEnrichmentWithLookupContext(lookupCtx, blockingUserEnrichmentDB{started: nil}, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Empty(t, got)
 }
 
-type blockingUserEnrichmentDB struct{}
+func TestFetchUserEnrichmentBoundsEachCallerWait(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	db := blockingUserEnrichmentDB{started: started}
+	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), cache.NoopCache, cache.SuffixNone)
+	loads := singleflight.Group{}
+	firstCtx, cancelFirst := context.WithTimeout(t.Context(), time.Second)
+	defer cancelFirst()
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := fetchUserEnrichmentWithLookupContext(firstCtx, db, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
+		firstResult <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		require.FailNow(t, "first lookup did not start")
+	}
+
+	secondCtx, cancelSecond := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancelSecond()
+	got, err := fetchUserEnrichmentWithLookupContext(secondCtx, db, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Empty(t, got)
+	cancelFirst()
+	select {
+	case err := <-firstResult:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		require.FailNow(t, "first lookup did not stop")
+	}
+}
+
+type blockingUserEnrichmentDB struct {
+	started chan<- struct{}
+}
 
 func (blockingUserEnrichmentDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, errors.New("unexpected exec")
@@ -158,7 +197,10 @@ func (blockingUserEnrichmentDB) Query(context.Context, string, ...any) (pgx.Rows
 	return nil, errors.New("unexpected query")
 }
 
-func (blockingUserEnrichmentDB) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
+func (b blockingUserEnrichmentDB) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
+	if b.started != nil {
+		close(b.started)
+	}
 	<-ctx.Done()
 	return userEnrichmentErrorRow{err: ctx.Err()}
 }

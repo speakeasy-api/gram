@@ -44,9 +44,21 @@ func fetchUserEnrichment(
 		var empty userEnrichment
 		return empty, nil
 	}
+
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), userEnrichmentTimeout)
 	defer cancel()
 
+	return fetchUserEnrichmentWithLookupContext(lookupCtx, replicaDB, enrichmentCache, loads, organizationID, email)
+}
+
+func fetchUserEnrichmentWithLookupContext(
+	lookupCtx context.Context,
+	replicaDB database.DBTX,
+	enrichmentCache *cache.TypedCacheObject[cachedUserEnrichment],
+	loads *singleflight.Group,
+	organizationID string,
+	email string,
+) (userEnrichment, error) {
 	emailDigest := sha256.Sum256([]byte(email))
 	emailHash := hex.EncodeToString(emailDigest[:])
 	cacheKey := userEnrichmentCacheKey(organizationID, emailHash)
@@ -54,7 +66,7 @@ func fetchUserEnrichment(
 		return cached.Enrichment, nil
 	}
 
-	value, err, _ := loads.Do(cacheKey, func() (any, error) {
+	results := loads.DoChan(cacheKey, func() (any, error) {
 		if cached, err := enrichmentCache.Get(lookupCtx, cacheKey); err == nil {
 			return cached.Enrichment, nil
 		}
@@ -74,12 +86,25 @@ func fetchUserEnrichment(
 		}
 		return resolved, nil
 	})
-	resolved, ok := value.(userEnrichment)
+
+	var result singleflight.Result
+	select {
+	case result = <-results:
+	case <-lookupCtx.Done():
+		select {
+		case result = <-results:
+		default:
+			var empty userEnrichment
+			return empty, fmt.Errorf("resolve user enrichment: %w", lookupCtx.Err())
+		}
+	}
+
+	resolved, ok := result.Val.(userEnrichment)
 	if !ok {
 		var empty userEnrichment
-		return empty, fmt.Errorf("resolve user enrichment: unexpected result type %T", value)
+		return empty, fmt.Errorf("resolve user enrichment: unexpected result type %T", result.Val)
 	}
-	return resolved, err
+	return resolved, result.Err
 }
 
 func loadUserEnrichment(ctx context.Context, replicaDB database.DBTX, organizationID string, email string) (userEnrichment, error) {
