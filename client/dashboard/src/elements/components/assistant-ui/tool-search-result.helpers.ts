@@ -133,3 +133,24 @@ export function extractPayload(result: unknown): ToolSearchPayload | null {
 
   return { servers, briefs };
 }
+
+/**
+ * `extractPayload`, memoised on the result object.
+ *
+ * A tool result is immutable once the call completes, but a streaming message
+ * hands its parts back on every update, so the same catalog would otherwise be
+ * JSON-parsed again on every token — once per card, per browse. Keyed weakly,
+ * so an entry lives exactly as long as the result it describes.
+ */
+const payloadByResult = new WeakMap<object, ToolSearchPayload | null>();
+
+export function catalogPayload(result: unknown): ToolSearchPayload | null {
+  if (typeof result !== "object" || result === null) {
+    return extractPayload(result);
+  }
+  const cached = payloadByResult.get(result);
+  if (cached !== undefined) return cached;
+  const parsed = extractPayload(result);
+  payloadByResult.set(result, parsed);
+  return parsed;
+}

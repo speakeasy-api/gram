@@ -1,6 +1,6 @@
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
-  extractPayload,
+  catalogPayload,
   isCatalogBrowseSearch,
 } from "@/elements/components/assistant-ui/tool-search-result.helpers";
 
@@ -95,44 +95,84 @@ export function runDrawsEveryWidget(
  */
 export type ToolSearchVerdict = "draw" | "suppress" | "fallback";
 
+/**
+ * Verdicts for every `tool_search` call in a message, memoised on the parts
+ * array.
+ *
+ * One walk serves every card in the message: computing this per card would
+ * re-group the parts and re-read every browse's catalog once per card, and a
+ * streaming message hands back a fresh parts array on every token. Keyed
+ * weakly on that array — safe because the state's parts are replaced rather
+ * than mutated in place, so a given array always describes the same message.
+ */
+const verdictsByParts = new WeakMap<
+  object,
+  {
+    hostComponents: HostToolComponents;
+    verdicts: ReadonlyMap<string, ToolSearchVerdict>;
+  }
+>();
+
 export function toolSearchVerdict(
   parts: readonly ToolPartLike[],
   toolCallId: string,
   hostComponents: HostToolComponents,
 ): ToolSearchVerdict {
-  let drawn: string | undefined;
-  let ownRunDraws = false;
-  let found = false;
+  const cached = verdictsByParts.get(parts);
+  const verdicts =
+    cached && cached.hostComponents === hostComponents
+      ? cached.verdicts
+      : computeVerdicts(parts, hostComponents);
+  if (verdicts !== cached?.verdicts) {
+    verdictsByParts.set(parts, { hostComponents, verdicts });
+  }
+  // A call this message does not contain gets the generic card, same as one
+  // whose run cannot be hoisted.
+  return verdicts.get(toolCallId) ?? "fallback";
+}
+
+function computeVerdicts(
+  parts: readonly ToolPartLike[],
+  hostComponents: HostToolComponents,
+): ReadonlyMap<string, ToolSearchVerdict> {
+  const searches: { id: string; runDraws: boolean; drawable: boolean }[] = [];
 
   for (const group of groupAssistantMessageParts(parts)) {
     const runDraws = runDrawsEveryWidget(parts, group.indices, hostComponents);
     for (const i of group.indices) {
       const part = parts[i];
-      if (part?.type !== "tool-call") continue;
-      if (part.toolCallId === toolCallId) {
-        found = true;
-        ownRunDraws = runDraws;
+      if (part?.type !== "tool-call" || part.toolName !== "tool_search") {
+        continue;
       }
-      // Only a browse the group would hoist, and whose result is a catalog
-      // this can actually render, holds the card. A browse that is stranded in
-      // a collapsed run, still running, or back with an unreadable result
-      // neither claims it nor denies it to an earlier one that can draw —
-      // otherwise a second search would blank the card the first one had
+      if (part.toolCallId === undefined) continue;
+      // Only a browse the group would hoist, and whose result is a catalog the
+      // card can actually render, is a candidate to draw. A browse that is
+      // stranded in a collapsed run, still running, or back with an unreadable
+      // result neither claims the card nor denies it to one that can draw —
+      // otherwise a second search would blank the catalog the first had
       // already put on screen.
-      if (
+      const drawable =
         runDraws &&
-        part.toolName === "tool_search" &&
         isCatalogBrowseSearch(part.args) &&
-        extractPayload(part.result) !== null
-      ) {
-        drawn = part.toolCallId;
-      }
+        catalogPayload(part.result) !== null;
+      searches.push({ id: part.toolCallId, runDraws, drawable });
     }
   }
 
-  if (found && drawn === toolCallId) return "draw";
-  // A hoisted browse that is not the chosen one renders nothing only while
-  // another one is drawing: a lone browse still waiting on its result keeps
-  // the generic card, which is where its running state shows.
-  return ownRunDraws && drawn !== undefined ? "suppress" : "fallback";
+  const drawn = searches.findLast((search) => search.drawable)?.id;
+  const verdicts = new Map<string, ToolSearchVerdict>();
+  for (const search of searches) {
+    if (search.id === drawn) {
+      verdicts.set(search.id, "draw");
+      continue;
+    }
+    // A hoisted search that is not the chosen one renders nothing only while
+    // another one is drawing: a lone browse still waiting on its result keeps
+    // the generic card, which is where its running state shows.
+    verdicts.set(
+      search.id,
+      search.runDraws && drawn !== undefined ? "suppress" : "fallback",
+    );
+  }
+  return verdicts;
 }

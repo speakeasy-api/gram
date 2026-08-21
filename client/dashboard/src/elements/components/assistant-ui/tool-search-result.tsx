@@ -9,7 +9,7 @@ import { useMemo } from "react";
 
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 import {
-  extractPayload,
+  catalogPayload,
   type ServerStatus,
 } from "@/elements/components/assistant-ui/tool-search-result.helpers";
 import { toolSearchVerdict } from "@/elements/components/assistant-ui/tool-widget-rendering";
@@ -133,23 +133,19 @@ export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
   const { config } = useElements();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
 
-  // The state's own array, not one built in the selector: useAuiState compares
-  // snapshots by identity, and a fresh array every render would never settle.
-  const parts = useAuiState(({ message }) => message.parts);
-
   // Which of the message's searches draws is a question about the whole
-  // message — see `toolSearchVerdict`.
-  const hostComponents = config.tools?.components;
-  const verdict = useMemo(
-    () => toolSearchVerdict(parts, toolCallId, hostComponents),
-    [parts, toolCallId, hostComponents],
+  // message — see `toolSearchVerdict`. Derived inside the selector so the
+  // subscription is to this one verdict: the parts array itself changes
+  // identity on every streaming update.
+  const verdict = useAuiState(({ message }) =>
+    toolSearchVerdict(message.parts, toolCallId, config.tools?.components),
   );
 
-  // No status check of its own: `extractPayload` is null for a call that has
-  // not come back with a readable catalog, which is the same test the verdict
-  // used to pick this call.
+  // No status check of its own: the payload is null for a call that has not
+  // come back with a readable catalog, which is the same test the verdict used
+  // to pick this call.
   const payload = useMemo(
-    () => (verdict === "draw" ? extractPayload(result) : null),
+    () => (verdict === "draw" ? catalogPayload(result) : null),
     [result, verdict],
   );
 

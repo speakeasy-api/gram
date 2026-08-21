@@ -121,6 +121,26 @@ describe("toolSearchVerdict", () => {
     expect(verdicts([runningBrowse()])).toEqual(["fallback"]);
   });
 
+  it("reads the same verdicts for every call in one message", () => {
+    // The walk is memoised on the parts array, so a second card asking about
+    // the same message must not see the first card's answer.
+    const parts = [browse(), browse()];
+    const first = parts[0]!.toolCallId;
+    const second = parts[1]!.toolCallId;
+    expect(toolSearchVerdict(parts, first, undefined)).toBe("suppress");
+    expect(toolSearchVerdict(parts, second, undefined)).toBe("draw");
+    expect(toolSearchVerdict(parts, first, undefined)).toBe("suppress");
+  });
+
+  it("recomputes when the host's tool components change", () => {
+    // A host override makes the plain call draw, which hoists the run the
+    // browse is in; the memo must not answer from the previous host's map.
+    const parts = [browse(), plainCall("weather")];
+    const id = parts[0]!.toolCallId;
+    expect(toolSearchVerdict(parts, id, undefined)).toBe("fallback");
+    expect(toolSearchVerdict(parts, id, { weather: () => null })).toBe("draw");
+  });
+
   it("falls back for a call that is not in the message", () => {
     expect(toolSearchVerdict([browse()], "call_missing", undefined)).toBe(
       "fallback",

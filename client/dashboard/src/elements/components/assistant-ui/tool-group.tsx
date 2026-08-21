@@ -29,6 +29,8 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
   children,
   indices,
 }) => {
+  const { config } = useElements();
+
   const toolCount = useAuiState(({ message }) => {
     let count = 0;
     for (const i of indices) {
@@ -44,10 +46,6 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
     }
     return undefined;
   });
-
-  // The state's own array, not one built in the selector: useAuiState compares
-  // snapshots by identity, and a fresh array every render would never settle.
-  const parts = useAuiState(({ message }) => message.parts);
 
   const anyMessagePartsAreRunning = useAuiState(({ message }) => {
     for (const i of indices) {
@@ -160,7 +158,6 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
   });
   const excerpts = citationKey ? excerptsRef.current : [];
 
-  const { config } = useElements();
   const defaultExpanded = config.tools?.expandToolGroupsByDefault ?? false;
 
   const groupTitle = useMemo(() => {
@@ -182,10 +179,11 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
   // repeat searches a model fires before it answers — but keep the annotation
   // visible, since AssistantText has suppressed its prose render. A host
   // override is taken at its word; a built-in is asked, since it may decline.
-  const everyToolHasComponent = runDrawsEveryWidget(
-    parts,
-    indices,
-    config.tools?.components,
+  // Derived inside the selector, like every other subscription here: returning
+  // the parts array itself would hand back a new identity on every streaming
+  // update and re-render every run in the message on every token.
+  const everyToolHasComponent = useAuiState(({ message }) =>
+    runDrawsEveryWidget(message.parts, indices, config.tools?.components),
   );
   if (everyToolHasComponent) {
     return (
