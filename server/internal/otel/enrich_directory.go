@@ -82,11 +82,11 @@ func (e *enrichDirectory) load(ctx context.Context, organizationID string, email
 		Email:          email,
 		OrganizationID: organizationID,
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		var result directorySpanContext
 		return result, nil
-	}
-	if err != nil {
+	case err != nil:
 		var result directorySpanContext
 		return result, fmt.Errorf("resolve connected user by email: %w", err)
 	}
