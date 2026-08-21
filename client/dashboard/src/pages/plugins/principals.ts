@@ -30,6 +30,48 @@ export type PrincipalKind =
   | "directory_attribute"
   | "unknown";
 
+export function isEveryoneAssignmentPrincipal(urn: string): boolean {
+  return urn === WILDCARD_PRINCIPAL || urn === "user:all";
+}
+
+function isMemberScopedAssignmentPrincipal(urn: string): boolean {
+  return isIndividualMemberPrincipal(urn) || urn.startsWith(ROLE_PREFIX);
+}
+
+// The wildcard reaches every synced identity and therefore subsumes every
+// targeted audience. `user:all` reaches only organization members, so it
+// subsumes member and role assignments but can coexist with an email or a
+// directory audience that may reach a non-member synced identity.
+export function selectMutuallyExclusivePluginAudiences(
+  previous: string[],
+  next: string[],
+): string[] {
+  const previousValues = new Set(previous);
+  const addedValues = next.filter((value) => !previousValues.has(value));
+  const addedWildcard = addedValues.includes(WILDCARD_PRINCIPAL);
+  const addedAllMembers = addedValues.includes("user:all");
+
+  if (addedWildcard) return [WILDCARD_PRINCIPAL];
+
+  if (addedAllMembers) {
+    return next.filter(
+      (value) =>
+        value !== WILDCARD_PRINCIPAL &&
+        !isMemberScopedAssignmentPrincipal(value),
+    );
+  }
+
+  if (addedValues.some((value) => value !== WILDCARD_PRINCIPAL)) {
+    if (addedValues.some(isMemberScopedAssignmentPrincipal)) {
+      return next.filter(
+        (value) => value !== WILDCARD_PRINCIPAL && value !== "user:all",
+      );
+    }
+    return next.filter((value) => value !== WILDCARD_PRINCIPAL);
+  }
+  return next;
+}
+
 const principalKindIcon: Record<
   PrincipalKind,
   React.ComponentType<{ className?: string }>
@@ -96,6 +138,13 @@ export function isIndividualMemberPrincipal(urn: string): boolean {
   return urn.startsWith("user:") && urn !== "user:all";
 }
 
+// Email principals target one person too, but they are not necessarily current
+// organization members. They remain separately identifiable so existing email
+// assignments can be preserved without converting their delivery semantics.
+export function isIndividualUserAssignmentPrincipal(urn: string): boolean {
+  return isIndividualMemberPrincipal(urn) || urn.startsWith(EMAIL_PREFIX);
+}
+
 // Resolve a plugin's individually-assigned members to facepile entries. Role,
 // email, and everyone principals are excluded — only "user:<id>" assignments
 // map to a specific person's avatar.
@@ -103,12 +152,22 @@ export function individualMemberFacepile(
   assignments: PluginAssignment[],
   memberByUrn: Map<string, AccessMember>,
 ): FacepileMember[] {
-  return assignments
-    .filter((a) => isIndividualMemberPrincipal(a.principalUrn))
-    .map((a) => {
-      const member = memberByUrn.get(a.principalUrn);
+  return individualMemberFacepileForUrns(
+    assignments.map((assignment) => assignment.principalUrn),
+    memberByUrn,
+  );
+}
+
+export function individualMemberFacepileForUrns(
+  principalUrns: string[],
+  memberByUrn: Map<string, AccessMember>,
+): FacepileMember[] {
+  return principalUrns
+    .filter(isIndividualMemberPrincipal)
+    .map((principalUrn) => {
+      const member = memberByUrn.get(principalUrn);
       return {
-        id: member?.id ?? a.principalUrn,
+        id: member?.id ?? principalUrn,
         name: member?.name || member?.email || "Unknown member",
         email: member?.email ?? "",
         photoUrl: member?.photoUrl,
@@ -147,7 +206,7 @@ export function audienceKindForPrincipal(
 ): PluginAudience["kind"] | undefined {
   const audience = audienceByUrn.get(urn);
   if (audience) return audience.kind;
-  if (urn === WILDCARD_PRINCIPAL) return "everyone";
+  if (isEveryoneAssignmentPrincipal(urn)) return "everyone";
   if (urn.startsWith(ROLE_PREFIX)) return "role";
   if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) return "directory_group";
   if (urn.startsWith(DIRECTORY_ATTRIBUTE_PREFIX)) return "directory_attribute";
