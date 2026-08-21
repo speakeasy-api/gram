@@ -11,6 +11,36 @@ var _ = Service("otel", func() {
 
 	shared.DeclareErrorResponses()
 
+	Method("logs", func() {
+		Description("Endpoint to receive OTEL logs data from LLM providers and harnesses.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.ProjectPayload()
+
+			Attribute("content_encoding", String, "Encoding applied to the OTLP request body. Supported values are gzip and identity.")
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/otel/v1/logs")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Header("content_encoding:Content-Encoding")
+			Response(StatusOK)
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadLogs")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadLogs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadOpenTelemetryLogs"}`)
+	})
+
 	Method("traces", func() {
 		Description("Endpoint to receive OTEL traces data from LLM providers and harnesses.")
 

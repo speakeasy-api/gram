@@ -1560,7 +1560,7 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
-			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, sessionManager, authzEngine, publishers.OTELSpans))
+			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, sessionManager, authzEngine, publishers.OTELSpans, publishers.OTELLogs))
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},

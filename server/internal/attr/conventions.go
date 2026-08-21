@@ -536,6 +536,7 @@ const (
 	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
+	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -815,6 +816,8 @@ func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountK
 func SlogTelemetryCHRowCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryCHRowCountKey), v)
 }
+
+func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {

@@ -195,6 +195,7 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
