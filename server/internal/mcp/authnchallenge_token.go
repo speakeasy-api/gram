@@ -26,6 +26,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -91,6 +93,7 @@ type mintSessionParams struct {
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
 	Subject                urn.SessionSubject
+	ToolSelection          []byte
 }
 
 type mintedSession struct {
@@ -162,7 +165,8 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	// lookupClientOnly: any CIMD row was persisted at authorize time, and
-	// mid-flow token legs must keep working even if the CIMD flag flips off.
+	// mid-flow token legs must keep working even if the issuer's admission
+	// policy changes between legs.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -268,7 +272,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "invalid_request")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -294,17 +298,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
@@ -313,12 +317,32 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		d := time.Duration(grant.DesiredSessionDurationHours) * time.Hour
 		desiredSessionDuration = &d
 	}
+	var toolSelection []byte
+	if grant.ToolSelection != nil {
+		// Codes are cached issuer-wide, so a sibling endpoint sharing the
+		// issuer could otherwise redeem this code and mint a session whose
+		// selection is bound to another endpoint's resource — rejected at use
+		// time anyway, but failing the redemption is cheaper than a
+		// 200-then-401 loop.
+		if grant.ToolSelection.Resource != endpointToolSelectionResource(endpoint) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+		}
+		encoded, merr := json.Marshal(grant.ToolSelection)
+		if merr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return oops.E(oops.CodeUnexpected, merr, "encode tool selection").LogError(ctx, logger)
+		}
+		toolSelection = encoded
+	}
 	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
 		AuthorizationExpiresAt: nil,
 		BaseURL:                baseURL,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
 		Subject:                grant.Subject,
+		ToolSelection:          toolSelection,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -330,11 +354,11 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// usable token, so the flow did not complete from its perspective.
 		// Conservatively bucketing this rare case as failed (not completed)
 		// keeps completed meaning "a token the client could actually use."
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
 	}
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
 	}
 
@@ -572,12 +596,25 @@ func (s *Service) rotateRefreshToken(
 	// that deadline forward verbatim; it never opens a fresh authorization
 	// window merely because the client exchanged its refresh token.
 	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
+	// Tool selection rides refresh slides verbatim; reject malformed or
+	// cross-endpoint policies before consuming the refresh transaction.
+	oldSelection, perr := toolfilter.ParseSessionSelection(oldSession.ToolSelection)
+	if perr != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
+	}
+	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
+	}
+
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
 		AuthorizationExpiresAt: &authorizationExpiresAt,
 		BaseURL:                baseURL,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
 		Subject:                oldSession.SubjectUrn,
+		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -626,7 +663,7 @@ func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lo
 		logger.WarnContext(releaseCtx, "refresh replay cache does not support ownership-aware lease release")
 		return
 	}
-	if _, err := leases.ReleaseLease(releaseCtx, lockKey, lockOwner); err != nil {
+	if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, lockKey, lockOwner); err != nil {
 		logger.WarnContext(releaseCtx, "failed to release refresh token replay lock", attr.SlogError(err))
 	}
 }
@@ -832,6 +869,8 @@ const accessTokenLifetime = 1 * time.Hour
 // Params.AuthorizationExpiresAt is used only for rotation and is carried from
 // the prior row. Exactly one is normally non-nil. Params.Replayable requests a
 // stable high-entropy JTI that can be reused when re-signing for another origin.
+// Params.ToolSelection is the consent-screen policy persisted verbatim; refresh
+// rotation carries the prior session's value forward.
 func (s *Service) mintSession(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -920,6 +959,7 @@ func (s *Service) mintSession(
 		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		ToolSelection:       params.ToolSelection,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}

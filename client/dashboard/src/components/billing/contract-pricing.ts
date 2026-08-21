@@ -117,16 +117,28 @@ export function overageLines(
 // The full pay-as-you-go bill for one month — every token is charged, from
 // the first one, with no baseline to subtract.
 //
+// The window of valid negotiated swings on the PAYG list rates. At -100% a
+// swing would zero every rate and past it rates would go negative, so both
+// are invalid input, and EVERY function in this module taking a swing must
+// ignore them (list rates) via this one predicate — the same fallback the
+// estimator's input applies — so no layer prices PAYG as free and no message
+// describes an adjustment that wasn't applied.
+function isValidRateAdjust(rateAdjustPct: number): boolean {
+  return rateAdjustPct > -100;
+}
+
 // `rateAdjustPct` scales every band rate by a percentage (+10 → +10% uplift,
 // -15 → 15% discount): PAYG deals are negotiated as a swing off the list
 // rates, not as four hand-edited band rates. Band boundaries are absolute
-// volumes and don't move. Floored at -100% — beyond that a rate would go
-// negative, which prices as free, not as a rebate.
+// volumes and don't move. Out-of-window swings are ignored — see
+// isValidRateAdjust.
 export function paygLines(
   monthlyTokens: number,
   rateAdjustPct = 0,
 ): TierLine[] {
-  const rateMultiplier = Math.max(0, 1 + rateAdjustPct / 100);
+  const rateMultiplier = isValidRateAdjust(rateAdjustPct)
+    ? 1 + rateAdjustPct / 100
+    : 1;
   return graduatedLines(
     monthlyTokens,
     PAYG_TIERS.map((t) => ({
@@ -276,6 +288,32 @@ export function formatUSD(value: number): string {
   return Math.abs(value) >= 1000
     ? usdWhole.format(value)
     : usdCents.format(value);
+}
+
+// "+10%" / "-15%": the sign is the information — an unsigned "10%" wouldn't
+// say which way the rates moved.
+export function formatSignedPct(pct: number): string {
+  return `${pct > 0 ? "+" : ""}${pct.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+// Reads the annual gap between the two models for the estimator's summary
+// line. PAYG undercutting the committed contract is a modelling error at
+// list rates — and a fortiori under an uplift, which only raises PAYG above
+// list — but it's the expected outcome of a big enough negotiated discount.
+// So only a discount claims the gap — a valid one: an out-of-window swing
+// was priced at list rates by paygLines, so it can't be what made PAYG
+// cheaper. Everything else falls through to the check-the-fee warning.
+export function paygDeltaMessage(delta: number, rateAdjustPct: number): string {
+  if (delta > 0) {
+    return `Pay-as-you-go costs ${formatUSD(delta)}/yr more than the committed contract at this volume — the number to point at in a "should we commit?" conversation.`;
+  }
+  if (delta < 0 && rateAdjustPct < 0 && isValidRateAdjust(rateAdjustPct)) {
+    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here at the adjusted rates (${formatSignedPct(rateAdjustPct)} vs list).`;
+  }
+  if (delta < 0) {
+    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here, which the model isn't meant to allow — check the platform fee against the baseline.`;
+  }
+  return "Both models price identically at this volume.";
 }
 
 // Token counts at contract scale are billions — the raw digits are unreadable

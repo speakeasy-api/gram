@@ -771,3 +771,53 @@ func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSources
 
 	return v, nil
 }
+
+// BuildListSessionLinksPayload builds the payload for the chat
+// listSessionLinks endpoint from CLI flags.
+func BuildListSessionLinksPayload(chatListSessionLinksChatIds string, chatListSessionLinksSessionToken string, chatListSessionLinksProjectSlugInput string, chatListSessionLinksChatSessionsToken string) (*chat.ListSessionLinksPayload, error) {
+	var err error
+	var chatIds []string
+	{
+		err = json.Unmarshal([]byte(chatListSessionLinksChatIds), &chatIds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for chatIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+		}
+		if len(chatIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("chat_ids", chatIds, len(chatIds), 1, true))
+		}
+		if len(chatIds) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("chat_ids", chatIds, len(chatIds), 100, false))
+		}
+		for _, e := range chatIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatListSessionLinksSessionToken != "" {
+			sessionToken = &chatListSessionLinksSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListSessionLinksProjectSlugInput != "" {
+			projectSlugInput = &chatListSessionLinksProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListSessionLinksChatSessionsToken != "" {
+			chatSessionsToken = &chatListSessionLinksChatSessionsToken
+		}
+	}
+	v := &chat.ListSessionLinksPayload{}
+	v.ChatIds = chatIds
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}

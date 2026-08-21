@@ -155,6 +155,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	if err != nil {
 		return roleCreateResult{}, err
 	}
+	description := conv.PtrValOr(payload.Description, "")
 	grants := roleGrantPayloads(payload.Grants)
 	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
 		return roleCreateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
@@ -171,7 +172,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        roleSlug,
 		WorkosName:        payload.Name,
-		WorkosDescription: conv.ToPGTextEmpty(payload.Description),
+		WorkosDescription: conv.ToPGTextEmpty(description),
 		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
@@ -208,7 +209,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 			_, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
 				Name:        payload.Name,
 				Slug:        roleSlug,
-				Description: payload.Description,
+				Description: description,
 			})
 			var apiErr *workos.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {

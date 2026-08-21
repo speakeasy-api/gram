@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router";
+import { useOrganization } from "@/contexts/Auth";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
@@ -40,6 +41,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -88,11 +90,12 @@ export function ProjectDashboard(): JSX.Element {
     [customRange, customRangeLabel, dateRange],
   );
 
+  const organization = useOrganization();
   const {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useProductFeatures();
+  } = useProductFeatures({ organizationId: organization.id });
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query
@@ -556,6 +559,13 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
               </StatTileGroup>
+
+              {isProjectEmpty && (
+                <PlatformMcpPromotion
+                  surface="project_overview_zero_data"
+                  projectSlug={projectSlug}
+                />
+              )}
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

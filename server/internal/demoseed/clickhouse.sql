@@ -41,9 +41,11 @@
 -- collapses per trace_id, so sharing one trace across row types would merge
 -- them into a single unclassifiable trace.
 --
---   Local: applied by `mise run seed:demo` via clickhouse-client --multiquery.
 --   Prod:  run daily by the infra cron AFTER demo.ensure_demo_org() on
 --          Postgres (ClickHouse has no procedural functions, hence a script).
+--   Demo:  `mise run seed:demo` applies the same statements locally.
+--   Local: `mise run seed` rewrites the demo constants to the dev-idp org
+--          first (demoseed.Spec) and seeds that tenant instead.
 
 SET lightweight_deletes_sync = 1;
 
@@ -597,15 +599,36 @@ FROM (
 INSERT INTO shadow_mcp_inventory_urls
   (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at)
 VALUES
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.internal.acme.example/mcp',
-   'mcp.internal.acme.example', 'acme-internal-mcp',
-   now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://tools.vendor-x.example/sse',
-   'tools.vendor-x.example', 'vendor-x-tools',
-   now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
-  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://ci-agents.acme.example/mcp',
-   'ci-agents.acme.example', 'ci-agents',
-   now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 3 HOUR, now64(9));
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://api.githubcopilot.com/mcp',
+   'api.githubcopilot.com', 'GitHub', now64(9) - INTERVAL 30 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.notion.com/mcp',
+   'mcp.notion.com', 'Notion', now64(9) - INTERVAL 29 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.linear.app/mcp',
+   'mcp.linear.app', 'Linear', now64(9) - INTERVAL 28 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.slack.com/mcp',
+   'mcp.slack.com', 'Slack', now64(9) - INTERVAL 26 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.sentry.dev/mcp',
+   'mcp.sentry.dev', 'Sentry', now64(9) - INTERVAL 25 DAY, now64(9) - INTERVAL 10 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.datadoghq.com/api/mcp',
+   'mcp.datadoghq.com', 'Datadog', now64(9) - INTERVAL 23 DAY, now64(9) - INTERVAL 12 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.cloudflare.com/mcp',
+   'mcp.cloudflare.com', 'Cloudflare', now64(9) - INTERVAL 22 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.stripe.com/mcp',
+   'mcp.stripe.com', 'Stripe', now64(9) - INTERVAL 20 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.figma.com/mcp',
+   'mcp.figma.com', 'Figma', now64(9) - INTERVAL 19 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://postgres.internal.example.com/mcp',
+   'postgres.internal.example.com', 'Postgres Explorer', now64(9) - INTERVAL 17 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://support-tools.example.com/mcp',
+   'support-tools.example.com', 'Customer Support', now64(9) - INTERVAL 16 DAY, now64(9) - INTERVAL 22 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://prod-admin.example.com/mcp',
+   'prod-admin.example.com', 'Production Admin', now64(9) - INTERVAL 14 DAY, now64(9) - INTERVAL 24 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://warehouse.example.com/mcp',
+   'warehouse.example.com', 'Data Warehouse', now64(9) - INTERVAL 13 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://incidents.example.com/mcp',
+   'incidents.example.com', 'Incident Commander', now64(9) - INTERVAL 11 DAY, now64(9) - INTERVAL 28 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://payroll.example.com/mcp',
+   'payroll.example.com', 'Payroll Assistant', now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 30 HOUR, now64(9));
 
 INSERT INTO telemetry_logs
   (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
@@ -620,10 +643,14 @@ SELECT
     '{"gram.event.source":"hook"',
     ',"gram.hook.source":"claude-code"',
     ',"gram.hook.event":"PostToolUse"',
-    ',"gram.tool.name":"', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx), '"',
+    ',"gram.tool.name":"', arrayElement(['search_issues', 'search_pages', 'list_issues', 'post_message', 'list_errors', 'query_metrics', 'list_zones', 'create_charge', 'get_file', 'run_query', 'lookup_ticket', 'restart_service', 'run_report', 'page_oncall', 'run_payroll'], sidx), '"',
     ',"gram.mcp.server_url":"', arrayElement(
-        ['https://mcp.internal.acme.example/mcp', 'https://tools.vendor-x.example/sse',
-         'https://ci-agents.acme.example/mcp'], sidx), '"',
+        ['https://api.githubcopilot.com/mcp', 'https://mcp.notion.com/mcp', 'https://mcp.linear.app/mcp',
+         'https://mcp.slack.com/mcp', 'https://mcp.sentry.dev/mcp', 'https://mcp.datadoghq.com/api/mcp',
+         'https://mcp.cloudflare.com/mcp', 'https://mcp.stripe.com/mcp', 'https://mcp.figma.com/mcp',
+         'https://postgres.internal.example.com/mcp', 'https://support-tools.example.com/mcp',
+         'https://prod-admin.example.com/mcp', 'https://warehouse.example.com/mcp',
+         'https://incidents.example.com/mcp', 'https://payroll.example.com/mcp'], sidx), '"',
     ',"gen_ai.tool.call.result":"ok"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', arrayElement(
@@ -633,17 +660,17 @@ SELECT
   ),
   '{"gram.deployment.id":"demo-seed"}',
   proj,
-  concat('hooks:', arrayElement(['lookup_ticket', 'run_ci_job', 'search_wiki'], sidx)),
+  concat('hooks:', arrayElement(['search_issues', 'search_pages', 'list_issues', 'post_message', 'list_errors', 'query_metrics', 'list_zones', 'create_charge', 'get_file', 'run_query', 'lookup_ticket', 'restart_service', 'run_report', 'page_oncall', 'run_payroll'], sidx)),
   'gram-hooks',
   ''
 FROM (
   SELECT
     number,
-    1 + toUInt32(cityHash64('sht', number) % 3) AS sidx,
+    1 + toUInt32(cityHash64('sht', number) % 15) AS sidx,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
     toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 3 + toInt64(number) * 9),
                                           toInt64(cityHash64('shj', number) % 300))) AS nano
-  FROM numbers(24)
+  FROM numbers(180)
 );
 
 -- Authz challenges (org home "Recent challenges" panel + /access/challenges).
@@ -696,15 +723,26 @@ SELECT
   toUInt32(3 + number % 5)
 FROM numbers(13);
 
--- Risk findings mirror (ClickHouse read path for the risk overview): one row
--- per Postgres finding, same md5-derived ids and the same 5-type rotation as
--- the Postgres loop (i % 3 = 0 chats, ftype = (i/3) % 5). The constant
--- start/len arrays match the fixed content prefixes in postgres.sql.
+-- Risk findings mirror (the ClickHouse read path behind the risk overview,
+-- the Risk Events listing and the Watchdog): one row per Postgres finding,
+-- with the same md5-derived ids and the SAME weighted type draw as the
+-- Postgres loop. Every array below is indexed by the finding type k and must
+-- stay aligned with the type table in postgres.sql; the start/len values are
+-- the fixed content prefixes there, so an edit to a prefix string is an edit
+-- here too.
+--
+-- Beyond mirroring, this insert stamps the attribution columns the ingest
+-- pipeline denormalizes and the Watchdog reads without touching Postgres:
+-- chat_source (its App grouping), team (its Team grouping) and user_email
+-- (its top-user display). Leaving them empty renders those groupings blank.
 INSERT INTO risk_findings
   (id, created_at, organization_id, project_id, chat_message_id, chat_id,
-   user_id, external_user_id, risk_policy_id, risk_policy_version, rule_id,
+   user_id, external_user_id, user_email, team, chat_source,
+   risk_policy_id, risk_policy_version, rule_id,
    description, source, confidence, category, tags, start_pos, end_pos,
-   match_len, match_redacted, surface, field, message_created_at)
+   match_len, match_redacted, surface, field, message_created_at,
+   excluded_at, exclusion_id, false_positive_at, excluded_reason,
+   excluded_detail)
 SELECT
   toUUID(concat(substring(hm, 1, 8), '-', substring(hm, 9, 4), '-5', substring(hm, 14, 3), '-8',
                 substring(hm, 18, 3), '-', substring(hm, 21, 12))),
@@ -719,44 +757,135 @@ SELECT
                 'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'], uidx),
   arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                 'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx),
-  'dec0de00-0000-4000-a000-00000000f001',
+  arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx),
+  -- WorkOS directory department_name, matching demo_departments in postgres.sql.
+  arrayElement(['Support Engineering', 'Support Engineering', 'Platform Engineering',
+                'Platform Engineering', 'Billing Operations', 'Engineering Leadership'], uidx),
+  surface_slug,
+  arrayElement(['dec0de00-0000-4000-a000-00000000f001',
+                'dec0de00-0000-4000-a000-00000000f001',
+                'dec0de00-0000-4000-a000-00000000f001',
+                'dec0de00-0000-4000-a000-00000000f007',
+                'dec0de00-0000-4000-a000-00000000f002',
+                'dec0de00-0000-4000-a000-00000000f001',
+                'dec0de00-0000-4000-a000-00000000f006',
+                'dec0de00-0000-4000-a000-00000000f006',
+                'dec0de00-0000-4000-a000-00000000f006',
+                'dec0de00-0000-4000-a000-00000000f002',
+                'dec0de00-0000-4000-a000-00000000f003',
+                'dec0de00-0000-4000-a000-00000000f008',
+                'dec0de00-0000-4000-a000-00000000f007'], 1 + k),
   1,
   arrayElement(['stripe-access-token', 'aws-access-token', 'pii.credit_card',
-                'pii.email_address', 'llm_judge'], 1 + k),
+                'pii.email_address', 'llm_judge', 'pii.us_ssn',
+                'custom.sensitive_file_read', 'custom.env_secret_dump',
+                'custom.ssrf_metadata_endpoint', 'prompt-injection.indirect',
+                'cli.destructive_command', 'pii.topic_boundary_violation',
+                'pii.phone_number'], 1 + k),
   arrayElement(['Stripe live secret key found in tool output',
                 'AWS secret access key in tool output',
                 'Credit card number in user message',
                 'Customer email address in tool output',
-                'Prompt injection attempt: instruction override + credential exfiltration'], 1 + k),
-  arrayElement(['gitleaks', 'gitleaks', 'presidio', 'presidio', 'llm_judge'], 1 + k),
-  arrayElement([0.97, 0.95, 0.92, 0.88, 0.72], 1 + k),
-  arrayElement(['secrets', 'secrets', 'pii', 'pii', 'prompt_injection'], 1 + k),
-  arrayElement([['secret', 'stripe'], ['secret', 'aws'], ['pii', 'pci'], ['pii'], ['prompt-injection']], 1 + k),
-  arrayElement([58, 48, 41, 41, 0], 1 + k),
-  arrayElement([58, 48, 41, 41, 0], 1 + k) + arrayElement([32, 38, 19, 22, 32], 1 + k),
-  arrayElement([32, 38, 19, 22, 32], 1 + k),
+                'Prompt injection attempt: instruction override + credential exfiltration',
+                'US Social Security number in user message',
+                'Agent reads of SSH keys, cloud credentials, or dotenv files outside the project (OWASP LLM02).',
+                'Agent dumping the process environment, where CI/CD tokens and API keys live (OWASP LLM02).',
+                'Agent-controlled requests to cloud metadata or loopback addresses (MCP security best practices).',
+                'Injected instruction in retrieved content redirecting the agent to exfiltrate data',
+                'Destructive database command issued through a tool call',
+                'Conversation strayed outside the approved support topics',
+                'Customer phone number in tool output'], 1 + k),
+  arrayElement(['gitleaks', 'gitleaks', 'presidio', 'presidio', 'llm_judge',
+                'presidio', 'custom', 'custom', 'custom', 'prompt_injection',
+                'cli_destructive', 'presidio', 'presidio'], 1 + k),
+  arrayElement([0.97, 0.95, 0.92, 0.88, 0.72, 0.94, 1.0, 1.0, 1.0, 0.81,
+                0.99, 0.64, 0.83], 1 + k),
+  -- categories.Classify(source, rule_id) computed at ingest; hardcoded here
+  -- because ClickHouse cannot call it. Source-based categories win over the
+  -- rule prefix, which is why k=4 is prompt_policy and k=9 prompt_injection.
+  arrayElement(['secrets', 'secrets', 'financial', 'pii', 'prompt_policy',
+                'government_ids', 'custom', 'custom', 'custom',
+                'prompt_injection', 'cli_destructive', 'off_policy',
+                'pii'], 1 + k),
+  arrayElement([['secret', 'stripe'], ['secret', 'aws'], ['pii', 'pci'], ['pii'],
+                ['prompt-injection'], ['pii', 'govid'],
+                emptyArrayString(), emptyArrayString(), emptyArrayString(),
+                ['prompt-injection', 'indirect'], ['destructive'], ['off-policy'],
+                ['pii']], 1 + k),
+  start_pos,
+  start_pos + match_len,
+  match_len,
   arrayElement([concat('sk_l', repeat('*', 26), 'u0'),
                 concat('wJal', repeat('*', 32), 'MO'),
-                concat(repeat('*', 15), '6467'),
+                concat(repeat('*', 15), if(i % 4 = 0, '1111', '6467')),
                 '***@example.com',
-                ''], 1 + k),
+                '',
+                concat('412-', repeat('*', 5), '91'),
+                concat('cat ', repeat('*', 26), 'ls'),
+                concat('prin', repeat('*', 18), 'en'),
+                concat('http', repeat('*', 59), 's/'),
+                '',
+                '',
+                concat('walk', repeat('*', 34), 'an'),
+                concat('+1-4', repeat('*', 9), '42')], 1 + k),
   'content',
   'content',
-  ts
+  ts,
+  if(supp > 0, chat_dt + toIntervalHour(3), NULL),
+  if(supp = 1, toUUID(if(k = 2, 'dec0de00-0000-4000-a000-00000000ec02',
+                                'dec0de00-0000-4000-a000-00000000ec01')), NULL),
+  if(supp IN (2, 3), chat_dt + toIntervalHour(3), NULL),
+  arrayElement(['', 'rule', 'manual', 'automated'], 1 + supp),
+  arrayElement(['', '', 'Known internal test fixture, not customer data',
+                'placeholder_value'], 1 + supp)
 FROM (
   SELECT
-    (number + 1) * 3 AS i,
-    toUInt8((number + 1) % 5) AS k,
-    -- Types 2 and 4 flag the opening user message (position 1); the rest a
-    -- tool output at position 3 — must match the Postgres flagged positions.
-    lower(hex(MD5(concat('gram-demo-risk-', toString((number + 1) * 3))))) AS hm,
-    lower(hex(MD5(concat('gram-demo-msg-', toString((number + 1) * 3), '-',
-                         if((number + 1) % 5 IN (2, 4), '1', '3'))))) AS hmsg,
-    lower(hex(MD5(concat('gram-demo-chat-', toString((number + 1) * 3))))) AS hchat,
-    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
-                 1 + reinterpretAsUInt8(unhex(substring(hchat, 13, 2))) % 16) AS uidx,
+    number + 1 AS i,
+    lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS hchat,
+    lower(hex(MD5(concat('gram-demo-riskpick-', toString(number + 1))))) AS hp,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(hchat, 1, 2))) % 16) AS day_off,
+    -- demo.risk_ftype(i): the weighted draw, with the trailing-3-days
+    -- override that makes types 7 and 8 read as newly-emerged signals.
+    if(day_off <= 2 AND reinterpretAsUInt8(unhex(substring(hp, 3, 2))) % 8 = 0,
+       toInt16(7 + reinterpretAsUInt8(unhex(substring(hp, 5, 2))) % 2),
+       toInt16(arrayElement([-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+                     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+                      3, 3, 3, 3, 3, 3, 3, 3,
+                     12,12,12,12,12,
+                      0, 0, 0, 0,
+                      1, 1, 1,
+                      6, 6, 6, 6, 6,
+                     10,10,10,10,
+                      2, 2, 2,
+                      9, 9, 9,
+                      4, 4,
+                     11,11,
+                      5, 5],
+                    1 + reinterpretAsUInt8(unhex(substring(hp, 1, 2))) % 64))) AS k,
+    -- Types 2, 4, 5 and 11 flag the opening user message (position 1); the
+    -- rest a tool output at position 3 — must match the Postgres f_on_user.
+    lower(hex(MD5(concat('gram-demo-risk-', toString(number + 1))))) AS hm,
+    lower(hex(MD5(concat('gram-demo-msg-', toString(number + 1), '-',
+                         if(k IN (2, 4, 5, 11), '1', '3'))))) AS hmsg,
+    -- demo.chat_surface(i).
+    if(i % 2 = 1, 'claude-code', if(i % 6 = 2, 'codex', 'cursor')) AS surface_slug,
+    -- Byte offset of the match inside the message content: the length of the
+    -- fixed prefix each type's content is built from in postgres.sql.
+    arrayElement([58, 48, 41, 41, 0, 59, 16, 16, 17, 13, 16, 28, 42],
+                 1 + k) AS start_pos,
+    arrayElement([32, 38, 19, 22, 32, 11, 32, 24, 65, 56, 34, 40, 15],
+                 1 + k) AS match_len,
+    -- demo.risk_suppression(i), restricted to the same types, with the
+    -- match-driven rule suppression taking precedence.
+    if((k = 2 AND i % 4 = 0) OR (k = 3 AND i % 5 = 0), 1,
+       if(k IN (3, 11, 12),
+          arrayElement([0,0,0,0,0,0,0,0,0,0,0,2,2,2,3,3],
+                       1 + reinterpretAsUInt8(unhex(substring(hp, 7, 2))) % 16),
+          0)) AS supp,
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(hchat, 13, 2))) % 16) AS uidx,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
                  1 + reinterpretAsUInt8(unhex(substring(hchat, 3, 2))) % 16) AS hour_off,
     toDateTime64(toStartOfDay(now()), 9)
@@ -764,8 +893,9 @@ FROM (
       + toIntervalMinute(reinterpretAsUInt8(unhex(substring(hchat, 5, 2))) % 60) AS ts0,
     if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0) AS chat_dt,
     chat_dt + toIntervalMinute(2) AS ts
-  FROM numbers(60)
-);
+  FROM numbers(180)
+)
+WHERE k >= 0;
 
 -- Skill efficacy mappings: one skill_session_versions row per Postgres
 -- skill_observation (same det-uuid ids, same skill-per-chat formula
@@ -913,8 +1043,30 @@ SELECT throwIf(
   'demo seed postflight: skill_efficacy_scores missing rows');
 
 SELECT throwIf(
-  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 60,
+  (SELECT count() FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace') < 90,
   'demo seed postflight: risk_findings mirror missing rows');
+
+-- The Watchdog groups by these three denormalized columns. A mirror that
+-- forgot them still lists signals, but every App/Team grouping and every
+-- top-user row renders empty, which is the failure this catches.
+SELECT throwIf(
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND (chat_source = '' OR team = '' OR user_email = '')) > 0,
+  'demo seed postflight: risk_findings missing chat_source/team/user_email attribution');
+
+-- Fewer than four distinct rule clusters means the weighted type draw
+-- collapsed and the Watchdog list is a flat rotation again.
+SELECT throwIf(
+  (SELECT uniqExact(rule_id) FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace') < 8,
+  'demo seed postflight: risk_findings cover too few rules to form signals');
+
+SELECT throwIf(
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND excluded_reason NOT IN ('', 'rule', 'manual', 'automated')) > 0,
+  'demo seed postflight: risk_findings carry an unrecognized excluded_reason');
 
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs

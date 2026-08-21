@@ -224,6 +224,32 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql
+`
+
+// Defines the trigger function used to force atomic remote-MCP provisioning to
+// fail after it has created the remote source and session issuer.
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureFunctionFixture)
+	return err
+}
+
+const createRemoteMCPServerMaterializationFailureTriggerFixture = `-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()
+`
+
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureTriggerFixture)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
@@ -675,6 +701,26 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LeaseToken,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
+SELECT blob_url, consumed_at
+FROM session_handoff_links
+WHERE token = $1
+`
+
+type GetSessionHandoffLinkFixtureRow struct {
+	BlobUrl    string
+	ConsumedAt pgtype.Timestamptz
+}
+
+// Test-only inspection of a minted session-handoff link, so tests can assert a
+// consumed link keeps its burn bookkeeping without keeping the blob pointer.
+func (q *Queries) GetSessionHandoffLinkFixture(ctx context.Context, token string) (GetSessionHandoffLinkFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSessionHandoffLinkFixture, token)
+	var i GetSessionHandoffLinkFixtureRow
+	err := row.Scan(&i.BlobUrl, &i.ConsumedAt)
 	return i, err
 }
 
@@ -1454,6 +1500,28 @@ type SetProjectSlugFixtureParams struct {
 
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
+	return err
+}
+
+const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = $1
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetUserSessionIssuerCIMDAdmissionModeParams struct {
+	ClientIDMetadataAdmissionMode pgtype.Text
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+}
+
+// Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+// update. The production UpdateUserSessionIssuer query COALESCEs every param,
+// where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+// keeping that contract out of per-package test helpers is the point of this
+// narrow query.
+func (q *Queries) SetUserSessionIssuerCIMDAdmissionMode(ctx context.Context, arg SetUserSessionIssuerCIMDAdmissionModeParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerCIMDAdmissionMode, arg.ClientIDMetadataAdmissionMode, arg.ID, arg.ProjectID)
 	return err
 }
 

@@ -33,6 +33,18 @@ type Client struct {
 	// updateConfiguration endpoint.
 	UpdateConfigurationDoer goahttp.Doer
 
+	// GetSessionMeta Doer is the HTTP client used to make requests to the
+	// getSessionMeta endpoint.
+	GetSessionMetaDoer goahttp.Doer
+
+	// ReportSessionMoved Doer is the HTTP client used to make requests to the
+	// reportSessionMoved endpoint.
+	ReportSessionMovedDoer goahttp.Doer
+
+	// CreateSessionHandoff Doer is the HTTP client used to make requests to the
+	// createSessionHandoff endpoint.
+	CreateSessionHandoffDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -53,15 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPluginsDoer:          doer,
-		ListSyncedUsersDoer:     doer,
-		GetConfigurationDoer:    doer,
-		UpdateConfigurationDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GetPluginsDoer:           doer,
+		ListSyncedUsersDoer:      doer,
+		GetConfigurationDoer:     doer,
+		UpdateConfigurationDoer:  doer,
+		GetSessionMetaDoer:       doer,
+		ReportSessionMovedDoer:   doer,
+		CreateSessionHandoffDoer: doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -156,6 +171,78 @@ func (c *Client) UpdateConfiguration() goa.Endpoint {
 		resp, err := c.UpdateConfigurationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "updateConfiguration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSessionMeta returns an endpoint that makes HTTP requests to the agent
+// service getSessionMeta server.
+func (c *Client) GetSessionMeta() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSessionMetaRequest(c.encoder)
+		decodeResponse = DecodeGetSessionMetaResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSessionMetaRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSessionMetaDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getSessionMeta", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReportSessionMoved returns an endpoint that makes HTTP requests to the agent
+// service reportSessionMoved server.
+func (c *Client) ReportSessionMoved() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReportSessionMovedRequest(c.encoder)
+		decodeResponse = DecodeReportSessionMovedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportSessionMovedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReportSessionMovedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "reportSessionMoved", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateSessionHandoff returns an endpoint that makes HTTP requests to the
+// agent service createSessionHandoff server.
+func (c *Client) CreateSessionHandoff() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSessionHandoffRequest(c.encoder)
+		decodeResponse = DecodeCreateSessionHandoffResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSessionHandoffRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSessionHandoffDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "createSessionHandoff", err)
 		}
 		return decodeResponse(resp)
 	}

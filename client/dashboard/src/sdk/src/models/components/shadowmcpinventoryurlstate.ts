@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -16,8 +17,18 @@ import {
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
 
+export const ShadowMCPInventoryURLStateAccess = {
+  None: "none",
+  Allowed: "allowed",
+  Blocked: "blocked",
+  Restricted: "restricted",
+} as const;
+export type ShadowMCPInventoryURLStateAccess = ClosedEnum<
+  typeof ShadowMCPInventoryURLStateAccess
+>;
+
 export type ShadowMCPInventoryURLState = {
-  access: string;
+  access: ShadowMCPInventoryURLStateAccess;
   allowedPolicyIds: Array<string>;
   /**
    * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
@@ -32,12 +43,17 @@ export type ShadowMCPInventoryURLState = {
 };
 
 /** @internal */
+export const ShadowMCPInventoryURLStateAccess$inboundSchema: z.ZodMiniEnum<
+  typeof ShadowMCPInventoryURLStateAccess
+> = z.enum(ShadowMCPInventoryURLStateAccess);
+
+/** @internal */
 export const ShadowMCPInventoryURLState$inboundSchema: z.ZodMiniType<
   ShadowMCPInventoryURLState,
   unknown
 > = z.pipe(
   z.object({
-    access: z.string(),
+    access: ShadowMCPInventoryURLStateAccess$inboundSchema,
     allowed_policy_ids: z.array(z.string()),
     approval_request: z.optional(
       ShadowMCPInventoryApprovalRequest$inboundSchema,

@@ -1403,6 +1403,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			category         *string
 			ruleID           *string
 			userID           *string
+			externalUserIds  []string
 			uniqueMatch      *bool
 			nonAssistant     *bool
 			assistantID      *string
@@ -1442,6 +1443,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if userIDRaw != "" {
 			userID = &userIDRaw
 		}
+		externalUserIds = qp["external_user_ids"]
 		{
 			uniqueMatchRaw := qp.Get("unique_match")
 			if uniqueMatchRaw != "" {
@@ -1523,7 +1525,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, externalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3006,6 +3008,7 @@ func DecodeListDismissedRiskResultsRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			cursor           *string
 			limit            *int
+			reasons          []string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -3037,6 +3040,12 @@ func DecodeListDismissedRiskResultsRequest(mux goahttp.Muxer, decoder func(*http
 				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 		}
+		reasons = qp["reasons"]
+		for _, e := range reasons {
+			if !(e == "rule" || e == "manual" || e == "automated") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("reasons[*]", e, []any{"rule", "manual", "automated"}))
+			}
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -3052,7 +3061,7 @@ func DecodeListDismissedRiskResultsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDismissedRiskResultsPayload(cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListDismissedRiskResultsPayload(cursor, limit, reasons, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -11273,6 +11282,10 @@ func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskRe
 		MatchRedacted:     v.MatchRedacted,
 		CreatedAt:         v.CreatedAt,
 		FalsePositiveAt:   v.FalsePositiveAt,
+		SuppressedAt:      v.SuppressedAt,
+		SuppressedReason:  v.SuppressedReason,
+		SuppressedDetail:  v.SuppressedDetail,
+		ExclusionID:       v.ExclusionID,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

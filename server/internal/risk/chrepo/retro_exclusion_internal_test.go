@@ -9,14 +9,14 @@ import (
 
 // TestCopyProjection_LockstepWithInsertColumns pins the INSERT ... SELECT
 // copy projection to the shared riskFindingColumns list: every column is
-// passed through verbatim except inserted_at and the two exclusion flags,
+// passed through verbatim except inserted_at and the suppression columns,
 // which are replaced. A new risk_findings column added to InsertRiskFindings
 // automatically joins the projection — this test fails only if the
 // projection helper's replacement set drifts.
 func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 	t.Parallel()
 
-	projected := strings.Split(copyProjection("?", "NULL"), ", ")
+	projected := strings.Split(copyProjection("?", "NULL", "'rule'", "''"), ", ")
 	require.Len(t, projected, len(riskFindingColumns))
 
 	for i, col := range riskFindingColumns {
@@ -27,10 +27,24 @@ func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 			require.Equal(t, "?", projected[i])
 		case "exclusion_id":
 			require.Equal(t, "NULL", projected[i])
+		case "excluded_reason":
+			require.Equal(t, "'rule'", projected[i])
+		case "excluded_detail":
+			require.Equal(t, "''", projected[i])
 		default:
 			require.Equal(t, col, projected[i], "column %d must pass through verbatim", i)
 		}
 	}
+}
+
+// TestApplyReversalProjections pins the two directions' replacement values:
+// apply stamps excluded_reason='rule' with a cleared detail, reversal clears
+// the whole suppression annotation.
+func TestApplyReversalProjections(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, applyProjection(), "?, ?, false_positive_at, '"+ExcludedReasonRule+"', ''")
+	require.Contains(t, reversalProjection(), "NULL, NULL, false_positive_at, '', ''")
 }
 
 func TestRetroExclusionPredicate_ApplyConditions(t *testing.T) {

@@ -14,6 +14,8 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -21,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -47,11 +51,29 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// stubProductFeatures controls org feature state without database rows. The
+// session-portability endpoints are the only feature-gated agent surface;
+// tests flip the field to exercise the gate.
+type stubProductFeatures struct {
+	sessionPortability bool
+}
+
+func (s *stubProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	if feature == productfeatures.FeatureSessionPortability {
+		return s.sessionPortability, nil
+	}
+	return false, nil
+}
+
 type testInstance struct {
 	service   *agent.Service
 	conn      *pgxpool.Pool
 	orgID     string
 	projectID uuid.UUID
+	features  *stubProductFeatures
+	// blobs is the same store the service writes handoff documents to, so
+	// tests can assert a burned handoff left nothing behind in it.
+	blobs assets.BlobStore
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -85,13 +107,17 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), testServerURL)
+	features := &stubProductFeatures{sessionPortability: true}
+	blobs := assetstest.NewTestBlobStore(t)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs)
 
 	return ctx, &testInstance{
 		service:   svc,
 		conn:      conn,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
+		features:  features,
+		blobs:     blobs,
 	}
 }
 
@@ -180,6 +206,57 @@ func assignPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pluginI
 		PluginID:       pluginID,
 		OrganizationID: orgID,
 		PrincipalUrn:   principalURN,
+	})
+	require.NoError(t, err)
+}
+
+func seedDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID string) uuid.UUID {
+	t.Helper()
+	now := time.Now().UTC()
+	id, err := directoryrepo.New(conn).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         orgID,
+		WorkosDirectoryGroupID: workosID,
+		Name:                   workosID,
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGText("event_" + workosID),
+	})
+	require.NoError(t, err)
+	return id
+}
+
+func seedDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID, email string) uuid.UUID {
+	t.Helper()
+	return seedDirectoryUserWithAttributes(t, ctx, conn, orgID, workosID, email, []byte(`{}`))
+}
+
+func seedDirectoryUserWithAttributes(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, workosID, email string, attributes []byte) uuid.UUID {
+	t.Helper()
+	now := time.Now().UTC()
+	id, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        orgID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: workosID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            attributes,
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
+		WorkosLastEventID:     conv.ToPGText("event_" + workosID),
+	})
+	require.NoError(t, err)
+	return id
+}
+
+func seedDirectoryGroupMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, directoryUserID, directoryGroupID uuid.UUID, workosUserID, workosGroupID string) {
+	t.Helper()
+	_, err := directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserID,
+		DirectoryGroupID:       directoryGroupID,
+		WorkosDirectoryUserID:  workosUserID,
+		WorkosDirectoryGroupID: workosGroupID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 	})
 	require.NoError(t, err)
 }

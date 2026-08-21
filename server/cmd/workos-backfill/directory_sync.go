@@ -15,9 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -76,7 +76,7 @@ func listDirectoryUserRecords(ctx context.Context, logger *slog.Logger, client C
 // workos_updated_at baseline written here — which is the honest guard for a
 // row whose provenance is a snapshot.
 func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec directoryUserRecord, snapshotAt time.Time) error {
-	repo := workosrepo.New(dbtx)
+	repo := directoryrepo.New(dbtx)
 
 	existing, err := repo.GetDirectoryUserSyncStateByWorkOSID(ctx, rec.user.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -111,7 +111,7 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 	if err != nil {
 		createdAt = rec.updatedAt
 	}
-	if _, err := repo.UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	if _, err := repo.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        organizationID,
 		UserID:                userID,
 		WorkosDirectoryUserID: rec.user.ID,
@@ -136,14 +136,14 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 // Directory state is authoritative for access here, so only an
 // already-deleted relationship short-circuits the deprovision.
 func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec directoryUserRecord, storedUserID pgtype.Text, snapshotAt time.Time) error {
-	repo := workosrepo.New(dbtx)
+	repo := directoryrepo.New(dbtx)
 
 	gramUserID, err := resolveDirectoryGramUser(ctx, dbtx, rec.user.Email, storedUserID)
 	if err != nil {
 		return err
 	}
 
-	if _, err := repo.DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
+	if _, err := repo.DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
 		WorkosDeletedAt:       conv.ToPGTimestamptz(rec.updatedAt),
 		WorkosLastEventID:     conv.ToPGText(""),
 		WorkosDirectoryUserID: rec.user.ID,
@@ -310,7 +310,7 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, orga
 // failure: a concurrent membership event (e.g. a re-add) legitimately wins
 // over the snapshot.
 func validateDirectoryUsers(ctx context.Context, db *pgxpool.Pool, organizationID string, records []directoryUserRecord) error {
-	repo := workosrepo.New(db)
+	repo := directoryrepo.New(db)
 	for _, rec := range records {
 		if rec.user.State == "" || rec.user.State == string(directorysync.Active) {
 			continue
@@ -368,7 +368,7 @@ func classifyDirectoryUserChanges(ctx context.Context, db *pgxpool.Pool, organiz
 		return rowCounts, deprovisionCounts, details, nil
 	}
 
-	repo := workosrepo.New(db)
+	repo := directoryrepo.New(db)
 	for _, rec := range records {
 		existing, err := repo.GetDirectoryUserSyncStateByWorkOSID(ctx, rec.user.ID)
 		rowFound := err == nil

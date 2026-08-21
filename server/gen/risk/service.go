@@ -52,9 +52,9 @@ type Service interface {
 	MarkRiskResultsFalsePositive(context.Context, *MarkRiskResultsFalsePositivePayload) (err error)
 	// Undo a false-positive dismissal for one or more risk results.
 	UnmarkRiskResultsFalsePositive(context.Context, *UnmarkRiskResultsFalsePositivePayload) (err error)
-	// List risk results manually marked as false positive for the current project
-	// (the Dismissed tab). Kept separate from listRiskResults, which never returns
-	// dismissed results.
+	// List suppressed risk results for the current project — findings hidden by an
+	// exclusion rule, a manual dismissal, or the automated false-positive sweep.
+	// Kept separate from listRiskResults, which never returns suppressed results.
 	ListDismissedRiskResults(context.Context, *ListDismissedRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
@@ -306,6 +306,10 @@ type CreateRiskPolicyBypassRequestPayload struct {
 	ApikeyToken  *string
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -648,6 +652,9 @@ type ListDismissedRiskResultsPayload struct {
 	Cursor *string
 	// Maximum number of results to return per page.
 	Limit *int
+	// Only return results suppressed for these reasons. Omitted or empty means all
+	// reasons.
+	Reasons []string
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -815,6 +822,10 @@ type ListRiskResultsPayload struct {
 	// Optional user identifier substring to filter by (case-insensitive, matched
 	// against the chat's external user id).
 	UserID *string
+	// Optional external user identifiers to filter by, matched whole rather than
+	// as a substring. Pass every identifier a subject is known by; unlike user_id
+	// this cannot pull in another person whose identifier merely contains theirs.
+	ExternalUserIds []string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.

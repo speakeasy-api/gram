@@ -164,12 +164,18 @@ func (t Tool) applyTargetPolicy(policy TargetPolicy, arguments []byte) ([]byte, 
 			decoded = map[string]any{}
 		}
 	}
-	for _, field := range projectFields(t.descriptor.InputSchema) {
-		switch field {
-		case "project_slug":
-			decoded[field] = policy.ProjectSlug
-		case "project_id":
-			decoded[field] = policy.ProjectID
+	fields := projectFields(t.descriptor.InputSchema)
+	// Prefer the immutable project ID when a descriptor permits either selector.
+	// Supplying both would turn an externally valid optional-selector schema into
+	// an invalid assistant call; the assistant has one exact project to inject.
+	for _, field := range fields {
+		if field == "project_id" {
+			decoded["project_id"] = policy.ProjectID
+			delete(decoded, "project_slug")
+			break
+		}
+		if field == "project_slug" {
+			decoded["project_slug"] = policy.ProjectSlug
 		}
 	}
 	encoded, err := json.Marshal(decoded)

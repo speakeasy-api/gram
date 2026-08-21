@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useOrganization } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -42,7 +43,7 @@ function verifiedMessage(principal: string | undefined): string {
   if (!principal) {
     return "Verified.";
   }
-  return `Gram can impersonate ${principal}.`;
+  return `Speakeasy can impersonate ${principal}.`;
 }
 
 export function ExternalServicesPage(): JSX.Element {
@@ -59,8 +60,9 @@ export function ExternalServicesPage(): JSX.Element {
 // passes. A gated-but-authorized org sees only the framed refusal, with no
 // header or toolbar.
 function ExternalServicesGate(): JSX.Element {
+  const organization = useOrganization();
   const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    undefined,
+    { organizationId: organization.id },
     undefined,
     { staleTime: 30_000, throwOnError: false },
   );
@@ -134,7 +136,7 @@ function ExternalServicesOverview(): JSX.Element {
     <>
       <ResourceListPage
         title="External Services"
-        description="How Gram authenticates into your cloud account to reach the keys you manage there. Gram impersonates a service account you nominate, so it never holds long-lived credentials of your own."
+        description="How Speakeasy authenticates into your cloud account to reach the keys you manage there. Speakeasy impersonates a service account you nominate, so it never holds long-lived credentials of your own."
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>

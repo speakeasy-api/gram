@@ -97,10 +97,16 @@ func BuildLogoutPayload(adminLogoutSessionID string) (*admin.LogoutPayload, erro
 
 // BuildGetProjectPayload builds the payload for the admin getProject endpoint
 // from CLI flags.
-func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
+func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectOrganizationIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
 	var idOrSlug string
 	{
 		idOrSlug = adminGetProjectIDOrSlug
+	}
+	var organizationIDOrSlug *string
+	{
+		if adminGetProjectOrganizationIDOrSlug != "" {
+			organizationIDOrSlug = &adminGetProjectOrganizationIDOrSlug
+		}
 	}
 	var adminSessionToken *string
 	{
@@ -110,6 +116,7 @@ func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdmin
 	}
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.OrganizationIDOrSlug = organizationIDOrSlug
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil
@@ -126,8 +133,8 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
 		}
 		if body.AccountType != nil {
-			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "enterprise") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "enterprise"}))
+			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "payg" || *body.AccountType == "enterprise") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "payg", "enterprise"}))
 			}
 		}
 		if err != nil {
@@ -174,8 +181,8 @@ func BuildBulkUpdateAccountTypePayload(adminBulkUpdateAccountTypeBody string, ad
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))
 			}
 		}
-		if !(body.AccountType == "free" || body.AccountType == "pro" || body.AccountType == "enterprise") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", body.AccountType, []any{"free", "pro", "enterprise"}))
+		if !(body.AccountType == "free" || body.AccountType == "pro" || body.AccountType == "payg" || body.AccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", body.AccountType, []any{"free", "pro", "payg", "enterprise"}))
 		}
 		if err != nil {
 			return nil, err
@@ -561,6 +568,116 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 		}
 	}
 	v := &admin.GetOrganizationStatsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetInferenceKeysPayload builds the payload for the admin
+// getInferenceKeys endpoint from CLI flags.
+func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, adminGetInferenceKeysAdminSessionToken string) (*admin.GetInferenceKeysPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetInferenceKeysOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetInferenceKeysAdminSessionToken != "" {
+			adminSessionToken = &adminGetInferenceKeysAdminSessionToken
+		}
+	}
+	v := &admin.GetInferenceKeysPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetPaygBillingSummaryPayload builds the payload for the admin
+// getPaygBillingSummary endpoint from CLI flags.
+func BuildGetPaygBillingSummaryPayload(adminGetPaygBillingSummaryOrganizationID string, adminGetPaygBillingSummaryAdminSessionToken string) (*admin.GetPaygBillingSummaryPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetPaygBillingSummaryOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetPaygBillingSummaryAdminSessionToken != "" {
+			adminSessionToken = &adminGetPaygBillingSummaryAdminSessionToken
+		}
+	}
+	v := &admin.GetPaygBillingSummaryPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetStripeSubscriptionPayload builds the payload for the admin
+// getStripeSubscription endpoint from CLI flags.
+func BuildGetStripeSubscriptionPayload(adminGetStripeSubscriptionOrganizationID string, adminGetStripeSubscriptionAdminSessionToken string) (*admin.GetStripeSubscriptionPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetStripeSubscriptionOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminGetStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.GetStripeSubscriptionPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCancelStripeSubscriptionPayload builds the payload for the admin
+// cancelStripeSubscription endpoint from CLI flags.
+func BuildCancelStripeSubscriptionPayload(adminCancelStripeSubscriptionBody string, adminCancelStripeSubscriptionAdminSessionToken string) (*admin.CancelStripeSubscriptionPayload, error) {
+	var err error
+	var body CancelStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCancelStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCancelStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminCancelStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.CancelStripeSubscriptionPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildResumeStripeSubscriptionPayload builds the payload for the admin
+// resumeStripeSubscription endpoint from CLI flags.
+func BuildResumeStripeSubscriptionPayload(adminResumeStripeSubscriptionBody string, adminResumeStripeSubscriptionAdminSessionToken string) (*admin.ResumeStripeSubscriptionPayload, error) {
+	var err error
+	var body ResumeStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminResumeStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminResumeStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminResumeStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.ResumeStripeSubscriptionPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

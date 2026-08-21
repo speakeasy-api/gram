@@ -237,6 +237,28 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetPluginAssignments"}`)
 	})
 
+	Method("listAudiences", func() {
+		Description("List the audiences that can be assigned to plugins.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAudiencesResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.listAudiences")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudiences")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Audiences"}`)
+	})
+
 	Method("downloadPluginPackage", func() {
 		Description("Download a ZIP of a single plugin package for direct installation.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
@@ -280,6 +302,46 @@ var _ = Service("plugins", func() {
 
 		Meta("openapi:operationId", "downloadPluginPackage")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
+	})
+
+	Method("downloadPlatformMCPPlugin", func() {
+		Description("Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			Attribute("platform", String, func() {
+				Description("Target package format.")
+				Enum("claude", "cursor", "codex", "opencode", "agent-plugin")
+			})
+			Required("platform")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/plugins.downloadPlatformMCPPlugin")
+			Param("platform")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK, func() {
+				ContentType("application/zip")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "downloadPlatformMCPPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadPlatformMCPPlugin")
 	})
 
 	Method("downloadObservabilityPlugin", func() {
@@ -346,6 +408,53 @@ var _ = Service("plugins", func() {
 
 		Meta("openapi:operationId", "downloadCodexInstallScript")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadCodexInstallScript")
+	})
+
+	Method("getPlatformMCPPackageStatus", func() {
+		Description("Get the organization-scoped Platform MCP package and canonical default-project marketplace status.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(PlatformMCPPackageStatusResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.getPlatformMCPPackageStatus")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPlatformMCPPackageStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPlatformMCPPackageStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PlatformMCPPackageStatus"}`)
+	})
+
+	Method("repairPlatformMCPPackage", func() {
+		Description("Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(PlatformMCPPackageStatusResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.repairPlatformMCPPackage")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "repairPlatformMCPPackage")
+		Meta("openapi:extension:x-speakeasy-name-override", "repairPlatformMCPPackage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RepairPlatformMCPPackage"}`)
 	})
 
 	Method("getPublishStatus", func() {
@@ -484,6 +593,18 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 	})
 })
 
+var PluginAudienceModel = Type("PluginAudience", func() {
+	Required("kind", "display_name", "principal_urn")
+
+	Attribute("kind", String, func() {
+		Description("Audience kind.")
+		Enum("everyone", "role", "directory_group", "directory_attribute")
+	})
+	Attribute("display_name", String, "Display name for the audience.")
+	Attribute("member_count", Int64, "Number of current members, when the audience has an enumerable membership.")
+	Attribute("principal_urn", String, "Principal URN used to assign the audience to a plugin.")
+})
+
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
 	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
@@ -588,6 +709,37 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 var ListPluginsResult = Type("ListPluginsResult", func() {
 	Required("plugins")
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
+})
+
+var ListAudiencesResult = Type("ListAudiencesResult", func() {
+	Required("audiences")
+
+	Attribute("audiences", ArrayOf(PluginAudienceModel), "Audiences that can be assigned to plugins.")
+})
+
+var PlatformMCPPackageStatusResult = Type("PlatformMCPPackageStatusResult", func() {
+	Required("admission", "available", "package_name", "claude_filename", "agent_plugin_filename", "marketplace_connected", "package_present", "freshness", "repair_allowed", "direct_download_available")
+
+	Attribute("admission", String, func() {
+		Description("Organization package admission: enabled, disabled, or indeterminate.")
+		Enum("enabled", "disabled", "indeterminate")
+	})
+	Attribute("available", Boolean, "Whether organization admission currently permits installing the package.")
+	Attribute("package_name", String, "Fixed Platform MCP package identity.")
+	Attribute("claude_filename", String, "Deterministic Claude direct-download ZIP filename.")
+	Attribute("agent_plugin_filename", String, "Deterministic portable Agent Plugins direct-download ZIP filename.")
+	Attribute("canonical_project_slug", String, "Literal default project that owns the canonical organization marketplace, when present.")
+	Attribute("marketplace_name", String, "Effective name of the canonical marketplace, when its default project is present.")
+	Attribute("marketplace_connected", Boolean, "Whether the canonical default project has a published GitHub marketplace.")
+	Attribute("marketplace_url", String, "Git URL used by supported clients to register the canonical marketplace.")
+	Attribute("repo_url", String, "Canonical GitHub repository URL.")
+	Attribute("package_present", Boolean, "Whether the last successful canonical publish recorded the Platform package fingerprint.")
+	Attribute("freshness", String, func() {
+		Description("Platform package freshness: current, stale, missing, unavailable, or indeterminate.")
+		Enum("current", "stale", "missing", "unavailable", "indeterminate")
+	})
+	Attribute("repair_allowed", Boolean, "Whether an organization admin can publish or repair the canonical package now.")
+	Attribute("direct_download_available", Boolean, "Whether keyless direct downloads are currently admitted.")
 })
 
 var PublishStatusResult = Type("PublishStatusResult", func() {

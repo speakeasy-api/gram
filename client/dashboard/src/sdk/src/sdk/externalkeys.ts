@@ -13,10 +13,12 @@ import { externalKeysListAwsKms } from "../funcs/externalKeysListAwsKms.js";
 import { externalKeysListGcpKms } from "../funcs/externalKeysListGcpKms.js";
 import { externalKeysUpdateAwsKms } from "../funcs/externalKeysUpdateAwsKms.js";
 import { externalKeysUpdateGcpKms } from "../funcs/externalKeysUpdateGcpKms.js";
+import { externalKeysVerifyGcpKms } from "../funcs/externalKeysVerifyGcpKms.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AwsKmsKey } from "../models/components/awskmskey.js";
 import { GcpKmsKey } from "../models/components/gcpkmskey.js";
 import { ListExternalKeysResult } from "../models/components/listexternalkeysresult.js";
+import { VerifyKmsKeyResult } from "../models/components/verifykmskeyresult.js";
 import {
   CreateAwsKmsKeyRequest,
   CreateAwsKmsKeySecurity,
@@ -61,6 +63,10 @@ import {
   UpdateGcpKmsKeyRequest,
   UpdateGcpKmsKeySecurity,
 } from "../models/operations/updategcpkmskey.js";
+import {
+  VerifyGcpKmsKeyRequest,
+  VerifyGcpKmsKeySecurity,
+} from "../models/operations/verifygcpkmskey.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class ExternalKeys extends ClientSDK {
@@ -266,6 +272,25 @@ export class ExternalKeys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GcpKmsKey> {
     return unwrapAsync(externalKeysUpdateGcpKms(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpKmsKey externalKeys
+   *
+   * @remarks
+   * Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+   */
+  async verifyGcpKms(
+    request: VerifyGcpKmsKeyRequest,
+    security?: VerifyGcpKmsKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<VerifyKmsKeyResult> {
+    return unwrapAsync(externalKeysVerifyGcpKms(
       this,
       request,
       security,

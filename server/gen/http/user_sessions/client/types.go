@@ -846,6 +846,48 @@ type UserSessionResponseBody struct {
 	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// When this session last carried an MCP request. Recorded on the request path
+	// and coalesced to a five-minute resolution, so treat it as accurate to within
+	// that. Null means the session has not been used since the column was
+	// introduced — unknown, not never.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// The upstream providers Gram holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only Gram-native
+	// tools. A session can have several: an issuer may have more than one
+	// remote_session_client attached.
+	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams,omitempty" json:"upstreams,omitempty" xml:"upstreams,omitempty"`
+}
+
+// UserSessionUpstreamResponseBody is used to define fields on response body
+// types.
+type UserSessionUpstreamResponseBody struct {
+	// The remote_session id. Target for revoke and force-refresh.
+	RemoteSessionID *string `form:"remote_session_id,omitempty" json:"remote_session_id,omitempty" xml:"remote_session_id,omitempty"`
+	// The remote_session_client the session was minted against.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// The remote_session_issuer the client belongs to.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// Display slug of the upstream provider, e.g. 'mcp.linear.app'.
+	IssuerSlug *string `form:"issuer_slug,omitempty" json:"issuer_slug,omitempty" xml:"issuer_slug,omitempty"`
+	// Upstream access-token expiry. Null when the upstream issued a non-expiring
+	// token.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session holds no refresh token
+	// or the upstream issued a non-expiring one.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Absolute upstream authorization deadline. Unlike refresh_expires_at,
+	// exchanging a token does not extend this.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is
+	// insufficient because an upstream may issue a non-expiring refresh token.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
+	// Whether the subject opted this connection into automated keepalive.
+	AutoRefresh *bool `form:"auto_refresh,omitempty" json:"auto_refresh,omitempty" xml:"auto_refresh,omitempty"`
+	// When this upstream token was last spent on a proxied call. Same five-minute
+	// resolution as the inbound leg, so the two are directly comparable.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Scopes held by this upstream session.
+	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body
@@ -2587,6 +2629,9 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 	if body.SubjectType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("subject_type", "body"))
 	}
+	if body.Upstreams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("upstreams", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -2610,6 +2655,64 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 	}
 	if body.RevokedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.revoked_at", *body.RevokedAt, goa.FormatDateTime))
+	}
+	if body.LastUsedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_used_at", *body.LastUsedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Upstreams {
+		if e != nil {
+			if err2 := ValidateUserSessionUpstreamResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUserSessionUpstreamResponseBody runs the validations defined on
+// UserSessionUpstreamResponseBody
+func ValidateUserSessionUpstreamResponseBody(body *UserSessionUpstreamResponseBody) (err error) {
+	if body.RemoteSessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.IssuerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_slug", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
+	}
+	if body.AutoRefresh == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_refresh", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.RemoteSessionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_id", *body.RemoteSessionID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.AccessExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.access_expires_at", *body.AccessExpiresAt, goa.FormatDateTime))
+	}
+	if body.RefreshExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
+	}
+	if body.AuthorizationExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_expires_at", *body.AuthorizationExpiresAt, goa.FormatDateTime))
+	}
+	if body.LastUsedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_used_at", *body.LastUsedAt, goa.FormatDateTime))
 	}
 	return
 }

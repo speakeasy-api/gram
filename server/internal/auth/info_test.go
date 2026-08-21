@@ -32,6 +32,7 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 		UserDisplayName:       nil,
 		UserPhotoURL:          nil,
 		IsAdmin:               false,
+		ImpersonatorEmail:     nil,
 		ActiveOrganizationID:  "organization-id",
 		GramAccountType:       "test",
 		HasActiveSubscription: false,
@@ -52,6 +53,7 @@ func TestInfoTransport_TrialNull(t *testing.T) {
 
 	result := authclient.NewInfoResultOK(&body, "session-token", "session-cookie")
 	require.Nil(t, result.Trial)
+	require.Nil(t, result.ImpersonatorEmail)
 }
 
 func TestService_Info(t *testing.T) {
@@ -70,6 +72,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -209,6 +212,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -282,6 +286,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // First org is active
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -339,22 +344,26 @@ func TestService_Info(t *testing.T) {
 		}, "")
 		require.NoError(t, err)
 
-		// Session active org is the customer org (set by callback admin override).
+		// Session active org is the customer org (set by support callback).
+		expiresAt := time.Now().Add(time.Hour)
 		session := sessions.Session{
-			SessionID:            "admin-override-info-session",
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: "customer-org-for-info",
-			WorkOSSessionID:      "",
+			SessionID:             "admin-override-info-session",
+			UserID:                userInfo.UserID,
+			ActiveOrganizationID:  "customer-org-for-info",
+			SupportOrganizationID: "customer-org-for-info",
+			SupportExpiresAt:      expiresAt,
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
 
-		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: session.ActiveOrganizationID,
-			AccountType:          "test",
-			Email:                &userInfo.Email,
+		ctx = contextvalues.WithValidatedSupportSession(ctx, &contextvalues.AuthContext{
+			SessionID:             &session.SessionID,
+			UserID:                session.UserID,
+			ActiveOrganizationID:  session.ActiveOrganizationID,
+			AccountType:           "test",
+			Email:                 &userInfo.Email,
+			IsAdmin:               true,
+			SupportOrganizationID: session.SupportOrganizationID,
 		})
 
 		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
@@ -367,6 +376,9 @@ func TestService_Info(t *testing.T) {
 		require.Equal(t, "Customer Org", result.Organizations[0].Name)
 		require.Equal(t, "customer-org", result.Organizations[0].Slug)
 		require.Equal(t, "customer-org-for-info", result.ActiveOrganizationID)
+		require.True(t, result.OrganizationOverride)
+		require.NotNil(t, result.OrganizationOverrideExpiresAt)
+		require.Equal(t, expiresAt.UTC().Format(time.RFC3339), *result.OrganizationOverrideExpiresAt)
 	})
 
 	t.Run("info returns correct org after state param callback", func(t *testing.T) {
@@ -404,6 +416,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "target-org-info",
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -462,6 +475,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "org-b-info",
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -556,6 +570,7 @@ func TestService_Info(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -607,6 +622,7 @@ func TestService_Info_OrganizationlessSessionContinuesLogin(t *testing.T) {
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: "",
 		WorkOSSessionID:      "",
+		ImpersonatorEmail:    "",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -643,6 +659,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -777,27 +794,31 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 	}, "")
 	require.NoError(t, err)
 
+	expiresAt := time.Now().Add(time.Hour)
 	session := sessions.Session{
-		SessionID:            "admin-customer-session-id",
-		UserID:               userInfo.UserID,
-		ActiveOrganizationID: customerOrgID,
-		WorkOSSessionID:      "",
+		SessionID:             "admin-customer-session-id",
+		UserID:                userInfo.UserID,
+		ActiveOrganizationID:  customerOrgID,
+		SupportOrganizationID: customerOrgID,
+		SupportExpiresAt:      expiresAt,
 	}
 	err = instance.sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)
 
 	authCtx := &contextvalues.AuthContext{
-		SessionID:            &session.SessionID,
-		UserID:               session.UserID,
-		ActiveOrganizationID: session.ActiveOrganizationID,
-		AccountType:          "test",
-		ProjectID:            nil,
-		OrganizationSlug:     "",
-		Email:                &userInfo.Email,
-		ProjectSlug:          nil,
-		APIKeyScopes:         nil,
+		SessionID:             &session.SessionID,
+		UserID:                session.UserID,
+		ActiveOrganizationID:  session.ActiveOrganizationID,
+		AccountType:           "test",
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 &userInfo.Email,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               true,
+		SupportOrganizationID: customerOrgID,
 	}
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	result, err := instance.service.Info(ctx, &gen.InfoPayload{SessionToken: nil})
 	require.NoError(t, err)

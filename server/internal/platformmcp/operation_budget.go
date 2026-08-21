@@ -19,6 +19,19 @@ const (
 	SetupOrganizationLimitName        = "platform-mcp-setup-organization"
 	RepairConnectionLimitName         = "platform-mcp-repair-connection"
 	RepairOrganizationLimitName       = "platform-mcp-repair-organization"
+	DocsConnectionLimitName           = "platform-mcp-docs-connection"
+	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
+	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
+	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
+)
+
+const (
+	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
+	// bound documentation search. Retrieval is in-process and cheap, so these
+	// exist to stop a loop from spending the caller's context on repeated
+	// queries rather than to protect a backend.
+	DocsQueriesPerConnectionPerMinute   = 10
+	DocsQueriesPerOrganizationPerMinute = 100
 )
 
 var (
@@ -46,15 +59,29 @@ func (b OperationBudget) valid() bool {
 }
 
 func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
-	if !b.valid() || principal.ConnectionID == "" || principal.OrganizationID == "" {
+	if !b.valid() || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
-	if err != nil {
-		return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
-	}
-	if !connection.Allowed {
-		return ErrOperationRateLimited
+	// A surface acting under assistant identity holds no OAuth connection, so
+	// there is no connection bucket to charge and the organization bucket meters
+	// it alone. Refusing the operation instead would deny every connection-less
+	// caller, and keying the connection bucket on the empty string would pool
+	// every such caller across every organization into one bucket.
+	if principal.HasConnection() {
+		// HasConnection is an OR, so a principal claiming a connection through its
+		// generation alone lands here rather than being metered as connection-less.
+		// It has no key to charge, and charging the empty string would pool every
+		// such caller into one bucket, so the budget is unavailable to it.
+		if principal.ConnectionID == "" {
+			return ErrOperationBudgetUnavailable
+		}
+		connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
+		if err != nil {
+			return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
+		}
+		if !connection.Allowed {
+			return ErrOperationRateLimited
+		}
 	}
 	organization, err := b.Organization.Allow(ctx, principal.OrganizationID)
 	if err != nil {
@@ -75,8 +102,15 @@ type OperationBudgets struct {
 	Handoff      OperationBudget
 	SetupStart   OperationBudget
 	Repair       OperationBudget
+	Docs         OperationBudget
+	// Skills meters authoring and distribution together. Reads and writes share
+	// one allowance because they are one workflow: a caller reads a skill to
+	// obtain the version token its next write needs, and metering the read
+	// separately would only let a loop spend twice as much reaching the same
+	// write.
+	Skills OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid()
 }

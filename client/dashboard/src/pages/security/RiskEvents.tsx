@@ -38,6 +38,7 @@ import {
 } from "./risk-ui";
 import {
   isJudgeSource,
+  isShadowMcpSource,
   scoreToRating,
   SEVERITY_RATING_LABEL,
   type SeverityRating,
@@ -659,7 +660,7 @@ function RiskEventsRow({
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
 }) {
-  const isShadowMCP = result.source === "shadow_mcp";
+  const isShadowMCP = isShadowMcpSource(result.source);
   const isEventSource = isJudgeSource(result.source);
   // The 2px left edge carries the severity band color; rows whose policy
   // hasn't loaded a score keep a transparent edge so the grid stays aligned.

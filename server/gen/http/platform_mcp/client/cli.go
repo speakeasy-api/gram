@@ -32,14 +32,59 @@ func BuildGetOnboardingPayload(platformMcpGetOnboardingSessionToken string) (*pl
 
 // BuildStartOnboardingPayload builds the payload for the platformMcp
 // startOnboarding endpoint from CLI flags.
-func BuildStartOnboardingPayload(platformMcpStartOnboardingSessionToken string) (*platformmcp.StartOnboardingPayload, error) {
+func BuildStartOnboardingPayload(platformMcpStartOnboardingBody string, platformMcpStartOnboardingSessionToken string) (*platformmcp.StartOnboardingPayload, error) {
+	var err error
+	var body StartOnboardingRequestBody
+	{
+		err = json.Unmarshal([]byte(platformMcpStartOnboardingBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_surface\": \"organization_setup\"\n   }'")
+		}
+	}
 	var sessionToken *string
 	{
 		if platformMcpStartOnboardingSessionToken != "" {
 			sessionToken = &platformMcpStartOnboardingSessionToken
 		}
 	}
-	v := &platformmcp.StartOnboardingPayload{}
+	v := &platformmcp.StartOnboardingPayload{
+		SourceSurface: body.SourceSurface,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRecordDashboardCtaEventPayload builds the payload for the platformMcp
+// recordDashboardCtaEvent endpoint from CLI flags.
+func BuildRecordDashboardCtaEventPayload(platformMcpRecordDashboardCtaEventBody string, platformMcpRecordDashboardCtaEventSessionToken string) (*platformmcp.RecordDashboardCtaEventPayload, error) {
+	var err error
+	var body RecordDashboardCtaEventRequestBody
+	{
+		err = json.Unmarshal([]byte(platformMcpRecordDashboardCtaEventBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"selected\",\n      \"surface\": \"sources_empty\"\n   }'")
+		}
+		if !(body.Action == "impression" || body.Action == "selected" || body.Action == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", body.Action, []any{"impression", "selected", "dismissed"}))
+		}
+		if !(body.Surface == "sidebar_footer" || body.Surface == "sources_empty" || body.Surface == "project_overview_zero_data" || body.Surface == "organization_home") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.surface", body.Surface, []any{"sidebar_footer", "sources_empty", "project_overview_zero_data", "organization_home"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if platformMcpRecordDashboardCtaEventSessionToken != "" {
+			sessionToken = &platformMcpRecordDashboardCtaEventSessionToken
+		}
+	}
+	v := &platformmcp.RecordDashboardCtaEventPayload{
+		Action:  body.Action,
+		Surface: body.Surface,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

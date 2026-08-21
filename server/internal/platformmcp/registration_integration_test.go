@@ -23,6 +23,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -35,7 +36,7 @@ import (
 var platformMCPInfra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
@@ -47,6 +48,208 @@ func TestMain(m *testing.M) {
 		log.Fatalf("cleanup test infrastructure: %v", err)
 	}
 	os.Exit(code)
+}
+
+func TestPostgresOAuthStoreRefreshReplayRecordsTerminalTransitionOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_refresh_replay_terminal_metric")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP OAuth test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	telemetry := &testOAuthTelemetry{}
+	store := NewPostgresOAuthStore(conn).WithTelemetry(telemetry)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP OAuth test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	parent := platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: "jti-" + uuid.NewString(), RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(30 * 24 * time.Hour)}
+	require.NoError(t, store.CreateSession(ctx, parent))
+	replacement := parent
+	replacement.ID = uuid.NewString()
+	replacement.JTI = "jti-" + uuid.NewString()
+	replacement.RefreshHash = "refresh-" + uuid.NewString()
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Generation: connection.Generation, Now: now.Add(time.Minute), Replacement: replacement})
+	require.NoError(t, err)
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Now: now.Add(2 * time.Minute)})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{OrganizationID: organizationID, RefreshHash: parent.RefreshHash, ClientID: client.ID, Generation: connection.Generation, Now: now.Add(3 * time.Minute), Replacement: platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: "jti-" + uuid.NewString(), RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(30 * 24 * time.Hour)}})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+	require.Equal(t, []platformoauth.ReauthorizationReason{platformoauth.ReauthorizationReasonRefreshReuse}, telemetry.terminalTransitionReasons)
+}
+
+func TestPostgresOAuthStoreRefreshReplayAfterConnectionRevocationIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_refresh_replay_revoked_connection")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP OAuth test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP OAuth test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{
+		ID:                     uuid.NewString(),
+		ClientID:               client.ID,
+		Subject:                userSubjectURN("user_" + uuid.NewString()),
+		OrganizationID:         organizationID,
+		Generation:             uuid.NewString(),
+		AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime),
+	}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	parent := platformoauth.Session{
+		ID:               uuid.NewString(),
+		ClientID:         client.ID,
+		Connection:       connection,
+		JTI:              "jti-" + uuid.NewString(),
+		RefreshHash:      "refresh-" + uuid.NewString(),
+		ExpiresAt:        now.Add(time.Hour),
+		RefreshExpiresAt: now.Add(30 * 24 * time.Hour),
+	}
+	require.NoError(t, store.CreateSession(ctx, parent))
+	replacement := parent
+	replacement.ID = uuid.NewString()
+	replacement.JTI = "jti-" + uuid.NewString()
+	replacement.RefreshHash = "refresh-" + uuid.NewString()
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{
+		OrganizationID: organizationID,
+		RefreshHash:    parent.RefreshHash,
+		ClientID:       client.ID,
+		Generation:     connection.Generation,
+		Now:            now.Add(time.Minute),
+		Replacement:    replacement,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.RevokeConnection(ctx, organizationID, connection.ID, now.Add(2*time.Minute)))
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{
+		OrganizationID: organizationID,
+		RefreshHash:    parent.RefreshHash,
+		ClientID:       client.ID,
+		Now:            now.Add(3 * time.Minute),
+	})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{
+		OrganizationID: organizationID,
+		RefreshHash:    replacement.RefreshHash,
+		ClientID:       client.ID,
+		Now:            now.Add(3 * time.Minute),
+	})
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+}
+
+func TestPostgresOAuthStoreGenerationRotationRevokesGenerationCommittedWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_generation_rotation_lock")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP rotation test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP rotation test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+
+	connectionID := uuid.MustParse(connection.ID)
+	intermediateGeneration := uuid.New()
+	blockingTx := testenv.BeginTx(t, ctx, conn)
+	blockingQueries := platformrepo.New(blockingTx)
+	locked, err := blockingQueries.GetPlatformMCPConnectionForUpdate(ctx, platformrepo.GetPlatformMCPConnectionForUpdateParams{ID: connectionID, OrganizationID: organizationID})
+	require.NoError(t, err)
+	_, err = blockingQueries.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: connectionID, OrganizationID: organizationID, ActiveGeneration: intermediateGeneration, ReauthorizedAt: timestamp(now.Add(time.Minute)), AuthorizationExpiresAt: timestamp(now.Add(time.Minute).Add(platformoauth.AuthorizationLifetime))})
+	require.NoError(t, err)
+	intermediateRefreshHash := "refresh-" + uuid.NewString()
+	_, err = blockingQueries.CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{ID: uuid.New(), OrganizationID: organizationID, ConnectionID: connectionID, OauthClientID: locked.OauthClientID, ConnectionGeneration: intermediateGeneration, Jti: "jti-" + uuid.NewString(), RefreshTokenHash: intermediateRefreshHash, ExpiresAt: timestamp(now.Add(time.Hour)), RefreshExpiresAt: timestamp(now.Add(24 * time.Hour))})
+	require.NoError(t, err)
+
+	finalGeneration := uuid.New()
+	rotationResult := make(chan error, 1)
+	go func() {
+		_, rotateErr := store.RotateConnectionGeneration(ctx, organizationID, connection.ID, finalGeneration.String(), now.Add(2*time.Minute))
+		rotationResult <- rotateErr
+	}()
+	select {
+	case rotateErr := <-rotationResult:
+		require.FailNow(t, "generation rotation did not wait for the connection lock", "error: %v", rotateErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	require.NoError(t, blockingTx.Commit(ctx))
+	require.NoError(t, <-rotationResult)
+	intermediateSession, err := platformrepo.New(conn).GetPlatformMCPSessionForRefreshForUpdate(ctx, platformrepo.GetPlatformMCPSessionForRefreshForUpdateParams{OrganizationID: organizationID, RefreshTokenHash: intermediateRefreshHash})
+	require.NoError(t, err)
+	require.True(t, intermediateSession.RevokedAt.Valid, "the rotation must revoke the generation that was current after acquiring the lock")
+}
+
+func TestPostgresOAuthStoreTerminalConnectionCannotBeRotatedWithoutAuthorization(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_terminal_generation_rotation")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP terminal rotation test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP terminal rotation test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	require.NoError(t, store.MarkAuthorizationLost(ctx, organizationID, connection.ID, connection.Generation, now.Add(time.Minute)))
+
+	_, err = store.RotateConnectionGeneration(ctx, organizationID, connection.ID, uuid.NewString(), now.Add(2*time.Minute))
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+
+	row, err := platformrepo.New(conn).GetPlatformMCPConnectionForUpdate(ctx, platformrepo.GetPlatformMCPConnectionForUpdateParams{ID: uuid.MustParse(connection.ID), OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(connection.Generation), row.ActiveGeneration)
+	require.True(t, row.ReauthorizationRequiredAt.Valid)
+	require.Equal(t, string(platformoauth.ReauthorizationReasonAuthorizationLost), row.ReauthorizationReason.String)
 }
 
 func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
@@ -427,6 +630,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(expiredDashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an expired handoff")
@@ -442,12 +646,14 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(invalidatedDashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects an invalidated handoff")
 	dashboardStart, err := platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(dashboardHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.NoError(t, err)
@@ -506,15 +712,17 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	oldGeneration := connectionIDFromPrincipalGeneration(t, principal)
 	newGeneration := uuid.New()
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: newGeneration,
-		ReauthorizedAt:   timestamp(time.Now().UTC()),
-		ConnectionID:     connectionID,
-		OrganizationID:   principal.OrganizationID,
+		ActiveGeneration:       newGeneration,
+		ReauthorizedAt:         timestamp(time.Now().UTC()),
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
+		ConnectionID:           connectionID,
+		OrganizationID:         principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(rotatedGenerationHandoff.Value),
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "dashboard setup rejects a handoff after connection generation rotation")
@@ -523,8 +731,8 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            handoffBinding.ProjectID,
 		RegistrationID:       handoffBinding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: oldGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: oldGeneration, Valid: true},
 		ProviderKey:          handoffBinding.ProviderKey,
 		Intent:               handoffBinding.Intent,
 		SubjectUrn:           userSubjectURN(principal.UserID),
@@ -548,11 +756,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	secondConnectionID := uuid.New()
 	secondGeneration := uuid.New()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               secondConnectionID,
-		OrganizationID:   principal.OrganizationID,
-		SubjectUrn:       userSubjectURN(principal.UserID),
-		OauthClientID:    secondClient.ID,
-		ActiveGeneration: secondGeneration,
+		ID:                     secondConnectionID,
+		OrganizationID:         principal.OrganizationID,
+		SubjectUrn:             userSubjectURN(principal.UserID),
+		OauthClientID:          secondClient.ID,
+		ActiveGeneration:       secondGeneration,
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	secondPrincipal := principal
@@ -580,8 +789,8 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 		OrganizationID:       secondPrincipal.OrganizationID,
 		ProjectID:            handoffBinding.ProjectID,
 		RegistrationID:       handoffBinding.RegistrationID,
-		ConnectionID:         secondConnectionID,
-		ConnectionGeneration: secondGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: secondConnectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: secondGeneration, Valid: true},
 		ProviderKey:          handoffBinding.ProviderKey,
 		Intent:               handoffBinding.Intent,
 		SubjectUrn:           userSubjectURN(secondPrincipal.UserID),
@@ -600,11 +809,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	foreignGeneration := uuid.New()
 	foreignUserID := "user_" + uuid.NewString()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               foreignConnectionID,
-		OrganizationID:   principal.OrganizationID,
-		SubjectUrn:       userSubjectURN(foreignUserID),
-		OauthClientID:    foreignClient.ID,
-		ActiveGeneration: foreignGeneration,
+		ID:                     foreignConnectionID,
+		OrganizationID:         principal.OrganizationID,
+		SubjectUrn:             userSubjectURN(foreignUserID),
+		OauthClientID:          foreignClient.ID,
+		ActiveGeneration:       foreignGeneration,
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	foreignPrincipal := Principal{
@@ -752,12 +962,26 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	connectionID := uuid.New()
 	generation := uuid.New()
 	userID := "user_" + uuid.NewString()
+	now := time.Now().UTC()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               connectionID,
-		OrganizationID:   organizationID,
-		SubjectUrn:       userSubjectURN(userID),
-		OauthClientID:    oauthClient.ID,
-		ActiveGeneration: generation,
+		ID:                     connectionID,
+		OrganizationID:         organizationID,
+		SubjectUrn:             userSubjectURN(userID),
+		OauthClientID:          oauthClient.ID,
+		ActiveGeneration:       generation,
+		AuthorizationExpiresAt: timestamp(now.Add(90 * 24 * time.Hour)),
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID:                   uuid.New(),
+		OrganizationID:       organizationID,
+		ConnectionID:         connectionID,
+		OauthClientID:        oauthClient.ID,
+		ConnectionGeneration: generation,
+		Jti:                  "jti-" + uuid.NewString(),
+		RefreshTokenHash:     "refresh-" + uuid.NewString(),
+		ExpiresAt:            timestamp(now.Add(time.Hour)),
+		RefreshExpiresAt:     timestamp(now.Add(30 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 
@@ -812,6 +1036,99 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 // attributed to the real user and its acting surface, and must still replay
 // idempotently — the property that breaks first if a read path joins through
 // the connection it does not have.
+// The assistant issues a handoff with no connection and the dashboard, which
+// authenticates under its own session, redeems it. This is the whole point of
+// the connection-less surfaces: neither step can key on a connection.
+func TestSetupHandoffRoundTripsWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_handoff_no_connection")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-handoff", "assistant-handoff-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant-handoff")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	binding := SetupHandoffBinding{
+		ProjectID:        project.ID,
+		RegistrationID:   receipt.RegistrationID.UUID,
+		ProviderKey:      request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+		Intent:           "dashboard_source_settings",
+	}
+	issued, err := store.IssueSetupHandoff(ctx, assistant, binding, time.Now().UTC())
+	require.NoError(t, err, "a connection-less surface must be able to issue a handoff")
+
+	// The dashboard finds it by user, with no connection on the row to match.
+	start, err := platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
+		HandoffHash:    setupHandoffHash(issued.Value),
+		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGText(assistant.UserID),
+		SubjectUrn:     userSubjectURN(assistant.UserID),
+	})
+	require.NoError(t, err, "the dashboard must find a connection-less handoff")
+	require.False(t, start.ConnectionID.Valid)
+
+	dashboard := Principal{
+		UserID:         assistant.UserID,
+		OrganizationID: assistant.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "",
+		Surface:        SurfaceDashboard,
+	}
+	consumed, err := store.ConsumeSetupHandoff(ctx, dashboard, binding, issued.Value)
+	require.NoError(t, err, "the dashboard must be able to redeem a connection-less handoff")
+	require.Equal(t, issued.ID, consumed.ID)
+
+	_, err = store.ConsumeSetupHandoff(ctx, dashboard, binding, issued.Value)
+	require.Error(t, err, "a redeemed handoff must not be redeemable twice")
+}
+
+// A connection-less surface records catalogue evidence against its user, and
+// repeat searches must not append a row per search.
+func TestCatalogExploredEvidenceIsIdempotentWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_evidence_no_connection")
+	require.NoError(t, err)
+
+	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+
+	onboarding := &OnboardingService{db: conn}
+	require.NoError(t, onboarding.RecordCatalogExplored(ctx, assistant))
+	require.NoError(t, onboarding.RecordCatalogExplored(ctx, assistant), "a repeat search must stay idempotent")
+}
+
 func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	t.Parallel()
 

@@ -2,19 +2,37 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GramAdminError,
   bulkUpdateAccountType,
+  cancelStripeSubscription,
   disableOrganization,
   enableOrganization,
   errorMessage,
   extendTrial,
+  getInferenceKeys,
+  getPaygBillingSummary,
+  getStripeSubscription,
+  getProject,
   listOrganizations,
   logout,
+  organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_REARM_DAYS,
+  rearmTrial,
+  resumeStripeSubscription,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 
 describe("toSearchParams", () => {
+  describe("organizationDashboardUrl", () => {
+    it("targets the same-origin handoff endpoint with an encoded organization id", () => {
+      expect(organizationDashboardUrl("org/id & value")).toBe(
+        "/admin/organization.open-dashboard?organization_id=org%2Fid+%26+value",
+      );
+    });
+  });
+
   it("repeats the key for each item of an array", () => {
     const qs = toSearchParams({ type: ["free", "pro"], q: "", page: 2 });
     expect(qs.toString()).toBe("type=free&type=pro&page=2");
@@ -81,6 +99,113 @@ describe("listOrganizations", () => {
     await listOrganizations({ account_types: [], trial_states: [] });
 
     expect(fetch.mock.calls.at(-1)?.[0]).toBe("/admin/organizations.list");
+  });
+});
+
+// Every page that reads a project mocks this function, so the query string it
+// builds is asserted here or nowhere. The organization is what makes a slug
+// unambiguous, and a parameter that silently never leaves the browser looks
+// exactly like one that works.
+describe("getProject", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("sends the organization alongside the project", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default", "one");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default&organization_id_or_slug=one",
+    );
+  });
+
+  it("omits the organization where there is none to send", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default",
+    );
+  });
+});
+
+describe("organization billing endpoints", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("reads billing state from explicit admin organization endpoints", async () => {
+    const fetch = stubFetch();
+
+    await getInferenceKeys("org one");
+    await getPaygBillingSummary("org one");
+    await getStripeSubscription("org one");
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "/admin/organization.inferenceKeys?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.stripeSubscription?organization_id=org+one",
+    );
+  });
+
+  it("posts only the canonical organization id to lifecycle controls", async () => {
+    const fetch = stubFetch();
+
+    await cancelStripeSubscription("org_1");
+    await resumeStripeSubscription("org_1");
+
+    for (const [path, init] of fetch.mock.calls) {
+      expect(path).toMatch(
+        /^\/admin\/organization\.(cancel|resume)StripeSubscription$/,
+      );
+      expect(init).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ organization_id: "org_1" }),
+      });
+    }
+  });
+
+  it("reports a lifecycle 401 without redirecting to login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+    const before = window.location.href;
+
+    await expect(cancelStripeSubscription("org_1")).rejects.toThrow(
+      GramAdminError,
+    );
+
+    expect(window.location.href).toBe(before);
   });
 });
 
@@ -216,6 +341,32 @@ describe("the organization write endpoints", () => {
     });
   });
 
+  // MinTrialRearmDays and MaxTrialRearmDays in
+  // server/internal/constants/trials.go, which alias the extension bounds there
+  // today. Written out rather than compared to the extension constants: the two
+  // pairs are separate names so they can diverge, and an assertion that only
+  // said they matched would go on passing on the day one of them moves.
+  it("mirrors the server's re-arm bounds exactly", () => {
+    expect(MIN_TRIAL_REARM_DAYS).toBe(1);
+    expect(MAX_TRIAL_REARM_DAYS).toBe(365);
+  });
+
+  // A different path and a different action from extend: this one restores the
+  // account type and the whitelist flag and revives the model provider keys,
+  // and its days are the whole length of a fresh run rather than an addition.
+  it("posts the id and the day count to the re-arm path", async () => {
+    const fetch = stubFetch();
+
+    await expect(rearmTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
+
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.rearm",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id, days: 14 },
+    });
+  });
+
   it("posts the ids and one account type to the bulk path", async () => {
     const answer = {
       updated_ids: [ORG.id],
@@ -293,9 +444,8 @@ describe("logout", () => {
     expect(window.location.href).toContain("prompt=select_account");
   });
 
-  // The 401 handler retries with prompt=none, which the provider honours
-  // silently. Taking it here would sign the operator back in behind the Logout
-  // they just pressed.
+  // Taking the read-side 401 handler here would start a new login behind the
+  // Logout the operator just pressed.
   it("reports a 401 instead of signing the operator back in", async () => {
     vi.stubGlobal(
       "fetch",

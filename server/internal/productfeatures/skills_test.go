@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -27,17 +28,20 @@ func TestProductFeaturesService_SkillsAlwaysEnabled(t *testing.T) {
 	ctx, ti := newTestProductFeaturesService(t)
 	organizationID := activeOrganizationID(t, ctx)
 	seedOrganization(t, ctx, ti.conn, organizationID)
-	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
+	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx), SessionToken: nil})
 	require.NoError(t, err)
 	require.True(t, result.SkillsEnabled)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureSkills),
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
-	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
+	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx), SessionToken: nil})
 	require.NoError(t, err)
 	require.True(t, result.SkillsEnabled)
 }
@@ -59,8 +63,9 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 	upsertGrant(t, ctx, q, organizationID, member, authz.ScopeSkillBlockedRead, "project-excluded")
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureSkills),
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 
@@ -72,20 +77,23 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 	require.Equal(t, 1, grantsAfterEnable[grantKey(member, authz.ScopeSkillBlockedRead, "project-excluded")])
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureSkills),
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        true,
 	})
 	require.NoError(t, err)
 	require.Equal(t, grantsAfterEnable, organizationGrantKeys(t, ctx, q, organizationID))
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureSkills),
-		Enabled:     false,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        false,
 	})
 	require.NoError(t, err)
 	require.Equal(t, grantsAfterEnable, organizationGrantKeys(t, ctx, q, organizationID))
 
-	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
+	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx), SessionToken: nil})
 	require.NoError(t, err)
 	require.True(t, result.SkillsEnabled)
 }
@@ -204,4 +212,30 @@ func organizationGrantKeys(t *testing.T, ctx context.Context, q *accessrepo.Quer
 
 func grantKey(principal fmt.Stringer, scope authz.Scope, resourceID string) string {
 	return principal.String() + "|" + string(scope) + "|" + resourceID
+}
+
+func TestProductFeaturesService_EnableSkillsTargetsRequestedOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	activeOrganizationID := activeOrganizationID(t, ctx)
+	targetOrganizationID := uuid.NewString()
+	seedOrganization(t, ctx, ti.conn, targetOrganizationID)
+	seedRequestedOrganizationRole(t, ctx, ti, targetOrganizationID, authz.SystemRoleAdmin)
+
+	q := accessrepo.New(ti.conn)
+	admin := systemRolePrincipal(t, ctx, q, authz.SystemRoleAdmin)
+	deleteGrant(t, ctx, q, activeOrganizationID, admin, authz.ScopeSkillWrite, authz.WildcardResource)
+	deleteGrant(t, ctx, q, targetOrganizationID, admin, authz.ScopeSkillWrite, authz.WildcardResource)
+
+	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: targetOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        true,
+	}))
+
+	activeGrants := organizationGrantKeys(t, ctx, q, activeOrganizationID)
+	targetGrants := organizationGrantKeys(t, ctx, q, targetOrganizationID)
+	require.Zero(t, activeGrants[grantKey(admin, authz.ScopeSkillWrite, authz.WildcardResource)])
+	require.Equal(t, 1, targetGrants[grantKey(admin, authz.ScopeSkillWrite, authz.WildcardResource)])
 }

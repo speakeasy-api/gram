@@ -444,8 +444,6 @@ export default function SkillsList(): JSX.Element {
     setPage((current) => current + 1);
   };
 
-  const countLabel = `${totalCount} skill${totalCount === 1 ? "" : "s"}`;
-
   if (legacySkillId) {
     return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
   }
@@ -485,7 +483,6 @@ export default function SkillsList(): JSX.Element {
           resetPage();
         },
       }}
-      count={countLabel}
       onRefresh={() => {
         void Promise.all([
           effectiveMetricSort ? metricQuery.refetch() : pageQuery.refetch(),

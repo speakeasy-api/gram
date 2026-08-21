@@ -87,11 +87,9 @@ async function gramAdminRequest(
   const res = await fetch(url, { ...init, headers });
 
   if (res.status === 401 && redirectOnUnauthorized) {
-    // Top-level redirect into the OIDC flow. Use prompt=none so the identity
-    // provider returns silently when the operator already has a session with
-    // it. The gram admin backend falls back to interactive login if the
-    // provider returns error=login_required (see Callback in
-    // server/internal/admin/impl.go).
+    // Top-level redirect into the OIDC flow. Interactive consent ensures the
+    // provider returns a refresh token; without one the one-hour access token
+    // would send the operator through login again on every expiry.
     //
     // return_to must stay a relative path. sanitizeReturnTo in
     // server/internal/admin/oauth.go keeps an absolute URL only when its origin
@@ -103,7 +101,7 @@ async function gramAdminRequest(
       window.location.pathname + window.location.search,
     );
     redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
+    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
     // Setting window.location starts the navigation but does not stop the code
     // that follows it. Throw to unwind the in-flight call.
     throw new GramAdminError(401, null, "redirecting to admin login");
@@ -131,6 +129,16 @@ export async function gramAdminFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const res = await gramAdminRequest(path, init, true);
+  return (await res.json()) as T;
+}
+
+// A mutation reports its own failure rather than taking the 401 redirect,
+// which would sign the operator back in behind the action they just took.
+async function gramAdminMutation<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await gramAdminRequest(path, init, false);
   return (await res.json()) as T;
 }
 
@@ -166,13 +174,16 @@ export function getSession(): Promise<AdminSessionInfo> {
   return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
 }
 
+export function organizationDashboardUrl(organizationId: string): string {
+  const query = new URLSearchParams({ organization_id: organizationId });
+  return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
-// cookie in the browser. The next request would therefore 401, and the 401
-// handler retries with prompt=none, which the identity provider honours
-// silently and signs the operator straight back in. Asking for select_account
-// instead forces the account chooser, so logging out is visible.
+// cookie in the browser. Asking for select_account after deleting the session
+// makes logout visible and lets the operator choose a different account.
 export async function logout(): Promise<void> {
   await gramAdminSend("/admin/auth.logout", { method: "POST" });
   window.location.href = "/admin/auth.login?prompt=select_account";
@@ -283,8 +294,14 @@ export type AdminProjectDetail = {
   updated_at: string;
 };
 
-export function getProject(idOrSlug: string): Promise<AdminProjectDetail> {
-  const qs = toSearchParams({ id_or_slug: idOrSlug });
+export function getProject(
+  idOrSlug: string,
+  organizationIdOrSlug?: string,
+): Promise<AdminProjectDetail> {
+  const qs = toSearchParams({
+    id_or_slug: idOrSlug,
+    organization_id_or_slug: organizationIdOrSlug,
+  });
   return gramAdminFetch<AdminProjectDetail>(`/admin/project.get?${qs}`);
 }
 
@@ -388,6 +405,33 @@ export function extendTrial(
   });
 }
 
+// The server's own bounds for a re-arm, mirrored the way the extension bounds
+// above are. See MinTrialRearmDays and MaxTrialRearmDays in
+// server/internal/constants/trials.go: separate names from the extension pair
+// they alias today, so reading the extension bound here would follow the wrong
+// one on the day they diverge.
+export const MIN_TRIAL_REARM_DAYS = 1;
+export const MAX_TRIAL_REARM_DAYS = 365;
+
+export type RearmTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// Not an extension with a different verb. The days are the whole length of a
+// fresh run counted from now, and the write also restores the organization's
+// account type and whitelist flag and revives its model provider keys. Only a
+// demoted trial can be re-armed; anything else is refused with a conflict.
+export function rearmTrial(
+  body: RearmTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type CreateOrganizationRequest = {
   name: string;
 };
@@ -406,6 +450,10 @@ export type AdminProject = {
   id: string;
   name: string;
   slug: string;
+  // Both server models: every mcp_servers row, plus every mcp_enabled toolset
+  // no such row points at. Required on the wire, so 0 is an answer rather than
+  // an omission. AGE-3276.
+  mcp_server_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -442,5 +490,208 @@ export function listOrganizationMembers(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationMembersResult>(
     `/admin/organization.members?${qs}`,
+  );
+}
+
+export type AdminInferenceKey = {
+  key_type: string;
+  credits_used: number;
+  monthly_credits: number;
+  disabled: boolean;
+};
+
+export type AdminOrganizationFeatures = {
+  authz_challenge_logging_enabled: boolean;
+  customer_managed_encryption_keys_enabled: boolean;
+  custom_model_keys_enabled: boolean;
+  platform_mcp_enabled: boolean;
+  remote_session_auto_refresh_enabled: boolean;
+  session_portability_enabled: boolean;
+  sso_enabled: boolean;
+  scim_enabled: boolean;
+};
+
+export type AdminOrganizationFeatureName =
+  | "authz_challenge_logging"
+  | "customer_managed_encryption_keys"
+  | "custom_model_keys"
+  | "platform_mcp"
+  | "remote_session_auto_refresh"
+  | "session_portability"
+  | "sso"
+  | "scim";
+
+export function getOrganizationFeatures(
+  organizationID: string,
+): Promise<AdminOrganizationFeatures> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationFeatures>(
+    `/admin/organization.features?${qs}`,
+  );
+}
+
+export function setOrganizationFeature(input: {
+  organizationID: string;
+  featureName: AdminOrganizationFeatureName;
+  enabled: boolean;
+}): Promise<AdminOrganizationFeatures> {
+  return gramAdminMutation<AdminOrganizationFeatures>(
+    "/admin/organization.features",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        feature_name: input.featureName,
+        enabled: input.enabled,
+      }),
+    },
+  );
+}
+
+export type AdminChatAnalysisJudge = "work_units" | "business_memory";
+
+export type AdminOrganizationChatAnalysisSettings = {
+  organization_id: string;
+  work_units_enabled: boolean;
+  work_units_daily_cap: number;
+  business_memory_enabled: boolean;
+  business_memory_daily_cap: number;
+  is_default: boolean;
+};
+
+export function getOrganizationChatAnalysisSettings(
+  organizationID: string,
+): Promise<AdminOrganizationChatAnalysisSettings> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationChatAnalysisSettings>(
+    `/admin/organization.chatAnalysisSettings?${qs}`,
+  );
+}
+
+export type AdminChatAnalysisTriggerResult = {
+  projects_signaled: number;
+};
+
+export function triggerOrganizationChatAnalysis(
+  organizationID: string,
+): Promise<AdminChatAnalysisTriggerResult> {
+  return gramAdminMutation<AdminChatAnalysisTriggerResult>(
+    "/admin/organization.chatAnalysisTrigger",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export function setOrganizationChatAnalysisSetting(input: {
+  organizationID: string;
+  judge: AdminChatAnalysisJudge;
+  enabled: boolean;
+  dailyCap: number;
+}): Promise<AdminOrganizationChatAnalysisSettings> {
+  return gramAdminMutation<AdminOrganizationChatAnalysisSettings>(
+    "/admin/organization.chatAnalysisSettings",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        judge: input.judge,
+        enabled: input.enabled,
+        daily_cap: input.dailyCap,
+      }),
+    },
+  );
+}
+
+export function getInferenceKeys(
+  organizationID: string,
+): Promise<AdminInferenceKey[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceKey[]>(
+    `/admin/organization.inferenceKeys?${qs}`,
+  );
+}
+
+export type AdminPaygBillingSummary = {
+  period_start: string;
+  period_end: string;
+  tum_tokens: number;
+  tum_unit_price_usd: string;
+  tum_cost_usd: string;
+  other_inference_spend_usd: string;
+  recorded_through?: string;
+  estimated_total_usd: string;
+};
+
+export type AdminStripeSubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused";
+
+export type AdminStripeSubscription = {
+  status: AdminStripeSubscriptionStatus;
+  current_period_start: string;
+  current_period_end: string;
+  trial_start?: string;
+  trial_end?: string;
+  cancel_at_period_end: boolean;
+  cancel_at?: string;
+  canceled_at?: string;
+  payment_failed: boolean;
+};
+
+export function getPaygBillingSummary(
+  organizationID: string,
+): Promise<AdminPaygBillingSummary> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminPaygBillingSummary>(
+    `/admin/organization.paygBillingSummary?${qs}`,
+  );
+}
+
+export function getStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminStripeSubscription>(
+    `/admin/organization.stripeSubscription?${qs}`,
+  );
+}
+
+function updateStripeSubscription(
+  path: string,
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return gramAdminMutation<AdminStripeSubscription>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationID }),
+  });
+}
+
+export function cancelStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return updateStripeSubscription(
+    "/admin/organization.cancelStripeSubscription",
+    organizationID,
+  );
+}
+
+export function resumeStripeSubscription(
+  organizationID: string,
+): Promise<AdminStripeSubscription> {
+  return updateStripeSubscription(
+    "/admin/organization.resumeStripeSubscription",
+    organizationID,
   );
 }

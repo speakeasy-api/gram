@@ -16,9 +16,7 @@ import {
 import { useAdminOpenRouterKeyUsage } from "@gram/client/react-query/adminOpenRouterKeyUsage.js";
 import { useDisableAdminOpenRouterKeyMutation } from "@gram/client/react-query/disableAdminOpenRouterKey.js";
 import { useEnableAdminOpenRouterKeyMutation } from "@gram/client/react-query/enableAdminOpenRouterKey.js";
-import { useEncryptAdminOpenRouterKeyMutation } from "@gram/client/react-query/encryptAdminOpenRouterKey.js";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ComponentProps } from "react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -40,7 +38,7 @@ export default function PlatformAdminOpenRouterKeys(): JSX.Element {
           </Page.Section.Title>
           <Page.Section.Description>
             Platform-issued OpenRouter keys across every organization: credit
-            limits, live usage, and at-rest encryption state.
+            limits and live usage.
           </Page.Section.Description>
           <Page.Section.Body>
             <StrictPlatformAdminGate>
@@ -74,48 +72,6 @@ function StrictPlatformAdminGate({
   }
 
   return <>{children}</>;
-}
-
-const ENCRYPTION_BADGE: Record<
-  AdminOpenRouterKey["encryptionStatus"],
-  {
-    variant: ComponentProps<typeof Badge>["variant"];
-    label: string;
-    tooltip: string;
-  }
-> = {
-  plaintext: {
-    variant: "destructive",
-    label: "Plaintext",
-    tooltip:
-      "The key is stored unencrypted. Use Encrypt key to write the encrypted copy and clear the plaintext column.",
-  },
-  encrypted_with_plaintext: {
-    variant: "warning",
-    label: "Encrypted + plaintext",
-    tooltip:
-      "An encrypted copy exists but the plaintext column is still populated. Use Encrypt key to verify and clear it.",
-  },
-  encrypted: {
-    variant: "success",
-    label: "Encrypted",
-    tooltip: "The key is stored encrypted at rest with no plaintext copy.",
-  },
-};
-
-function EncryptionBadge({
-  status,
-}: {
-  status: AdminOpenRouterKey["encryptionStatus"];
-}): JSX.Element {
-  const badge = ENCRYPTION_BADGE[status];
-  return (
-    <SimpleTooltip tooltip={badge.tooltip}>
-      <Badge variant={badge.variant} background className="shrink-0">
-        <Badge.Text>{badge.label}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
 }
 
 // Usage is fetched live per visible row rather than stored: nothing in the
@@ -176,19 +132,6 @@ function KeysTable(): JSX.Element {
     void invalidateAllAdminOpenRouterKeys(queryClient);
   };
 
-  const encrypt = useEncryptAdminOpenRouterKeyMutation({
-    onSuccess: (key) => {
-      toast.success(
-        `Encrypted the ${key.keyType} key for ${key.organizationName}.`,
-      );
-      invalidate();
-    },
-    onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to encrypt the key",
-      );
-    },
-  });
   const disable = useDisableAdminOpenRouterKeyMutation({
     onSuccess: (key) => {
       toast.success(
@@ -240,21 +183,7 @@ function KeysTable(): JSX.Element {
   const rowActions = (row: AdminOpenRouterKey): Action[] => {
     const keyType = row.keyType === "internal" ? "internal" : "chat";
     const body = { organizationId: row.organizationId, keyType } as const;
-    const actions: Action[] = [
-      {
-        icon: "lock",
-        label: "Encrypt key",
-        disabled:
-          row.encryptionStatus === "encrypted" ||
-          encrypt.isPending ||
-          disable.isPending ||
-          enable.isPending,
-        onClick: () =>
-          encrypt.mutate({
-            request: { encryptOpenRouterKeyRequestBody: body },
-          }),
-      },
-    ];
+    const actions: Action[] = [];
     if (row.disabled) {
       actions.push({
         icon: "play",
@@ -322,12 +251,6 @@ function KeysTable(): JSX.Element {
       header: "Usage",
       width: "160px",
       render: (row) => <UsageCell row={row} />,
-    },
-    {
-      key: "encryption",
-      header: "Encryption",
-      width: "180px",
-      render: (row) => <EncryptionBadge status={row.encryptionStatus} />,
     },
     {
       key: "status",

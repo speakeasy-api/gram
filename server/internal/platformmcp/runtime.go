@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 const (
@@ -34,7 +35,7 @@ type ActingSurface string
 
 const (
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint.
-	SurfacePlatformMCP ActingSurface = "platform_mcp"
+	SurfacePlatformMCP ActingSurface = contextvalues.ActingSurfacePlatformMCP
 	// SurfaceProjectAssistant is the project assistant runtime, which acts
 	// under assistant identity and holds no OAuth connection.
 	SurfaceProjectAssistant ActingSurface = "project_assistant"
@@ -109,6 +110,7 @@ type Runtime struct {
 	authorizer           Authorizer
 	protectedResourceURL string
 	readiness            ReadinessRecorder
+	telemetry            OAuthTelemetry
 	server               *mcp.Server
 }
 
@@ -117,21 +119,25 @@ func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, aut
 }
 
 func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService) *Runtime {
-	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, CatalogDescriptor{})
+	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, nil, CatalogDescriptor{})
 }
 
 // NewRuntimeWithLifecycle wires the Platform MCP onboarding lifecycle. Catalogue
 // selection remains server-validated: callers receive only search/inspect
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
-func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *Runtime {
-	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate)
+func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) *Runtime {
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
+	}
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, candidate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
 		readiness:            readiness,
+		telemetry:            noopOAuthTelemetry{},
 		server:               server,
 		registrar:            registrar,
 	}
@@ -155,6 +161,19 @@ func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, g
 	return runtime
 }
 
+func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
+	if telemetry != nil {
+		r.telemetry = telemetry
+	}
+	return r
+}
+
+func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string) {
+	if r.telemetry != nil {
+		r.telemetry.Record(ctx, OAuthEvent{Operation: "runtime_auth", Outcome: outcome, Reason: reason})
+	}
+}
+
 func (r *Runtime) Handler() http.Handler {
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
@@ -173,6 +192,12 @@ func (r *Runtime) Handler() http.Handler {
 
 		principal, err := r.authenticate(req)
 		if err != nil {
+			if errors.Is(err, ErrUnavailable) {
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
 				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
 			}
@@ -181,18 +206,27 @@ func (r *Runtime) Handler() http.Handler {
 		}
 		enabled, err := r.gate.Enabled(req.Context(), principal.OrganizationID)
 		if err != nil {
+			r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if !enabled {
+			r.recordAuthOutcome(req.Context(), "access_denied", "platform_disabled")
 			http.Error(w, "unavailable", http.StatusForbidden)
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			if isAuthorizationDenied(err) {
+				r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
+				http.Error(w, "forbidden", http.StatusForbidden)
+			} else {
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			}
 			return
 		}
 
+		r.recordAuthOutcome(req.Context(), "succeeded", "")
 		req = req.WithContext(contextWithPrincipal(req.Context(), principal))
 		req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
 		w.Header().Set("Cache-Control", "no-store")
@@ -231,7 +265,31 @@ func ContextWithPrincipal(ctx context.Context, principal Principal) context.Cont
 	return contextWithPrincipal(ctx, principal)
 }
 
+// contextWithPrincipal binds the acting identity, and with it the attribution
+// audit records for any write the call goes on to make.
+//
+// Platform MCP authenticates its own way, so nothing else on the context tells
+// audit which surface is acting; without this mark a registration made by an
+// agent would be recorded exactly like one made from the dashboard. Marking
+// here rather than at each call site means every path that establishes a
+// principal — the HTTP endpoint and the assistant adapter alike — is attributed
+// by construction.
 func contextWithPrincipal(ctx context.Context, principal Principal) context.Context {
+	ctx = contextvalues.SetActingSurface(ctx, string(principal.surface()))
+	// Only a principal holding an OAuth connection has a registered client to
+	// name. Other surfaces carry an internal client identifier that is not an
+	// OAuth client record, and recording it would misrepresent where the
+	// identity came from; the surface already says who acted.
+	//
+	// The connection-less path clears the value rather than leaving it alone.
+	// This context may descend from a request that authenticated as some other
+	// OAuth client — the assistant adapter runs inside one — and inheriting it
+	// would attribute the write to a client that had no part in it.
+	if principal.HasConnection() {
+		ctx = contextvalues.SetOAuthClientID(ctx, principal.ClientID)
+	} else {
+		ctx = contextvalues.SetOAuthClientID(ctx, "")
+	}
 	return context.WithValue(ctx, principalContextKey{}, principal)
 }
 

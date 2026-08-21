@@ -28,3 +28,17 @@ export function fmtDateShort(iso?: string): string {
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString(undefined, { timeZone: "UTC" });
 }
+
+// Oldest first, which is the order the record's views draw: the project a
+// customer started with and the member who opened the account explain the
+// account, so they lead. The id breaks a tie, because two rows created in the
+// same second would otherwise swap places between renders.
+export function byOldestFirst<T extends { id: string; created_at: string }>(
+  a: T,
+  b: T,
+): number {
+  const at = Date.parse(a.created_at);
+  const bt = Date.parse(b.created_at);
+  if (at !== bt && !Number.isNaN(at) && !Number.isNaN(bt)) return at - bt;
+  return a.id.localeCompare(b.id);
+}

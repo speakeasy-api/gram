@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -225,7 +226,7 @@ func newRefreshTokenReplayTestFixture(
 
 	service := new(Service)
 	service.enc = enc
-	service.metrics = &metrics{}
+	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,

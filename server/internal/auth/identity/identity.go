@@ -59,9 +59,10 @@ type AuthorizationURLParams struct {
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken    string
-	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
-	User           AuthenticatedUser
+	AccessToken       string
+	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
+	User              AuthenticatedUser
+	impersonatorEmail string
 }
 
 type MagicAuthChallenge struct {
@@ -81,7 +82,9 @@ type AuthenticatedUser struct {
 }
 
 // WorkOSClient is the subset of workos.Client needed for identity resolution:
-// org membership sync, cross-system ID synchronization, and org provisioning.
+// org membership sync, cross-system ID synchronization, org provisioning, and
+// the signup-time email lookup that keeps existing AuthKit users off the
+// hosted sign-up screen.
 type WorkOSClient interface {
 	ListUserMemberships(ctx context.Context, userID string) ([]workos.Member, error)
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
@@ -92,17 +95,28 @@ type WorkOSClient interface {
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
+	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub             string  `json:"sub"`
-	Email           string  `json:"email"`
-	Name            string  `json:"name"`
-	Picture         *string `json:"picture,omitempty"`
-	ExternalID      string  `json:"-"`
-	WorkOSSessionID string  `json:"-"`
-	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	Sub               string  `json:"sub"`
+	Email             string  `json:"email"`
+	Name              string  `json:"name"`
+	Picture           *string `json:"picture,omitempty"`
+	ExternalID        string  `json:"-"`
+	WorkOSSessionID   string  `json:"-"`
+	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
+	impersonatorEmail string
+}
+
+// ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
+// impersonation session. It is empty for ordinary authentication.
+func (u *IDPUserInfo) ImpersonatorEmail() string {
+	if u == nil {
+		return ""
+	}
+	return u.impersonatorEmail
 }
 
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
@@ -214,13 +228,14 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:             resp.User.ID,
-		Email:           resp.User.Email,
-		Name:            name,
-		Picture:         picture,
-		ExternalID:      resp.User.ExternalID,
-		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:  resp.OrganizationID,
+		Sub:               resp.User.ID,
+		Email:             resp.User.Email,
+		Name:              name,
+		Picture:           picture,
+		ExternalID:        resp.User.ExternalID,
+		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:    resp.OrganizationID,
+		impersonatorEmail: resp.impersonatorEmail,
 	}
 }
 
@@ -577,6 +592,22 @@ func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) e
 
 const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
 
+// HasWorkOSUser reports whether WorkOS already has an account for email.
+// An unset client is treated as "no such user" so local and test environments
+// keep the current signup flow. Callers must fail open on error: a temporary
+// WorkOS problem must not block new signups.
+func (r *Resolver) HasWorkOSUser(ctx context.Context, email string) (bool, error) {
+	if r.workosClient == nil || email == "" {
+		return false, nil
+	}
+
+	user, err := r.workosClient.GetUserByEmail(ctx, email)
+	if err != nil {
+		return false, fmt.Errorf("lookup workos user by email: %w", err)
+	}
+	return user != nil, nil
+}
+
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
 func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
@@ -587,8 +618,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
-	// Both hints are AuthKit features and both are sign-up only, so an
-	// ordinary login produces the same URL it always has.
+	// Both hints are AuthKit features. Ordinary login leaves them empty so
+	// the authorization URL stays unchanged. Signup may set login_hint for
+	// either screen, and screen_hint only when the address is new.
 	if params.LoginHint != "" {
 		q.Set("login_hint", params.LoginHint)
 	}

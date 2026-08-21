@@ -26,6 +26,28 @@ type AuthContext struct {
 	ProjectSlug           *string
 	APIKeyScopes          []string
 	IsAdmin               bool
+	// SupportOrganizationID is set only after session authentication validates
+	// a time-bounded platform-admin support session for this organization.
+	SupportOrganizationID   string
+	supportSessionValidated bool
+}
+
+// WithValidatedSupportSession records the support decision made during session
+// authentication. Keeping this immutable for the request ensures grants and
+// support safeguards cannot disagree when the session expires mid-request.
+func WithValidatedSupportSession(ctx context.Context, authCtx *AuthContext) context.Context {
+	validated := *authCtx
+	validated.supportSessionValidated = true
+	return SetAuthContext(ctx, &validated)
+}
+
+// IsSupportSession is the single trusted predicate for support-only behavior.
+// Request headers and legacy cookies never satisfy it directly.
+func IsSupportSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.supportSessionValidated && authCtx.IsAdmin &&
+		authCtx.SupportOrganizationID != "" &&
+		authCtx.SupportOrganizationID == authCtx.ActiveOrganizationID
 }
 
 type RequestContext struct {
@@ -57,7 +79,6 @@ type RPCContext struct {
 const (
 	SessionTokenContextKey      contextKey = "sessionTokenKey"
 	SessionValueContextKey      contextKey = "sessionValueKey"
-	AdminOverrideContextKey     contextKey = "adminOverrideKey"
 	RequestContextKey           contextKey = "requestContextKey"
 	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
@@ -66,6 +87,7 @@ const (
 	RPCContextKey               contextKey = "rpcContextKey"
 	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
 	oauthClientIDContextKey     contextKey = "oauthClientIDKey"
+	actingSurfaceContextKey     contextKey = "actingSurfaceKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -74,15 +96,6 @@ func SetSessionTokenInContext(ctx context.Context, value string) context.Context
 
 func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(SessionTokenContextKey).(string)
-	return value, ok
-}
-
-func SetAdminOverrideInContext(ctx context.Context, value string) context.Context {
-	return context.WithValue(ctx, AdminOverrideContextKey, value)
-}
-
-func GetAdminOverrideFromContext(ctx context.Context) (string, bool) {
-	value, ok := ctx.Value(AdminOverrideContextKey).(string)
 	return value, ok
 }
 
@@ -158,6 +171,36 @@ func SetOAuthClientID(ctx context.Context, value string) context.Context {
 // `client_id` claim existed.
 func GetOAuthClientID(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(oauthClientIDContextKey).(string)
+	return value, ok && value != ""
+}
+
+// SetActingSurface marks the surface a request arrives through, for surfaces
+// that cannot be told apart from the auth context alone.
+//
+// Audit derives most surfaces from signals it can already see — a session, an
+// API key, an assistant principal. A surface that authenticates its own way,
+// such as Platform MCP, has no such signal and says so explicitly here.
+//
+// The value is a plain string so that packages carrying a surface do not have
+// to depend on the audit package. Audit accepts only the values on its own
+// allowlist, so an unrecognized one records an unknown surface rather than
+// widening what the column can hold.
+// ActingSurfacePlatformMCP marks a call arriving through the OAuth-authenticated
+// Platform MCP endpoint. It is named here rather than only in that package
+// because authorization has to recognize the surface: a Platform MCP call
+// carries a real user but no browser session, and the session is what tells
+// RBAC to enforce for every other human-driven surface.
+const ActingSurfacePlatformMCP = "platform_mcp"
+
+func SetActingSurface(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, actingSurfaceContextKey, value)
+}
+
+// GetActingSurface returns the explicitly marked acting surface. The second
+// result is false when nothing marked one, which is the ordinary case for
+// requests whose surface audit can derive on its own.
+func GetActingSurface(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(actingSurfaceContextKey).(string)
 	return value, ok && value != ""
 }
 

@@ -137,3 +137,47 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
 }
+
+// A handoff issued by a connection-less surface reaches setup without a
+// connection pair. The request is still identified by its user, so setup must
+// proceed rather than be rejected as an invalid handoff.
+func TestPreflightSetupAcceptsAConnectionlessRequest(t *testing.T) {
+	t.Parallel()
+
+	configured := false
+	configurator := configuratorFunc(func(_ context.Context, _ platformmcp.ProviderSetupRequest, _ Descriptor) error {
+		configured = true
+		return errors.New("configure fixture client")
+	})
+	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      uuid.New(),
+		StreamableHTTPURL:          "https://provider.test/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+	}, configurator)
+	err := adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
+		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp",
+	})
+
+	require.ErrorContains(t, err, "configure fixture client", "a connection-less request must reach the configurator")
+	require.True(t, configured)
+}
+
+// A half-populated pair is an incomplete identity, not a connection-less
+// caller, and must not be admitted by the relaxed check.
+func TestPreflightSetupRejectsAHalfPopulatedConnection(t *testing.T) {
+	t.Parallel()
+
+	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      uuid.New(),
+		StreamableHTTPURL:          "https://provider.test/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+	}, nil)
+	for _, request := range []platformmcp.ProviderSetupRequest{
+		{UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp", ConnectionID: uuid.New()},
+		{UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp", Generation: uuid.New()},
+	} {
+		require.ErrorIs(t, adapter.PreflightSetup(t.Context(), request), platformmcp.ErrSetupHandoffInvalid)
+	}
+}

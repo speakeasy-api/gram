@@ -11,6 +11,7 @@ const snapshot = {
   grantTypesSupported: ["authorization_code"],
   responseTypesSupported: ["code"],
   tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+  codeChallengeMethodsSupported: ["S256"],
   clientIdMetadataDocumentSupported: true,
   revocationEndpoint: "https://idp.example.com/revoke",
   serviceDocumentation: "https://docs.example.com",
@@ -21,6 +22,7 @@ const snapshot = {
 const baseState = {
   id: "issuer-1",
   name: "  Example IdP  ",
+  logoAssetId: "  11111111-2222-3333-4444-555555555555  ",
   slug: "  example-idp  ",
   clientSetupDocumentationUrl: "  https://docs.example.com/oauth  ",
   issuerUrl: "  https://idp.example.com  ",
@@ -36,6 +38,7 @@ describe("buildUpdateIssuerForm", () => {
     const form = buildUpdateIssuerForm(baseState);
 
     expect(form.name).toBe("Example IdP");
+    expect(form.logoAssetId).toBe("11111111-2222-3333-4444-555555555555");
     expect(form.slug).toBe("example-idp");
     expect(form.issuer).toBe("https://idp.example.com");
     expect(form.authorizationEndpoint).toBe(
@@ -53,10 +56,13 @@ describe("buildUpdateIssuerForm", () => {
       ...baseState,
       clientSetupDocumentationUrl: "",
       registrationEndpoint: "",
+      logoAssetId: "",
     });
 
     expect(form).toHaveProperty("clientSetupDocumentationUrl", "");
     expect(form).toHaveProperty("registrationEndpoint", "");
+    // "" is the explicit "clear the saved logo to NULL" sentinel.
+    expect(form).toHaveProperty("logoAssetId", "");
   });
 
   // Without a discovery for the current URL the server must keep the metadata
@@ -68,6 +74,7 @@ describe("buildUpdateIssuerForm", () => {
     expect(form.grantTypesSupported).toBeUndefined();
     expect(form.responseTypesSupported).toBeUndefined();
     expect(form.tokenEndpointAuthMethodsSupported).toBeUndefined();
+    expect(form.codeChallengeMethodsSupported).toBeUndefined();
     expect(form.clientIdMetadataDocumentSupported).toBeUndefined();
     expect(form.revocationEndpoint).toBeUndefined();
     expect(form.serviceDocumentation).toBeUndefined();
@@ -82,9 +89,34 @@ describe("buildUpdateIssuerForm", () => {
     });
 
     expect(form.scopesSupported).toEqual(["openid", "profile"]);
+    expect(form.codeChallengeMethodsSupported).toEqual(["S256"]);
     expect(form.clientIdMetadataDocumentSupported).toBe(true);
     expect(form.revocationEndpoint).toBe("https://idp.example.com/revoke");
     expect(form.serviceDocumentation).toBe("https://docs.example.com");
+  });
+
+  // A snapshot seeded from a record whose PKCE methods were never captured
+  // holds null there, and the update must omit the field (keep NULL) rather
+  // than send [], which would record "the issuer advertises no methods".
+  it("omits never-captured PKCE methods from a seeded snapshot", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      discoveredSnapshot: { ...snapshot, codeChallengeMethodsSupported: null },
+    });
+
+    expect(form.scopesSupported).toEqual(["openid", "profile"]);
+    expect(form.codeChallengeMethodsSupported).toBeUndefined();
+  });
+
+  // An empty array is a real captured value ("the issuer advertises no
+  // methods") and must be forwarded, not collapsed into the omitted case.
+  it("forwards captured-empty PKCE methods", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      discoveredSnapshot: { ...snapshot, codeChallengeMethodsSupported: [] },
+    });
+
+    expect(form.codeChallengeMethodsSupported).toEqual([]);
   });
 
   // The operator repointed the provider after discovering the old URL. Sending

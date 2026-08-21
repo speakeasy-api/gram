@@ -88,6 +88,40 @@ if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Reset auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL to the shared defaults."
 fi
 
+# The LGTM observability stack moved to the shared stack for the same reason,
+# and needs the same treatment: a pre-existing worktree still carries the
+# auto-generated remaps for Grafana/Tempo/Loki/Prometheus and the OTLP
+# receivers, which now point at ports nothing is listening on. Same proof as
+# above — `zero:remap-ports` is the only thing that writes the
+# `{{env.OTLP_GRPC_PORT}}` template into OTEL_EXPORTER_OTLP_ENDPOINT, and it
+# emitted the whole group in one pass, so the marker attests the group is
+# generated and the group is reset together.
+if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.OTLP_GRPC_PORT}}'; then
+  for key in OTEL_EXPORTER_OTLP_ENDPOINT OTLP_GRPC_PORT OTLP_HTTP_PORT \
+             GRAFANA_PORT TEMPO_HTTP_PORT LOKI_HTTP_PORT PROMETHEUS_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated LGTM ports to the shared defaults."
+fi
+
+# With one LGTM serving every worktree, a worktree that does not tag its
+# telemetry is indistinguishable from every other worktree on the same commit.
+# `git:workinit` writes this for new worktrees; add it here for the ones created
+# before the stack was shared. Only ever filled in when absent, so a
+# hand-customised value survives.
+if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
+  worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
+    | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+  if [ -n "$worktree_project" ]; then
+    mise set --file mise.local.toml \
+      "OTEL_RESOURCE_ATTRIBUTES=worktree=${worktree_project}"
+    echo "✅ Tagged this worktree's telemetry as worktree=${worktree_project}."
+  fi
+fi
+
 if [ "${usage_no_migrate:-false}" = "true" ]; then
   echo
   echo "ℹ️  Skipping database migrations (--no-migrate)."

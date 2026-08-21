@@ -1,5 +1,10 @@
 // The list the admin API accepts.
-export const ACCOUNT_TYPE_OPTIONS = ["free", "pro", "enterprise"] as const;
+export const ACCOUNT_TYPE_OPTIONS = [
+  "free",
+  "pro",
+  "payg",
+  "enterprise",
+] as const;
 
 export type AccountType = (typeof ACCOUNT_TYPE_OPTIONS)[number];
 

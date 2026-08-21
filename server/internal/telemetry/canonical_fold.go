@@ -10,6 +10,7 @@ package telemetry
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,6 +124,118 @@ func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, 
 			attr.SlogIdentityFoldCostDelta(foldedCost-literalCost),
 		)
 	}()
+}
+
+// shadowCompareSearchUsersFold re-runs the employee list query with folding
+// enabled and logs how the folded list diverges from the literal one already
+// served: row counts, keys that exist only folded (canonical emails replacing
+// literal variants), whether the shared keys changed relative order, and the
+// input+output token delta — folding merges rows, so on an untruncated page
+// the token sum must be preserved and the folded list can only shrink. Emails
+// are deliberately not logged; counts carry the signal. Runs in the
+// background off a detached context so it never delays or fails the caller's
+// request.
+func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string, params repo.SearchUsersParams, literal []repo.UserSummary) {
+	select {
+	case s.shadowFoldSem <- struct{}{}:
+	default:
+		s.logger.InfoContext(ctx, "identity fold shadow comparison skipped: concurrency cap reached", attr.SlogOrganizationID(orgID))
+		return
+	}
+
+	bgCtx := context.WithoutCancel(ctx)
+	go func() {
+		defer func() { <-s.shadowFoldSem }()
+		bgCtx, cancel := context.WithTimeout(bgCtx, shadowCompareTimeout)
+		defer cancel()
+
+		params.CanonicalIdentityOrg = orgID
+		folded, err := s.chRepo.SearchUsers(bgCtx, params)
+		if err != nil {
+			s.logger.WarnContext(bgCtx, "identity fold shadow employee list query failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+			return
+		}
+
+		literalKeys := make(map[string]struct{}, len(literal))
+		var literalTokens, foldedTokens int64
+		for _, u := range literal {
+			literalKeys[u.UserID] = struct{}{}
+			literalTokens += u.TotalInputTokens + u.TotalOutputTokens
+		}
+		newKeys := 0
+		for _, u := range folded {
+			foldedTokens += u.TotalInputTokens + u.TotalOutputTokens
+			if _, ok := literalKeys[u.UserID]; !ok {
+				newKeys++
+			}
+		}
+
+		// Ordering divergence is measured over the shared keys the fold did
+		// NOT touch — same last-seen and same token sums in both lists. A
+		// merged identity legitimately moves (its folded last-seen is the max
+		// across its emails), so including merge targets would make this
+		// signal permanently true for any org with real folds; untouched
+		// groups have identical sort keys in both queries, and any reorder
+		// among them is a genuine ordering bug, which is the divergence the
+		// spec needs surfaced alongside membership and counts.
+		type sortIdentity struct {
+			lastSeen int64
+			tokens   int64
+		}
+		literalSort := make(map[string]sortIdentity, len(literal))
+		for _, u := range literal {
+			literalSort[u.UserID] = sortIdentity{lastSeen: u.LastSeenUnixNano, tokens: u.TotalInputTokens + u.TotalOutputTokens}
+		}
+		untouched := make(map[string]struct{}, len(folded))
+		for _, u := range folded {
+			if lit, ok := literalSort[u.UserID]; ok && lit == (sortIdentity{lastSeen: u.LastSeenUnixNano, tokens: u.TotalInputTokens + u.TotalOutputTokens}) {
+				untouched[u.UserID] = struct{}{}
+			}
+		}
+		var untouchedLiteral, untouchedFolded []string
+		for _, u := range literal {
+			if _, ok := untouched[u.UserID]; ok {
+				untouchedLiteral = append(untouchedLiteral, u.UserID)
+			}
+		}
+		for _, u := range folded {
+			if _, ok := untouched[u.UserID]; ok {
+				untouchedFolded = append(untouchedFolded, u.UserID)
+			}
+		}
+		orderChanged := !slices.Equal(untouchedLiteral, untouchedFolded)
+
+		s.logger.InfoContext(bgCtx, "identity fold shadow employee list comparison",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogIdentityFoldLiteralGroups(len(literal)),
+			attr.SlogIdentityFoldCanonicalGroups(len(folded)),
+			attr.SlogIdentityFoldNewKeys(newKeys),
+			attr.SlogIdentityFoldOrderChanged(orderChanged),
+			attr.SlogIdentityFoldTokenDelta(foldedTokens-literalTokens),
+			// On a truncated page both lists are capped at limit+1 and the
+			// deltas are page-cap artifacts, not divergence — folding frees
+			// slots and pulls in groups past the literal horizon. Readers
+			// deciding a rollout must weigh only truncated=false lines.
+			attr.SlogIdentityFoldTruncated(len(literal) >= params.Limit),
+		)
+	}()
+}
+
+// CanonicalOrgFor exposes the fold gate to services outside this package that
+// run their own identity-folded queries, so the rollout flag stays a single
+// switch rather than one per caller.
+func (s *Service) CanonicalOrgFor(ctx context.Context, orgID string) string {
+	return s.canonicalOrgFor(ctx, orgID)
+}
+
+// canonicalOrgFor resolves the fold flag to the org id the repo params carry:
+// the org id when folding is enabled, "" when the org serves literal
+// identities. The single choke point for fold gating on org-scoped reads.
+func (s *Service) canonicalOrgFor(ctx context.Context, orgID string) string {
+	if fold, _ := s.canonicalIdentityMode(ctx, orgID); fold {
+		return orgID
+	}
+	return ""
 }
 
 // resolveUserScope resolves an employee identifier into either a canonical

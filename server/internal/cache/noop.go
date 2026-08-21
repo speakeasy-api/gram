@@ -52,8 +52,8 @@ func (s *noopCache) AcquireLease(ctx context.Context, key, owner string, ttl tim
 	return true, nil
 }
 
-// ReleaseLease implements [LeaseCache].
-func (s *noopCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+// ReleaseLeaseIfOwner implements [LeaseCache].
+func (s *noopCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return true, nil
 }
 

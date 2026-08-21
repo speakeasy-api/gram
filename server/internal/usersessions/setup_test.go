@@ -75,7 +75,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // without an unreachable Redis, which would cost ~1.7s per seeded session
 // (1s DialTimeout plus go-redis retries). Pass nil for the real
 // chatsessions.Manager over the test Redis.
-func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) (context.Context, *testInstance) {
+//
+// guardianOpts extend the guardian policy the CIMD resolver fetches through —
+// e.g. guardian.WithTLSRootCAs so refresh tests can trust an httptest TLS
+// document server.
+func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -95,7 +99,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager

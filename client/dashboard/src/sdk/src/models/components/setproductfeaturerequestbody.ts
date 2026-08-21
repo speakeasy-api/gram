@@ -26,6 +26,8 @@ export const FeatureName = {
   CustomerManagedEncryptionKeys: "customer_managed_encryption_keys",
   RemoteSessionAutoRefresh: "remote_session_auto_refresh",
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
+  ConsentToolFiltering: "consent_tool_filtering",
+  SessionPortability: "session_portability",
 } as const;
 /**
  * Name of the feature to update
@@ -41,6 +43,10 @@ export type SetProductFeatureRequestBody = {
    * Name of the feature to update
    */
   featureName: FeatureName;
+  /**
+   * Organization whose product feature to update.
+   */
+  organizationId: string;
 };
 
 /** @internal */
@@ -51,6 +57,7 @@ export const FeatureName$outboundSchema: z.ZodMiniEnum<typeof FeatureName> = z
 export type SetProductFeatureRequestBody$Outbound = {
   enabled: boolean;
   feature_name: string;
+  organization_id: string;
 };
 
 /** @internal */
@@ -61,10 +68,12 @@ export const SetProductFeatureRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     enabled: z.boolean(),
     featureName: FeatureName$outboundSchema,
+    organizationId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       featureName: "feature_name",
+      organizationId: "organization_id",
     });
   }),
 );

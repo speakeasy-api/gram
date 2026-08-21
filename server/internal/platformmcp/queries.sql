@@ -24,6 +24,19 @@ FROM platform_mcp_oauth_clients
 WHERE client_id = @client_id
   AND revoked_at IS NULL;
 
+-- name: GetPlatformMCPOAuthClientForUpdate :one
+SELECT *
+FROM platform_mcp_oauth_clients
+WHERE client_id = @client_id
+FOR UPDATE;
+
+-- name: ListPlatformMCPClientConnectionsForUpdate :many
+SELECT *
+FROM platform_mcp_connections
+WHERE oauth_client_id = @oauth_client_id
+  AND revoked_at IS NULL
+FOR UPDATE;
+
 -- name: RevokePlatformMCPOAuthClient :one
 UPDATE platform_mcp_oauth_clients
 SET revoked_at = @revoked_at,
@@ -46,13 +59,15 @@ INSERT INTO platform_mcp_connections (
     organization_id,
     subject_urn,
     oauth_client_id,
-    active_generation
+    active_generation,
+    authorization_expires_at
 ) VALUES (
     @id,
     @organization_id,
     @subject_urn,
     @oauth_client_id,
-    @active_generation
+    @active_generation,
+    @authorization_expires_at
 )
 RETURNING *;
 
@@ -97,9 +112,22 @@ FOR UPDATE OF connection;
 -- name: RevokePlatformMCPConnection :one
 UPDATE platform_mcp_connections
 SET revoked_at = @revoked_at,
+    reauthorization_required_at = @revoked_at,
+    reauthorization_reason = 'connection_revoked',
     updated_at = @revoked_at
 WHERE id = @id
   AND organization_id = @organization_id
+  AND revoked_at IS NULL
+RETURNING *;
+
+-- name: MarkPlatformMCPConnectionReauthorizationRequired :one
+UPDATE platform_mcp_connections
+SET reauthorization_required_at = @reauthorization_required_at,
+    reauthorization_reason = @reauthorization_reason,
+    updated_at = @reauthorization_required_at
+WHERE id = @connection_id
+  AND organization_id = @organization_id
+  AND active_generation = @connection_generation
   AND revoked_at IS NULL
 RETURNING *;
 
@@ -107,6 +135,9 @@ RETURNING *;
 UPDATE platform_mcp_connections
 SET active_generation = @active_generation,
     reauthorized_at = @reauthorized_at,
+    authorization_expires_at = @authorization_expires_at,
+    reauthorization_required_at = NULL,
+    reauthorization_reason = NULL,
     updated_at = @reauthorized_at
 WHERE id = @connection_id
   AND organization_id = @organization_id
@@ -135,8 +166,16 @@ INSERT INTO platform_mcp_authorization_grants (
 )
 RETURNING *;
 
--- name: GetPlatformMCPAuthorizationGrantForConsume :one
-SELECT auth_grant.*, connection.subject_urn, connection.active_generation, client.client_id
+-- name: GetPlatformMCPAuthorizationGrantForValidation :one
+SELECT
+    auth_grant.*,
+    connection.subject_urn,
+    connection.active_generation,
+    client.client_id,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
 FROM platform_mcp_authorization_grants AS auth_grant
 JOIN platform_mcp_connections AS connection
   ON connection.id = auth_grant.connection_id
@@ -147,8 +186,32 @@ JOIN platform_mcp_oauth_clients AS client
 WHERE auth_grant.organization_id = @organization_id
   AND auth_grant.authorization_code_hash = @authorization_code_hash
   AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
+  AND client.revoked_at IS NULL;
+
+-- name: GetPlatformMCPAuthorizationGrantForConsume :one
+SELECT
+    auth_grant.*,
+    connection.subject_urn,
+    connection.active_generation,
+    client.client_id,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
+FROM platform_mcp_authorization_grants AS auth_grant
+JOIN platform_mcp_connections AS connection
+  ON connection.id = auth_grant.connection_id
+  AND connection.organization_id = auth_grant.organization_id
+  AND connection.oauth_client_id = auth_grant.oauth_client_id
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = auth_grant.oauth_client_id
+WHERE auth_grant.organization_id = @organization_id
+  AND auth_grant.authorization_code_hash = @authorization_code_hash
+  AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
   AND client.revoked_at IS NULL
-FOR UPDATE OF auth_grant;
+FOR UPDATE OF auth_grant, connection;
 
 -- name: ConsumePlatformMCPAuthorizationGrant :one
 UPDATE platform_mcp_authorization_grants
@@ -202,18 +265,54 @@ WHERE session.organization_id = @organization_id
   AND client.revoked_at IS NULL;
 
 -- name: GetPlatformMCPSessionForRefreshForUpdate :one
-SELECT session.*, connection.subject_urn, connection.active_generation, client.client_id
-FROM platform_mcp_sessions AS session
-JOIN platform_mcp_connections AS connection
+-- Lock the connection before its session so refresh, connection revocation, and
+-- client revocation all use the same connection -> session lock order.
+WITH target_session AS MATERIALIZED (
+    SELECT session.connection_id, session.oauth_client_id
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = @organization_id
+      AND session.refresh_token_hash = @refresh_token_hash
+),
+locked_connection AS MATERIALIZED (
+    SELECT connection.*
+    FROM platform_mcp_connections AS connection
+    JOIN target_session
+      ON target_session.connection_id = connection.id
+      AND target_session.oauth_client_id = connection.oauth_client_id
+    WHERE connection.organization_id = @organization_id
+    FOR UPDATE OF connection
+),
+locked_session AS MATERIALIZED (
+    SELECT session.*
+    FROM platform_mcp_sessions AS session
+    JOIN locked_connection AS connection
+      ON connection.id = session.connection_id
+      AND connection.organization_id = session.organization_id
+      AND connection.oauth_client_id = session.oauth_client_id
+    WHERE session.organization_id = @organization_id
+      AND session.refresh_token_hash = @refresh_token_hash
+    FOR UPDATE OF session
+)
+SELECT
+    session.*,
+    connection.subject_urn,
+    connection.active_generation,
+    connection.revoked_at AS connection_revoked_at,
+    connection.reauthorization_required_at,
+    connection.reauthorization_reason,
+    client.client_id,
+    client.revoked_at AS client_revoked_at,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at
+FROM locked_session AS session
+JOIN locked_connection AS connection
   ON connection.id = session.connection_id
   AND connection.organization_id = session.organization_id
   AND connection.oauth_client_id = session.oauth_client_id
 JOIN platform_mcp_oauth_clients AS client
-  ON client.id = session.oauth_client_id
-WHERE session.organization_id = @organization_id
-  AND session.refresh_token_hash = @refresh_token_hash
-  AND client.revoked_at IS NULL
-FOR UPDATE OF session;
+  ON client.id = session.oauth_client_id;
 
 -- name: RotatePlatformMCPSession :one
 UPDATE platform_mcp_sessions
@@ -614,6 +713,184 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ListPlatformMCPInventory :many
+-- One bounded, tenant-qualified inventory projection for every Platform MCP
+-- read surface. It reads persisted readiness/distribution state only; it never
+-- contacts a remote MCP or provider.
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    m.name AS mcp_name,
+    m.slug AS mcp_slug,
+    m.visibility,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.toolset_id,
+    m.unproxied_mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(registration.source_kind, '') AS source_kind,
+    COALESCE(registration.catalog_provider, '') AS catalog_provider,
+    COALESCE(registration.catalog_reference, '') AS catalog_reference,
+    COALESCE(registration.status, '') AS registration_status,
+    COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+    COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+    COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+    COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+    COALESCE(readiness.state, '') AS readiness_state,
+    readiness.checked_at AS readiness_checked_at,
+    readiness.expires_at AS readiness_expires_at
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.*
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = @organization_id
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN LATERAL (
+    SELECT readiness.*
+    FROM platform_mcp_readiness AS readiness
+    WHERE readiness.organization_id = @organization_id
+      AND readiness.project_id = m.project_id
+      AND readiness.registration_id = registration.id
+      AND (
+          (sqlc.narg(connection_id)::uuid IS NOT NULL
+              AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+              AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid)
+          OR
+          (sqlc.narg(connection_id)::uuid IS NULL
+              AND readiness.connection_id IS NULL
+              AND readiness.user_id = @user_id
+              AND readiness.acting_surface = @acting_surface)
+      )
+    ORDER BY readiness.checked_at DESC, readiness.id DESC
+    LIMIT 1
+) AS readiness ON TRUE
+WHERE m.deleted IS FALSE
+  AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
+  AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
+  AND (
+      @query_text::text = ''
+      OR m.id::text ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+  )
+  AND (
+      sqlc.narg(readiness_state)::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = sqlc.narg(readiness_state)::text
+  )
+ORDER BY
+    CASE
+        WHEN @query_text::text <> ''
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT @limit_value;
+
+-- name: GetPlatformMCPInventoryItem :one
+SELECT *
+FROM (
+    SELECT
+        m.id AS mcp_server_id,
+        m.project_id,
+        project.name AS project_name,
+        project.slug AS project_slug,
+        m.name AS mcp_name,
+        m.slug AS mcp_slug,
+        m.visibility,
+        m.remote_mcp_server_id,
+        m.tunneled_mcp_server_id,
+        m.toolset_id,
+        m.unproxied_mcp_server_id,
+        COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+        COALESCE(registration.source_kind, '') AS source_kind,
+        COALESCE(registration.catalog_provider, '') AS catalog_provider,
+        COALESCE(registration.catalog_reference, '') AS catalog_reference,
+        COALESCE(registration.status, '') AS registration_status,
+        COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+        COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+        COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+        COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+        COALESCE(readiness.state, '') AS readiness_state,
+        readiness.checked_at AS readiness_checked_at,
+        readiness.expires_at AS readiness_expires_at
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = @organization_id
+     AND project.deleted IS FALSE
+    LEFT JOIN LATERAL (
+        SELECT registration.*
+        FROM platform_mcp_catalog_registrations AS registration
+        WHERE registration.organization_id = @organization_id
+          AND registration.project_id = m.project_id
+          AND registration.mcp_server_id = m.id
+          AND registration.deleted IS FALSE
+        ORDER BY registration.created_at DESC, registration.id DESC
+        LIMIT 1
+    ) AS registration ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT readiness.*
+        FROM platform_mcp_readiness AS readiness
+        WHERE readiness.organization_id = @organization_id
+          AND readiness.project_id = m.project_id
+          AND readiness.registration_id = registration.id
+          AND (
+              (sqlc.narg(connection_id)::uuid IS NOT NULL
+                  AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+                  AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid)
+              OR
+              (sqlc.narg(connection_id)::uuid IS NULL
+                  AND readiness.connection_id IS NULL
+                  AND readiness.user_id = @user_id
+                  AND readiness.acting_surface = @acting_surface)
+          )
+        ORDER BY readiness.checked_at DESC, readiness.id DESC
+        LIMIT 1
+    ) AS readiness ON TRUE
+    WHERE m.id = @mcp_server_id
+      AND m.project_id = @project_id
+      AND m.deleted IS FALSE
+) AS inventory;
+
+-- name: ListPlatformMCPInventoryDistributions :many
+SELECT
+    distribution.registration_id,
+    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    distribution.state,
+    distribution.publication_state
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = distribution.registration_id
+ AND registration.organization_id = distribution.organization_id
+ AND registration.project_id = distribution.project_id
+ AND registration.deleted IS FALSE
+WHERE distribution.organization_id = @organization_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
+  AND distribution.registration_id = ANY(@registration_ids::uuid[])
+ORDER BY distribution.registration_id, distribution.id ASC;
+
 -- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 -- Registrations are project desired state, not permanently owned by the OAuth
 -- client that originally created them. Lifecycle actions require the caller to
@@ -713,6 +990,8 @@ INSERT INTO platform_mcp_setup_handoffs (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_key,
     intent,
     handoff_hash,
@@ -722,8 +1001,10 @@ SELECT
     @organization_id,
     @project_id,
     @registration_id,
-    @connection_id,
-    @connection_generation,
+    sqlc.narg(connection_id),
+    sqlc.narg(connection_generation),
+    @user_id,
+    @acting_surface,
     @provider_key,
     @intent,
     @handoff_hash,
@@ -749,12 +1030,21 @@ SET invalidated_at = clock_timestamp(),
 WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND registration_id = @registration_id
-  AND connection_id = @connection_id
-  AND connection_generation = @connection_generation
+  AND (
+    (
+      connection_id = sqlc.narg(connection_id)
+      AND connection_generation = sqlc.narg(connection_generation)
+    )
+    OR (connection_id IS NULL AND user_id = @user_id)
+  )
   AND intent = @intent
   AND redeemed_at IS NULL
   AND invalidated_at IS NULL;
 
+-- A handoff issued by a surface with no OAuth connection is redeemed by the
+-- same user from the dashboard, so identity comes from the handoff's own user
+-- attribution. A handoff that does carry a connection still has that
+-- connection's liveness checked.
 -- name: GetPlatformMCPSetupHandoffForDashboardStart :one
 SELECT
     handoff.id,
@@ -764,6 +1054,7 @@ SELECT
     handoff.intent,
     handoff.connection_id,
     handoff.connection_generation,
+    handoff.user_id,
     registration.catalog_reference,
     project.slug AS project_slug
 FROM platform_mcp_setup_handoffs AS handoff
@@ -776,14 +1067,23 @@ JOIN projects AS project
   ON project.id = registration.project_id
  AND project.organization_id = registration.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_connections AS connection
+LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = handoff.connection_id
  AND connection.organization_id = handoff.organization_id
 WHERE handoff.handoff_hash = @handoff_hash
   AND handoff.organization_id = @organization_id
-  AND connection.subject_urn = @subject_urn
-  AND connection.active_generation = handoff.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+    handoff.user_id = @user_id
+    OR (handoff.user_id IS NULL AND connection.subject_urn = @subject_urn)
+  )
+  AND (
+    handoff.connection_id IS NULL
+    OR (
+      connection.subject_urn = @subject_urn
+      AND connection.active_generation = handoff.connection_generation
+      AND connection.revoked_at IS NULL
+    )
+  )
   AND handoff.redeemed_at IS NULL
   AND handoff.invalidated_at IS NULL
   AND handoff.expires_at > clock_timestamp();
@@ -796,8 +1096,15 @@ WHERE handoff.handoff_hash = @handoff_hash
   AND handoff.organization_id = @organization_id
   AND handoff.project_id = @project_id
   AND handoff.registration_id = @registration_id
-  AND handoff.connection_id = @connection_id
-  AND handoff.connection_generation = @connection_generation
+  -- A handoff issued by a connection-less surface is matched by its user, the
+  -- same way the dashboard-start lookup above matches it.
+  AND (
+    (
+      handoff.connection_id = sqlc.narg(connection_id)
+      AND handoff.connection_generation = sqlc.narg(connection_generation)
+    )
+    OR (handoff.connection_id IS NULL AND handoff.user_id = @user_id)
+  )
   AND handoff.provider_key = @provider_key
   AND handoff.intent = @intent
   AND handoff.redeemed_at IS NULL
@@ -810,16 +1117,21 @@ WHERE handoff.handoff_hash = @handoff_hash
         ON project.id = registration.project_id
        AND project.organization_id = registration.organization_id
        AND project.deleted IS FALSE
-      JOIN platform_mcp_connections AS connection
+      LEFT JOIN platform_mcp_connections AS connection
         ON connection.id = handoff.connection_id
        AND connection.organization_id = handoff.organization_id
       WHERE registration.id = handoff.registration_id
         AND registration.organization_id = handoff.organization_id
         AND registration.project_id = handoff.project_id
         AND registration.deleted IS FALSE
-        AND connection.subject_urn = @subject_urn
-        AND connection.active_generation = handoff.connection_generation
-        AND connection.revoked_at IS NULL
+        AND (
+          handoff.connection_id IS NULL
+          OR (
+            connection.subject_urn = @subject_urn
+            AND connection.active_generation = handoff.connection_generation
+            AND connection.revoked_at IS NULL
+          )
+        )
   )
 RETURNING handoff.*;
 
@@ -1352,6 +1664,24 @@ WHERE workflow.organization_id = @organization_id
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
 
+-- name: HasPlatformMCPOrganizationSetupComplete :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'first_value_achieved'
+    UNION ALL
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    WHERE distribution.organization_id = @organization_id
+      AND distribution.state = 'attached'
+) AS setup_complete;
+
 -- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
 SELECT EXISTS (
     SELECT 1
@@ -1418,8 +1748,7 @@ RETURNING *;
 
 -- name: RecordPlatformMCPOnboardingInstallIntent :one
 UPDATE platform_mcp_onboarding_workflows
-SET source_surface = @source_surface,
-    client_family = @client_family,
+SET client_family = @client_family,
     expires_at = @expires_at,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -1428,6 +1757,54 @@ WHERE id = @id
   AND status = 'active'
   AND expires_at > clock_timestamp()
 RETURNING *;
+
+-- name: RecordPlatformMCPOnboardingInstallStarted :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+)
+SELECT
+    @organization_id,
+    'install_started',
+    @attempt_id
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_workflows AS workflow
+    WHERE workflow.id = @attempt_id
+      AND workflow.organization_id = @organization_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+)
+ON CONFLICT DO NOTHING;
+
+-- name: HasPlatformMCPOnboardingInstallStarted :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    JOIN platform_mcp_onboarding_workflows AS workflow
+      ON workflow.organization_id = milestone.organization_id
+     AND workflow.id = milestone.attempt_id
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'install_started'
+      AND milestone.attempt_id = @attempt_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+);
+
+-- name: RecordPlatformMCPDashboardCtaEvent :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+) VALUES (
+    @organization_id,
+    @milestone,
+    @attempt_id
+)
+ON CONFLICT DO NOTHING;
 
 -- name: RecordPlatformMCPOnboardingAgentConfigurationCopied :one
 UPDATE platform_mcp_onboarding_workflows
@@ -1474,6 +1851,37 @@ WHERE EXISTS (
 ON CONFLICT (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
   AND connection_generation IS NOT NULL
+  AND milestone IN (
+    'authorization_succeeded',
+    'authorization_failed',
+    'connection_ready',
+    'catalog_explored',
+    'first_read_succeeded',
+    'first_write_succeeded',
+    'read_only_cohort'
+)
+DO NOTHING;
+
+-- A surface acting under assistant identity holds no connection, so its
+-- evidence is keyed by the acting user and dedupes on the user grain instead of
+-- the connection generation.
+-- name: RecordPlatformMCPCatalogExploredForUser :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    user_id,
+    acting_surface
+)
+VALUES (
+    @organization_id,
+    'catalog_explored',
+    @user_id,
+    @acting_surface
+)
+ON CONFLICT (organization_id, milestone, user_id)
+WHERE connection_id IS NULL
+  AND connection_generation IS NULL
+  AND user_id IS NOT NULL
   AND milestone IN (
     'authorization_succeeded',
     'authorization_failed',
@@ -1550,11 +1958,68 @@ SELECT
 FROM platform_mcp_connections AS connection
 JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
+JOIN LATERAL (
+    SELECT session.refresh_expires_at, session.revoked_at
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = connection.organization_id
+      AND session.connection_id = connection.id
+      AND session.connection_generation = connection.active_generation
+    ORDER BY session.created_at DESC, session.id DESC
+    LIMIT 1
+) AS latest_session ON TRUE
 WHERE connection.organization_id = @organization_id
   AND connection.subject_urn = @subject_urn
   AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
   AND client.revoked_at IS NULL
+  AND COALESCE(
+      connection.authorization_expires_at,
+      COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+  ) > @now
+  AND latest_session.revoked_at IS NULL
+  AND latest_session.refresh_expires_at > @now
 ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC;
+
+-- name: GetPlatformMCPSubjectConnectionAuthState :one
+SELECT
+    connection.id,
+    connection.active_generation,
+    connection.authorized_at,
+    connection.reauthorized_at,
+    connection.reauthorization_required_at,
+    connection.reauthorization_reason,
+    connection.revoked_at,
+    client.revoked_at AS client_revoked_at,
+    COALESCE(
+        connection.authorization_expires_at,
+        COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+    )::timestamptz AS effective_authorization_expires_at,
+    latest_session.refresh_expires_at AS latest_refresh_expires_at,
+    latest_session.revoked_at AS latest_session_revoked_at,
+    EXISTS (
+        SELECT 1
+        FROM platform_mcp_onboarding_milestones AS milestone
+        WHERE milestone.organization_id = connection.organization_id
+          AND milestone.milestone = 'connection_ready'
+          AND milestone.connection_id = connection.id
+          AND milestone.connection_generation = connection.active_generation
+    ) AS ready
+FROM platform_mcp_connections AS connection
+JOIN platform_mcp_oauth_clients AS client
+  ON client.id = connection.oauth_client_id
+LEFT JOIN LATERAL (
+    SELECT session.refresh_expires_at, session.revoked_at
+    FROM platform_mcp_sessions AS session
+    WHERE session.organization_id = connection.organization_id
+      AND session.connection_id = connection.id
+      AND session.connection_generation = connection.active_generation
+    ORDER BY session.created_at DESC, session.id DESC
+    LIMIT 1
+) AS latest_session ON TRUE
+WHERE connection.organization_id = @organization_id
+  AND connection.subject_urn = @subject_urn
+ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC
+LIMIT 1;
 
 -- name: RecordPlatformMCPSetupMilestone :exec
 INSERT INTO platform_mcp_onboarding_milestones (
@@ -1693,3 +2158,41 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @attempt_id
 )
 ON CONFLICT DO NOTHING;
+
+-- Skill distribution targets. A skill is distributed to an exact existing
+-- plugin or assistant in one project; these reads name what exists so the
+-- resolver can refuse a target that does not, rather than falling back to the
+-- default plugin.
+
+-- name: ListPlatformMCPProjectPlugins :many
+SELECT
+    plugins.id,
+    plugins.name,
+    plugins.slug,
+    COALESCE(plugins.is_default, FALSE) AS is_default
+FROM plugins
+JOIN projects
+  ON projects.id = plugins.project_id
+WHERE plugins.project_id = @project_id
+  AND plugins.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND plugins.deleted IS FALSE
+ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
+LIMIT @result_limit;
+
+-- name: ListPlatformMCPProjectAssistants :many
+SELECT
+    assistants.id,
+    assistants.name
+FROM assistants
+JOIN projects
+  ON projects.id = assistants.project_id
+WHERE assistants.project_id = @project_id
+  AND assistants.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND assistants.deleted IS FALSE
+  AND assistants.status = 'active'
+ORDER BY assistants.name ASC
+LIMIT @result_limit;

@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -30,6 +33,23 @@ type trialProvisioner struct {
 	failWith error
 }
 
+type recordingTrialNotifier struct {
+	inactive []string
+}
+
+func (n *recordingTrialNotifier) TrialStarted(context.Context, string) error {
+	return nil
+}
+
+func (n *recordingTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (n *recordingTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	n.inactive = append(n.inactive, organizationID)
+	return nil
+}
+
 var _ openrouter.Provisioner = (*trialProvisioner)(nil)
 
 func (p *trialProvisioner) DisableAPIKey(_ context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -41,29 +61,18 @@ func (p *trialProvisioner) DisableAPIKey(_ context.Context, orgID string, keyTyp
 	return nil
 }
 
-type fakeTrialNotifier struct {
-	inactive    []string
-	inactiveErr error
-}
-
-func (f *fakeTrialNotifier) TrialStarted(context.Context, string) error { return nil }
-
-func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
-	return nil
-}
-
-func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
-	f.inactive = append(f.inactive, organizationID)
-	return f.inactiveErr
+func (p *trialProvisioner) DisableAPIKeyWithDB(ctx context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType) error {
+	return p.DisableAPIKey(ctx, orgID, keyType)
 }
 
 type trialTestInstance struct {
-	conn        *pgxpool.Pool
-	trials      *trialsrepo.Queries
-	orgs        *orgrepo.Queries
-	provisioner *trialProvisioner
-	notifier    *fakeTrialNotifier
-	activity    *activities.DemoteExpiredTrials
+	conn            *pgxpool.Pool
+	trials          *trialsrepo.Queries
+	orgs            *orgrepo.Queries
+	productFeatures *productfeatures.Client
+	provisioner     *trialProvisioner
+	notifier        *recordingTrialNotifier
+	activity        *activities.DemoteExpiredTrials
 }
 
 func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
@@ -75,25 +84,32 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	require.NoError(t, err)
 
 	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
-	notifier := &fakeTrialNotifier{}
+	notifier := &recordingTrialNotifier{inactive: nil}
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	productFeatures := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
 
 	return ctx, &trialTestInstance{
-		conn:        conn,
-		trials:      trialsrepo.New(conn),
-		orgs:        orgrepo.New(conn),
-		provisioner: provisioner,
-		notifier:    notifier,
+		conn:            conn,
+		trials:          trialsrepo.New(conn),
+		orgs:            orgrepo.New(conn),
+		productFeatures: productFeatures,
+		provisioner:     provisioner,
+		notifier:        notifier,
 		activity: activities.NewDemoteExpiredTrials(
 			testenv.NewLogger(t),
 			conn,
 			provisioner,
 			audit.NewLogger(),
 			notifier,
+			productFeatures,
 		),
 	}
 }
 
-func newOrg(t *testing.T, ctx context.Context, ti *trialTestInstance) string {
+// newTrialOrg creates an enterprise organization that is whitelisted for the
+// duration of its trial, which is the state signup leaves behind.
+func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsAt time.Time) string {
 	t.Helper()
 
 	orgID := "org-" + uuid.NewString()[:8]
@@ -112,16 +128,7 @@ func newOrg(t *testing.T, ctx context.Context, ti *trialTestInstance) string {
 		GramAccountType: "enterprise",
 	}))
 
-	return orgID
-}
-
-// newTrialOrg creates an enterprise organization that is whitelisted for the
-// duration of its trial, which is the state signup leaves behind.
-func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsAt time.Time) string {
-	t.Helper()
-
-	orgID := newOrg(t, ctx, ti)
-	err := ti.trials.CreateTrial(ctx, trialsrepo.CreateTrialParams{
+	err = ti.trials.CreateTrial(ctx, trialsrepo.CreateTrialParams{
 		OrganizationID: orgID,
 		Tier:           "enterprise",
 		EndsAt:         pgtype.Timestamptz{Time: endsAt, InfinityModifier: pgtype.Finite, Valid: true},
@@ -137,6 +144,25 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	ctx, ti := newTrialTestInstance(t)
 	endsAt := time.Now().Add(-time.Hour).UTC()
 	orgID := newTrialOrg(t, ctx, ti, endsAt)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, orgID))
+	q := featurerepo.New(tx)
+	features := slices.Concat(productfeatures.TrialRuntimeFeatures, []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureAuthzChallengeLogging,
+	})
+	for _, feature := range features {
+		_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, tx.Commit(ctx))
+	for _, feature := range features {
+		_, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+	}
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
@@ -158,6 +184,19 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 
 	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
 	require.Equal(t, []string{orgID}, ti.notifier.inactive)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.Falsef(t, enabled, "demotion should disable %s", feature)
+	}
+	for _, feature := range []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureAuthzChallengeLogging,
+	} {
+		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.Truef(t, enabled, "demotion should preserve %s", feature)
+	}
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
@@ -224,7 +263,7 @@ func TestDemoteExpiredTrials_DemoteSkipsTrialConvertedAfterListing(t *testing.T)
 	require.False(t, trial.DemotedAt.Valid)
 
 	require.Empty(t, ti.provisioner.disabled, "a trial that converted keeps its keys")
-	require.Equal(t, []string{orgID}, ti.notifier.inactive)
+	require.Empty(t, ti.notifier.inactive, "a no-op demotion must not publish trial inactivity")
 }
 
 // Temporal retries a failed activity, so a second demotion of the same trial
@@ -253,7 +292,7 @@ func TestDemoteExpiredTrials_DemoteIsIdempotent(t *testing.T) {
 	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, after, again)
-	require.Equal(t, []string{orgID, orgID}, ti.notifier.inactive)
+	require.Equal(t, []string{orgID}, ti.notifier.inactive, "a retried demotion notifies exactly once")
 }
 
 // The lockdown runs inside the demotion transaction on purpose: a stamped
@@ -280,57 +319,5 @@ func TestDemoteExpiredTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	due, err := ti.activity.List(ctx)
 	require.NoError(t, err)
 	require.Equal(t, []string{orgID}, due)
-	require.Empty(t, ti.notifier.inactive)
-}
-
-func TestDemoteExpiredTrials_DemoteSkipsActiveUnexpiredTrialEmails(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTrialTestInstance(t)
-	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(24*time.Hour).UTC())
-
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
-
-	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
-	require.NoError(t, err)
-	require.Equal(t, "enterprise", org.GramAccountType)
-	require.True(t, org.Whitelisted)
-	require.Empty(t, ti.notifier.inactive)
-}
-
-func TestDemoteExpiredTrials_DemoteAlreadyDemotedWithFutureEndsAtStillNotifies(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTrialTestInstance(t)
-	orgID := newOrg(t, ctx, ti)
-	now := time.Now().UTC()
-	require.NoError(t, ti.trials.InsertTrialFixture(ctx, trialsrepo.InsertTrialFixtureParams{
-		OrganizationID: orgID,
-		CreatedAt:      pgtype.Timestamptz{Time: now.Add(-48 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-		EndsAt:         pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-		ConvertedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		DemotedAt:      pgtype.Timestamptz{Time: now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-	}))
-
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
-
-	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
-	require.NoError(t, err)
-	require.Equal(t, "enterprise", org.GramAccountType)
-	require.Equal(t, []string{orgID}, ti.notifier.inactive)
-}
-
-func TestDemoteExpiredTrials_TrialInactiveFailureDoesNotFailDemotion(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTrialTestInstance(t)
-	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
-	ti.notifier.inactiveErr = errors.New("loops unavailable")
-
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
-
-	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
-	require.NoError(t, err)
-	require.Equal(t, "free", org.GramAccountType)
-	require.Equal(t, []string{orgID}, ti.notifier.inactive)
+	require.Empty(t, ti.notifier.inactive, "a rolled-back demotion must not publish trial inactivity")
 }

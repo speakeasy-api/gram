@@ -1528,10 +1528,13 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{
-		SessionID:            sessionID,
-		UserID:               gramUserID,
-		ActiveOrganizationID: invite.OrganizationID,
-		WorkOSSessionID:      idpUser.WorkOSSessionID,
+		SessionID:             sessionID,
+		UserID:                gramUserID,
+		ActiveOrganizationID:  invite.OrganizationID,
+		WorkOSSessionID:       idpUser.WorkOSSessionID,
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))

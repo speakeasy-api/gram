@@ -12,31 +12,204 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillClaudeUserMessagePromptID = `-- name: BackfillClaudeUserMessagePromptID :exec
-UPDATE chat_messages
-SET message_id = $1
-WHERE id = $2
-  AND chat_id = $3
-  AND project_id = $4
-  AND role = 'user'
-  AND (message_id IS NULL OR message_id = '')
+const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))
 `
 
-type BackfillClaudeUserMessagePromptIDParams struct {
-	PromptID  pgtype.Text
-	MessageID uuid.UUID
-	ChatID    uuid.UUID
-	ProjectID uuid.NullUUID
+type AcquireOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
 }
 
-func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg BackfillClaudeUserMessagePromptIDParams) error {
-	_, err := q.db.Exec(ctx, backfillClaudeUserMessagePromptID,
-		arg.PromptID,
-		arg.MessageID,
-		arg.ChatID,
-		arg.ProjectID,
-	)
+// A session lock lets the reconciler serialize a billing projection read and
+// its upstream PATCH without holding a database transaction across the
+// network call. Billing writers take the same key transactionally before
+// changing the projection.
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
 	return err
+}
+
+const assignPositiveCarryToStripeInvoice = `-- name: AssignPositiveCarryToStripeInvoice :execrows
+WITH assignments AS (
+  SELECT
+      allocation.id
+    , (
+        SELECT candidate.stripe_invoice_id
+        FROM stripe_invoices original
+        JOIN stripe_invoices candidate
+          ON candidate.organization_id = original.organization_id
+         AND candidate.invoice_state = 'draft'
+         AND original.service_period_end <= candidate.service_period_start
+        WHERE original.organization_id = allocation.organization_id
+          AND original.stripe_invoice_id = allocation.original_invoice_id
+        ORDER BY candidate.service_period_start, candidate.stripe_invoice_id
+        LIMIT 1
+      ) AS destination_invoice_id
+  FROM stripe_invoice_allocations allocation
+  WHERE allocation.organization_id = $1
+    AND allocation.amount_usd > 0
+    AND allocation.destination_invoice_id IS NULL
+    AND allocation.original_invoice_id IS NOT NULL
+)
+UPDATE stripe_invoice_allocations allocation
+SET destination_invoice_id = assignments.destination_invoice_id,
+    updated_at = clock_timestamp()
+FROM assignments
+WHERE allocation.organization_id = $1
+  AND allocation.id = assignments.id
+  AND assignments.destination_invoice_id IS NOT NULL
+  AND allocation.amount_usd > 0
+  AND allocation.destination_invoice_id IS NULL
+  AND allocation.original_invoice_id IS NOT NULL
+`
+
+// Assign every positive carry to the earliest eligible draft. The NULL guard
+// is the compare-and-swap fence for concurrent settlement runs.
+func (q *Queries) AssignPositiveCarryToStripeInvoice(ctx context.Context, organizationID pgtype.Text) (int64, error) {
+	result, err := q.db.Exec(ctx, assignPositiveCarryToStripeInvoice, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const attachTUMCarryToOriginalInvoice = `-- name: AttachTUMCarryToOriginalInvoice :execrows
+UPDATE stripe_invoice_allocations allocation
+SET original_invoice_id = invoice.stripe_invoice_id,
+    destination_invoice_id = CASE WHEN allocation.amount_usd < 0 THEN invoice.stripe_invoice_id END,
+    updated_at = clock_timestamp()
+FROM stripe_invoices invoice
+WHERE allocation.organization_id = $1
+  AND allocation.source_kind = 'tum_cycle'
+  AND allocation.original_invoice_id IS NULL
+  AND invoice.organization_id = allocation.organization_id
+  AND invoice.service_period_start = allocation.source_period_start
+  AND invoice.service_period_end = allocation.source_period_end
+`
+
+func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizationID pgtype.Text) (int64, error) {
+	result, err := q.db.Exec(ctx, attachTUMCarryToOriginalInvoice, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
+WITH candidate AS (
+  SELECT
+      allocation.id
+    , allocation.first_attempted_at AS previous_first_attempted_at
+    , allocation.delivery_state AS previous_delivery_state
+  FROM stripe_invoice_allocations allocation
+  JOIN stripe_invoices destination
+    ON destination.stripe_invoice_id = allocation.destination_invoice_id
+   AND destination.organization_id = allocation.organization_id
+  WHERE allocation.organization_id = $1
+    AND allocation.delivery_state IN ('pending', 'ambiguous')
+    AND allocation.amount_usd <> 0
+    AND (
+      allocation.last_attempted_at IS NULL
+      OR allocation.last_attempted_at <= $2
+    )
+  ORDER BY allocation.created_at, allocation.source_kind, allocation.source_key, allocation.seq
+  LIMIT 1
+  FOR UPDATE OF allocation SKIP LOCKED
+), claimed AS (
+  UPDATE stripe_invoice_allocations allocation
+  SET first_attempted_at = COALESCE(allocation.first_attempted_at, $3),
+      last_attempted_at = $3,
+      delivery_state = 'pending',
+      updated_at = clock_timestamp()
+  FROM candidate
+  WHERE allocation.organization_id = $1
+    AND allocation.id = candidate.id
+  RETURNING
+    allocation.id
+  , allocation.organization_id::text AS organization_id
+  , allocation.source_kind
+  , allocation.source_key
+  , allocation.seq
+  , allocation.source_day
+  , allocation.source_period_start
+  , allocation.source_period_end
+  , allocation.amount_usd
+  , allocation.original_invoice_id
+  , allocation.destination_invoice_id
+  , allocation.idempotency_key
+  , allocation.delivery_state
+  , candidate.previous_first_attempted_at
+  , candidate.previous_delivery_state
+)
+SELECT
+    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.source_period_start, claimed.source_period_end, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
+  , destination.stripe_customer_id
+  , destination.stripe_subscription_id
+  , destination.service_period_start AS destination_period_start
+  , destination.service_period_end AS destination_period_end
+  , destination.invoice_state AS destination_invoice_state
+FROM claimed
+JOIN stripe_invoices destination
+  ON destination.stripe_invoice_id = claimed.destination_invoice_id
+ AND destination.organization_id = claimed.organization_id
+`
+
+type ClaimNextStripeInvoiceAllocationParams struct {
+	OrganizationID pgtype.Text
+	LeaseBefore    pgtype.Timestamptz
+	AttemptedAt    pgtype.Timestamptz
+}
+
+type ClaimNextStripeInvoiceAllocationRow struct {
+	ID                       uuid.UUID
+	OrganizationID           string
+	SourceKind               string
+	SourceKey                string
+	Seq                      int32
+	SourceDay                pgtype.Date
+	SourcePeriodStart        pgtype.Timestamptz
+	SourcePeriodEnd          pgtype.Timestamptz
+	AmountUsd                pgtype.Numeric
+	OriginalInvoiceID        pgtype.Text
+	DestinationInvoiceID     pgtype.Text
+	IdempotencyKey           string
+	DeliveryState            string
+	PreviousFirstAttemptedAt pgtype.Timestamptz
+	PreviousDeliveryState    string
+	StripeCustomerID         string
+	StripeSubscriptionID     string
+	DestinationPeriodStart   pgtype.Timestamptz
+	DestinationPeriodEnd     pgtype.Timestamptz
+	DestinationInvoiceState  string
+}
+
+func (q *Queries) ClaimNextStripeInvoiceAllocation(ctx context.Context, arg ClaimNextStripeInvoiceAllocationParams) (ClaimNextStripeInvoiceAllocationRow, error) {
+	row := q.db.QueryRow(ctx, claimNextStripeInvoiceAllocation, arg.OrganizationID, arg.LeaseBefore, arg.AttemptedAt)
+	var i ClaimNextStripeInvoiceAllocationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.SourceKind,
+		&i.SourceKey,
+		&i.Seq,
+		&i.SourceDay,
+		&i.SourcePeriodStart,
+		&i.SourcePeriodEnd,
+		&i.AmountUsd,
+		&i.OriginalInvoiceID,
+		&i.DestinationInvoiceID,
+		&i.IdempotencyKey,
+		&i.DeliveryState,
+		&i.PreviousFirstAttemptedAt,
+		&i.PreviousDeliveryState,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.DestinationPeriodStart,
+		&i.DestinationPeriodEnd,
+		&i.DestinationInvoiceState,
+	)
+	return i, err
 }
 
 const claimPublishOutboxBatch = `-- name: ClaimPublishOutboxBatch :many
@@ -122,6 +295,141 @@ func (q *Queries) ClaimPublishOutboxBatch(ctx context.Context, arg ClaimPublishO
 	return items, nil
 }
 
+const confirmStripeCreditNoteAllocation = `-- name: ConfirmStripeCreditNoteAllocation :execrows
+UPDATE stripe_invoice_allocations
+SET stripe_credit_note_id = $1,
+    delivery_state = 'confirmed',
+    confirmed_at = COALESCE(confirmed_at, $2),
+    reconciled_at = CASE WHEN $3::boolean THEN $2 ELSE reconciled_at END,
+    updated_at = clock_timestamp()
+WHERE organization_id = $4
+  AND id = $5
+  AND delivery_state = 'pending'
+  AND last_attempted_at = $6
+`
+
+type ConfirmStripeCreditNoteAllocationParams struct {
+	StripeCreditNoteID pgtype.Text
+	ConfirmedAt        pgtype.Timestamptz
+	Reconciled         bool
+	OrganizationID     pgtype.Text
+	ID                 uuid.UUID
+	AttemptedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) ConfirmStripeCreditNoteAllocation(ctx context.Context, arg ConfirmStripeCreditNoteAllocationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, confirmStripeCreditNoteAllocation,
+		arg.StripeCreditNoteID,
+		arg.ConfirmedAt,
+		arg.Reconciled,
+		arg.OrganizationID,
+		arg.ID,
+		arg.AttemptedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const confirmStripeInvoiceItemAllocation = `-- name: ConfirmStripeInvoiceItemAllocation :execrows
+UPDATE stripe_invoice_allocations
+SET stripe_invoice_item_id = $1,
+    delivery_state = 'confirmed',
+    confirmed_at = COALESCE(confirmed_at, $2),
+    reconciled_at = CASE WHEN $3::boolean THEN $2 ELSE reconciled_at END,
+    updated_at = clock_timestamp()
+WHERE organization_id = $4
+  AND id = $5
+  AND delivery_state = 'pending'
+  AND last_attempted_at = $6
+`
+
+type ConfirmStripeInvoiceItemAllocationParams struct {
+	StripeInvoiceItemID pgtype.Text
+	ConfirmedAt         pgtype.Timestamptz
+	Reconciled          bool
+	OrganizationID      pgtype.Text
+	ID                  uuid.UUID
+	AttemptedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) ConfirmStripeInvoiceItemAllocation(ctx context.Context, arg ConfirmStripeInvoiceItemAllocationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, confirmStripeInvoiceItemAllocation,
+		arg.StripeInvoiceItemID,
+		arg.ConfirmedAt,
+		arg.Reconciled,
+		arg.OrganizationID,
+		arg.ID,
+		arg.AttemptedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countOpenRouterInvoiceSpendGaps = `-- name: CountOpenRouterInvoiceSpendGaps :one
+SELECT COUNT(*)::bigint AS missing_count
+FROM stripe_invoices invoice
+CROSS JOIN LATERAL generate_series(
+  invoice.service_period_start,
+  invoice.service_period_end - interval '1 day',
+  interval '1 day'
+) AS generated(source_timestamp)
+LEFT JOIN openrouter_spend_daily spend
+  ON spend.organization_id = invoice.organization_id
+ AND spend.key_type = $1
+ AND spend.day = generated.source_timestamp::date
+WHERE invoice.organization_id = $2
+  AND generated.source_timestamp::date >= $3::date
+  AND generated.source_timestamp::date < $4::date
+  AND spend.id IS NULL
+  AND (
+    (
+      invoice.service_period_end + interval '48 hours' <= $4::date
+      AND NOT EXISTS (
+        SELECT 1
+        FROM stripe_invoice_allocations allocation
+        WHERE allocation.organization_id = invoice.organization_id
+          AND allocation.source_kind = 'openrouter_daily_spend'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $1::text
+          AND allocation.seq = 1
+      )
+    )
+    OR (
+      invoice.service_period_end + interval '72 hours' <= $4::date
+      AND NOT EXISTS (
+        SELECT 1
+        FROM stripe_invoice_allocations allocation
+        WHERE allocation.organization_id = invoice.organization_id
+          AND allocation.source_kind = 'openrouter_daily_spend'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $1::text
+          AND allocation.seq = 2
+      )
+    )
+  )
+`
+
+type CountOpenRouterInvoiceSpendGapsParams struct {
+	TargetKeyType        string
+	TargetOrganizationID pgtype.Text
+	TargetEarliestDay    pgtype.Date
+	TargetEndDay         pgtype.Date
+}
+
+func (q *Queries) CountOpenRouterInvoiceSpendGaps(ctx context.Context, arg CountOpenRouterInvoiceSpendGapsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenRouterInvoiceSpendGaps,
+		arg.TargetKeyType,
+		arg.TargetOrganizationID,
+		arg.TargetEarliestDay,
+		arg.TargetEndDay,
+	)
+	var missing_count int64
+	err := row.Scan(&missing_count)
+	return missing_count, err
+}
+
 const countPendingPublishOutboxRows = `-- name: CountPendingPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `
@@ -133,6 +441,171 @@ func (q *Queries) CountPendingPublishOutboxRows(ctx context.Context) (int64, err
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createOpenRouterInvoiceAllocation = `-- name: CreateOpenRouterInvoiceAllocation :execrows
+INSERT INTO stripe_invoice_allocations (
+    organization_id
+  , source_kind
+  , source_key
+  , seq
+  , source_day
+  , source_snapshot_usd
+  , amount_usd
+  , original_invoice_id
+  , destination_invoice_id
+  , idempotency_key
+  , delivery_state
+  , confirmed_at
+) VALUES (
+    $1
+  , 'openrouter_daily_spend'
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+)
+ON CONFLICT (organization_id, source_kind, source_key, seq) DO NOTHING
+`
+
+type CreateOpenRouterInvoiceAllocationParams struct {
+	OrganizationID       pgtype.Text
+	SourceKey            string
+	Seq                  int32
+	SourceDay            pgtype.Date
+	SourceSnapshotUsd    pgtype.Numeric
+	AmountUsd            pgtype.Numeric
+	OriginalInvoiceID    pgtype.Text
+	DestinationInvoiceID pgtype.Text
+	IdempotencyKey       string
+	DeliveryState        string
+	ConfirmedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) CreateOpenRouterInvoiceAllocation(ctx context.Context, arg CreateOpenRouterInvoiceAllocationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createOpenRouterInvoiceAllocation,
+		arg.OrganizationID,
+		arg.SourceKey,
+		arg.Seq,
+		arg.SourceDay,
+		arg.SourceSnapshotUsd,
+		arg.AmountUsd,
+		arg.OriginalInvoiceID,
+		arg.DestinationInvoiceID,
+		arg.IdempotencyKey,
+		arg.DeliveryState,
+		arg.ConfirmedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const createStripeInvoiceFixture = `-- name: CreateStripeInvoiceFixture :exec
+INSERT INTO stripe_invoices (
+    stripe_invoice_id
+  , organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+  , service_period_start
+  , service_period_end
+  , invoice_state
+  , finalized_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+`
+
+type CreateStripeInvoiceFixtureParams struct {
+	StripeInvoiceID      string
+	OrganizationID       pgtype.Text
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) CreateStripeInvoiceFixture(ctx context.Context, arg CreateStripeInvoiceFixtureParams) error {
+	_, err := q.db.Exec(ctx, createStripeInvoiceFixture,
+		arg.StripeInvoiceID,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripeSubscriptionID,
+		arg.ServicePeriodStart,
+		arg.ServicePeriodEnd,
+		arg.InvoiceState,
+		arg.FinalizedAt,
+	)
+	return err
+}
+
+const createTUMInvoiceAllocationFixture = `-- name: CreateTUMInvoiceAllocationFixture :exec
+INSERT INTO stripe_invoice_allocations (
+    organization_id
+  , source_kind
+  , source_key
+  , seq
+  , source_period_start
+  , source_period_end
+  , source_snapshot_usd
+  , delta_tokens
+  , original_tum_unit_price_usd
+  , amount_usd
+  , idempotency_key
+  , delivery_state
+) VALUES (
+    $1
+  , 'tum_cycle'
+  , $2
+  , 1
+  , $3
+  , $4
+  , $5
+  , 1
+  , 0.000000350000
+  , $6
+  , $7
+  , 'pending'
+)
+`
+
+type CreateTUMInvoiceAllocationFixtureParams struct {
+	OrganizationID    pgtype.Text
+	SourceKey         string
+	SourcePeriodStart pgtype.Timestamptz
+	SourcePeriodEnd   pgtype.Timestamptz
+	SourceSnapshotUsd pgtype.Numeric
+	AmountUsd         pgtype.Numeric
+	IdempotencyKey    string
+}
+
+func (q *Queries) CreateTUMInvoiceAllocationFixture(ctx context.Context, arg CreateTUMInvoiceAllocationFixtureParams) error {
+	_, err := q.db.Exec(ctx, createTUMInvoiceAllocationFixture,
+		arg.OrganizationID,
+		arg.SourceKey,
+		arg.SourcePeriodStart,
+		arg.SourcePeriodEnd,
+		arg.SourceSnapshotUsd,
+		arg.AmountUsd,
+		arg.IdempotencyKey,
+	)
+	return err
 }
 
 const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execrows
@@ -196,6 +669,34 @@ type DeletePublishedOutboxRowsParams struct {
 // ClaimPublishOutboxBatch for why locked_until identifies the claim.
 func (q *Queries) DeletePublishedOutboxRows(ctx context.Context, arg DeletePublishedOutboxRowsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePublishedOutboxRows, arg.Ids, arg.LeaseToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStripeInvoiceAllocationFixture = `-- name: DeleteStripeInvoiceAllocationFixture :execrows
+DELETE FROM stripe_invoice_allocations
+WHERE organization_id = $1
+  AND source_kind = $2
+  AND source_key = $3
+  AND seq = $4
+`
+
+type DeleteStripeInvoiceAllocationFixtureParams struct {
+	OrganizationID pgtype.Text
+	SourceKind     string
+	SourceKey      string
+	Seq            int32
+}
+
+func (q *Queries) DeleteStripeInvoiceAllocationFixture(ctx context.Context, arg DeleteStripeInvoiceAllocationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStripeInvoiceAllocationFixture,
+		arg.OrganizationID,
+		arg.SourceKind,
+		arg.SourceKey,
+		arg.Seq,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -405,6 +906,7 @@ const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertR
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
+    om.gram_account_type,
     bm.alert_email,
     EXISTS (
         SELECT 1
@@ -418,7 +920,10 @@ FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY($2::text[])
   AND om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  )
 `
 
 type GetOpenRouterCreditsAlertRecipientsParams struct {
@@ -429,6 +934,7 @@ type GetOpenRouterCreditsAlertRecipientsParams struct {
 type GetOpenRouterCreditsAlertRecipientsRow struct {
 	OrganizationID   string
 	OrganizationName string
+	GramAccountType  string
 	AlertEmail       pgtype.Text
 	ChatByok         bool
 }
@@ -457,6 +963,7 @@ func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, arg G
 		if err := rows.Scan(
 			&i.OrganizationID,
 			&i.OrganizationName,
+			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.ChatByok,
 		); err != nil {
@@ -477,7 +984,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.key AS api_key,
+    (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -494,7 +1001,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
-	ApiKey           pgtype.Text
+	LimitGeneration  int64
 	ApiKeyEncrypted  pgtype.Text
 }
 
@@ -503,11 +1010,9 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 // account-type allowlist so coverage can expand (e.g. add 'pro') without a
 // code change. monthly_credits is the canonical limit last written by
 // RefreshAPIKeyLimit and reflects any per-org overrides applied via the
-// OpenrouterKeyRefreshWorkflow. The key material is included so the caller
-// can issue the upstream usage HTTP call in a single round-trip — keep it
-// inside the activity boundary and never return it to the workflow. The
-// encrypted column is preferred and the plaintext column is the legacy
-// fallback for rows minted before encrypted storage.
+// OpenrouterKeyRefreshWorkflow. The encrypted key material is included so the
+// caller can issue the upstream usage HTTP call in a single round-trip — keep
+// it inside the activity boundary and never return it to the workflow.
 func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, accountTypes []string) ([]GetOpenRouterCreditsMonitoringTargetsRow, error) {
 	rows, err := q.db.Query(ctx, getOpenRouterCreditsMonitoringTargets, accountTypes)
 	if err != nil {
@@ -523,7 +1028,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
-			&i.ApiKey,
+			&i.LimitGeneration,
 			&i.ApiKeyEncrypted,
 		); err != nil {
 			return nil, err
@@ -534,6 +1039,112 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 		return nil, err
 	}
 	return items, nil
+}
+
+const getOpenRouterDailySpendRecoveryStartDay = `-- name: GetOpenRouterDailySpendRecoveryStartDay :one
+SELECT MIN(generated.source_timestamp)::date AS recovery_start_day
+FROM stripe_invoices invoice
+CROSS JOIN LATERAL generate_series(
+  invoice.service_period_start,
+  invoice.service_period_end - interval '1 day',
+  interval '1 day'
+) AS generated(source_timestamp)
+WHERE invoice.organization_id = $1
+  AND generated.source_timestamp::date >= $2::date
+  AND generated.source_timestamp::date < $3::date
+  AND (
+    (
+      invoice.service_period_end + interval '48 hours' <= $3::date
+      AND NOT EXISTS (
+        SELECT 1
+        FROM stripe_invoice_allocations allocation
+        WHERE allocation.organization_id = invoice.organization_id
+          AND allocation.source_kind = 'openrouter_daily_spend'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $4::text
+          AND allocation.seq = 1
+      )
+    )
+    OR (
+      invoice.service_period_end + interval '72 hours' <= $3::date
+      AND NOT EXISTS (
+        SELECT 1
+        FROM stripe_invoice_allocations allocation
+        WHERE allocation.organization_id = invoice.organization_id
+          AND allocation.source_kind = 'openrouter_daily_spend'
+          AND allocation.source_key = generated.source_timestamp::date::text || ':' || $4::text
+          AND allocation.seq = 2
+      )
+    )
+  )
+`
+
+type GetOpenRouterDailySpendRecoveryStartDayParams struct {
+	TargetOrganizationID pgtype.Text
+	TargetEarliestDay    pgtype.Date
+	TargetEndDay         pgtype.Date
+	TargetKeyType        string
+}
+
+// Expand collection to the oldest unresolved invoice day. This heals outages
+// beyond the normal overlap instead of permanently detecting the same gap.
+func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, arg GetOpenRouterDailySpendRecoveryStartDayParams) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterDailySpendRecoveryStartDay,
+		arg.TargetOrganizationID,
+		arg.TargetEarliestDay,
+		arg.TargetEndDay,
+		arg.TargetKeyType,
+	)
+	var recovery_start_day pgtype.Date
+	err := row.Scan(&recovery_start_day)
+	return recovery_start_day, err
+}
+
+const getOpenRouterInferenceKeyLimit = `-- name: GetOpenRouterInferenceKeyLimit :one
+SELECT monthly_credits
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type GetOpenRouterInferenceKeyLimitParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) GetOpenRouterInferenceKeyLimit(ctx context.Context, arg GetOpenRouterInferenceKeyLimitParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterInferenceKeyLimit, arg.OrganizationID, arg.KeyType)
+	var monthly_credits int64
+	err := row.Scan(&monthly_credits)
+	return monthly_credits, err
+}
+
+const getPaygOpenRouterChatKeyProjection = `-- name: GetPaygOpenRouterChatKeyProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+  , chat_key.disabled AS chat_key_disabled
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+LEFT JOIN openrouter_api_keys chat_key
+  ON chat_key.organization_id = organization_metadata.id
+ AND chat_key.key_type = 'chat'
+ AND chat_key.deleted IS FALSE
+WHERE organization_metadata.id = $1
+`
+
+type GetPaygOpenRouterChatKeyProjectionRow struct {
+	GramAccountType      string
+	StripeSubscriptionID pgtype.Text
+	ChatKeyDisabled      pgtype.Bool
+}
+
+func (q *Queries) GetPaygOpenRouterChatKeyProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatKeyProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getPaygOpenRouterChatKeyProjection, organizationID)
+	var i GetPaygOpenRouterChatKeyProjectionRow
+	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID, &i.ChatKeyDisabled)
+	return i, err
 }
 
 const getPlatformUsageMetrics = `-- name: GetPlatformUsageMetrics :many
@@ -757,54 +1368,550 @@ func (q *Queries) ListIdentityMapEntries(ctx context.Context) ([]ListIdentityMap
 	return items, nil
 }
 
-const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
-SELECT id, seq, content, created_at
-FROM chat_messages
-WHERE chat_id = $1
-  AND project_id = $2
-  AND role = 'user'
-  AND content != ''
-  AND (message_id IS NULL OR message_id = '')
-  AND seq > $3
-ORDER BY seq ASC, created_at ASC
-LIMIT $4
+const listOpenRouterDailySpend = `-- name: ListOpenRouterDailySpend :many
+SELECT
+    organization_id,
+    key_type,
+    day,
+    spend_usd,
+    created_at,
+    updated_at
+FROM openrouter_spend_daily
+WHERE organization_id = $1
+  AND key_type = $2
+ORDER BY day
 `
 
-type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
-	ChatID          uuid.UUID
-	ProjectID       uuid.NullUUID
-	AfterMessageSeq int64
-	LimitCount      int32
+type ListOpenRouterDailySpendParams struct {
+	OrganizationID string
+	KeyType        string
 }
 
-type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
-	ID        uuid.UUID
-	Seq       int64
-	Content   string
-	CreatedAt pgtype.Timestamptz
+type ListOpenRouterDailySpendRow struct {
+	OrganizationID string
+	KeyType        string
+	Day            pgtype.Date
+	SpendUsd       pgtype.Numeric
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
-// Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
-// row to detect whether another drain pass is needed.
-func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.AfterMessageSeq,
-		arg.LimitCount,
+func (q *Queries) ListOpenRouterDailySpend(ctx context.Context, arg ListOpenRouterDailySpendParams) ([]ListOpenRouterDailySpendRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterDailySpend, arg.OrganizationID, arg.KeyType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterDailySpendRow
+	for rows.Next() {
+		var i ListOpenRouterDailySpendRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.KeyType,
+			&i.Day,
+			&i.SpendUsd,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterDailySpendTargets = `-- name: ListOpenRouterDailySpendTargets :many
+SELECT
+    organization_id,
+    key_type,
+    key_hash,
+    created_at
+FROM openrouter_api_keys
+WHERE deleted = FALSE
+ORDER BY organization_id, key_type
+`
+
+type ListOpenRouterDailySpendTargetsRow struct {
+	OrganizationID string
+	KeyType        string
+	KeyHash        string
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Every live platform-managed key is a billing input, including disabled keys:
+// disabling a key stops future usage but does not erase spend already reported
+// by OpenRouter. The key hash identifies the management-API analytics filter;
+// plaintext key material never crosses this activity boundary.
+func (q *Queries) ListOpenRouterDailySpendTargets(ctx context.Context) ([]ListOpenRouterDailySpendTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterDailySpendTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterDailySpendTargetsRow
+	for rows.Next() {
+		var i ListOpenRouterDailySpendTargetsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.KeyType,
+			&i.KeyHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterInvoiceBaselines = `-- name: ListOpenRouterInvoiceBaselines :many
+SELECT
+    allocation.source_key
+  , allocation.source_day
+  , split_part(allocation.source_key, ':', 2)::text AS key_type
+  , allocation.source_snapshot_usd
+  , (CASE
+      WHEN inference_key.created_at IS NULL
+        OR allocation.source_day < (inference_key.created_at AT TIME ZONE 'UTC')::date
+        THEN 0::numeric
+      WHEN inference_key.deleted_at IS NOT NULL
+        AND allocation.source_day >= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
+        THEN COALESCE(spend.spend_usd, 0::numeric)
+      ELSE spend.spend_usd
+    END)::numeric(14, 6) AS final_spend_usd
+  , carry.amount_usd AS existing_carry_amount_usd
+  , allocation.original_invoice_id
+FROM stripe_invoice_allocations allocation
+JOIN stripe_invoices invoice
+  ON invoice.organization_id = allocation.organization_id
+ AND invoice.stripe_invoice_id = allocation.original_invoice_id
+LEFT JOIN openrouter_api_keys inference_key
+  ON inference_key.organization_id = allocation.organization_id
+ AND inference_key.key_type = split_part(allocation.source_key, ':', 2)
+LEFT JOIN openrouter_spend_daily spend
+  ON spend.organization_id = allocation.organization_id
+ AND spend.key_type = split_part(allocation.source_key, ':', 2)
+ AND spend.day = allocation.source_day
+ AND (
+   inference_key.deleted_at IS NULL
+   OR spend.day <= (inference_key.deleted_at AT TIME ZONE 'UTC')::date
+ )
+LEFT JOIN stripe_invoice_allocations carry
+  ON carry.organization_id = allocation.organization_id
+ AND carry.source_kind = allocation.source_kind
+ AND carry.source_key = allocation.source_key
+ AND carry.seq = 2
+WHERE allocation.organization_id = $1
+  AND invoice.stripe_invoice_id = $2
+  AND invoice.service_period_end + interval '72 hours' <= $3
+  AND allocation.source_kind = 'openrouter_daily_spend'
+  AND split_part(allocation.source_key, ':', 2) = ANY($4::text[])
+  AND allocation.seq = 1
+ORDER BY allocation.source_day, split_part(allocation.source_key, ':', 2)
+`
+
+type ListOpenRouterInvoiceBaselinesParams struct {
+	OrganizationID   pgtype.Text
+	StripeInvoiceID  string
+	Now              pgtype.Timestamptz
+	BillableKeyTypes []string
+}
+
+type ListOpenRouterInvoiceBaselinesRow struct {
+	SourceKey              string
+	SourceDay              pgtype.Date
+	KeyType                string
+	SourceSnapshotUsd      pgtype.Numeric
+	FinalSpendUsd          pgtype.Numeric
+	ExistingCarryAmountUsd pgtype.Numeric
+	OriginalInvoiceID      pgtype.Text
+}
+
+func (q *Queries) ListOpenRouterInvoiceBaselines(ctx context.Context, arg ListOpenRouterInvoiceBaselinesParams) ([]ListOpenRouterInvoiceBaselinesRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterInvoiceBaselines,
+		arg.OrganizationID,
+		arg.StripeInvoiceID,
+		arg.Now,
+		arg.BillableKeyTypes,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListUnlinkedClaudeUserMessagesForCorrelationRow
+	var items []ListOpenRouterInvoiceBaselinesRow
 	for rows.Next() {
-		var i ListUnlinkedClaudeUserMessagesForCorrelationRow
+		var i ListOpenRouterInvoiceBaselinesRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.SourceKey,
+			&i.SourceDay,
+			&i.KeyType,
+			&i.SourceSnapshotUsd,
+			&i.FinalSpendUsd,
+			&i.ExistingCarryAmountUsd,
+			&i.OriginalInvoiceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterInvoiceSourceDays = `-- name: ListOpenRouterInvoiceSourceDays :many
+SELECT
+    generated.source_timestamp::date AS source_day
+  , billable.key_type::text AS key_type
+  , COALESCE(spend.spend_usd, 0::numeric) AS spend_usd
+  , frozen.source_snapshot_usd AS frozen_snapshot_usd
+FROM stripe_invoices invoice
+CROSS JOIN LATERAL generate_series(
+  invoice.service_period_start,
+  invoice.service_period_end - interval '1 day',
+  interval '1 day'
+) AS generated(source_timestamp)
+CROSS JOIN unnest($1::text[]) AS billable(key_type)
+LEFT JOIN openrouter_spend_daily spend
+  ON spend.organization_id = invoice.organization_id
+ AND spend.key_type = billable.key_type
+ AND spend.day = generated.source_timestamp::date
+LEFT JOIN stripe_invoice_allocations frozen
+  ON frozen.organization_id = invoice.organization_id
+ AND frozen.source_kind = 'openrouter_daily_spend'
+ AND frozen.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
+ AND frozen.seq = 1
+WHERE invoice.organization_id = $2
+  AND invoice.stripe_invoice_id = $3
+  AND invoice.service_period_end + interval '48 hours' <= $4
+ORDER BY generated.source_timestamp::date, billable.key_type
+`
+
+type ListOpenRouterInvoiceSourceDaysParams struct {
+	BillableKeyTypes []string
+	OrganizationID   pgtype.Text
+	StripeInvoiceID  string
+	Now              pgtype.Timestamptz
+}
+
+type ListOpenRouterInvoiceSourceDaysRow struct {
+	SourceDay         pgtype.Date
+	KeyType           string
+	SpendUsd          pgtype.Numeric
+	FrozenSnapshotUsd pgtype.Numeric
+}
+
+// Surface a snapshot an earlier pass already froze; the caller must not reseed
+// that key-day from spend backfilled since.
+func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListOpenRouterInvoiceSourceDaysParams) ([]ListOpenRouterInvoiceSourceDaysRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterInvoiceSourceDays,
+		arg.BillableKeyTypes,
+		arg.OrganizationID,
+		arg.StripeInvoiceID,
+		arg.Now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterInvoiceSourceDaysRow
+	for rows.Next() {
+		var i ListOpenRouterInvoiceSourceDaysRow
+		if err := rows.Scan(
+			&i.SourceDay,
+			&i.KeyType,
+			&i.SpendUsd,
+			&i.FrozenSnapshotUsd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStripeInvoiceAllocationsFixture = `-- name: ListStripeInvoiceAllocationsFixture :many
+SELECT
+    seq
+  , source_kind
+  , source_key
+  , source_snapshot_usd
+  , amount_usd
+  , original_invoice_id
+  , destination_invoice_id
+  , idempotency_key
+  , delivery_state
+  , stripe_invoice_item_id
+  , stripe_credit_note_id
+  , first_attempted_at
+  , last_attempted_at
+  , reconciled_at
+FROM stripe_invoice_allocations
+WHERE organization_id = $1
+ORDER BY source_key, seq
+`
+
+type ListStripeInvoiceAllocationsFixtureRow struct {
+	Seq                  int32
+	SourceKind           string
+	SourceKey            string
+	SourceSnapshotUsd    pgtype.Numeric
+	AmountUsd            pgtype.Numeric
+	OriginalInvoiceID    pgtype.Text
+	DestinationInvoiceID pgtype.Text
+	IdempotencyKey       string
+	DeliveryState        string
+	StripeInvoiceItemID  pgtype.Text
+	StripeCreditNoteID   pgtype.Text
+	FirstAttemptedAt     pgtype.Timestamptz
+	LastAttemptedAt      pgtype.Timestamptz
+	ReconciledAt         pgtype.Timestamptz
+}
+
+func (q *Queries) ListStripeInvoiceAllocationsFixture(ctx context.Context, organizationID pgtype.Text) ([]ListStripeInvoiceAllocationsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listStripeInvoiceAllocationsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStripeInvoiceAllocationsFixtureRow
+	for rows.Next() {
+		var i ListStripeInvoiceAllocationsFixtureRow
+		if err := rows.Scan(
 			&i.Seq,
-			&i.Content,
-			&i.CreatedAt,
+			&i.SourceKind,
+			&i.SourceKey,
+			&i.SourceSnapshotUsd,
+			&i.AmountUsd,
+			&i.OriginalInvoiceID,
+			&i.DestinationInvoiceID,
+			&i.IdempotencyKey,
+			&i.DeliveryState,
+			&i.StripeInvoiceItemID,
+			&i.StripeCreditNoteID,
+			&i.FirstAttemptedAt,
+			&i.LastAttemptedAt,
+			&i.ReconciledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStripeInvoiceBillingOrganizations = `-- name: ListStripeInvoiceBillingOrganizations :many
+SELECT DISTINCT invoice.organization_id::text AS organization_id
+FROM stripe_invoices invoice
+WHERE invoice.organization_id IS NOT NULL
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM generate_series(
+        invoice.service_period_start,
+        invoice.service_period_end - interval '1 day',
+        interval '1 day'
+      ) AS generated(source_timestamp)
+      CROSS JOIN unnest($1::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '48 hours' <= $2
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stripe_invoice_allocations allocation
+          WHERE allocation.organization_id = invoice.organization_id
+            AND allocation.source_kind = 'openrouter_daily_spend'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
+            AND allocation.seq = 1
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM generate_series(
+        invoice.service_period_start,
+        invoice.service_period_end - interval '1 day',
+        interval '1 day'
+      ) AS generated(source_timestamp)
+      CROSS JOIN unnest($1::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '72 hours' <= $2
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stripe_invoice_allocations allocation
+          WHERE allocation.organization_id = invoice.organization_id
+            AND allocation.source_kind = 'openrouter_daily_spend'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
+            AND allocation.seq = 2
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM stripe_invoice_allocations allocation
+      WHERE allocation.organization_id = invoice.organization_id
+        AND (
+          allocation.delivery_state IN ('pending', 'ambiguous')
+          OR (
+            allocation.amount_usd > 0
+            AND allocation.destination_invoice_id IS NULL
+            AND allocation.original_invoice_id IS NOT NULL
+          )
+          OR (
+            allocation.source_kind = 'tum_cycle'
+            AND allocation.original_invoice_id IS NULL
+          )
+        )
+    )
+  )
+ORDER BY organization_id
+`
+
+type ListStripeInvoiceBillingOrganizationsParams struct {
+	BillableKeyTypes []string
+	Now              pgtype.Timestamptz
+}
+
+// Organizations remain candidates for as long as a required immutable
+// snapshot, a delivery, or a destination assignment is missing. There is no
+// age cutoff: an outage must delay billing rather than erase it.
+func (q *Queries) ListStripeInvoiceBillingOrganizations(ctx context.Context, arg ListStripeInvoiceBillingOrganizationsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStripeInvoiceBillingOrganizations, arg.BillableKeyTypes, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStripeInvoicesForOpenRouterBilling = `-- name: ListStripeInvoicesForOpenRouterBilling :many
+SELECT
+    stripe_invoice_id
+  , organization_id::text AS organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+  , service_period_start
+  , service_period_end
+  , invoice_state
+  , finalized_at
+FROM stripe_invoices invoice
+WHERE invoice.organization_id = $1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM generate_series(
+        invoice.service_period_start,
+        invoice.service_period_end - interval '1 day',
+        interval '1 day'
+      ) AS generated(source_timestamp)
+      CROSS JOIN unnest($2::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '48 hours' <= $3
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stripe_invoice_allocations allocation
+          WHERE allocation.organization_id = invoice.organization_id
+            AND allocation.source_kind = 'openrouter_daily_spend'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
+            AND allocation.seq = 1
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM generate_series(
+        invoice.service_period_start,
+        invoice.service_period_end - interval '1 day',
+        interval '1 day'
+      ) AS generated(source_timestamp)
+      CROSS JOIN unnest($2::text[]) AS billable(key_type)
+      WHERE invoice.service_period_end + interval '72 hours' <= $3
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stripe_invoice_allocations allocation
+          WHERE allocation.organization_id = invoice.organization_id
+            AND allocation.source_kind = 'openrouter_daily_spend'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':' || billable.key_type
+            AND allocation.seq = 2
+        )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM stripe_invoice_allocations allocation
+      WHERE allocation.organization_id = invoice.organization_id
+        AND (
+          allocation.original_invoice_id = invoice.stripe_invoice_id
+          OR allocation.destination_invoice_id = invoice.stripe_invoice_id
+          OR (
+            invoice.invoice_state = 'draft'
+            AND allocation.amount_usd > 0
+            AND allocation.destination_invoice_id IS NULL
+            AND allocation.original_invoice_id IS NOT NULL
+          )
+          OR (
+            allocation.source_kind = 'tum_cycle'
+            AND allocation.original_invoice_id IS NULL
+            AND allocation.source_period_start = invoice.service_period_start
+            AND allocation.source_period_end = invoice.service_period_end
+          )
+        )
+    )
+  )
+ORDER BY service_period_start
+`
+
+type ListStripeInvoicesForOpenRouterBillingParams struct {
+	OrganizationID   pgtype.Text
+	BillableKeyTypes []string
+	Now              pgtype.Timestamptz
+}
+
+type ListStripeInvoicesForOpenRouterBillingRow struct {
+	StripeInvoiceID      string
+	OrganizationID       string
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, arg ListStripeInvoicesForOpenRouterBillingParams) ([]ListStripeInvoicesForOpenRouterBillingRow, error) {
+	rows, err := q.db.Query(ctx, listStripeInvoicesForOpenRouterBilling, arg.OrganizationID, arg.BillableKeyTypes, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStripeInvoicesForOpenRouterBillingRow
+	for rows.Next() {
+		var i ListStripeInvoicesForOpenRouterBillingRow
+		if err := rows.Scan(
+			&i.StripeInvoiceID,
+			&i.OrganizationID,
+			&i.StripeCustomerID,
+			&i.StripeSubscriptionID,
+			&i.ServicePeriodStart,
+			&i.ServicePeriodEnd,
+			&i.InvoiceState,
+			&i.FinalizedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -821,12 +1928,16 @@ SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
+  AND (
+    (om.gram_account_type = 'enterprise' AND bm.alert_email IS NOT NULL)
+    OR om.gram_account_type = 'payg'
+  )
 ORDER BY om.slug
 `
 
@@ -834,15 +1945,16 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	OrganizationID        string
 	OrganizationName      string
 	OrganizationSlug      string
+	GramAccountType       string
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
 }
 
 // Organizations that receive the weekly tokens-under-management usage
-// summary email: not disabled, with a billing alert email configured (the
-// address set on the billing page). The anchor day determines the billing
-// cycle window the summary reports on; the slug builds the billing page
-// link.
+// summary email: enabled enterprise organizations with an explicit billing
+// alert email and enabled PAYG organizations (whose fallback audience is
+// resolved by the activity). The anchor day determines the billing cycle
+// window; the slug builds the billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {
@@ -856,6 +1968,7 @@ func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeek
 			&i.OrganizationID,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.BillingCycleAnchorDay,
 		); err != nil {
@@ -979,6 +2092,83 @@ func (q *Queries) MarkPublishOutboxFailed(ctx context.Context, arg MarkPublishOu
 	return err
 }
 
+const markStripeInvoiceAllocationAmbiguous = `-- name: MarkStripeInvoiceAllocationAmbiguous :execrows
+UPDATE stripe_invoice_allocations
+SET first_attempted_at = COALESCE(first_attempted_at, $1),
+    last_attempted_at = $1,
+    ambiguous_at = COALESCE(ambiguous_at, $1),
+    delivery_state = 'ambiguous',
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND id = $3
+  AND delivery_state = 'pending'
+  AND last_attempted_at = $1
+`
+
+type MarkStripeInvoiceAllocationAmbiguousParams struct {
+	AttemptedAt    pgtype.Timestamptz
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+func (q *Queries) MarkStripeInvoiceAllocationAmbiguous(ctx context.Context, arg MarkStripeInvoiceAllocationAmbiguousParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markStripeInvoiceAllocationAmbiguous, arg.AttemptedAt, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reconcileAndRotateStripeInvoiceAllocation = `-- name: ReconcileAndRotateStripeInvoiceAllocation :one
+UPDATE stripe_invoice_allocations
+SET reconciled_at = $1,
+    idempotency_key = regexp_replace(idempotency_key, ':retry:[0-9]+$', '')
+      || ':retry:' || extract(epoch FROM $1::timestamptz)::bigint::text,
+    first_attempted_at = $1,
+    ambiguous_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND id = $3
+  AND delivery_state = 'pending'
+  AND last_attempted_at = $4
+RETURNING idempotency_key
+`
+
+type ReconcileAndRotateStripeInvoiceAllocationParams struct {
+	ReconciledAt   pgtype.Timestamptz
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+	AttemptedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ReconcileAndRotateStripeInvoiceAllocation(ctx context.Context, arg ReconcileAndRotateStripeInvoiceAllocationParams) (string, error) {
+	row := q.db.QueryRow(ctx, reconcileAndRotateStripeInvoiceAllocation,
+		arg.ReconciledAt,
+		arg.OrganizationID,
+		arg.ID,
+		arg.AttemptedAt,
+	)
+	var idempotency_key string
+	err := row.Scan(&idempotency_key)
+	return idempotency_key, err
+}
+
+const releaseOpenRouterKeyBillingLock = `-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const releasePublishOutboxRows = `-- name: ReleasePublishOutboxRows :exec
 UPDATE publish_outbox SET
     locked_until = NULL,
@@ -999,5 +2189,180 @@ type ReleasePublishOutboxRowsParams struct {
 // back because the claim incremented it for a delivery that never happened.
 func (q *Queries) ReleasePublishOutboxRows(ctx context.Context, arg ReleasePublishOutboxRowsParams) error {
 	_, err := q.db.Exec(ctx, releasePublishOutboxRows, arg.Ids, arg.LeaseToken)
+	return err
+}
+
+const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeyDeletedAtFixture = `-- name: SetOpenRouterAPIKeyDeletedAtFixture :exec
+UPDATE openrouter_api_keys
+SET deleted_at = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyDeletedAtFixtureParams struct {
+	DeletedAt      pgtype.Timestamptz
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) SetOpenRouterAPIKeyDeletedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyDeletedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyDeletedAtFixture, arg.DeletedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setPaygOpenRouterChatKeyProjectionFixture = `-- name: SetPaygOpenRouterChatKeyProjectionFixture :exec
+WITH updated_organization AS (
+  UPDATE organization_metadata
+  SET gram_account_type = $2,
+      updated_at = clock_timestamp()
+  WHERE organization_metadata.id = $3
+  RETURNING organization_metadata.id
+)
+INSERT INTO billing_metadata (
+    organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+)
+SELECT
+    updated_organization.id
+  , 'customer_placeholder'
+  , $1
+FROM updated_organization
+ON CONFLICT (organization_id) DO UPDATE
+SET stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+    updated_at = clock_timestamp()
+`
+
+type SetPaygOpenRouterChatKeyProjectionFixtureParams struct {
+	StripeSubscriptionID pgtype.Text
+	GramAccountType      string
+	OrganizationID       string
+}
+
+func (q *Queries) SetPaygOpenRouterChatKeyProjectionFixture(ctx context.Context, arg SetPaygOpenRouterChatKeyProjectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setPaygOpenRouterChatKeyProjectionFixture, arg.StripeSubscriptionID, arg.GramAccountType, arg.OrganizationID)
+	return err
+}
+
+const unassignPositiveStripeInvoiceAllocation = `-- name: UnassignPositiveStripeInvoiceAllocation :execrows
+UPDATE stripe_invoice_allocations
+SET destination_invoice_id = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND amount_usd > 0
+  AND delivery_state = 'pending'
+  AND last_attempted_at = $3
+`
+
+type UnassignPositiveStripeInvoiceAllocationParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+	AttemptedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) UnassignPositiveStripeInvoiceAllocation(ctx context.Context, arg UnassignPositiveStripeInvoiceAllocationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, unassignPositiveStripeInvoiceAllocation, arg.OrganizationID, arg.ID, arg.AttemptedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateStripeInvoiceState = `-- name: UpdateStripeInvoiceState :execrows
+UPDATE stripe_invoices
+SET invoice_state = $1,
+    finalized_at = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND stripe_invoice_id = $4
+  AND stripe_customer_id = $5
+  AND stripe_subscription_id = $6
+  AND service_period_start = $7
+  AND service_period_end = $8
+`
+
+type UpdateStripeInvoiceStateParams struct {
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+	OrganizationID       pgtype.Text
+	StripeInvoiceID      string
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateStripeInvoiceState(ctx context.Context, arg UpdateStripeInvoiceStateParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateStripeInvoiceState,
+		arg.InvoiceState,
+		arg.FinalizedAt,
+		arg.OrganizationID,
+		arg.StripeInvoiceID,
+		arg.StripeCustomerID,
+		arg.StripeSubscriptionID,
+		arg.ServicePeriodStart,
+		arg.ServicePeriodEnd,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertOpenRouterDailySpend = `-- name: UpsertOpenRouterDailySpend :exec
+INSERT INTO openrouter_spend_daily (
+    organization_id,
+    key_type,
+    day,
+    spend_usd
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET
+    spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp()
+WHERE openrouter_spend_daily.spend_usd IS DISTINCT FROM $4
+`
+
+type UpsertOpenRouterDailySpendParams struct {
+	TargetOrganizationID string
+	TargetKeyType        string
+	TargetDay            pgtype.Date
+	TargetSpendUsd       pgtype.Numeric
+}
+
+// Restatements replace a day's value, while an identical replay leaves
+// updated_at unchanged so operators can distinguish a real correction from a
+// routine overlapping pull.
+func (q *Queries) UpsertOpenRouterDailySpend(ctx context.Context, arg UpsertOpenRouterDailySpendParams) error {
+	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpend,
+		arg.TargetOrganizationID,
+		arg.TargetKeyType,
+		arg.TargetDay,
+		arg.TargetSpendUsd,
+	)
 	return err
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -440,24 +441,58 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		groupBy = "external_user_id"
 	}
 
-	items, err := s.chRepo.SearchUsers(ctx, repo.SearchUsersParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(filter.HookSource, ""),
-		AccountType:      conv.PtrValOr(filter.AccountType, ""),
-		ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-		GroupBy:          groupBy,
-		UserIDs:          filter.UserIds,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
-		MetricsDetail:    metricsDetailFromPayload(payload.Metrics),
-	})
+	// Internal grouping folds one employee's linked emails into one summary
+	// when the org is on the canonical fold; external ids never fold. A
+	// canonical cursor minted under the fold stops resolving if the flag
+	// flips off mid-pagination (short page, no error) — transient, inherent
+	// to per-request flag evaluation.
+	fold, shadow := false, false
+	if groupBy != "external_user_id" {
+		fold, shadow = s.canonicalIdentityMode(ctx, params.organizationID)
+	}
+	canonicalOrg := ""
+	if fold {
+		canonicalOrg = params.organizationID
+	}
+
+	// Gram-hosted inference is excluded only for internal (employee)
+	// grouping. External users are the opposite case: their hosted-chat
+	// completions ARE their usage — and their only token-bearing rows, so
+	// excluding them would zero the external surfaces entirely.
+	var excludedHookSources []string
+	if groupBy == "user_id" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
+	searchParams := repo.SearchUsersParams{
+		ExcludedHookSources:  excludedHookSources,
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		GramDeploymentID:     deploymentID,
+		EventSource:          conv.PtrValOr(filter.EventSource, ""),
+		HookSource:           conv.PtrValOr(filter.HookSource, ""),
+		AccountType:          conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+		GroupBy:              groupBy,
+		UserIDs:              filter.UserIds,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		MetricsDetail:        metricsDetailFromPayload(payload.Metrics),
+		CanonicalIdentityOrg: canonicalOrg,
+	}
+	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
+	}
+
+	// List divergence is customer-visible in a way aggregate drift is not, so
+	// the employee list gets its own shadow: first pages only — under a cursor
+	// the literal and folded orderings paginate differently and a membership
+	// diff would be noise.
+	if shadow && params.cursor == "" {
+		s.shadowCompareSearchUsersFold(ctx, params.organizationID, searchParams, items)
 	}
 
 	var nextCursor *string
@@ -527,10 +562,7 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	g, gctx := errgroup.WithContext(ctx)
 	// Fold the enrollment list's email keys to canonical identities when the
 	// org is on the fold, matching the employee detail pages it links to.
-	canonicalOrg := ""
-	if fold, _ := s.canonicalIdentityMode(ctx, params.organizationID); fold {
-		canonicalOrg = params.organizationID
-	}
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
@@ -548,10 +580,11 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	})
 	g.Go(func() error {
 		items, err := s.chRepo.ListEmaillessIdentities(gctx, repo.ListEmaillessIdentitiesParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			ExcludedHookSources: billing.GramHostedHookSourceNames(),
+			GramProjectID:       params.projectID,
+			TimeStart:           params.timeStart,
+			TimeEnd:             params.timeEnd,
+			Limit:               agentMetricsDirectoryCap,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error listing email-less identities")
@@ -915,6 +948,12 @@ func dedupeNonEmpty(values []string) []string {
 // pairing one person's email with another person's user id hand the second
 // person's accounts to the first summary (DNO-509). Best-effort: a lookup
 // failure leaves accounts empty rather than failing the listing.
+//
+// Canonical-fold edge, accepted: if the fold's canonical key fails directory
+// resolution (owner deleted after the last identity-map sync), the email
+// fallback targets the folded-away personal-email summary and the chip
+// attaches nowhere for that page load. Transient — the next map sync drops
+// the deleted owner's entries and the rows return to literal keys.
 func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
 	if len(users) == 0 {
 		return
@@ -1030,24 +1069,30 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	var items []repo.UserSummary
 	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
 
+	// Canonical keys also serve the role rollup: one employee aggregates once
+	// per role instead of splitting across their linked emails.
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
-			GramProjectID:    params.projectID,
-			TimeStart:        params.timeStart,
-			TimeEnd:          params.timeEnd,
-			GramDeploymentID: deploymentID,
-			EventSource:      conv.PtrValOr(filter.EventSource, ""),
-			HookSource:       conv.PtrValOr(filter.HookSource, ""),
-			AccountType:      conv.PtrValOr(filter.AccountType, ""),
-			ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-			GroupBy:          "user_id",
-			UserIDs:          filter.UserIds,
-			SortOrder:        "desc",
-			Cursor:           "",
-			Limit:            10001,                  // Upper bound; orgs rarely have >10k users
-			MetricsDetail:    repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			ExcludedHookSources:  billing.GramHostedHookSourceNames(),
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			GramDeploymentID:     deploymentID,
+			EventSource:          conv.PtrValOr(filter.EventSource, ""),
+			HookSource:           conv.PtrValOr(filter.HookSource, ""),
+			AccountType:          conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+			GroupBy:              "user_id",
+			UserIDs:              filter.UserIds,
+			SortOrder:            "desc",
+			Cursor:               "",
+			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:        repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
@@ -1302,18 +1347,28 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// judges and friends) as their usage. An external user is the opposite
+	// case: their hosted-chat completions ARE their usage — and their only
+	// token-bearing rows, so the exclusion would zero their page.
+	var excludedHookSources []string
+	if userID != "" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
-		GramProjectID:  authCtx.ProjectID.String(),
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		User:           user,
-		CanonicalUser:  canonicalUser,
-		ExternalUserID: externalUserID,
-		EventSource:    conv.PtrValOr(payload.EventSource, ""),
-		HookSource:     conv.PtrValOr(payload.HookSource, ""),
-		AccountType:    conv.PtrValOr(payload.AccountType, ""),
-		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       authCtx.ProjectID.String(),
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		EventSource:         conv.PtrValOr(payload.EventSource, ""),
+		HookSource:          conv.PtrValOr(payload.HookSource, ""),
+		AccountType:         conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:       conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
@@ -1847,6 +1902,20 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
+	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// judges and friends): those completions log under the session owner's
+	// identity but are the platform's spend, not the employee's usage —
+	// counting them made one employee's page show 60M+ judge tokens as their
+	// own. External-user scope keeps them: an external user's hosted-chat
+	// completions ARE their usage, and their only token-bearing rows.
+	// Org-wide views also keep the current semantics (the summaries fast path
+	// cannot express the exclusion; changing org totals is a separate
+	// decision).
+	var excludedHookSources []string
+	if userID != "" {
+		excludedHookSources = billing.GramHostedHookSourceNames()
+	}
+
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
 
@@ -1857,40 +1926,42 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 
 	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
 	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
 	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         comparisonStart,
-		TimeEnd:           comparisonEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           comparisonStart,
+		TimeEnd:             comparisonEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -1899,21 +1970,22 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	var timeSeries []repo.TimeSeriesBucket
 	if payload.IncludeTimeSeries {
 		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			GramProjectID:     projectID,
-			TimeStart:         timeStart,
-			TimeEnd:           timeEnd,
-			IntervalSeconds:   intervalSeconds,
-			User:              user,
-			CanonicalUser:     canonicalUser,
-			ExternalUserID:    externalUserID,
-			APIKeyID:          apiKeyID,
-			ToolsetSlug:       toolsetSlug,
-			RemoteMCPServerID: remoteMCPServerID,
-			MCPServerID:       mcpServerID,
-			EventSource:       eventSource,
-			HookSource:        hookSource,
-			AccountType:       accountType,
-			ExternalOrgID:     externalOrgID,
+			ExcludedHookSources: excludedHookSources,
+			GramProjectID:       projectID,
+			TimeStart:           timeStart,
+			TimeEnd:             timeEnd,
+			IntervalSeconds:     intervalSeconds,
+			User:                user,
+			CanonicalUser:       canonicalUser,
+			ExternalUserID:      externalUserID,
+			APIKeyID:            apiKeyID,
+			ToolsetSlug:         toolsetSlug,
+			RemoteMCPServerID:   remoteMCPServerID,
+			MCPServerID:         mcpServerID,
+			EventSource:         eventSource,
+			HookSource:          hookSource,
+			AccountType:         accountType,
+			ExternalOrgID:       externalOrgID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -1921,44 +1993,46 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
-		Limit:             10,
-		SortBy:            "count",
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
+		Limit:               10,
+		SortBy:              "count",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
 	}
 
 	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		User:              user,
-		CanonicalUser:     canonicalUser,
-		ExternalUserID:    externalUserID,
-		APIKeyID:          apiKeyID,
-		ToolsetSlug:       toolsetSlug,
-		RemoteMCPServerID: remoteMCPServerID,
-		MCPServerID:       mcpServerID,
-		EventSource:       eventSource,
-		HookSource:        hookSource,
-		AccountType:       accountType,
-		ExternalOrgID:     externalOrgID,
-		Limit:             10,
-		SortBy:            "failure_rate",
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       projectID,
+		TimeStart:           timeStart,
+		TimeEnd:             timeEnd,
+		User:                user,
+		CanonicalUser:       canonicalUser,
+		ExternalUserID:      externalUserID,
+		APIKeyID:            apiKeyID,
+		ToolsetSlug:         toolsetSlug,
+		RemoteMCPServerID:   remoteMCPServerID,
+		MCPServerID:         mcpServerID,
+		EventSource:         eventSource,
+		HookSource:          hookSource,
+		AccountType:         accountType,
+		ExternalOrgID:       externalOrgID,
+		Limit:               10,
+		SortBy:              "failure_rate",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
@@ -2127,13 +2201,15 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
 	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		CanonicalURL:  canonical.CanonicalURL,
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-		Cursor:        cursor,
-		Limit:         payload.Limit,
+		GramProjectID:        authCtx.ProjectID.String(),
+		CanonicalURL:         canonical.CanonicalURL,
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		Cursor:               cursor,
+		Limit:                payload.Limit,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
@@ -2823,17 +2899,23 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
 		sessionCount          int64
 	)
+	// The user dimension folds one employee's linked emails into one bucket
+	// when the org is on the canonical fold; server/tool dimensions and the
+	// flag-off behavior are unchanged.
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
 
 	eg.Go(func() error {
 		var err error
 		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks server summary: %w", err)
@@ -2843,11 +2925,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks user summary: %w", err)
@@ -2857,11 +2940,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)
@@ -2871,10 +2955,11 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillBreakdownRows, err = s.chRepo.GetSkillBreakdown(egCtx, repo.GetSkillBreakdownParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill breakdown: %w", err)
@@ -2884,11 +2969,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks breakdown: %w", err)
@@ -2898,12 +2984,13 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			BucketSizeNs:   bucketSizeNs,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks time series: %w", err)
@@ -2913,11 +3000,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillTimeSeriesPoints, err = s.chRepo.GetSkillTimeSeries(egCtx, repo.GetSkillTimeSeriesParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			BucketSizeNs:  bucketSizeNs,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill time series: %w", err)
@@ -2927,11 +3015,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks session count: %w", err)
@@ -3912,15 +4001,17 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
-		GramProjectID:  params.projectID,
-		TimeStart:      params.timeStart,
-		TimeEnd:        params.timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: payload.TypesToInclude,
-		SortOrder:      params.sortOrder,
-		Cursor:         params.cursor,
-		Limit:          params.limit + 1,
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		Filters:              attributeFilters,
+		TypesToInclude:       payload.TypesToInclude,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))

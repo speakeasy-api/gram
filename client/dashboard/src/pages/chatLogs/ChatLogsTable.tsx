@@ -6,20 +6,23 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Pin } from "lucide-react";
-import { useCallback, useState, type MouseEvent } from "react";
+import { ArrowUpRight, CircleDashed, GitBranch, Pin } from "lucide-react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
+import { formatPlatform } from "@/lib/formatPlatform";
+import { summarizeLineage, type LineageSummary } from "./sessionLinks";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -60,6 +63,68 @@ function RiskIndicator({ count }: { count: number }) {
         </span>
       </div>
     </SimpleTooltip>
+  );
+}
+
+// listHarnesses renders a harness list for a lineage tooltip ("Claude Code",
+// "Claude Code and Cursor").
+function listHarnesses(harnesses: string[]): string {
+  const labels = [...new Set(harnesses.map(formatPlatform))];
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+// SessionLineageIcons is the at-a-glance lineage cluster on a session row:
+// one icon per state — continued elsewhere (navigable continuation exists),
+// derived from an earlier session, and moved with no captured continuation.
+// The cluster sits above the row's stretched select button (tooltips need
+// pointer events), so clicking it forwards to the same row selection; the
+// stretched button remains the tab stop, hence tabIndex={-1}.
+function SessionLineageIcons({
+  summary,
+  onActivate,
+}: {
+  summary?: LineageSummary;
+  onActivate: () => void;
+}) {
+  if (!summary) return null;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={onActivate}
+      aria-label="Open session details"
+      className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 cursor-pointer items-center gap-1"
+    >
+      {summary.continuedIn.length > 0 && (
+        <SimpleTooltip
+          tooltip={`Continued in ${listHarnesses(summary.continuedIn)}`}
+        >
+          <ArrowUpRight
+            className="size-3.5"
+            aria-label="Continued in another harness"
+          />
+        </SimpleTooltip>
+      )}
+      {summary.derived && (
+        <SimpleTooltip tooltip="Derived from an earlier session">
+          <GitBranch
+            className="size-3.5"
+            aria-label="Derived from an earlier session"
+          />
+        </SimpleTooltip>
+      )}
+      {summary.danglingIn.length > 0 && (
+        <SimpleTooltip
+          tooltip={`Moved to ${listHarnesses(summary.danglingIn)} — continuation not yet captured`}
+        >
+          <CircleDashed
+            className="size-3.5"
+            aria-label="Moved, continuation not yet captured"
+          />
+        </SimpleTooltip>
+      )}
+    </button>
   );
 }
 
@@ -181,6 +246,28 @@ export function ChatLogsTable({
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
   const { data: membersData } = useMembers();
+
+  // One batched lineage lookup for the visible rows. Optional decoration:
+  // errors are swallowed (never blank the list) and the endpoint caps at 100
+  // ids, matching the list's maximum page size.
+  const chatIds = useMemo(
+    () => chats.slice(0, 100).map((chat) => chat.id),
+    [chats],
+  );
+  const { data: linksData } = useListChatSessionLinks({ chatIds }, undefined, {
+    enabled: chatIds.length > 0,
+    throwOnError: false,
+    retry: false,
+  });
+  const lineageByChat = useMemo(() => {
+    const map = new Map<string, LineageSummary>();
+    const links = linksData?.links ?? [];
+    for (const id of chatIds) {
+      const summary = summarizeLineage(links, id);
+      if (summary) map.set(id, summary);
+    }
+    return map;
+  }, [chatIds, linksData]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -276,10 +363,16 @@ export function ChatLogsTable({
 
                   {/* Center: Main content */}
                   <div className="min-w-0 flex-1">
-                    {/* Title — the scan target */}
-                    <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
-                      {chat.title}
-                    </h3>
+                    {/* Title — the scan target — with the lineage cluster */}
+                    <div className="flex items-start gap-1.5">
+                      <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
+                        {chat.title}
+                      </h3>
+                      <SessionLineageIcons
+                        summary={lineageByChat.get(chat.id)}
+                        onActivate={() => onSelectChat(chat)}
+                      />
+                    </div>
 
                     {/* Meta row — muted mono */}
                     <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
@@ -316,7 +409,7 @@ export function ChatLogsTable({
                         <>
                           <span className="text-muted-foreground/40">·</span>
                           <span className="inline-flex items-center gap-1.5">
-                            <HookSourceIcon
+                            <AgentProviderIcon
                               source={source}
                               className="size-3.5"
                             />

@@ -350,6 +350,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		Cwd:                 "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",

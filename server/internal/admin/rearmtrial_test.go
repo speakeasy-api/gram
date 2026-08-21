@@ -23,6 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -56,6 +59,18 @@ type rearmProvisioner struct {
 var _ TrialKeyReviver = (*rearmProvisioner)(nil)
 
 func (p *rearmProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
 	accountType, demoted := "", false
 	if p.conn != nil {
 		accountType, demoted = readRearmState(ctx, p.conn, orgID)
@@ -149,12 +164,15 @@ type keyFixture struct {
 func seedOpenRouterKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, f keyFixture) {
 	t.Helper()
 
+	enc := testenv.NewEncryptionClient(t)
+	ciphertext, err := enc.Encrypt([]byte("sk-test-" + orgID + "-" + string(f.keyType)))
+	require.NoError(t, err)
+
 	keys := orrepo.New(conn)
-	_, err := keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+	_, err = keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(f.keyType),
-		Key:            conv.ToPGText("sk-test-" + orgID + "-" + string(f.keyType)),
-		KeyEncrypted:   conv.ToPGText(""),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
 		KeyHash:        "hash-" + orgID + "-" + string(f.keyType),
 		MonthlyCredits: f.monthlyCredits,
 	})
@@ -197,11 +215,32 @@ func seedDemotedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	return endsAt
 }
 
+func seedDisabledTrialRuntimeFeatures(t *testing.T, ctx context.Context, svc *Service, conn *pgxpool.Pool, orgID string) {
+	t.Helper()
+	q := featurerepo.New(conn)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := q.EnableFeature(ctx, featurerepo.EnableFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+			OrganizationID: orgID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.False(t, enabled)
+	}
+}
+
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, provisioner := newRearmService(t)
 	seedDemotedTrial(t, ctx, conn, "org_rearm", "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, "org_rearm")
 	beforeTrial := readTrial(t, ctx, conn, "org_rearm")
 	beforeOrg := readOrgState(t, ctx, conn, "org_rearm")
 
@@ -221,6 +260,11 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	state := readOrgState(t, ctx, conn, "org_rearm")
 	require.Equal(t, "enterprise", state.GramAccountType)
 	require.True(t, state.Whitelisted, "a re-armed organization must be whitelisted again")
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, "org_rearm", feature)
+		require.NoError(t, err)
+		require.Truef(t, enabled, "re-arm should restore %s", feature)
+	}
 
 	after := readTrial(t, ctx, conn, "org_rearm")
 	require.False(t, after.DemotedAt.Valid, "re-arming must clear demoted_at")
@@ -523,6 +567,9 @@ func TestRearmTrial_OrganizationWithNoTrialRow(t *testing.T) {
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_no_trial", Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
+	// Extend and re-arm share one rejection helper, so each has to name its own
+	// message or the two can be swapped without a test noticing.
+	require.ErrorContains(t, err, "organization has no demoted enterprise trial to re-arm")
 
 	// Re-arm must never be a way to grant a trial; that is the auth flow's job.
 	_, err = trialsRepo.New(conn).GetTrial(ctx, "org_rearm_no_trial")
@@ -531,6 +578,26 @@ func TestRearmTrial_OrganizationWithNoTrialRow(t *testing.T) {
 	state := readOrgState(t, ctx, conn, "org_rearm_no_trial")
 	require.Equal(t, "free", state.GramAccountType)
 	require.False(t, state.Whitelisted)
+}
+
+func TestRearmTrial_ReleasesRejectedTransactionBeforeClassificationLookup(t *testing.T) { //nolint:paralleltest // The regression deliberately constrains the shared pool to three connections.
+	ctx, svc, conn, provisioner := newRearmService(t)
+	orgID := "org_rearm_limited_pool"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "No Trial", slug: "limited-pool-rearm", accountType: "free"})
+
+	poolConfig := conn.Config().Copy()
+	poolConfig.MinConns = 0
+	poolConfig.MaxConns = 3 // two key locks plus the trial transaction
+	limited, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	require.NoError(t, err)
+	t.Cleanup(limited.Close)
+	svc.db = limited
+	provisioner.conn = limited
+
+	requestCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	_, err = svc.RearmTrial(requestCtx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 // DisableAPIKey no-ops on a missing key row but RefreshAPIKeyLimit errors on
@@ -772,6 +839,7 @@ func TestRearmTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
 	// The subject is opaque, so it is not the email in another shape.
 	for name, field := range map[string]string{
 		"actor display name": conv.PtrValOr(entry.ActorDisplayName, ""),
+		"actor slug":         entry.ActorSlug,
 		"actor id":           entry.ActorID,
 		"subject display":    entry.SubjectDisplay,
 		"subject slug":       entry.SubjectSlug,

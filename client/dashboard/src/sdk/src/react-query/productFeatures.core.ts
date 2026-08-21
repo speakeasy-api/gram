@@ -22,7 +22,7 @@ export type ProductFeaturesQueryData = GetProductFeaturesResponseBody;
 export function prefetchProductFeatures(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetProductFeaturesRequest | undefined,
+  request: GetProductFeaturesRequest,
   security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -38,7 +38,7 @@ export function prefetchProductFeatures(
 
 export function buildProductFeaturesQuery(
   client$: GramCore,
-  request?: GetProductFeaturesRequest | undefined,
+  request: GetProductFeaturesRequest,
   security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -46,7 +46,10 @@ export function buildProductFeaturesQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ProductFeaturesQueryData>;
 } {
   return {
-    queryKey: queryKeyProductFeatures({ gramSession: request?.gramSession }),
+    queryKey: queryKeyProductFeatures({
+      organizationId: request.organizationId,
+      gramSession: request.gramSession,
+    }),
     queryFn: async function productFeaturesQueryFn(
       ctx,
     ): Promise<ProductFeaturesQueryData> {
@@ -72,7 +75,7 @@ export function buildProductFeaturesQuery(
 }
 
 export function queryKeyProductFeatures(
-  parameters: { gramSession?: string | undefined },
+  parameters: { organizationId: string; gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "features", "get", parameters];
 }

@@ -241,9 +241,10 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (*auth.LoginPayload, error) {
 		var payload *auth.LoginPayload
 		var (
-			redirect *string
-			orgName  *string
-			email    *string
+			redirect       *string
+			orgName        *string
+			email          *string
+			supportHandoff *string
 		)
 		qp := r.URL.Query()
 		redirectRaw := qp.Get("redirect")
@@ -258,7 +259,11 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if emailRaw != "" {
 			email = &emailRaw
 		}
-		payload = NewLoginPayload(redirect, orgName, email)
+		supportHandoffRaw := qp.Get("support_handoff")
+		if supportHandoffRaw != "" {
+			supportHandoff = &supportHandoffRaw
+		}
+		payload = NewLoginPayload(redirect, orgName, email, supportHandoff)
 
 		return payload, nil
 	}

@@ -375,7 +375,7 @@ func (c failingConditionalCache) AcquireLease(ctx context.Context, key, owner st
 	return acquireLease(ctx, c.Cache, key, owner, ttl)
 }
 
-func (c failingConditionalCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+func (c failingConditionalCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return releaseLease(ctx, c.Cache, key, owner)
 }
 
@@ -391,7 +391,7 @@ func (contendedLeaseCache) AcquireLease(context.Context, string, string, time.Du
 	return false, nil
 }
 
-func (c contendedLeaseCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+func (c contendedLeaseCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return releaseLease(ctx, c.Cache, key, owner)
 }
 
@@ -407,7 +407,7 @@ func (failingAddCache) AcquireLease(context.Context, string, string, time.Durati
 	return false, errors.New("refresh replay coordination unavailable")
 }
 
-func (f failingAddCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+func (f failingAddCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return releaseLease(ctx, f.Cache, key, owner)
 }
 
@@ -434,7 +434,7 @@ func (c cancelOnReplaySetCache) AcquireLease(ctx context.Context, key, owner str
 	return acquireLease(ctx, c.Cache, key, owner, ttl)
 }
 
-func (c cancelOnReplaySetCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+func (c cancelOnReplaySetCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return releaseLease(ctx, c.Cache, key, owner)
 }
 
@@ -460,7 +460,7 @@ func (c failingReplayGetCache) AcquireLease(ctx context.Context, key, owner stri
 	return acquireLease(ctx, c.Cache, key, owner, ttl)
 }
 
-func (c failingReplayGetCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+func (c failingReplayGetCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
 	return releaseLease(ctx, c.Cache, key, owner)
 }
 
@@ -485,7 +485,7 @@ func releaseLease(ctx context.Context, delegate cache.Cache, key, owner string) 
 	if !ok {
 		return false, errors.New("cache does not support leases")
 	}
-	released, err := leases.ReleaseLease(ctx, key, owner)
+	released, err := leases.ReleaseLeaseIfOwner(ctx, key, owner)
 	if err != nil {
 		return false, fmt.Errorf("release cache lease: %w", err)
 	}

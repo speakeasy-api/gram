@@ -401,7 +401,7 @@ func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, id uuid.UUID) 
 }
 
 const getEligibleRootMcpEndpoint = `-- name: GetEligibleRootMcpEndpoint :one
-SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM mcp_endpoints AS e
 JOIN projects AS p
   ON p.id = e.project_id
@@ -431,6 +431,7 @@ func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibl
 		&i.ProjectID,
 		&i.CustomDomainID,
 		&i.McpServerID,
+		&i.MetaMcpServerID,
 		&i.Slug,
 		&i.IsDomainRoot,
 		&i.CreatedAt,
@@ -586,44 +587,6 @@ func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, 
 	for rows.Next() {
 		var i ListActivatedCustomDomainsForHealthCheckRow
 		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOrganizationUsersForHealthNotification = `-- name: ListOrganizationUsersForHealthNotification :many
-SELECT users.id, users.email
-FROM organization_user_relationships AS our
-JOIN users
-  ON users.id = our.user_id
-WHERE our.organization_id = $1
-  AND our.deleted IS FALSE
-  AND users.deleted_at IS NULL
-  AND users.email <> ''
-ORDER BY users.email, users.id
-`
-
-type ListOrganizationUsersForHealthNotificationRow struct {
-	ID    string
-	Email string
-}
-
-// Authorization filtering is applied by the caller.
-func (q *Queries) ListOrganizationUsersForHealthNotification(ctx context.Context, organizationID string) ([]ListOrganizationUsersForHealthNotificationRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationUsersForHealthNotification, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrganizationUsersForHealthNotificationRow
-	for rows.Next() {
-		var i ListOrganizationUsersForHealthNotificationRow
-		if err := rows.Scan(&i.ID, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

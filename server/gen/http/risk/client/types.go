@@ -193,6 +193,10 @@ type UnmarkRiskResultsFalsePositiveRequestBody struct {
 type CreateRiskPolicyBypassRequestRequestBody struct {
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string `form:"request_token" json:"request_token" xml:"request_token"`
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeRequestBody is the type of the "risk" service
@@ -10318,9 +10322,22 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When this result was manually marked as a false positive. Null when not
-	// dismissed.
+	// Deprecated: mirror of suppressed_at, kept while clients migrate to the
+	// suppressed_* fields. Null when not suppressed.
 	FalsePositiveAt *string `form:"false_positive_at,omitempty" json:"false_positive_at,omitempty" xml:"false_positive_at,omitempty"`
+	// When this result was suppressed (hidden from open-finding listings). Null
+	// when not suppressed.
+	SuppressedAt *string `form:"suppressed_at,omitempty" json:"suppressed_at,omitempty" xml:"suppressed_at,omitempty"`
+	// Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id),
+	// 'manual' (dismissed by a user), or 'automated' (the automated false-positive
+	// sweep). Null when not suppressed.
+	SuppressedReason *string `form:"suppressed_reason,omitempty" json:"suppressed_reason,omitempty" xml:"suppressed_reason,omitempty"`
+	// Free-form suppression context: the user-supplied dismissal reason for manual
+	// suppressions, the catalog reason for automated ones. Null when absent.
+	SuppressedDetail *string `form:"suppressed_detail,omitempty" json:"suppressed_detail,omitempty" xml:"suppressed_detail,omitempty"`
+	// The exclusion rule that suppressed this result. Only set when
+	// suppressed_reason is 'rule'.
+	ExclusionID *string `form:"exclusion_id,omitempty" json:"exclusion_id,omitempty" xml:"exclusion_id,omitempty"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.
@@ -10984,6 +11001,7 @@ func NewUnmarkRiskResultsFalsePositiveRequestBody(p *risk.UnmarkRiskResultsFalse
 func NewCreateRiskPolicyBypassRequestRequestBody(p *risk.CreateRiskPolicyBypassRequestPayload) *CreateRiskPolicyBypassRequestRequestBody {
 	body := &CreateRiskPolicyBypassRequestRequestBody{
 		RequestToken: p.RequestToken,
+		Note:         p.Note,
 	}
 	return body
 }
@@ -32273,6 +32291,17 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	}
 	if body.FalsePositiveAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.false_positive_at", *body.FalsePositiveAt, goa.FormatDateTime))
+	}
+	if body.SuppressedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.suppressed_at", *body.SuppressedAt, goa.FormatDateTime))
+	}
+	if body.SuppressedReason != nil {
+		if !(*body.SuppressedReason == "rule" || *body.SuppressedReason == "manual" || *body.SuppressedReason == "automated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suppressed_reason", *body.SuppressedReason, []any{"rule", "manual", "automated"}))
+		}
+	}
+	if body.ExclusionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.exclusion_id", *body.ExclusionID, goa.FormatUUID))
 	}
 	return
 }

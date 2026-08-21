@@ -4,6 +4,7 @@
 
 import { userSessionClientsGet } from "../funcs/userSessionClientsGet.js";
 import { userSessionClientsList } from "../funcs/userSessionClientsList.js";
+import { userSessionClientsRefreshCIMD } from "../funcs/userSessionClientsRefreshCIMD.js";
 import { userSessionClientsRevoke } from "../funcs/userSessionClientsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { UserSessionClient } from "../models/components/usersessionclient.js";
@@ -16,6 +17,10 @@ import {
   ListUserSessionClientsResponse,
   ListUserSessionClientsSecurity,
 } from "../models/operations/listusersessionclients.js";
+import {
+  RefreshUserSessionClientCIMDRequest,
+  RefreshUserSessionClientCIMDSecurity,
+} from "../models/operations/refreshusersessionclientcimd.js";
 import {
   RevokeUserSessionClientRequest,
   RevokeUserSessionClientSecurity,
@@ -55,6 +60,25 @@ export class UserSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListUserSessionClientsResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionClientsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshUserSessionClientCIMD userSessionClients
+   *
+   * @remarks
+   * Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.
+   */
+  async refreshCIMD(
+    request: RefreshUserSessionClientCIMDRequest,
+    security?: RefreshUserSessionClientCIMDSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionClient> {
+    return unwrapAsync(userSessionClientsRefreshCIMD(
       this,
       request,
       security,

@@ -20,6 +20,21 @@ func TestKeyTypeOrDefault(t *testing.T) {
 	require.Equal(t, KeyTypeInternal, KeyTypeInternal.OrDefault())
 }
 
+func TestBillableKeyTypes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []KeyType{KeyTypeChat, KeyTypeInternal}, BillableKeyTypes())
+	require.Equal(t, []string{"chat", "internal"}, BillableKeyTypeStrings())
+	require.Equal(t, "4b4e792daf43040a6f92b112a281187144b92cc902d5b355056f28a0c2ad6894", BillableKeyPolicyFingerprint())
+	require.True(t, KeyTypeChat.IsBillable())
+	require.True(t, KeyTypeInternal.IsBillable())
+	require.False(t, KeyType("future").IsBillable())
+
+	keyTypes := BillableKeyTypes()
+	keyTypes[0] = "changed"
+	require.Equal(t, KeyTypeChat, BillableKeyTypes()[0], "callers cannot mutate billing policy")
+}
+
 func TestKeyTypeValidate(t *testing.T) {
 	t.Parallel()
 
@@ -104,9 +119,9 @@ func TestChatClient_GetCompletion_ExplicitInternalKeyType(t *testing.T) {
 }
 
 // TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey pins the
-// pairing guard: risk-analysis inference never legitimately bills the chat
+// pairing guard: risk-analysis inference never legitimately bills the Other inference
 // key, so a caller that forgets KeyType must fail fast rather than silently
-// drain the customer's chat cap.
+// drain the customer's Other inference cap.
 func TestChatClient_GetCompletion_RiskAnalysisRequiresInternalKey(t *testing.T) {
 	t.Parallel()
 

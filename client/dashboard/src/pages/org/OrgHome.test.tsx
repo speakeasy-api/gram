@@ -1,6 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+import OrgHome from "./OrgHome";
+import type { ReactNode } from "react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/components/page-layout", () => {
   function Page({ children }: { children: ReactNode }) {
@@ -69,6 +72,17 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/hooks/usePlatformMcpCta", () => ({
+  usePlatformMcpCta: () => ({
+    dismiss: vi.fn(),
+    href: "/acme/platform-mcp",
+    label: "Set up Platform MCP",
+    recordImpression: vi.fn(),
+    recordSelected: vi.fn(),
+    visible: false,
+  }),
+  usePlatformMcpCtaImpression: () => vi.fn(),
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {
@@ -132,9 +146,6 @@ vi.mock("@/components/ui/Dropdown", () => ({
 vi.mock("@/components/ui/Icon", () => ({
   Icon: () => null,
 }));
-
-import { TooltipProvider } from "@/components/ui/Tooltip";
-import OrgHome from "./OrgHome";
 
 afterEach(cleanup);
 

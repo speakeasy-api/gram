@@ -31,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -52,23 +54,11 @@ import (
 type toolsCallParams struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
-	Meta      *toolsCallMeta  `json:"_meta,omitempty"`
-}
 
-// toolsCallMeta is the subset of request `_meta` Gram reads. Clients may send
-// any keys they like; unknown ones are dropped on decode.
-type toolsCallMeta struct {
-	// ClientInfo is the per-request caller identity introduced by the draft
-	// stateless MCP work (SEP-2575), where the handshake fields move onto
-	// every request.
-	ClientInfo *mcpClientInfoHint `json:"io.modelcontextprotocol/clientInfo,omitempty"`
-}
-
-// mcpClientInfoHint is an MCP `Implementation` value as reported by a client.
-// Untrusted and self-reported.
-type mcpClientInfoHint struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	// Meta is the per-request metadata, decoded in the same pass as the rest
+	// of the params so tools/call never re-scans its (potentially large)
+	// arguments. Unsanitized until passed through Sanitize.
+	Meta *mcprequests.WireMeta `json:"_meta,omitempty"`
 }
 
 const (
@@ -80,7 +70,7 @@ const (
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
-	metrics *metrics,
+	metrics *mcpmetrics.Metrics,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
@@ -103,6 +93,7 @@ func handleToolsCall(
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, logger)
 	}
+	reqMeta := params.Meta.Sanitize()
 
 	if params.Name == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
@@ -124,7 +115,24 @@ func handleToolsCall(
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
-	if payload.mode != ToolModeStatic {
+	// The consent-screen tool selection narrows the same slice before any
+	// resolution, so a deselected tool surfaces as method-not-found exactly
+	// like a ?tags=-filtered one.
+	if payload.toolSelection != nil {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsBySelection(toolset.Tools, payload.toolSelection)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
+	}
+
+	// Mirror tools/list: a zero-tool restrictive session exposes no dynamic
+	// facade, so its search/describe/execute calls fall through to the name
+	// lookup below and surface as method-not-found.
+	dynamicFacade := payload.mode != ToolModeStatic
+	if payload.toolSelection != nil && len(toolset.Tools) == 0 {
+		dynamicFacade = false
+	}
+
+	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
 			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
@@ -275,10 +283,7 @@ func handleToolsCall(
 		}
 	}
 
-	var clientInfoHint *mcpClientInfoHint
-	if params.Meta != nil {
-		clientInfoHint = params.Meta.ClientInfo
-	}
+	clientIdentity, _ := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
 
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
@@ -286,7 +291,7 @@ func handleToolsCall(
 		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
-		MCPClient:  resolveClientIdentity(ctx, logger, clientInfoStore, payload, clientInfoHint),
+		MCPClient:  clientIdentity,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
@@ -437,8 +442,9 @@ func handleToolsCall(
 	// External MCP tools and MCP passthrough tools already return properly formatted responses
 	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
 		bs, err := json.Marshal(result[json.RawMessage]{
-			ID:     req.ID,
-			Result: json.RawMessage(rw.body.Bytes()),
+			ID:             req.ID,
+			Result:         json.RawMessage(rw.body.Bytes()),
+			serverIdentity: serverInfoHostedToolset,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
@@ -459,6 +465,7 @@ func handleToolsCall(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoHostedToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)

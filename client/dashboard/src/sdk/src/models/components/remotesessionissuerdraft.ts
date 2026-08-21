@@ -21,6 +21,10 @@ export type RemoteSessionIssuerDraft = {
    */
   clientIdMetadataDocumentSupported: boolean;
   /**
+   * PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.
+   */
+  codeChallengeMethodsSupported?: Array<string> | null | undefined;
+  /**
    * Warnings describing any RFC 8414 deviations encountered during discovery.
    */
   discoveryWarnings: Array<string>;
@@ -78,6 +82,9 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
   z.object({
     authorization_endpoint: z.optional(z.string()),
     client_id_metadata_document_supported: z.boolean(),
+    code_challenge_methods_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
     discovery_warnings: z.array(z.string()),
     grant_types_supported: z.optional(z.array(z.string())),
     issuer: z.string(),
@@ -99,6 +106,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
       "authorization_endpoint": "authorizationEndpoint",
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
+      "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "discovery_warnings": "discoveryWarnings",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",

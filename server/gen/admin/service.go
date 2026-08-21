@@ -67,6 +67,18 @@ type Service interface {
 	// narrows to the caller's list filters, so the strip does not move when an
 	// operator filters.
 	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
+	// Returns the configured state of every materialized platform-managed
+	// OpenRouter key for an organization.
+	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
+	// Returns current PAYG usage and estimated cost for an organization.
+	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
+	// Returns the live Stripe subscription and payment state for an organization.
+	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Schedules an organization's PAYG subscription to cancel at period end.
+	CancelStripeSubscription(context.Context, *CancelStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Removes a scheduled period-end cancellation from an organization's PAYG
+	// subscription.
+	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -89,7 +101,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
+var MethodNames = [21]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -100,6 +112,16 @@ type AdminBulkUpdateAccountTypeResult struct {
 	// IDs from the request that matched no organization, deduplicated and in
 	// request order. Nothing was written for these.
 	MissingIds []string
+}
+
+// Current usage and configured state for one materialized platform-managed
+// OpenRouter key, without key material or provider identifiers.
+type AdminInferenceKey struct {
+	KeyType string
+	// Credits spent this month in USD.
+	CreditsUsed    float64
+	MonthlyCredits int64
+	Disabled       bool
 }
 
 // AdminListOrganizationMembersResult is the result type of the admin service
@@ -136,7 +158,7 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, enterprise).
+	// Gram account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
@@ -190,6 +212,19 @@ type AdminOrganizationStats struct {
 	DisabledLast7Days int64
 }
 
+// AdminPaygBillingSummary is the result type of the admin service
+// getPaygBillingSummary method.
+type AdminPaygBillingSummary struct {
+	PeriodStart            string
+	PeriodEnd              string
+	TumTokens              int64
+	TumUnitPriceUsd        string
+	TumCostUsd             string
+	OtherInferenceSpendUsd string
+	RecordedThrough        *string
+	EstimatedTotalUsd      string
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -198,6 +233,9 @@ type AdminProject struct {
 	Name string
 	// The slug of the project
 	Slug string
+	// Number of MCP servers in the project, counting both toolset-backed servers
+	// and mcp_servers rows.
+	McpServerCount int
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.
@@ -234,6 +272,20 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// AdminStripeSubscription is the result type of the admin service
+// getStripeSubscription method.
+type AdminStripeSubscription struct {
+	Status             string
+	CurrentPeriodStart string
+	CurrentPeriodEnd   string
+	TrialStart         *string
+	TrialEnd           *string
+	CancelAtPeriodEnd  bool
+	CancelAt           *string
+	CanceledAt         *string
+	PaymentFailed      bool
+}
+
 // BulkUpdateAccountTypePayload is the payload type of the admin service
 // bulkUpdateAccountType method.
 type BulkUpdateAccountTypePayload struct {
@@ -266,6 +318,13 @@ type CallbackResult struct {
 	Location string
 	// The admin session cookie value
 	SessionID string
+}
+
+// CancelStripeSubscriptionPayload is the payload type of the admin service
+// cancelStripeSubscription method.
+type CancelStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
 }
 
 // CreateOrganizationPayload is the payload type of the admin service
@@ -302,6 +361,13 @@ type ExtendTrialPayload struct {
 	Days int
 }
 
+// GetInferenceKeysPayload is the payload type of the admin service
+// getInferenceKeys method.
+type GetInferenceKeysPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -316,11 +382,29 @@ type GetOrganizationStatsPayload struct {
 	AdminSessionToken *string
 }
 
+// GetPaygBillingSummaryPayload is the payload type of the admin service
+// getPaygBillingSummary method.
+type GetPaygBillingSummaryPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetProjectPayload is the payload type of the admin service getProject method.
 type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+	// Organization the project must belong to, by id or slug. A project outside it
+	// is reported as not found. Optional, because the global project lookup has no
+	// organization to scope by.
+	OrganizationIDOrSlug *string
+}
+
+// GetStripeSubscriptionPayload is the payload type of the admin service
+// getStripeSubscription method.
+type GetStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service
@@ -350,7 +434,7 @@ type ListOrganizationsPayload struct {
 	// otherwise hide; it still respects account_type, account_types, trial_states
 	// and cursor.
 	Q *string
-	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
 	// set.
 	AccountType *string
@@ -420,13 +504,20 @@ type RearmTrialPayload struct {
 	Days int
 }
 
+// ResumeStripeSubscriptionPayload is the payload type of the admin service
+// resumeStripeSubscription method.
+type ResumeStripeSubscriptionPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // UpdateOrganizationPayload is the payload type of the admin service
 // updateOrganization method.
 type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type.
+	// New gram_account_type (free, pro, payg, or enterprise).
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool

@@ -58,7 +58,7 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 
 	// Skip challenge logging when a Speakeasy admin is impersonating a
 	// customer org — challenges belong to the admin, not the customer.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating {
+	if contextvalues.IsSupportSession(ctx) {
 		return
 	}
 

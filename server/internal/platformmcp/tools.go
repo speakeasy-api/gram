@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -26,7 +27,7 @@ var externalOnly = []Audience{AudienceExternal}
 
 type Reader interface {
 	ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error)
-	ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error)
+	FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error)
 	GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 
@@ -51,26 +52,68 @@ type ListProjectsOutput struct {
 	Truncated bool      `json:"truncated"`
 }
 
-type ListProjectMCPsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"Gram project ID to inspect"`
-	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+type FindMCPInput struct {
+	// At most one project selector may be supplied. Without a selector, an
+	// unfiltered list uses the organization's Default project; a query searches
+	// the organization. The assistant policy injects project_id and removes both
+	// selectors from its model-visible schema.
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional AICP project ID; defaults to the organization's Default project when query is omitted"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional AICP project slug; defaults to the organization's Default project when query is omitted"`
+	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search; without a project selector, searches the organization"`
+	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+	Readiness   string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
+}
+
+type MCPSource struct {
+	Kind      string `json:"kind"`
+	Provider  string `json:"provider,omitempty"`
+	Reference string `json:"reference,omitempty"`
+}
+
+type MCPReadiness struct {
+	State     string `json:"state"`
+	CheckedAt string `json:"checked_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+type MCPDistribution struct {
+	PluginID         string `json:"plugin_id"`
+	State            string `json:"state"`
+	PublicationState string `json:"publication_state"`
 }
 
 type MCP struct {
-	ID         string `json:"id"`
-	ProjectID  string `json:"project_id"`
-	Name       string `json:"name,omitempty"`
-	Slug       string `json:"slug,omitempty"`
-	Visibility string `json:"visibility"`
+	ID               string            `json:"id"`
+	ProjectID        string            `json:"project_id"`
+	ProjectName      string            `json:"project_name,omitempty"`
+	ProjectSlug      string            `json:"project_slug,omitempty"`
+	Name             string            `json:"name,omitempty"`
+	Slug             string            `json:"slug,omitempty"`
+	Visibility       string            `json:"visibility"`
+	EffectiveEnabled bool              `json:"effective_enabled"`
+	Model            string            `json:"model"`
+	Source           MCPSource         `json:"source"`
+	Registration     *MCPRegistration  `json:"registration,omitempty"`
+	Readiness        MCPReadiness      `json:"readiness"`
+	Distributions    []MCPDistribution `json:"distributions"`
+	Operations       []string          `json:"operations"`
+	DashboardPath    string            `json:"dashboard_path,omitempty"`
 }
 
-type ListProjectMCPsOutput struct {
-	MCPs      []MCP `json:"mcps"`
-	Truncated bool  `json:"truncated"`
+type MCPRegistration struct {
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	ComponentsComplete bool   `json:"components_complete"`
+}
+
+type FindMCPOutput struct {
+	MCPs       []MCP  `json:"mcps"`
+	NextCursor string `json:"next_cursor,omitempty"`
 }
 
 type GetMCPInput struct {
-	ProjectID string `json:"project_id" jsonschema:"Gram project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
 }
 
@@ -90,7 +133,7 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "speakeasy-aicp-platform-mcp",
 		Title:   "Speakeasy AICP Platform MCP",
@@ -102,8 +145,17 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 
 	reg := newRegistrar(server)
 
-	registerReadTools(reg, reader)
-	registerSetupResources(reg, setupResources)
+	registerReadTools(reg, reader, cursorKeyMaterial)
+	registerSetupResources(reg, setupResources, time.Now)
+	if registrations == nil || !registrations.budgets.Docs.valid() {
+		registerUnavailableSearchDocsTool(reg)
+	} else {
+		// The search index reads the same pinned corpus the resources are
+		// registered from, so a citation's URI always resolves to a resource
+		// this deployment actually serves.
+		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
+	}
+	registerReadDocTool(reg)
 	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
 	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
@@ -131,25 +183,32 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerOnboardingLifecycleTools(reg, onboarding, registrations, distributions)
 	}
+	if !skills.valid() {
+		registerUnavailableSkillsTools(reg)
+	} else {
+		registerSkillsTools(reg, skills)
+	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Platform MCP Feedback",
 			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
 	return server, reg
 }
 
-func registerReadTools(reg *Registrar, reader Reader) {
+func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) {
 	registerGetPlatformContextTool(reg)
 	registerListProjectsTool(reg, reader)
-	registerListProjectMCPsTool(reg, reader)
+	registerFindMCPTool(reg, reader, cursorKeyMaterial)
 	registerGetMCPTool(reg, reader)
 }
 
+// Each stub declares the audiences its live counterpart declares, so a tool
+// does not appear on and disappear from a surface as the rollout flips.
 func registerUnavailableCatalogTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name        string
@@ -164,7 +223,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
@@ -181,7 +240,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
 		Description: "Create a secure setup handoff. Provider setup is not available in the current preview.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
 func registerUnavailableTools(reg *Registrar) {

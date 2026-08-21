@@ -33,6 +33,12 @@ type Service interface {
 	// Re-run every evidence source for a request and replace its current evidence
 	// with the fresh gather. Frozen decision snapshots are never touched.
 	RefreshEvidence(context.Context, *RefreshEvidencePayload) (res *ApprovalRequestDetail, err error)
+	// Start a research-agent run for an approval request. The agent searches the
+	// web and reads pages about the server's vendor, then files a cited report; it
+	// never decides. Runs are additive — a re-run adds a report rather than
+	// replacing one — and at most one run per request is in flight at a time:
+	// starting while one runs returns the running report.
+	StartResearch(context.Context, *StartResearchPayload) (res *ResearchReport, err error)
 	// Approve or deny an MCP approval request, recording the rationale and who it
 	// applies to.
 	RecordDecision(context.Context, *RecordDecisionPayload) (res *ApprovalDecision, err error)
@@ -58,7 +64,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "refreshEvidence", "recordDecision"}
+var MethodNames = [8]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "refreshEvidence", "startResearch", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -105,6 +111,10 @@ type ApprovalRequestDetail struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecision
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiff
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReport
 }
@@ -135,6 +145,10 @@ type ApprovalRequestSummary struct {
 	Status string
 	// How many people have asked for this server.
 	RequesterCount int
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string
 	// When the request was first raised.
 	CreatedAt string
 	// When the request last changed.
@@ -176,6 +190,52 @@ type EnsureServerReviewPayload struct {
 	ProjectSlugInput *string
 	// The server URL the dossier describes.
 	Target string
+}
+
+// A published advisory the decision's snapshot did not carry.
+type EvidenceAdvisoryChange struct {
+	// The advisory identifier.
+	ID string
+	// The advisory's summary, when the database published one.
+	Summary *string
+	// The advisory's severity, when the database published one.
+	Severity *string
+}
+
+// What moved between the latest decision's evidence snapshot and the current
+// gather, restricted to the permission-relevant slice: OAuth scopes, authority
+// mode, demanded credentials, and published advisories. A change here is a
+// re-review trigger, never a verdict — an unchanged published interface says
+// nothing about unchanged behavior.
+type EvidenceDiff struct {
+	// Whether anything below is non-empty.
+	Changed bool
+	// OAuth scopes the server's published authority metadata gained since the
+	// decision.
+	ScopesAdded []string
+	// OAuth scopes the published authority metadata lost since the decision.
+	ScopesRemoved []string
+	// Credentials the server now demands that it did not at decision time.
+	SecretsAdded []string
+	// Credentials the server demanded at decision time and no longer does.
+	SecretsRemoved []string
+	// Scalar drifts: authority mode, dynamic client registration,
+	// published-advisory count.
+	Fields []*EvidenceFieldChange
+	// Advisories in the current gather's most-recent sample that the snapshot's
+	// sample did not carry.
+	AdvisoriesAdded []*EvidenceAdvisoryChange
+}
+
+// One scalar drift between the decision's evidence snapshot and the current
+// gather.
+type EvidenceFieldChange struct {
+	// Which fact moved: authority_mode, dynamic_registration, or known_advisories.
+	Field string
+	// The value the decision rested on.
+	Before string
+	// The value the latest gather found.
+	After string
 }
 
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
@@ -246,9 +306,35 @@ type RefreshEvidencePayload struct {
 	ID string
 }
 
-// One research-agent run over a request's server. Findings are gathered and
-// cited, never adjudicated — and web-sourced claims may be inaccurate,
-// incomplete, or deliberately seeded.
+// A page the agent fetched, with what came back and the injection judge's
+// verdict on it. A fetch spends nothing.
+type ResearchPageFetchCall struct {
+	// The page the agent fetched.
+	URL *string
+	// Where the fetch landed after redirects, when it differed.
+	FinalURL *string
+	// The fetched page's content type.
+	ContentType *string
+	// The fetched page's extracted-text size.
+	ContentBytes *int
+	// Whether the fetch hit its caps and the preview is of a prefix.
+	Truncated *bool
+	// Whether the injection judge reached a verdict on this page.
+	Judged *bool
+	// Whether the judge found the page tried to instruct its reader.
+	InjectionFlagged *bool
+	// The judge's reasoning, when it flagged the page.
+	JudgeRationale *string
+	// A bounded preview of the extracted page text. Untrusted web content.
+	ContentPreview *string
+	// Indices of the report claims that cited this page — the link from a fetch to
+	// the evidence it became. Empty when the page was read but nothing in the
+	// final report rests on it.
+	CitedByClaims []int
+}
+
+// ResearchReport is the result type of the mcpApproval service startResearch
+// method.
 type ResearchReport struct {
 	// The report ID.
 	ID string
@@ -274,6 +360,51 @@ type ResearchReport struct {
 	Error *string
 	// When the run was requested.
 	CreatedAt string
+	// The run's per-action trace — every search and page fetch, in order. The
+	// report above is a synthesis that drops most of what was read; this is what
+	// the agent actually did.
+	ToolCalls []*ResearchToolCall
+}
+
+// One action a research run took, named by tool and carrying the payload for
+// that tool. The report is a synthesis that drops most of what was read; this
+// is what the agent actually did. Observability, never a claim about the
+// server.
+type ResearchToolCall struct {
+	// Position in the run, from zero.
+	Sequence int
+	// The tool that ran: web_search or fetch_page. The discriminator for which
+	// payload below is present.
+	Tool string
+	// The tool's failure text, when the call did not succeed.
+	Error *string
+	// The web-search payload, present when tool is web_search.
+	Search *ResearchWebSearchCall
+	// The page-fetch payload, present when tool is fetch_page.
+	Fetch *ResearchPageFetchCall
+}
+
+// A web search the agent ran. A search runs a billed completion, so its token
+// spend lives here.
+type ResearchWebSearchCall struct {
+	// What the agent searched for.
+	Query *string
+	// How many citations the search returned.
+	ResultCount *int
+	// Prompt tokens this search spent.
+	PromptTokens *int
+	// Completion tokens this search spent.
+	CompletionTokens *int
+}
+
+// StartResearchPayload is the payload type of the mcpApproval service
+// startResearch method.
+type StartResearchPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The approval request ID.
+	ID string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

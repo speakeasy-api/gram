@@ -110,3 +110,12 @@ func TestBuildAuthorizationURL_DevIDP(t *testing.T) {
 	// "openid". Dropping it here would break local login.
 	require.Equal(t, "openid email profile", q.Get("scope"))
 }
+
+func TestHasWorkOSUser_NilClient(t *testing.T) {
+	t.Parallel()
+
+	r := newURLResolver(t, "https://unused.example.com", "client_test123")
+	exists, err := r.HasWorkOSUser(t.Context(), "someone@example.com")
+	require.NoError(t, err)
+	require.False(t, exists)
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // ShadowMCPApprovalIntake admits a blocked shadow-MCP server into the MCP
@@ -23,4 +24,13 @@ type ShadowMCPApprovalIntake interface {
 	// error means the approval workflow is not enabled for the organization
 	// and the caller should fall back to the legacy bypass request.
 	AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (requestID string, status string, err error)
+
+	// ReconcileStandingDecisionsForPolicy replays the project's recorded
+	// decisions onto a newly blocking policy, inside the transaction that
+	// creates or transitions it. Without it, ordering decides what an
+	// approval means: a policy created after decisions were recorded would
+	// block servers whose reviews still read approved. A returned shareable
+	// error (an inexpressible blast radius) aborts the policy write with its
+	// explanation intact.
+	ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID) error
 }

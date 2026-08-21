@@ -319,7 +319,7 @@ WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
 -- refresh_token_hash is excluded from the projection so the management API
 -- surface cannot accidentally return it.
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
-       s.refresh_expires_at, s.expires_at,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
@@ -388,6 +388,36 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND refresh_token_hash = @refresh_token_hash
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: GetUserSessionToolSelectionByJTI :one
+-- Serve-path lookup for the consent-screen tool selection, keyed the same way
+-- runtime requests are addressed (issuer + jti). Deliberately narrow: request
+-- handling must not haul refresh-token material around. Project scoping is
+-- intentionally NOT applied here -- the OAuth surface is public and the
+-- issuer_id is the authoritative scope.
+SELECT tool_selection, expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE;
+
+-- name: GetLatestLiveUserSessionToolSelection :one
+-- Reauth prefill: the identified subject's newest live restrictive policy
+-- for the same issuer + client + endpoint resource. Filtering by resource in
+-- SQL keeps a newer session on a sibling endpoint from shadowing this
+-- endpoint's policy. Anonymous subjects never prefill (each authorization
+-- mints a fresh random subject).
+SELECT tool_selection
+FROM user_sessions
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id
+  AND subject_urn = @subject_urn
+  AND tool_selection ->> 'resource' = @resource::text
+  AND deleted IS FALSE
+  AND refresh_expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: GetUserSessionByJTI :one
 -- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
@@ -538,12 +568,55 @@ RETURNING *;
 -- Revoking the client purges its cache as a side effect, since the lookup
 -- behind every authorize filters on deleted IS FALSE and a miss forces an
 -- unconditional fetch. This query exists for the case where the client should
--- keep working and only its stored document is suspect. It has no endpoint
--- yet and is run by hand; AIS-211 wires it to a per-client refresh action.
+-- keep working and only its stored document is suspect. It backs the
+-- refreshUserSessionClientCIMD endpoint and is also run by hand.
+--
+-- Project-scoped like every management-API mutation in this file, so the
+-- generated method cannot touch another tenant's row even if a future caller
+-- skips the ownership read.
 UPDATE user_session_clients
 SET client_id_metadata_cache_expires_at = NULL,
     client_id_metadata_etag = NULL,
     updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateUserSessionClientFromCIMD :one
+-- Persists a freshly re-read metadata document onto an EXISTING CIMD row,
+-- scoped by id so it can never insert. The refresh endpoint targets one row
+-- an operator is looking at; persisting through the (issuer, client_id)
+-- upsert instead would re-insert — and thereby silently resurrect — a client
+-- revoked between the refresh's purge and this write, because the conflict
+-- target is a partial unique index that only sees live rows. The guards
+-- mirror UpdateUserSessionClientCIMDCache's plus the project scoping every
+-- management-API mutation in this file carries; a miss surfaces as no-rows,
+-- which the refresh handler maps to not-found.
+UPDATE user_session_clients
+SET client_name = @client_name,
+    redirect_uris = @redirect_uris,
+    client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetUserSessionClientCIMDFetchedAt :one
+-- Sets client_id_metadata_fetched_at to an explicit timestamp. Every
+-- production writer stamps this column from clock_timestamp(), so a caller
+-- that needs a row whose last successful read is in the past — the refresh
+-- cooldown tests — supplies the aged value here. Guarded to CIMD rows like
+-- the other client_id_metadata_* writers; a miss surfaces as no-rows rather
+-- than silently stamping a DCR row.
+UPDATE user_session_clients
+SET client_id_metadata_fetched_at = @fetched_at
 WHERE id = @id
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
@@ -561,7 +634,8 @@ INSERT INTO user_sessions (
     jti,
     refresh_token_hash,
     refresh_expires_at,
-    expires_at
+    expires_at,
+    tool_selection
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -571,7 +645,8 @@ VALUES (
     @jti,
     @refresh_token_hash,
     @refresh_expires_at,
-    @expires_at
+    @expires_at,
+    @tool_selection
 )
 RETURNING *;
 
@@ -633,3 +708,54 @@ WHERE project_id = @project_id
   AND jti = @jti
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListRemoteSessionUpstreamsForSubjects :many
+-- The outbound leg of the brokered connections on one page of user_sessions.
+-- user_sessions and remote_sessions both carry (subject_urn,
+-- user_session_issuer_id), so that pair is the join between "an agent can reach
+-- Gram" and "Gram can reach an upstream on this subject's behalf".
+-- Takes the page's pairs as parallel arrays rather than two independent IN
+-- lists: filtering on subjects and issuers separately would return the cross
+-- product, attributing one subject's upstream session to another subject who
+-- happens to share an issuer.
+-- Token material is never projected — only expiry metadata and a boolean for
+-- whether a refresh grant exists.
+-- Scoped by the session's user_session_issuer project, not the client's project
+-- (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
+-- through an organization-level or global client, whose project_id is NULL,
+-- still belongs to the project whose user_session_issuer minted it. Filtering
+-- on the client's project would silently drop those upstreams and report a
+-- brokered session as having none. A client that does carry a project must
+-- still match, so a row that somehow paired one project's client with another
+-- project's issuer stays invisible rather than being read as a shared one.
+SELECT rs.id,
+       rs.subject_urn,
+       rs.user_session_issuer_id,
+       rs.remote_session_client_id,
+       rc.remote_session_issuer_id,
+       ri.slug AS issuer_slug,
+       rs.access_expires_at,
+       rs.refresh_expires_at,
+       rs.authorization_expires_at,
+       -- Cast so sqlc types this as bool rather than interface{}; the token
+       -- itself is never projected, only whether a refresh grant exists.
+       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       rs.auto_refresh,
+       rs.last_used_at,
+       rs.scopes
+FROM remote_sessions AS rs
+JOIN (
+       SELECT unnest(@subject_urns::text[]) AS subject_urn,
+              unnest(@issuer_ids::uuid[]) AS issuer_id
+     ) AS pair
+  ON rs.subject_urn = pair.subject_urn
+  AND rs.user_session_issuer_id = pair.issuer_id
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE usi.project_id = @project_id
+  AND (rc.project_id IS NULL OR rc.project_id = @project_id)
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+ORDER BY ri.slug ASC, rs.id ASC;

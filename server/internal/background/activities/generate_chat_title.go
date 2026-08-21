@@ -166,6 +166,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 			openrouter.CreateMessageUser(conversationContext),
 		},
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               nil,
 		Model:                     "",
 		Stream:                    false,
@@ -181,6 +182,8 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
