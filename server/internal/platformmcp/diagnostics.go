@@ -228,8 +228,11 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	}
 
 	output := GetProjectOverviewOutput{
-		ProjectID:   input.ProjectID,
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window),
+		ProjectID: input.ProjectID,
+		// A project overview is project-scoped, so the watermark and the result
+		// answer for the same scope; observation is still taken from the
+		// result rather than inferred from the watermark.
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, summary != nil && summary.TotalToolCalls > 0),
 		MetricsMode: metricsMode(sessionMode),
 		TopServers:  make([]ProjectOverviewServer, 0, len(servers)),
 	}
@@ -393,7 +396,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	return GetMCPDiagnosticsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
-		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window),
+		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window, serverTotals.Total > 0),
 		Readiness: MCPDiagnosticsReadiness{
 			State:     string(normalizedReadiness(readiness, readinessFound).State),
 			Freshness: readinessFreshness(readiness, readinessFound),

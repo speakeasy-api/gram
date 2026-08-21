@@ -23,7 +23,7 @@ func TestQueryMCPTracesOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := QueryMCPTracesOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
 		MCPID:     "00000000-0000-0000-0000-000000000002",
-		Envelope:  newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:  newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		Traces: []MCPTraceReference{{
 			Reference:  "opaque",
 			OccurredAt: now.Format(time.RFC3339),
@@ -52,7 +52,7 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := GetUserMCPStatusOutput{
 		ProjectID:      "00000000-0000-0000-0000-000000000001",
 		MCPID:          "00000000-0000-0000-0000-000000000002",
-		Envelope:       newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:       newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		MaskedIdentity: "a***@e***",
 		Activity:       SubjectStateActive,
 	}
@@ -108,7 +108,7 @@ func TestQueryMCPEventsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := QueryMCPEventsOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
 		MCPID:     "00000000-0000-0000-0000-000000000002",
-		Envelope:  newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:  newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		Tools:     []MCPToolEvents{{ToolName: "charge", Outcomes: MCPOutcomeSummary{Total: 4, Success: 1, ServerError: 3}}},
 		Truncated: false,
 	}
@@ -132,7 +132,7 @@ func TestQueryMCPMetricsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := QueryMCPMetricsOutput{
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		MCPID:           "00000000-0000-0000-0000-000000000002",
-		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		ToolCalls:       100,
 		FailedToolCalls: 5,
 		FailureRate:     0.05,

@@ -50,6 +50,61 @@ func TestResolveWindow_DefaultsAndClosedSet(t *testing.T) {
 	}
 }
 
+// TestResolveWindow_RefusesWindowsLongerThanTheToolAllows pins each tool's
+// look-back cap. It refuses rather than clamps, for the same reason an unknown
+// window is refused: a caller must never be told about a different interval
+// than the one it asked for.
+func TestResolveWindow_RefusesWindowsLongerThanTheToolAllows(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		requested string
+		spec      windowSpec
+		wantErr   bool
+	}{
+		{name: "overview allows a month", requested: "30d", spec: overviewWindowSpec},
+		{name: "diagnostics refuse a month", requested: "30d", spec: diagnosticsWindowSpec, wantErr: true},
+		{name: "diagnostics refuse a week", requested: "7d", spec: diagnosticsWindowSpec, wantErr: true},
+		{name: "diagnostics allow a day", requested: "24h", spec: diagnosticsWindowSpec},
+		{name: "drilldown refuses a week", requested: "7d", spec: drilldownWindowSpec, wantErr: true},
+		{name: "drilldown allows a day", requested: "24h", spec: drilldownWindowSpec},
+		{name: "metrics refuse a month", requested: "30d", spec: metricsWindowSpec, wantErr: true},
+		{name: "metrics allow a week", requested: "7d", spec: metricsWindowSpec},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := resolveWindow(test.requested, now, test.spec)
+			if test.wantErr {
+				require.ErrorIs(t, err, ErrDiagnosticWindowTooLong)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestResolveWindow_EachToolHasItsOwnDefault pins that an unspecified window
+// means what the tool says it means, not one shared value.
+func TestResolveWindow_EachToolHasItsOwnDefault(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+
+	window, err := resolveWindow("", now, diagnosticsWindowSpec)
+	require.NoError(t, err)
+	require.Equal(t, DiagnosticWindowLastHour, window.Window)
+
+	window, err = resolveWindow("", now, overviewWindowSpec)
+	require.NoError(t, err)
+	require.Equal(t, DiagnosticWindowLastDay, window.Window)
+}
+
 func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 	t.Parallel()
 
@@ -104,7 +159,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			envelope := newDataEnvelope(now, test.watermark, window)
+			envelope := newDataEnvelope(now, test.watermark, window, !test.watermark.IsZero())
 			require.Equal(t, test.want, envelope.Freshness)
 			// no_observations is stated positively beside freshness, because
 			// "unavailable" describes the pipeline while this describes the
