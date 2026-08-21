@@ -63,9 +63,11 @@ const (
 	bulkRevokeTimeout = 30 * time.Second
 
 	// bulkRevokeConcurrency caps in-flight POSTs within one batch. Every session
-	// on a client shares that client's issuer, so the whole batch lands on a
-	// single upstream host and an unbounded fan-out would read as a burst from
-	// Gram against one customer's identity provider.
+	// on a client shares that client's issuer, so a single-client batch lands on
+	// one upstream host and an unbounded fan-out would read as a burst from Gram
+	// against one customer's identity provider. The orphan cascade can hand over
+	// sessions spanning several clients (and so several hosts); the cap then
+	// bounds the total fan-out, which only spreads the burst thinner per host.
 	bulkRevokeConcurrency = 8
 )
 
@@ -250,15 +252,17 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
-// already been soft-deleted together — every session on a client, whether the
-// operator revoked them explicitly or deleted the client out from under them.
+// already been soft-deleted together — every session on a client (operator
+// revoke or client delete), or every session across the clients one issuer
+// deletion orphaned, which may span several upstream hosts.
 //
 // Post-commit and off the caller's cancellation for the same reasons as
 // RevokeDetached. Two bounds on top of that, because a batch is unbounded in a
 // way a single revoke is not:
 //
-//   - bulkRevokeConcurrency in flight at once. The batch shares one issuer, so
-//     the fan-out is aimed at a single upstream host.
+//   - bulkRevokeConcurrency in flight at once. A single-client batch aims the
+//     fan-out at one upstream host; a multi-client batch spreads the same cap
+//     across its hosts.
 //   - bulkRevokeTimeout across the whole batch, with each session still holding
 //     its own upstreamRevokeTimeout inside it. Without the per-session bound one
 //     unresponsive upstream would hold a concurrency slot for the entire batch

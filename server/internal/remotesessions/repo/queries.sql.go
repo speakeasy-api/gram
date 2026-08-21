@@ -4109,6 +4109,25 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
+SELECT id
+FROM remote_session_clients
+WHERE id = $1 AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Serializes a remote-login callback's session write against the issuer-delete
+// orphan cascade, which locks the same client row before sweeping the client's
+// sessions. A callback that acquires the lock after that cascade committed
+// re-reads the (issuer, client) binding as dead and rejects the write instead
+// of resurrecting an orphaned grant. No rows means the client itself is gone.
+func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientForSessionWrite, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockRemoteSessionClientsBoundToUserSessionIssuer = `-- name: LockRemoteSessionClientsBoundToUserSessionIssuer :many
 SELECT c.id
 FROM remote_session_clients AS c
