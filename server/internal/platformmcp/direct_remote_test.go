@@ -24,6 +24,15 @@ func TestCanonicalDirectRemoteURL(t *testing.T) {
 	require.Equal(t, "https://example.test/", canonical)
 }
 
+func TestCanonicalDirectRemoteURLPreservesSafeQuery(t *testing.T) {
+	t.Parallel()
+
+	canonical, err := canonicalDirectRemoteURL("HTTPS://Example.TEST:443/mcp?tenant=example&region=us")
+
+	require.NoError(t, err)
+	require.Equal(t, "https://example.test/mcp?tenant=example&region=us", canonical)
+}
+
 func TestCanonicalDirectRemoteURLRejectsUnsafeShapes(t *testing.T) {
 	t.Parallel()
 
@@ -31,6 +40,7 @@ func TestCanonicalDirectRemoteURLRejectsUnsafeShapes(t *testing.T) {
 		"http://example.test/mcp",
 		"https://user:password@example.test/mcp",
 		"https://example.test/mcp?token=value",
+		"https://example.test/mcp?X-Amz-Signature=value",
 		"https://example.test/mcp#fragment",
 		"https://example.test:8443/mcp",
 		"https://example.test/{tenant}/mcp",
@@ -115,6 +125,25 @@ func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 	require.Len(t, requests, 3)
 }
 
+func TestDirectRemoteOAuthDiscoveryUsesOIDCCompatibleCandidate(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		switch request.URL.String() {
+		case "https://remote.example.test/.well-known/oauth-protected-resource/mcp":
+			return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://issuer.example.test/path"]}`)
+		case "https://issuer.example.test/.well-known/oauth-authorization-server/path":
+			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+		case "https://issuer.example.test/.well-known/openid-configuration/path":
+			return directRemoteTestResponse(request, http.StatusOK, `{"registration_endpoint":"https://issuer.example.test/register"}`)
+		default:
+			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+		}
+	})
+
+	require.Equal(t, "available_dcr", directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}))
+}
+
 func TestDirectRemoteOAuthDiscoveryReportsAvailableWithoutDCR(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +186,7 @@ func TestValidDirectRemoteRegistrationURLRequiresCanonicalForm(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, validDirectRemoteRegistrationURL("https://example.test/mcp"))
+	require.True(t, validDirectRemoteRegistrationURL("https://example.test/mcp?tenant=example"))
 	require.False(t, validDirectRemoteRegistrationURL("https://Example.test/mcp"))
 	require.False(t, validDirectRemoteRegistrationURL("https://example.test:443/mcp"))
 }

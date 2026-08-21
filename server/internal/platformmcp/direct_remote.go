@@ -11,11 +11,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 const (
@@ -173,67 +175,75 @@ type directRemoteRPCResponse struct {
 	Result json.RawMessage `json:"result"`
 }
 
-func directRemoteRequest(ctx context.Context, client *http.Client, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (directRemoteRPCResponse, string, string, int, error) {
+type directRemoteHTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+func emptyDirectRemoteRPCResponse() directRemoteRPCResponse {
+	return directRemoteRPCResponse{Result: nil}
+}
+
+func directRemoteRequest(ctx context.Context, client directRemoteHTTPClient, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (directRemoteRPCResponse, string, string, int, error) {
 	if err := budget.consumeRequest(); err != nil {
-		return directRemoteRPCResponse{}, "", "", 0, err
+		return emptyDirectRemoteRPCResponse(), "", "", 0, err
 	}
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 	if err != nil {
-		return directRemoteRPCResponse{}, "", "", 0, fmt.Errorf("marshal MCP probe: %w", err)
+		return emptyDirectRemoteRPCResponse(), "", "", 0, fmt.Errorf("marshal MCP probe: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
-		return directRemoteRPCResponse{}, "", "", 0, fmt.Errorf("build direct MCP probe: %w", err)
+		return emptyDirectRemoteRPCResponse(), "", "", 0, fmt.Errorf("build direct MCP probe: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
 		if len(sessionID) > directRemoteSessionIDMaxBytes {
-			return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 		}
 		req.Header.Set("Mcp-Session-Id", sessionID)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, ErrDirectRemoteRejected) || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
-			return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteUnavailable
+			return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteUnavailable
 		}
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteUnavailable
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteUnavailable
 	}
 	defer func() { _ = resp.Body.Close() }()
 	finalURL, err := canonicalDirectRemoteURL(resp.Request.URL.String())
 	if err != nil {
-		return directRemoteRPCResponse{}, "", "", 0, err
+		return emptyDirectRemoteRPCResponse(), "", "", 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return directRemoteRPCResponse{}, finalURL, "", resp.StatusCode, nil
+		return emptyDirectRemoteRPCResponse(), finalURL, "", resp.StatusCode, nil
 	}
 	if mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])); mediaType != "application/json" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 	}
 	if budget == nil || budget.remaining <= 0 {
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(budget.remaining+1)))
 	if err != nil || len(payload) > budget.remaining {
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 	}
 	budget.remaining -= len(payload)
 	var result directRemoteRPCResponse
 	if err := json.Unmarshal(payload, &result); err != nil {
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 	}
 	sessionID = resp.Header.Get("Mcp-Session-Id")
 	if len(sessionID) > directRemoteSessionIDMaxBytes {
-		return directRemoteRPCResponse{}, "", "", 0, ErrDirectRemoteRejected
+		return emptyDirectRemoteRPCResponse(), "", "", 0, ErrDirectRemoteRejected
 	}
 	return result, finalURL, sessionID, resp.StatusCode, nil
 }
 
-func directRemoteNotification(ctx context.Context, client *http.Client, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (string, int, error) {
+func directRemoteNotification(ctx context.Context, client directRemoteHTTPClient, rawURL, method string, params any, sessionID string, budget *directRemoteResponseBudget) (string, int, error) {
 	if err := budget.consumeRequest(); err != nil {
 		return "", 0, err
 	}
@@ -277,7 +287,7 @@ func directRemoteNotification(ctx context.Context, client *http.Client, rawURL, 
 // directRemoteOAuthDiscovery returns only the safe discovery category. Metadata
 // URLs are derived from the canonical resource or a discovered issuer, rechecked
 // with Guardian before egress, and charged to the inspection response budget.
-func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client *http.Client, resourceURL string, budget *directRemoteResponseBudget) string {
+func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string, budget *directRemoteResponseBudget) string {
 	available := false
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL, budget)
@@ -296,18 +306,17 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 			if !ok || issuer == "" {
 				continue
 			}
-			authorizationMetadataURL := directRemoteAuthorizationServerMetadataURL(issuer)
-			if authorizationMetadataURL == "" {
-				continue
+			for _, authorizationMetadataURL := range directRemoteAuthorizationServerMetadataURLs(issuer) {
+				authorizationMetadata, status, err := directRemoteGetJSON(ctx, policy, client, authorizationMetadataURL, budget)
+				if err != nil || status != http.StatusOK {
+					continue
+				}
+				if endpoint, _ := authorizationMetadata["registration_endpoint"].(string); endpoint != "" {
+					return "available_dcr"
+				}
+				available = true
+				break
 			}
-			authorizationMetadata, status, err := directRemoteGetJSON(ctx, policy, client, authorizationMetadataURL, budget)
-			if err != nil || status != http.StatusOK {
-				continue
-			}
-			if endpoint, _ := authorizationMetadata["registration_endpoint"].(string); endpoint != "" {
-				return "available_dcr"
-			}
-			available = true
 		}
 	}
 	if available {
@@ -329,16 +338,24 @@ func directRemoteProtectedResourceMetadataURLs(resourceURL string) []string {
 	return []string{origin + "/.well-known/oauth-protected-resource" + path, origin + "/.well-known/oauth-protected-resource"}
 }
 
-func directRemoteAuthorizationServerMetadataURL(issuer string) string {
+// directRemoteAuthorizationServerMetadataURLs reuses the production issuer
+// discovery candidates. Query parameters identify the MCP endpoint and never
+// flow into metadata URLs.
+func directRemoteAuthorizationServerMetadataURLs(issuer string) []string {
 	parsed, err := url.Parse(issuer)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return ""
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
+		return nil
 	}
-	path := strings.TrimSuffix(parsed.EscapedPath(), "/")
-	return "https://" + parsed.Host + "/.well-known/oauth-authorization-server" + path
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	candidates, err := remotesessions.IssuerMetadataProbeCandidates(parsed.String())
+	if err != nil {
+		return nil
+	}
+	return candidates
 }
 
-func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client *http.Client, rawURL string, budget *directRemoteResponseBudget) (map[string]any, int, error) {
+func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, rawURL string, budget *directRemoteResponseBudget) (map[string]any, int, error) {
 	if policy == nil || client == nil || budget == nil || budget.remaining <= 0 {
 		return nil, 0, ErrDirectRemoteUnavailable
 	}
@@ -405,7 +422,7 @@ func canonicalDirectRemoteURL(rawURL string) (string, error) {
 		return "", ErrDirectRemoteRejected
 	}
 	parsed, err := url.Parse(rawURL)
-	if err != nil || !parsed.IsAbs() || parsed.Scheme == "" || parsed.Host == "" || parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || !strings.EqualFold(parsed.Scheme, "https") || parsed.Hostname() == "" || containsURLControlOrTemplate(parsed.Path) || containsURLControlOrTemplate(parsed.RawPath) {
+	if err != nil || !parsed.IsAbs() || parsed.Scheme == "" || parsed.Host == "" || parsed.Opaque != "" || parsed.User != nil || parsed.Fragment != "" || !strings.EqualFold(parsed.Scheme, "https") || parsed.Hostname() == "" || containsURLControlOrTemplate(parsed.Path) || containsURLControlOrTemplate(parsed.RawPath) || !safeDirectRemoteQuery(parsed) {
 		return "", ErrDirectRemoteRejected
 	}
 	port := parsed.Port()
@@ -422,8 +439,6 @@ func canonicalDirectRemoteURL(rawURL string) (string, error) {
 		parsed.Host = "[" + host + "]"
 	}
 	parsed.User = nil
-	parsed.RawQuery = ""
-	parsed.ForceQuery = false
 	parsed.Fragment = ""
 	if parsed.Path == "" {
 		parsed.Path = "/"
@@ -433,6 +448,38 @@ func canonicalDirectRemoteURL(rawURL string) (string, error) {
 		return "", ErrDirectRemoteRejected
 	}
 	return canonical, nil
+}
+
+func safeDirectRemoteQuery(parsed *url.URL) bool {
+	if parsed == nil || parsed.ForceQuery || containsURLControlOrTemplate(parsed.RawQuery) {
+		return false
+	}
+	values, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return false
+	}
+	for key, entries := range values {
+		if containsURLControlOrTemplate(key) || directRemoteQueryCredentialKey(key) {
+			return false
+		}
+		if slices.ContainsFunc(entries, containsURLControlOrTemplate) {
+			return false
+		}
+	}
+	return true
+}
+
+func directRemoteQueryCredentialKey(key string) bool {
+	normalized := strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(strings.ToLower(strings.TrimSpace(key)))
+	if strings.HasPrefix(normalized, "x_amz_") || strings.HasPrefix(normalized, "x_goog_") {
+		return true
+	}
+	switch normalized {
+	case "access_token", "api_key", "apikey", "authorization", "credential", "key", "password", "secret", "signature", "sig", "token", "client_secret":
+		return true
+	default:
+		return false
+	}
 }
 
 func containsURLControlOrTemplate(value string) bool {

@@ -30,7 +30,7 @@ type RegisterCatalogMCPToolOutput struct {
 
 type RegisterRemoteMCPToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that will own the user-supplied MCP"`
-	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; query parameters, fragments, userinfo, headers, and credentials are not accepted"`
+	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
 }

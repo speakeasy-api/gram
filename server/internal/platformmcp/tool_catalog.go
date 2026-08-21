@@ -24,7 +24,7 @@ type SearchCatalogOutput struct {
 type InspectCatalogCandidateInput struct {
 	ProviderKey string `json:"provider_key,omitempty" jsonschema:"reviewed provider key returned by search_mcp_catalog; provide with catalog_ref, or provide remote_url instead"`
 	CatalogRef  string `json:"catalog_ref,omitempty" jsonschema:"canonical catalog reference returned by search_mcp_catalog; provide with provider_key, or provide remote_url instead"`
-	RemoteURL   string `json:"remote_url,omitempty" jsonschema:"user-supplied HTTPS Streamable HTTP MCP URL; mutually exclusive with provider_key and catalog_ref; credentials, query parameters, and fragments are not supported"`
+	RemoteURL   string `json:"remote_url,omitempty" jsonschema:"user-supplied HTTPS Streamable HTTP MCP URL; mutually exclusive with provider_key and catalog_ref; safe endpoint query parameters are supported, but credentials, credential-like query parameters, and fragments are not"`
 }
 
 // CandidateInspection is the safe common projection for reviewed and direct
