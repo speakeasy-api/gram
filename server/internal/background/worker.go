@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -569,6 +570,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	// Retire per-policy executions created before the coordinator migration.
+	temporalWorker.RegisterWorkflowWithOptions(legacyDrainRiskAnalysisWorkflow, workflow.RegisterOptions{
+		Name:                          legacyDrainRiskAnalysisWorkflowName,
+		DisableAlreadyRegisteredCheck: false,
+	})
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
