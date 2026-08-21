@@ -16,22 +16,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ReviewShadowMCPPolicyURLEdit implements the risk service's conflict-check
-// seam: before a policy URL-list save touches grants, it names every standing
-// decision the save would contradict, so the write path can demand explicit
-// confirmation instead of contradicting a decision record silently.
+// ReviewShadowMCPPolicyURLEdit names every standing decision a policy
+// URL-list edit would contradict, so the write path can demand explicit
+// confirmation. Counterpart of ReconcileStandingDecisionsForPolicy: when a
+// policy becomes blocking the replay runs and decisions win; when an
+// already-blocking policy's list is edited this review runs and the edit
+// wins after confirmation.
 //
-// It is the counterpart of ReconcileStandingDecisionsForPolicy, and the two
-// split the policy write paths between them: when a policy becomes blocking
-// the replay runs and decisions win (a freshly typed list has never seen the
-// standing record); when an already-blocking policy's list is edited this
-// review runs and the edit wins — but only after the caller confirms
-// superseding the decisions it contradicts.
-//
-// A conflict is a membership change, not a membership state: only toggles the
-// edit itself performs are flagged. A denied server whose allow grant already
-// drifted in before this feature reads as drift on the inventory, and a save
-// that does not touch it is not asked to answer for it.
+// A conflict is a membership change, not a membership state: only toggles
+// the edit itself performs are flagged, never pre-existing drift.
 func (s *Service) ReviewShadowMCPPolicyURLEdit(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -44,10 +37,8 @@ func (s *Service) ReviewShadowMCPPolicyURLEdit(
 ) (shadowmcp.StandingDecisionReview, error) {
 	review := shadowmcp.StandingDecisionReview{Conflicts: nil, StandingURLs: nil}
 
-	// The same lock decision-time enforcement and the policy replay take: a
-	// decision recorded concurrently with this edit either commits first and
-	// is seen by this check, or waits and re-derives its grants after the
-	// edit commits — never interleaves into a silent contradiction.
+	// The same lock decision-time enforcement and the policy replay take, so
+	// a concurrent decision never interleaves into a silent contradiction.
 	if err := repo.New(tx).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
 		return review, fmt.Errorf("lock project enforcement state for url edit review: %w", err)
 	}
@@ -93,11 +84,8 @@ func (s *Service) ReviewShadowMCPPolicyURLEdit(
 			continue
 		}
 
-		// Which transition contradicts the decision depends on what the list
-		// means. On an allow list (block_all), removing an approved server
-		// revokes its access and adding a denied one grants it. On a block
-		// list (allow_all), the directions invert: removing a denied server
-		// unblocks it and adding an approved one blocks it.
+		// On an allow list (block_all), removing revokes access and adding
+		// grants it; on a block list (allow_all) the directions invert.
 		removingAllow := has && !wants
 		if disposition == shadowmcp.DispositionAllowAll {
 			removingAllow = !removingAllow
@@ -125,10 +113,8 @@ func (s *Service) ReviewShadowMCPPolicyURLEdit(
 }
 
 // SupersedeShadowMCPDecisions transitions each conflicted request to
-// superseded — actor-attributed and audit-logged, with the decision history
-// and its rationale left intact. Runs in the same transaction as the policy
-// edit that displaces the decisions, so the record and the grant state it
-// explains commit atomically.
+// superseded — actor-attributed, audit-logged, decision history intact — in
+// the same transaction as the policy edit that displaces the decisions.
 func (s *Service) SupersedeShadowMCPDecisions(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -165,10 +151,8 @@ func (s *Service) SupersedeShadowMCPDecisions(
 	return nil
 }
 
-// policyURLGrantSet reads the canonical server URLs a policy currently holds
-// URL grants for under one scope. Legacy selectors may carry pre-canonical
-// URL forms, so each value re-canonicalizes before joining the set — the same
-// tolerance the grant revoker applies.
+// policyURLGrantSet reads the canonical server URLs a policy holds URL
+// grants for under one scope, re-canonicalizing legacy selector spellings.
 func policyURLGrantSet(
 	ctx context.Context,
 	tx pgx.Tx,

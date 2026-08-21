@@ -6,9 +6,7 @@ import type { ShadowMCPDecisionConflict } from "./policy-shadow-mcp-setup";
 
 /**
  * Confirms a policy URL-list save that contradicts recorded access
- * decisions. The server refuses such a save outright unless it carries the
- * supersede confirmation, so this dialog is the only path to a contradicting
- * save — cancelling leaves both the list and the decisions untouched.
+ * decisions; the server refuses such a save without the confirmation.
  */
 export function SupersedeDecisionsDialog({
   conflicts,

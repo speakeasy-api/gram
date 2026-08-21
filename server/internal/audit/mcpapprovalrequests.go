@@ -134,9 +134,8 @@ type LogMCPApprovalRequestSupersedeEvent struct {
 
 	RequestURN urn.MCPApprovalRequest
 
-	// Decision is the standing decision that was displaced — approved or
-	// denied — carried as metadata so the feed shows what intent the edit
-	// overrode without a lookup into the decision history.
+	// Decision is the displaced decision — approved or denied — carried as
+	// metadata so the feed shows what the edit overrode.
 	Decision string
 
 	// TargetRaw is the stored (redacted) form of the server reference,
@@ -146,10 +145,8 @@ type LogMCPApprovalRequestSupersedeEvent struct {
 }
 
 // LogMCPApprovalRequestSupersede records that a policy URL-list edit
-// displaced a request's standing decision after the editor explicitly
-// confirmed the contradiction. Written in the same transaction as the status
-// change and the grant writes it explains, so the feed never shows a
-// superseded decision whose enforcement still stands or vice versa.
+// displaced a request's standing decision after explicit confirmation.
+// Written in the same transaction as the status change it describes.
 func (l *Logger) LogMCPApprovalRequestSupersede(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestSupersedeEvent) error {
 	metadata, err := marshalAuditPayload(map[string]any{
 		"superseded_decision": event.Decision,

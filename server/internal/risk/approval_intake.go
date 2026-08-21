@@ -40,11 +40,8 @@ type ShadowMCPApprovalIntake interface {
 	// ReviewShadowMCPPolicyURLEdit names the standing decisions a URL-list
 	// edit on an already-blocking policy would contradict, plus every URL
 	// whose grants carry a standing decision (so the reconciler can leave
-	// retained ones untouched). The counterpart of the replay: when a policy
-	// becomes blocking the replay runs and decisions win; when its list is
-	// edited this review runs and the edit wins — only after the caller
-	// confirms superseding what it contradicts. A nil URL list means that
-	// list is not being edited.
+	// retained ones untouched). A nil URL list means that list is not being
+	// edited.
 	ReviewShadowMCPPolicyURLEdit(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID, disposition string, desiredAllowedURLs []string, desiredBlockedURLs []string) (shadowmcp.StandingDecisionReview, error)
 
 	// SupersedeShadowMCPDecisions transitions each conflicted request to

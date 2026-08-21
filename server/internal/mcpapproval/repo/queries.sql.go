@@ -756,8 +756,7 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
-  -- Same latest-decision-regardless-of-status join as
-  -- ListApprovalRequestsByTargetKeys, for the request-only rows.
+  -- Same latest-decision join as ListApprovalRequestsByTargetKeys.
   , COALESCE((
       SELECT d.decision
       FROM mcp_approval_decisions d
@@ -927,10 +926,8 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
-  -- The latest decision independent of the request's lifecycle status: a
-  -- reopened request's prior decision still stands (its grants keep
-  -- enforcing) until re-decided, and the inventory reports it so clients
-  -- never mistake a pending re-review for an undecided server.
+  -- The latest decision independent of lifecycle status: a reopened
+  -- request's prior decision still stands until re-decided.
   , COALESCE((
       SELECT d.decision
       FROM mcp_approval_decisions d
@@ -1284,14 +1281,10 @@ type ListStandingServerDecisionsForProjectRow struct {
 }
 
 // The latest decision per server_url review in a project — what enforcement
-// derived its grants from. Read by the policy-creation backfill so a blocking
-// policy created after decisions were recorded honors them, instead of
-// blocking servers whose rows still read approved. Also read by the policy
-// URL-list conflict check, which is why the request id rides along.
-//
-// A superseded request's decision is excluded: an admin explicitly overrode
-// it from the policy editor, so it is no longer standing intent — replaying
-// it would resurrect exactly the access change the admin confirmed away.
+// derived its grants from. Read by the policy-creation backfill and by the
+// policy URL-list conflict check (which is why the request id rides along).
+// Superseded requests are excluded: their decisions were explicitly
+// overridden and must never be replayed.
 func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
 	if err != nil {

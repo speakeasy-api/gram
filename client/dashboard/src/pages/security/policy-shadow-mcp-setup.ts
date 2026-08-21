@@ -115,13 +115,11 @@ export interface ShadowMCPDecisionConflict {
 }
 
 /**
- * The standing review decisions this edit's URL toggles contradict —
- * unchecking an approved server, allow-listing a denied one, block-listing
- * an approved one, or unblocking a denied one. Mirrors the server's own
- * conflict check so the confirm dialog can open before the save round-trips;
- * the server independently rejects an unconfirmed contradicting save, so a
- * miss here (e.g. a reopened request whose prior decision still stands)
- * degrades to the error toast, never to a silent supersession.
+ * The standing review decisions this edit's URL toggles contradict. Mirrors
+ * the server's conflict check so the confirm dialog opens before the save
+ * round-trips; the server independently rejects an unconfirmed contradicting
+ * save, so a miss here degrades to an error toast, never a silent
+ * supersession.
  */
 export function shadowMCPDecisionConflicts({
   servers,
@@ -169,11 +167,10 @@ export function shadowMCPDecisionConflicts({
 }
 
 /**
- * The decision still standing for a review, independent of its lifecycle
- * status — a reopened request's prior decision keeps enforcing until
- * re-decided, so an edit contradicting it must still confirm. Prefers the
- * server-computed standing_decision; a server one release behind omits it,
- * where the lifecycle status carries the decision except for reopened rows.
+ * The decision still standing for a review, independent of lifecycle status
+ * (a reopened request's prior decision keeps enforcing). Prefers the
+ * server-computed standing_decision, falling back to status for a server one
+ * release behind.
  */
 function standingDecisionOf(
   request: ShadowMCPInventoryServer["approvalRequest"],

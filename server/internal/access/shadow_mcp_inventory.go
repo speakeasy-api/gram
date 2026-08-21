@@ -261,15 +261,9 @@ func (s *Service) shadowMCPRequestOnlyTargets(ctx context.Context, chRepo *telem
 	return out, nil
 }
 
-// buildShadowMCPRequestOnlyServer synthesizes a servers-table row from a
-// review with no telemetry behind it: zero usage, zero seen-times (the
-// never-observed sentinel), and the review carried as the row's approval
-// state. Stdio commands have no URL host and no server page.
-// standingDecisionValue derives the standing-decision field from a request's
-// lifecycle status and its latest recorded decision. The decision stands —
-// its grants keep enforcing — whatever the lifecycle says, with one
-// exception: a superseded request's decision was explicitly displaced, so
-// nothing stands until someone re-decides.
+// standingDecisionValue derives the standing-decision field: the latest
+// decision counts whatever the lifecycle status says, except superseded,
+// where it was explicitly displaced.
 func standingDecisionValue(status string, latestDecision string) *string {
 	if status == shadowMCPInventoryBypassStatusSuperseded || latestDecision == "" {
 		return nil
@@ -277,6 +271,10 @@ func standingDecisionValue(status string, latestDecision string) *string {
 	return conv.PtrEmpty(latestDecision)
 }
 
+// buildShadowMCPRequestOnlyServer synthesizes a servers-table row from a
+// review with no telemetry behind it: zero usage, zero seen-times (the
+// never-observed sentinel), and the review carried as the row's approval
+// state. Stdio commands have no URL host and no server page.
 func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequestTargetsRow, policyState shadowMCPInventoryPolicyState) *gen.ShadowMCPInventoryServer {
 	targetKind := shadowMCPTargetKindStdioCommand
 	urlHost := ""

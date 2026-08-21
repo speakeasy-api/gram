@@ -3565,9 +3565,7 @@ export function StandardPolicyEditor({
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
   // Standing decisions the pending save would contradict; non-null opens the
-  // supersede confirmation. The server refuses a contradicting save without
-  // the confirmation flag, so a stale miss here degrades to an error toast,
-  // never to a silent supersession.
+  // supersede confirmation.
   const [supersedeConflicts, setSupersedeConflicts] = useState<
     ShadowMCPDecisionConflict[] | null
   >(null);
@@ -3807,10 +3805,8 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
-      // A URL toggle that contradicts a recorded decision needs the admin's
-      // explicit confirmation before it supersedes that decision. Only edits
-      // of a policy that stays blocking can contradict — on any other save
-      // the server runs its replay or clears the lists, not this check.
+      // A URL toggle that contradicts a recorded decision needs explicit
+      // confirmation before it supersedes that decision.
       if (
         !options?.supersedeDecisions &&
         targetIsShadowMCPBlock &&
@@ -3913,10 +3909,6 @@ export function StandardPolicyEditor({
         conflicts={supersedeConflicts}
         saving={saving}
         onCancel={() => setSupersedeConflicts(null)}
-        // The dialog stays open while the confirmed save runs — its buttons
-        // disable and the confirm label reads "Saving…" — and closes from the
-        // mutation's onSuccess, so a failed save leaves it up to retry or
-        // cancel instead of vanishing under an error toast.
         onConfirm={() => save({ supersedeDecisions: true })}
       />
       <StepperShell

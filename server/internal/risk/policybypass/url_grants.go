@@ -20,12 +20,10 @@ type ReconcilePolicyURLsInput struct {
 	// DesiredURLs nil preserves the existing URL set while refreshing its audience.
 	DesiredURLs []string
 	Principals  []urn.Principal
-	// PreserveURLs are canonical server URLs whose retained grants must be
-	// left exactly as they stand — no audience refresh. These carry a
-	// standing MCP approval decision's recorded blast radius, which a policy
-	// save that merely re-sends its list has no authority to rewrite; only a
-	// membership change (confirmed as superseding the decision) or a new
-	// decision touches them. URLs being added or removed are unaffected.
+	// PreserveURLs are canonical URLs whose retained grants are left as they
+	// stand — no audience refresh. They carry a standing MCP approval
+	// decision's recorded blast radius, which a re-sent list has no
+	// authority to rewrite. URLs being added or removed are unaffected.
 	PreserveURLs map[string]struct{}
 }
 
@@ -58,10 +56,9 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 		return fmt.Errorf("list policy url grants: %w", err)
 	}
 
-	// Keys are canonical URLs, grouping legacy pre-canonical selector
-	// spellings with their canonical form: DesiredURLs and PreserveURLs are
-	// canonical, and comparing them against raw selector values would let a
-	// legacy variant slip past preservation into remove-and-recreate.
+	// Keys are canonical URLs so legacy pre-canonical selector spellings
+	// group with their canonical form when compared against DesiredURLs and
+	// PreserveURLs.
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {

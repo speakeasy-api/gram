@@ -1175,11 +1175,9 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
     case "superseded":
-      // A decided review whose decision an admin explicitly displaced from
-      // the policy editor. Neutral, not destructive: the history stands and
-      // nothing is pending — enforcement just no longer derives from it.
-      // The default neutral border (softest) washes out against both table
-      // backgrounds, so this one steps up to the theme-aware default border.
+      // Neutral, not destructive: the history stands, nothing is pending.
+      // The default (softest) neutral border washes out against the table
+      // backgrounds, hence the stronger theme-aware border.
       return (
         <Badge variant="neutral" className="border-neutral-default">
           Superseded

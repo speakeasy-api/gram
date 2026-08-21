@@ -1013,13 +1013,10 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
 
 	// The conflict review runs exactly where the replay below does not: on a
-	// policy that was and stays blocking, no replay re-derives decision
-	// grants, so this edit is the only writer of the URL grant state — it
-	// must not displace a standing decision silently. Conflicts abort the
-	// save unless the caller explicitly confirmed superseding them; either
-	// way the review's standing URLs are preserved through the reconcile so
-	// re-sending an unchanged list never rewrites a decision's recorded
-	// blast radius with the policy audience.
+	// policy that was and stays blocking, this edit is the only writer of
+	// URL grant state, so it must not displace a standing decision without
+	// the caller's explicit confirmation. Standing URLs are preserved
+	// through the reconcile either way.
 	var preserveDecisionURLs map[string]struct{}
 	if s.approvalIntake != nil && wasBlocking && nowBlocking {
 		review, err := s.approvalIntake.ReviewShadowMCPPolicyURLEdit(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, current.ID, effectiveDisposition, shadowMCPAllowedURLs, shadowMCPBlockedURLs)
