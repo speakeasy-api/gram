@@ -147,6 +147,8 @@ export const AUDIT_ACTIONS = [
   "risk_result:dismiss",
   "risk_result:restore",
   "risk_result:unmask",
+  "session_quarantine:open",
+  "session_quarantine:release",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -526,6 +528,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored risk finding";
     case "risk_result:unmask":
       return "unmasked risk finding";
+
+    case "session_quarantine:open":
+      return "quarantined agent session";
+    case "session_quarantine:release":
+      return "released quarantined agent session";
 
     case "skill:create":
       return "created skill";
