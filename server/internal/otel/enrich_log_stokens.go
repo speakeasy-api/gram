@@ -2,39 +2,13 @@ package otel
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-type enrichLogTenancy struct{}
-
-func (*enrichLogTenancy) Name() string {
-	return "enrich-tenancy"
-}
-
-func (*enrichLogTenancy) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
-	provenance := record.GetProvenance()
-	organizationID := provenance.GetOrganizationId()
-	projectID := provenance.GetProjectId()
-
-	if organizationID == "" {
-		return nil, errors.New("missing organization ID in log provenance")
-	}
-	if projectID == "" {
-		return nil, errors.New("missing project ID in log provenance")
-	}
-
-	return []attribute.KeyValue{
-		OrganizationID(organizationID),
-		ProjectID(projectID),
-	}, nil
-}
 
 type enrichLogSpeakeasyTokens struct {
 	codec *stokens.Codec
@@ -76,18 +50,4 @@ func (e *enrichLogSpeakeasyTokens) Enrich(ctx context.Context, record *otelv1.In
 		TokensCount(inputCount + outputCount),
 		TokensCodec(e.codec.Name()),
 	}, nil
-}
-
-type enrichLogDirectory struct {
-	*enrichDirectory
-}
-
-func (e *enrichLogDirectory) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
-	organizationID := record.GetProvenance().GetOrganizationId()
-	_, email, err := dialect.ForLog(record).ExternalUserEmail(record)
-	if err != nil {
-		e.logger.WarnContext(ctx, "failed to read user email for directory log enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return nil, nil
-	}
-	return e.enrich(ctx, organizationID, email), nil
 }

@@ -12,41 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-func TestEnrichDirectoryIncludesProfileGroupsAndRoles(t *testing.T) {
-	t.Parallel()
-
-	directory := directoryContext{
-		ID: "directory-user-id",
-		Attributes: map[string]any{
-			"active":     true,
-			"department": nil,
-			"mixed":      []any{"one", float64(2), true},
-			"nested":     map[string]any{"level": float64(7)},
-			"skills":     []any{"Go", "SQL"},
-		},
-		GroupIDs:   []string{"directory-group-id"},
-		GroupNames: []string{"Developers"},
-		Roles:      []string{"member", "tool-author"},
-	}
-
-	require.ElementsMatch(t, []attribute.KeyValue{
-		DirectoryID("directory-user-id"),
-		DirectoryAttribute("active").Bool(true),
-		DirectoryAttribute("mixed").Slice(
-			attribute.StringValue("one"),
-			attribute.Float64Value(2),
-			attribute.BoolValue(true),
-		),
-		DirectoryAttribute("nested").String(`{"level":7}`),
-		DirectoryAttribute("skills").Slice(attribute.StringValue("Go"), attribute.StringValue("SQL")),
-		DirectoryGroupIDs([]string{"directory-group-id"}),
-		DirectoryGroupNames([]string{"Developers"}),
-		GramUserRoles([]string{"member", "tool-author"}),
-	}, directory.attributes())
-	require.Equal(t, "directory.attribute.active", string(DirectoryAttribute("active")))
-}
-
-func TestEnrichLogDirectoryIncludesCachedUserContext(t *testing.T) {
+func TestEnrichLogDirectoryIncludesCachedUserEnrichment(t *testing.T) {
 	t.Parallel()
 
 	const organizationID = "organization-id"
@@ -54,16 +20,19 @@ func TestEnrichLogDirectoryIncludesCachedUserContext(t *testing.T) {
 	emailDigest := sha256.Sum256([]byte(email))
 	emailHash := hex.EncodeToString(emailDigest[:])
 
-	directoryEnricher := NewEnrichDirectory(testenv.NewLogger(t), newTestDatabase(t), testenv.NewMemoryCache())
-	require.NoError(t, directoryEnricher.cache.Store(t.Context(), cachedDirectoryContext{
+	logger := testenv.NewLogger(t)
+	db := newTestDatabase(t)
+	cacheImpl := testenv.NewMemoryCache()
+	directoryEnricher := NewEnrichDirectory(logger, db, cacheImpl)
+	require.NoError(t, directoryEnricher.cache.Store(t.Context(), cachedUserEnrichment{
 		OrganizationID: organizationID,
 		EmailHash:      emailHash,
-		Context: directoryContext{
-			ID:         "directory-user-id",
-			Attributes: map[string]any{"department": "Engineering"},
-			GroupIDs:   []string{"directory-group-id"},
-			GroupNames: []string{"Developers"},
-			Roles:      []string{"member"},
+		Enrichment: userEnrichment{
+			DirectoryID:         "directory-user-id",
+			DirectoryAttributes: map[string]any{"department": "Engineering"},
+			DirectoryGroupIDs:   []string{"directory-group-id"},
+			DirectoryGroupNames: []string{"Developers"},
+			Roles:               []string{"member"},
 		},
 	}))
 
@@ -71,7 +40,7 @@ func TestEnrichLogDirectoryIncludesCachedUserContext(t *testing.T) {
 		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(organizationID)}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", " User@Example.Invalid ")},
 	}).Build()
-	got, err := (&enrichLogDirectory{enrichDirectory: directoryEnricher}).Enrich(t.Context(), record)
+	got, err := newEnrichLogDirectory(logger, db, cacheImpl).Enrich(t.Context(), record)
 
 	require.NoError(t, err)
 	require.ElementsMatch(t, []attribute.KeyValue{

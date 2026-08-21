@@ -43,7 +43,7 @@ func NewLogTransformHandler(
 		enrichers: []LogEnricher{
 			&enrichLogTenancy{},
 			newEnrichLogSpeakeasyTokens(),
-			&enrichLogDirectory{enrichDirectory: NewEnrichDirectory(logger, db, cacheImpl)},
+			newEnrichLogDirectory(logger, db, cacheImpl),
 		},
 	}
 }
