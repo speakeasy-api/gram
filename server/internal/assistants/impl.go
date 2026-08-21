@@ -84,6 +84,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.recordCompactedGeneration", oops.ErrHandle(service.logger, service.handleRecordCompactedGeneration).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistantMcpAuth.create", oops.ErrHandle(service.logger, service.handleCreateMCPAuthFlow).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.ErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
+	// Public, unauthenticated outbound-CIMD document. Distinct from the
+	// remote-session path at /.well-known/oauth-client/{id}: assistants are
+	// addressed by assistant id, and the document identifies the assistant.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/assistants/{id}", oops.ErrHandle(service.logger, service.handleAssistantClientMetadataDocument).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

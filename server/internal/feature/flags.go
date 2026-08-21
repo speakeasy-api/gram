@@ -86,6 +86,16 @@ const (
 	// billing is generally available.
 	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
 
+	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
+	// (CIMD) support for assistant MCP OAuth clients. When on, and the
+	// upstream authorization server advertises
+	// client_id_metadata_document_supported, assistants publish a stable
+	// metadata document and send its URL as client_id instead of dynamic
+	// client registration. Off (the default) keeps the DCR reuse path.
+	// Targeted by PostHog organization group (org slug). Removed once CIMD
+	// is GA.
+	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
+
 	// FlagMCPApproval gates the MCP approval workflow end to end: the
 	// approval queue, evidence gathering, deciding, and the promotion of
 	// blocked-server redemptions into approval requests (orgs off the flag

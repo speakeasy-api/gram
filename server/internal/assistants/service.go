@@ -397,6 +397,7 @@ type ServiceCore struct {
 	slackClient       *slackclient.SlackClient
 	assistantTokens   *assistanttokens.Manager
 	serverURL         *url.URL
+	siteURL           *url.URL
 	telemetryLogger   *telemetry.Logger
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
@@ -446,6 +447,7 @@ func NewServiceCore(
 		slackClient:       slackClient,
 		assistantTokens:   assistantTokens,
 		serverURL:         serverURL,
+		siteURL:           nil,
 		telemetryLogger:   telemetryLogger,
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
@@ -495,6 +497,14 @@ func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
 // grant off (fail closed).
 func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 	s.featureFlags = p
+}
+
+// SetSiteURL wires the dashboard base URL used to smart-link CIMD client
+// metadata back to the assistant UI. Set after construction to match the
+// existing post-construction injection pattern. A nil URL omits client_uri
+// from served documents.
+func (s *ServiceCore) SetSiteURL(u *url.URL) {
+	s.siteURL = u
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
