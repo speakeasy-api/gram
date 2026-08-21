@@ -171,7 +171,7 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)
@@ -521,7 +521,7 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)

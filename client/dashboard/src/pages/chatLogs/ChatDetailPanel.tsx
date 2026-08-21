@@ -60,7 +60,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Switch } from "@/components/ui/Switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -353,7 +353,10 @@ function SessionSummary({
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
-                  <HookSourceIcon source={chat.source} className="size-3.5" />
+                  <AgentProviderIcon
+                    source={chat.source}
+                    className="size-3.5"
+                  />
                   {formatChatSource(chat.source, chat)}
                 </span>
               </MetaRow>
@@ -436,7 +439,7 @@ function ChatDetailMetadataBadges({
         <Badge variant="neutral" className="shrink-0 text-[10px]">
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
-              <HookSourceIcon source={chat.source} className="size-3" />
+              <AgentProviderIcon source={chat.source} className="size-3" />
               {formatChatSource(chat.source, chat)}
             </span>
           </Badge.Text>

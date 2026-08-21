@@ -93,6 +93,10 @@ Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GI
 
 ### Testing assistants locally
 
+`./zero` (and `mise run zero:assistants`) writes `GRAM_ASSISTANT_RUNTIME_PROVIDER` and `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE` into `mise.local.toml` when those keys are missing there — persisting a value already in the environment, or `local` / `gram-assistant-runtime` if unset — and builds `gram-assistant-runtime:dev` if that image is missing.
+
+`mise run zero:assistants --restart` rewrites those keys to the local defaults and rebuilds the image (use this when a stale `flyio` pin is in the way). Do not leave those keys in `mise.toml` — committed defaults make it impossible to tell an intentional override from a stale value. LLM chat still needs `OPENROUTER_DEV_KEY` in `mise.local.toml` (`mise run zero:openrouter`).
+
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
 
 ### Demo org and seed data

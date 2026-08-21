@@ -19,7 +19,8 @@ type UpsertConfigRequestBody struct {
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Whether forwarding should be active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Full set of headers to attach. Replaces any existing headers.
+	// Complete desired header set. Omitted entries are removed; entries with an
+	// omitted value preserve the existing encrypted value for the same name.
 	Headers []*OtelForwardingHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
@@ -633,7 +634,8 @@ type OtelForwardingHeaderResponseBody struct {
 type OtelForwardingHeaderInputRequestBody struct {
 	// Header name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Header value. Stored encrypted at rest; never returned on reads.
+	// Header value. Omit to preserve an existing value; provide to create,
+	// replace, or clear it. Stored encrypted at rest and never returned on reads.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
@@ -1180,9 +1182,6 @@ func ValidateUpsertConfigRequestBody(body *UpsertConfigRequestBody) (err error) 
 func ValidateOtelForwardingHeaderInputRequestBody(body *OtelForwardingHeaderInputRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
 	return
 }

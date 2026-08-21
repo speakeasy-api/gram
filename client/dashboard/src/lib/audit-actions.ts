@@ -77,6 +77,12 @@ export const AUDIT_ACTIONS = [
   "mcp_collection:detach_server",
   "mcp_collection:update",
   "mcp_metadata:update",
+  "meta-mcp:add_member",
+  "meta-mcp:create",
+  "meta-mcp:delete",
+  "meta-mcp:remove_member",
+  "meta-mcp:update",
+  "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
   "openrouter-key:disable",
@@ -338,6 +344,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP endpoint";
     case "mcp-endpoint:delete":
       return "deleted MCP endpoint";
+
+    case "meta-mcp:create":
+      return "created meta MCP server";
+    case "meta-mcp:update":
+      return "updated meta MCP server";
+    case "meta-mcp:delete":
+      return "deleted meta MCP server";
+    case "meta-mcp:add_member":
+      return "added meta MCP member";
+    case "meta-mcp:update_member":
+      return "updated meta MCP member";
+    case "meta-mcp:remove_member":
+      return "removed meta MCP member";
 
     case "mcp-server:create":
       return "created MCP server";

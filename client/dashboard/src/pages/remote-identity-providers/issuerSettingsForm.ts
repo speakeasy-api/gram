@@ -61,6 +61,12 @@ export function buildUpdateIssuerForm(
     responseTypesSupported: fromDiscovery?.responseTypesSupported,
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported,
+    // Tri-state: a seeded snapshot of a never-captured record holds null,
+    // which must go out as undefined (omit; the server keeps its stored
+    // value) — sending [] instead would record "the issuer advertises no
+    // methods", a refusal state under future PKCE enforcement.
+    codeChallengeMethodsSupported:
+      fromDiscovery?.codeChallengeMethodsSupported ?? undefined,
     clientIdMetadataDocumentSupported:
       fromDiscovery?.clientIdMetadataDocumentSupported,
     revocationEndpoint: fromDiscovery?.revocationEndpoint,
@@ -114,6 +120,13 @@ export function buildCreateIssuerForm(
     responseTypesSupported: fromDiscovery?.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported ?? [],
+    // No `?? []` default, unlike the NOT NULL arrays above: the column is
+    // nullable, and an operator who typed endpoints by hand has not captured
+    // the field — omitting it stores NULL ("not captured"), while [] would
+    // claim the issuer advertises no methods. A fresh discovery snapshot is
+    // never null, so a discovered create records what the document said.
+    codeChallengeMethodsSupported:
+      fromDiscovery?.codeChallengeMethodsSupported ?? undefined,
     // CIMD support is parsed during discovery and persisted here so the issuer
     // can offer the CIMD client type. Defaults false when the operator skipped
     // Discover and typed the endpoints by hand.

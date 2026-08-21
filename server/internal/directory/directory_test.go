@@ -193,6 +193,29 @@ func TestServiceGetUserProfileReturnsEmptyGroups(t *testing.T) {
 	require.ErrorIs(t, err, directory.ErrUserNotFound)
 }
 
+func TestServiceGetUserProfileExcludesDeletedUser(t *testing.T) {
+	t.Parallel()
+	service, conn := newTestService(t)
+	ctx := t.Context()
+
+	const organizationID = "org_directory_deleted_user"
+	const userID = "user_directory_deleted_user"
+	const externalID = "directory_user_deleted"
+	seedOrganization(t, conn, organizationID)
+	syncedAt := time.Date(2026, time.April, 2, 0, 0, 0, 0, time.UTC)
+	seedDirectoryUser(t, conn, organizationID, userID, externalID, "deleted@example.invalid", []byte(`{"department":"Engineering"}`), syncedAt)
+
+	_, err := directoryrepo.New(conn).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		WorkosDeletedAt:       conv.ToPGTimestamptz(syncedAt.Add(time.Hour)),
+		WorkosLastEventID:     conv.ToPGText("event_delete_user"),
+		WorkosDirectoryUserID: externalID,
+	})
+	require.NoError(t, err)
+
+	_, err = service.GetUserProfile(ctx, organizationID, userID)
+	require.ErrorIs(t, err, directory.ErrUserNotFound)
+}
+
 func TestServiceGetUserProfileAcceptsNullAttributeValues(t *testing.T) {
 	t.Parallel()
 	service, conn := newTestService(t)

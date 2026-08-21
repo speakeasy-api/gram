@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -408,10 +409,11 @@ func newStreamsCommand() *cli.Command {
 			}
 			var (
 				findingsPub gcp.Publisher[*riskv1.Finding]
+				logPub      gcp.Publisher[*otelv1.LogRecord]
 				spanPub     gcp.Publisher[*otelv1.Span]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, spanPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -513,10 +515,23 @@ func newStreamsCommand() *cli.Command {
 				return errors.Join(handlerErrors...)
 			})
 
+			logPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.LogRecord{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+			}
+
 			spanPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
 			}
+
+			logRelayHandler := otelsvc.NewLogRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
 
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
@@ -541,7 +556,21 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
 
-				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(logger, meterProvider, spanPub))
+				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
+					logger,
+					meterProvider,
+					logPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
+					logger,
+					meterProvider,
+					spanPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				if enableCHRiskWrites {

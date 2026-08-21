@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
 type Fallback struct {
@@ -47,9 +48,15 @@ func (f Fallback) SessionID(span *otelv1.InboundSpan) (string, string, error) {
 	})
 }
 
-func (f Fallback) Content(span *otelv1.InboundSpan) (key string, val []string, err error) {
-	return firstFallback(f, span, func(d SpanDialect, span *otelv1.InboundSpan) (string, []string, error) {
-		return d.Content(span)
+func (f Fallback) InputContent(span *otelv1.InboundSpan) (key string, val genaiconv.InputMessages, err error) {
+	return firstFallback(f, span, func(d SpanDialect, span *otelv1.InboundSpan) (string, genaiconv.InputMessages, error) {
+		return d.InputContent(span)
+	})
+}
+
+func (f Fallback) OutputContent(span *otelv1.InboundSpan) (key string, val genaiconv.OutputMessages, err error) {
+	return firstFallback(f, span, func(d SpanDialect, span *otelv1.InboundSpan) (string, genaiconv.OutputMessages, error) {
+		return d.OutputContent(span)
 	})
 }
 

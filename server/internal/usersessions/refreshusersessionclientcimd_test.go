@@ -22,9 +22,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -153,11 +155,10 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 }
 
 // newRefreshTestSetup builds a doc server plus a service whose guardian
-// policy trusts the doc server's TLS certificate, creates an issuer, seeds a
-// CIMD client row resolved from the doc server carrying a stored ETag, and
-// enables FlagUserSessionCIMD for the caller's organization. The stored ETag
-// is what makes the no-If-None-Match assertions meaningful: an ordinary
-// revalidation of this row WOULD be conditional.
+// policy trusts the doc server's TLS certificate, creates an issuer, and
+// seeds a CIMD client row resolved from the doc server carrying a stored
+// ETag. The stored ETag is what makes the no-If-None-Match assertions
+// meaningful: an ordinary revalidation of this row WOULD be conditional.
 func newRefreshTestSetup(t *testing.T, issuerSlug string) (context.Context, *testInstance, *cimdDocServer, repo.UserSessionClient) {
 	t.Helper()
 
@@ -185,20 +186,7 @@ func newRefreshTestSetup(t *testing.T, issuerSlug string) (context.Context, *tes
 	require.NoError(t, err)
 	require.True(t, row.ClientIDMetadataEtag.Valid)
 
-	enableCIMDFlag(t, ctx, ti)
-
 	return ctx, ti, ds, row
-}
-
-// enableCIMDFlag turns FlagUserSessionCIMD on for the caller's organization,
-// matching how the flag is targeted in PostHog (distinctID = org ID).
-func enableCIMDFlag(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, authCtx.ActiveOrganizationID, true)
 }
 
 // backdateFetchedAt ages a client row's last successful read past the refresh
@@ -406,16 +394,14 @@ func TestRefreshUserSessionClientCIMD_DCRClientRejected(t *testing.T) {
 	client, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), "refresh-dcr-client")
 	require.NoError(t, err)
 
-	enableCIMDFlag(t, ctx, ti)
-
 	_, err = ti.service.RefreshUserSessionClientCIMD(ctx, refreshPayload(client.ID.String()))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// The endpoint carries the same organization flag gate as the /authorize
-// resolve path: an org whose flag is off cannot make Gram fetch documents,
-// and the rejection costs no upstream request.
-func TestRefreshUserSessionClientCIMD_FlagDisabled(t *testing.T) {
+// The issuer-level off switch applies to refresh like it does to /authorize:
+// an issuer whose admission mode is `disabled` cannot have Gram fetch
+// documents on its behalf, and the rejection costs no upstream request.
+func TestRefreshUserSessionClientCIMD_AdmissionDisabled(t *testing.T) {
 	t.Parallel()
 
 	ds := startCIMDDocServer(t)
@@ -425,11 +411,19 @@ func TestRefreshUserSessionClientCIMD_FlagDisabled(t *testing.T) {
 		SessionToken:         nil,
 		ApikeyToken:          nil,
 		ProjectSlugInput:     nil,
-		Slug:                 "refresh-flagoff-issuer",
+		Slug:                 "refresh-disabled-issuer",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
+		ClientIDMetadataAdmissionMode: conv.ToPGText(string(admission.ModeDisabled)),
+		ID:                            uuid.MustParse(issuer.ID),
+		ProjectID:                     *authCtx.ProjectID,
+	}))
 
 	client, err := seedCimdUserSessionClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), ds.clientID)
 	require.NoError(t, err)
@@ -437,7 +431,7 @@ func TestRefreshUserSessionClientCIMD_FlagDisabled(t *testing.T) {
 
 	_, err = ti.service.RefreshUserSessionClientCIMD(ctx, refreshPayload(client.ID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
-	require.Equal(t, int64(0), ds.requests.Load())
+	require.Equal(t, int64(0), ds.requests.Load(), "a rejected refresh must cost no upstream request")
 }
 
 func TestRefreshUserSessionClientCIMD_NotFound(t *testing.T) {

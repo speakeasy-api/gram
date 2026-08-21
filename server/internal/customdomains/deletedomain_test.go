@@ -116,7 +116,7 @@ func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.
 	decoyEndpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    decoyMcpServer,
+		McpServerID:    uuid.NullUUID{UUID: decoyMcpServer, Valid: true},
 		Slug:           authCtx.OrganizationSlug + "-decoy",
 	})
 	require.NoError(t, err)

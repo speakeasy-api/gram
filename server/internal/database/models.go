@@ -1160,16 +1160,17 @@ type McpApprovalRequestRequester struct {
 }
 
 type McpEndpoint struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	CustomDomainID uuid.NullUUID
-	McpServerID    uuid.UUID
-	Slug           string
-	IsDomainRoot   pgtype.Bool
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	CustomDomainID  uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	Slug            string
+	IsDomainRoot    pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type McpEnvironmentConfig struct {
@@ -1292,6 +1293,30 @@ type MdmDevice struct {
 	MissingSince              pgtype.Timestamptz
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
+}
+
+type MetaMcpServer struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+	Name                string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type MetaMcpServerMember struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	MetaMcpServerID uuid.UUID
+	McpServerID     uuid.UUID
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type ModelProviderKey struct {
@@ -2932,6 +2957,9 @@ type UserSessionClient struct {
 	ClientIDMetadataFetchedAt      pgtype.Timestamptz
 	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
 	ClientIDMetadataEtag           pgtype.Text
+	TokenEndpointAuthMethod        pgtype.Text
+	ClientJwks                     []byte
+	ClientJwksUri                  pgtype.Text
 	CreatedAt                      pgtype.Timestamptz
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz

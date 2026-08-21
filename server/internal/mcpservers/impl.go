@@ -41,6 +41,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -150,25 +151,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, err
 	}
 
-	// Generate the server ID up front so the slug can include its suffix and
-	// the row can be inserted in a single statement (no insert-then-update).
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
-	}
-
-	slug, err := computeServerSlug(name, serverID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
@@ -178,30 +165,19 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	// Remote- and tunneled-backed servers carry a user_session_issuer for
-	// their lifetime (mcp_servers_issuer_required_check). Mint it here in the
-	// same transaction as the server row so a failed create can never leak an
-	// orphan issuer.
-	if ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid {
-		ids.UserSessionIssuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
-		}
-	}
-
-	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ID:                    serverID,
+	server, err := CreateMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
-		Name:                  conv.ToPGText(name),
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   ids.UserSessionIssuerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunneledMcpServerID:   ids.TunneledMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		ActorUserID:           authCtx.UserID,
+		ActorEmail:            authCtx.Email,
+		Name:                  name,
 		Visibility:            string(payload.Visibility),
+		EnvironmentID:         ids.EnvironmentID,
+		RemoteMCPServerID:     ids.RemoteMcpServerID,
+		TunneledMCPServerID:   ids.TunneledMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		UnproxiedMCPServerID:  ids.UnproxiedMcpServerID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -211,45 +187,52 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.audit.LogMcpServerCreate(ctx, dbtx, audit.LogMcpServerCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		McpServerURN:     urn.NewMcpServer(server.ID),
-		McpServerName:    name,
-		McpServerSlug:    slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log mcp server creation").LogError(ctx, logger)
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Best-effort: an unproxied or remote server has no logo of its own to
-	// inherit, so give it the vendor's favicon as a starting icon rather than
-	// leaving it blank. Catalog installs set the registry icon unconditionally
-	// via mcpMetadata.set, and this default only fills an unset logo, so the
-	// catalog icon wins regardless of which write lands first. Backgrounded on
-	// a detached context so a slow or unreachable favicon (up to the fetch's
-	// own timeout) doesn't add latency to the create response; the request's
-	// ctx would otherwise cancel this the moment the handler returns. Bounded
-	// independently of the request so a stuck DB call can't leave the
-	// goroutine running forever.
-	if ids.UnproxiedMcpServerID.Valid || ids.RemoteMcpServerID.Valid {
-		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
-		// Deref before spawning: the goroutine outlives the request, and the
-		// auth context must not be read after the handler returns.
-		projectID := *authCtx.ProjectID
-		go func() {
-			defer cancel()
-			s.setDefaultServerIcon(bgCtx, logger, projectID, server.ID, ids)
-		}()
-	}
+	s.scheduleDefaultServerIcon(ctx, *authCtx.ProjectID, server.ID, ids)
 
 	return mv.BuildMcpServerView(server), nil
+}
+
+// DefaultServerIconSetter schedules best-effort post-create icon discovery for
+// remote-backed MCP servers.
+type DefaultServerIconSetter interface {
+	ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID)
+}
+
+// ScheduleDefaultRemoteServerIcon gives remote-MCP provisioning the same
+// post-commit icon behavior as CreateMcpServer without exposing its transaction
+// command or requiring the remote workflow to duplicate favicon logic.
+func (s *Service) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	if s == nil {
+		return
+	}
+	s.scheduleDefaultServerIcon(ctx, projectID, mcpServerID, serverIDs{
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteMCPServerID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+}
+
+// scheduleDefaultServerIcon starts best-effort icon discovery after the create
+// transaction commits. It uses a detached bounded context so the request can
+// complete without waiting for a vendor favicon.
+func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpServerID uuid.UUID, ids serverIDs) {
+	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
+		return
+	}
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+	go func() {
+		defer cancel()
+		s.setDefaultServerIcon(bgCtx, logger, projectID, mcpServerID, ids)
+	}()
 }
 
 // setDefaultServerIcon fetches the vendor's favicon and sets it as the
@@ -953,6 +936,33 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "detach mcp server from plugins").LogError(ctx, logger)
 	}
 
+	// Meta MCP memberships reference this server through a soft-delete-aware
+	// join table; tombstone them so member listings and the meta runtime stop
+	// projecting a deleted server.
+	deletedMemberships, err := metamcprepo.New(dbtx).DeleteMetaMCPMembersByMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMCPServerIDParams{
+		McpServerID: deleted.ID,
+		ProjectID:   *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp memberships").LogError(ctx, logger)
+	}
+	for _, membership := range deletedMemberships {
+		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			MetaMcpServerURN: urn.NewMetaMcpServer(membership.MetaMcpServerID),
+			Name:             membership.MetaMcpServerName,
+			MembershipURN:    urn.NewMetaMcpServerMember(membership.ID),
+			McpServerURN:     urn.NewMcpServer(membership.McpServerID),
+			SortOrder:        membership.SortOrder,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log meta mcp membership removal").LogError(ctx, logger)
+		}
+	}
+
 	deletedServerURN := urn.NewMcpServer(deleted.ID)
 	for _, pluginServer := range detachedPluginServers {
 		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
@@ -977,6 +987,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// cascade once this deletion leaves it without an active owner.
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
+		// Lock the issuer row before the ownership check. A concurrent meta
+		// MCP attach holds this same row lock while writing its reference, so
+		// the statements below see any newly committed owner. A missing
+		// issuer must not block server deletion, so ErrNoRows skips the
+		// cascade entirely.
+		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
+			ID:        deleted.UserSessionIssuerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
+		}
+
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
@@ -985,7 +1008,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
 		}
 
-		if !hasActiveOwner {
+		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
 				ID:        deleted.UserSessionIssuerID.UUID,
 				ProjectID: *authCtx.ProjectID,

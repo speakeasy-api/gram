@@ -110,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useUploadOpenTelemetryTracesMutation } from "@gram/client/react-query/otelUploadTraces.js";
+import { useUploadOpenTelemetryLogsMutation } from "@gram/client/react-query/otelUploadLogs.js";
 
 export function Example() {
-  const { mutate, status } = useUploadOpenTelemetryTracesMutation();
+  const { mutate, status } = useUploadOpenTelemetryLogsMutation();
 
   return (
     <form
@@ -138,10 +138,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useUploadOpenTelemetryTracesMutation } from "@gram/client/react-query/otelUploadTraces.js";
+import { useUploadOpenTelemetryLogsMutation } from "@gram/client/react-query/otelUploadLogs.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useUploadOpenTelemetryTracesMutation({
+  const { mutate, status } = useUploadOpenTelemetryLogsMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

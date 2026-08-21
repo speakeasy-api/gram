@@ -298,6 +298,20 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the issuer row before the ownership check. A concurrent meta MCP
+	// attach holds this same row lock while writing its reference, so once the
+	// lock is acquired the statements below run on a snapshot that includes
+	// any newly committed owner.
+	if _, err := txRepo.LockUserSessionIssuer(ctx, repo.LockUserSessionIssuerParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer").LogError(ctx, logger)
+	}
+
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
 		UserSessionIssuerID: id,
@@ -306,7 +320,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
 	}
 	if hasActiveOwner {
-		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server, toolset, or meta MCP server")
 	}
 
 	deleted, err := txRepo.DeleteUserSessionIssuer(ctx, repo.DeleteUserSessionIssuerParams{
@@ -323,7 +337,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 				return oops.E(oops.CodeUnexpected, ownerErr, "recheck user session issuer ownership").LogError(ctx, logger)
 			}
 			if hasActiveOwner {
-				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server, toolset, or meta MCP server")
 			}
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}

@@ -1,4 +1,5 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
+import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -299,6 +300,12 @@ export function AttachRemoteIdentityProviderSheet({
               discoveredSnapshot?.responseTypesSupported ?? [],
             tokenEndpointAuthMethodsSupported:
               discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+            // Nullable server-side, so no `?? []` fallback: hand-typed setups
+            // omit the field to store NULL ("not captured") rather than claim
+            // the issuer advertises no PKCE methods. A discovery snapshot is
+            // never null and records what the document said.
+            codeChallengeMethodsSupported:
+              discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
             // CIMD support parsed during discovery; persisted so the issuer can
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:
@@ -877,21 +884,35 @@ function SelectExistingFields({
   selectedIssuerId: string;
   onChange: (id: string) => void;
 }) {
+  const issuerOptions = useMemo(
+    () =>
+      selectableIssuers
+        .map((issuer) => ({
+          value: issuer.id,
+          label: `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`,
+          keywords: [issuer.name ?? "", issuer.slug, issuer.issuer],
+        }))
+        .toSorted((a, b) => a.label.localeCompare(b.label)),
+    [selectableIssuers],
+  );
+  const selectedIssuer = issuerOptions.find(
+    (issuer) => issuer.value === selectedIssuerId,
+  );
+
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Identity Provider</Label>
-      <Select value={selectedIssuerId} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder="Choose an identity provider…" />
-        </SelectTrigger>
-        <SelectContent>
-          {selectableIssuers.map((issuer) => (
-            <SelectItem key={issuer.id} value={issuer.id}>
-              {issuer.name?.trim() || issuer.slug} — {issuer.issuer}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Combobox
+        items={issuerOptions}
+        selected={selectedIssuer}
+        onSelectionChange={(issuer) => onChange(issuer.value)}
+        searchable
+        searchPlaceholder="Search identity providers…"
+        className="w-full justify-between"
+        contentClassName="w-[min(500px,calc(100vw-2rem))]"
+      >
+        {selectedIssuer?.label ?? "Choose an identity provider…"}
+      </Combobox>
       <Text muted small>
         Pick an organization-level or project identity provider already
         configured on this project.

@@ -18,6 +18,18 @@ const (
 
 // Cache defines a generic interface for cache operations.
 // Implementations can use any underlying storage (Redis, in-memory, etc.)
+// LeaseCache provides ownership-aware distributed leases.
+type LeaseCache interface {
+	AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+	ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error)
+}
+
+// ConditionalCache is implemented by caches that can atomically preserve the
+// first value published for a key.
+type ConditionalCache interface {
+	SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error)
+}
+
 type Cache interface {
 	Get(ctx context.Context, key string, value any) error
 	// GetAndDelete atomically reads the value at key and deletes the key.
@@ -157,6 +169,21 @@ func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
 	return nil
+}
+
+func (d *TypedCacheObject[T]) StoreIfAbsent(ctx context.Context, obj T) (bool, error) {
+	if d.cache == nil {
+		return false, errors.New("cache is not configured")
+	}
+	conditional, ok := d.cache.(ConditionalCache)
+	if !ok {
+		return false, errors.New("cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, d.fullKey(obj.CacheKey()), obj, obj.TTL())
+	if err != nil {
+		return false, fmt.Errorf("store if absent: %s: %w", d.fullKey(obj.CacheKey()), err)
+	}
+	return stored, nil
 }
 
 // CompareAndSwap atomically replaces expected when the cached value has not changed.

@@ -36,7 +36,7 @@ import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import { EditServerNameDialog } from "@/pages/hooks/EditServerNameDialog";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
@@ -1110,7 +1110,7 @@ function LogsToolsTraceRow({
         <div className="flex min-w-28 shrink-0 items-center gap-2">
           {trace.hookSource ? (
             <>
-              <HookSourceIcon
+              <AgentProviderIcon
                 source={trace.hookSource}
                 className="size-4 shrink-0"
               />

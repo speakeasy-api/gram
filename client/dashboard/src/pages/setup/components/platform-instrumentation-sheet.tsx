@@ -27,7 +27,7 @@ import type { AgentPlatform, PlatformSetupStatus } from "../types";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
-import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "./platform-logos";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
 const MARKETPLACE_URL_PLACEHOLDER = "{{GRAM_MARKETPLACE_URL}}";
@@ -358,20 +358,7 @@ export function PlatformInstrumentationSheet({
               className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
             >
               <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
-                {PLATFORM_LOGOS[platform.id] ? (
-                  <img
-                    src={PLATFORM_LOGOS[platform.id]}
-                    alt={platform.name}
-                    className={cn(
-                      "h-5 w-5",
-                      INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
-                    )}
-                  />
-                ) : (
-                  <span className="text-foreground text-sm font-semibold">
-                    {platform.name.charAt(0)}
-                  </span>
-                )}
+                <AgentProviderIcon source={platform.icon} className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-foreground text-sm font-medium">

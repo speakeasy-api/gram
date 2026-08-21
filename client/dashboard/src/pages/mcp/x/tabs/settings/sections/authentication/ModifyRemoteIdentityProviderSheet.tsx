@@ -147,6 +147,10 @@ function ModifyRemoteIdentityProviderSheetBody({
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
+    // No `?? []`: null means the saved record never captured the field, and
+    // the seeded snapshot must round-trip it as null so saving the sheet does
+    // not record "the issuer advertises no PKCE methods".
+    codeChallengeMethodsSupported: issuer.codeChallengeMethodsSupported ?? null,
     clientIdMetadataDocumentSupported: issuer.clientIdMetadataDocumentSupported,
     revocationEndpoint: issuer.revocationEndpoint ?? "",
     serviceDocumentation: issuer.serviceDocumentation ?? "",
@@ -248,6 +252,10 @@ function ModifyRemoteIdentityProviderSheetBody({
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
+          // Null (never captured) goes out as undefined so the server keeps
+          // NULL; a fresh discovery snapshot is never null and overwrites.
+          codeChallengeMethodsSupported:
+            discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
           // undefined when no snapshot — the server COALESCEs to keep the
           // stored CIMD-support value; a fresh discovery overwrites it.
           clientIdMetadataDocumentSupported:

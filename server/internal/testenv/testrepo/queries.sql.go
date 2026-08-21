@@ -224,6 +224,32 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql
+`
+
+// Defines the trigger function used to force atomic remote-MCP provisioning to
+// fail after it has created the remote source and session issuer.
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureFunctionFixture)
+	return err
+}
+
+const createRemoteMCPServerMaterializationFailureTriggerFixture = `-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization()
+`
+
+func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPServerMaterializationFailureTriggerFixture)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
@@ -1474,6 +1500,28 @@ type SetProjectSlugFixtureParams struct {
 
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
+	return err
+}
+
+const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = $1
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetUserSessionIssuerCIMDAdmissionModeParams struct {
+	ClientIDMetadataAdmissionMode pgtype.Text
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+}
+
+// Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+// update. The production UpdateUserSessionIssuer query COALESCEs every param,
+// where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+// keeping that contract out of per-package test helpers is the point of this
+// narrow query.
+func (q *Queries) SetUserSessionIssuerCIMDAdmissionMode(ctx context.Context, arg SetUserSessionIssuerCIMDAdmissionModeParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerCIMDAdmissionMode, arg.ClientIDMetadataAdmissionMode, arg.ID, arg.ProjectID)
 	return err
 }
 

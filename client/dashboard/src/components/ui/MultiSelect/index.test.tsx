@@ -8,6 +8,7 @@ vi.mock("@/components/ui/Icon", () => ({
 }));
 
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { MemberFacepile } from "@/components/member-facepile";
 
 // This vitest project does not enable `globals`, so RTL's automatic cleanup is
 // not registered. Without this, mounted popovers accumulate across tests.
@@ -211,6 +212,217 @@ describe("MultiSelect disabled selected options", () => {
     );
 
     expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it("removes nested actions from keyboard navigation", () => {
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={() => undefined}
+        disabled
+      />,
+    );
+
+    expect(screen.getByRole("combobox").hasAttribute("inert")).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Remove Selected from selection",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Clear all 1 selected options",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("does not toggle the options list when removing a selection by keyboard", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    const removeButton = screen.getByRole("button", {
+      name: "Remove Selected from selection",
+    });
+    fireEvent.keyDown(removeButton, { key: "Enter" });
+    fireEvent.click(removeButton);
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("does not toggle the options list when clearing selections by keyboard", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    const clearButton = screen.getByRole("button", {
+      name: "Clear all 1 selected options",
+    });
+    fireEvent.keyDown(clearButton, { key: " " });
+    fireEvent.click(clearButton);
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("keeps visually muted options selectable", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          {
+            label: "Engineering",
+            value: "role:engineering",
+            className: "opacity-60",
+          },
+        ]}
+        defaultValue={["*"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox"));
+    const engineering = screen.getByRole("option", { name: /Engineering/ });
+    expect(engineering.className).toContain("opacity-60");
+
+    fireEvent.click(engineering);
+    expect(onValueChange).toHaveBeenCalledWith(["*", "role:engineering"]);
+  });
+});
+
+describe("MultiSelect collapsed selections", () => {
+  it("retains collapsed values when removing extra visible badges", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[
+          { label: "Collapsed one", value: "collapsed-1" },
+          { label: "Visible one", value: "visible-1" },
+          { label: "Visible two", value: "visible-2" },
+          { label: "Visible three", value: "visible-3" },
+          { label: "Visible four", value: "visible-4" },
+          { label: "Visible five", value: "visible-5" },
+          { label: "Collapsed two", value: "collapsed-2" },
+        ]}
+        defaultValue={[
+          "collapsed-1",
+          "visible-1",
+          "visible-2",
+          "visible-3",
+          "visible-4",
+          "visible-5",
+          "collapsed-2",
+        ]}
+        onValueChange={onValueChange}
+        maxCount={3}
+        collapseSelectedValues={(values) => ({
+          values: values.filter((value) => value.startsWith("collapsed")),
+          summary: <span>Collapsed members</span>,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove 2 extra selected options",
+      }),
+    );
+
+    expect(onValueChange).toHaveBeenCalledWith([
+      "collapsed-1",
+      "visible-1",
+      "visible-2",
+      "visible-3",
+      "collapsed-2",
+    ]);
+  });
+
+  it("uses a controlled selection immediately", () => {
+    const { rerender } = render(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          { label: "Engineering", value: "role:engineering" },
+        ]}
+        value={["*"]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Everyone")).toBeTruthy();
+
+    rerender(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          { label: "Engineering", value: "role:engineering" },
+        ]}
+        value={["role:engineering"]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Engineering")).toBeTruthy();
+    expect(screen.queryByText("Everyone")).toBeNull();
+  });
+
+  it("opens a custom summary without opening the options list", () => {
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={() => undefined}
+        collapseSelectedValues={(values) => ({
+          values,
+          summary: (
+            <MemberFacepile
+              members={[
+                {
+                  id: "member-1",
+                  name: "Test Member",
+                  email: "member@example.test",
+                },
+              ]}
+              renderTrigger={({ label, onClick, onKeyDown }) => (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Show ${label}`}
+                  onClick={onClick}
+                  onKeyDown={onKeyDown}
+                >
+                  {label}
+                </span>
+              )}
+            />
+          ),
+        })}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Show 1 member" }), {
+      key: "Enter",
+    });
+
+    expect(screen.getByText("member@example.test")).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 

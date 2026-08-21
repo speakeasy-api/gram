@@ -11,6 +11,35 @@ import (
 	otel "github.com/speakeasy-api/gram/server/gen/otel"
 )
 
+// BuildLogsPayload builds the payload for the otel logs endpoint from CLI
+// flags.
+func BuildLogsPayload(otelLogsApikeyToken string, otelLogsProjectSlugInput string, otelLogsContentEncoding string) (*otel.LogsPayload, error) {
+	var apikeyToken *string
+	{
+		if otelLogsApikeyToken != "" {
+			apikeyToken = &otelLogsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if otelLogsProjectSlugInput != "" {
+			projectSlugInput = &otelLogsProjectSlugInput
+		}
+	}
+	var contentEncoding *string
+	{
+		if otelLogsContentEncoding != "" {
+			contentEncoding = &otelLogsContentEncoding
+		}
+	}
+	v := &otel.LogsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ContentEncoding = contentEncoding
+
+	return v, nil
+}
+
 // BuildTracesPayload builds the payload for the otel traces endpoint from CLI
 // flags.
 func BuildTracesPayload(otelTracesApikeyToken string, otelTracesProjectSlugInput string, otelTracesContentEncoding string) (*otel.TracesPayload, error) {

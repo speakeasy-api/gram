@@ -333,7 +333,7 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)

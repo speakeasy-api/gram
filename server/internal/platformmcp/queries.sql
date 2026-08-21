@@ -713,6 +713,184 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ListPlatformMCPInventory :many
+-- One bounded, tenant-qualified inventory projection for every Platform MCP
+-- read surface. It reads persisted readiness/distribution state only; it never
+-- contacts a remote MCP or provider.
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    m.name AS mcp_name,
+    m.slug AS mcp_slug,
+    m.visibility,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.toolset_id,
+    m.unproxied_mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(registration.source_kind, '') AS source_kind,
+    COALESCE(registration.catalog_provider, '') AS catalog_provider,
+    COALESCE(registration.catalog_reference, '') AS catalog_reference,
+    COALESCE(registration.status, '') AS registration_status,
+    COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+    COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+    COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+    COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+    COALESCE(readiness.state, '') AS readiness_state,
+    readiness.checked_at AS readiness_checked_at,
+    readiness.expires_at AS readiness_expires_at
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.*
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = @organization_id
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN LATERAL (
+    SELECT readiness.*
+    FROM platform_mcp_readiness AS readiness
+    WHERE readiness.organization_id = @organization_id
+      AND readiness.project_id = m.project_id
+      AND readiness.registration_id = registration.id
+      AND (
+          (sqlc.narg(connection_id)::uuid IS NOT NULL
+              AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+              AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid)
+          OR
+          (sqlc.narg(connection_id)::uuid IS NULL
+              AND readiness.connection_id IS NULL
+              AND readiness.user_id = @user_id
+              AND readiness.acting_surface = @acting_surface)
+      )
+    ORDER BY readiness.checked_at DESC, readiness.id DESC
+    LIMIT 1
+) AS readiness ON TRUE
+WHERE m.deleted IS FALSE
+  AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
+  AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
+  AND (
+      @query_text::text = ''
+      OR m.id::text ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+  )
+  AND (
+      sqlc.narg(readiness_state)::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = sqlc.narg(readiness_state)::text
+  )
+ORDER BY
+    CASE
+        WHEN @query_text::text <> ''
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT @limit_value;
+
+-- name: GetPlatformMCPInventoryItem :one
+SELECT *
+FROM (
+    SELECT
+        m.id AS mcp_server_id,
+        m.project_id,
+        project.name AS project_name,
+        project.slug AS project_slug,
+        m.name AS mcp_name,
+        m.slug AS mcp_slug,
+        m.visibility,
+        m.remote_mcp_server_id,
+        m.tunneled_mcp_server_id,
+        m.toolset_id,
+        m.unproxied_mcp_server_id,
+        COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+        COALESCE(registration.source_kind, '') AS source_kind,
+        COALESCE(registration.catalog_provider, '') AS catalog_provider,
+        COALESCE(registration.catalog_reference, '') AS catalog_reference,
+        COALESCE(registration.status, '') AS registration_status,
+        COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+        COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+        COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+        COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+        COALESCE(readiness.state, '') AS readiness_state,
+        readiness.checked_at AS readiness_checked_at,
+        readiness.expires_at AS readiness_expires_at
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = @organization_id
+     AND project.deleted IS FALSE
+    LEFT JOIN LATERAL (
+        SELECT registration.*
+        FROM platform_mcp_catalog_registrations AS registration
+        WHERE registration.organization_id = @organization_id
+          AND registration.project_id = m.project_id
+          AND registration.mcp_server_id = m.id
+          AND registration.deleted IS FALSE
+        ORDER BY registration.created_at DESC, registration.id DESC
+        LIMIT 1
+    ) AS registration ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT readiness.*
+        FROM platform_mcp_readiness AS readiness
+        WHERE readiness.organization_id = @organization_id
+          AND readiness.project_id = m.project_id
+          AND readiness.registration_id = registration.id
+          AND (
+              (sqlc.narg(connection_id)::uuid IS NOT NULL
+                  AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+                  AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid)
+              OR
+              (sqlc.narg(connection_id)::uuid IS NULL
+                  AND readiness.connection_id IS NULL
+                  AND readiness.user_id = @user_id
+                  AND readiness.acting_surface = @acting_surface)
+          )
+        ORDER BY readiness.checked_at DESC, readiness.id DESC
+        LIMIT 1
+    ) AS readiness ON TRUE
+    WHERE m.id = @mcp_server_id
+      AND m.project_id = @project_id
+      AND m.deleted IS FALSE
+) AS inventory;
+
+-- name: ListPlatformMCPInventoryDistributions :many
+SELECT
+    distribution.registration_id,
+    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    distribution.state,
+    distribution.publication_state
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = distribution.registration_id
+ AND registration.organization_id = distribution.organization_id
+ AND registration.project_id = distribution.project_id
+ AND registration.deleted IS FALSE
+WHERE distribution.organization_id = @organization_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
+  AND distribution.registration_id = ANY(@registration_ids::uuid[])
+ORDER BY distribution.registration_id, distribution.id ASC;
+
 -- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 -- Registrations are project desired state, not permanently owned by the OAuth
 -- client that originally created them. Lifecycle actions require the caller to

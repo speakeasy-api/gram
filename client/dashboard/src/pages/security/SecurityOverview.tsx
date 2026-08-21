@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { AXIS, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
@@ -373,7 +377,7 @@ function SecurityOverviewContent() {
         )}
         <StatTileGroup>
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Events Scanned"
@@ -384,7 +388,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Findings"
@@ -395,7 +399,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Flagged Sessions"
@@ -408,7 +412,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Active Policies"

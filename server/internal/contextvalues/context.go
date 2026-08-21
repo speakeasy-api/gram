@@ -26,6 +26,28 @@ type AuthContext struct {
 	ProjectSlug           *string
 	APIKeyScopes          []string
 	IsAdmin               bool
+	// SupportOrganizationID is set only after session authentication validates
+	// a time-bounded platform-admin support session for this organization.
+	SupportOrganizationID   string
+	supportSessionValidated bool
+}
+
+// WithValidatedSupportSession records the support decision made during session
+// authentication. Keeping this immutable for the request ensures grants and
+// support safeguards cannot disagree when the session expires mid-request.
+func WithValidatedSupportSession(ctx context.Context, authCtx *AuthContext) context.Context {
+	validated := *authCtx
+	validated.supportSessionValidated = true
+	return SetAuthContext(ctx, &validated)
+}
+
+// IsSupportSession is the single trusted predicate for support-only behavior.
+// Request headers and legacy cookies never satisfy it directly.
+func IsSupportSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.supportSessionValidated && authCtx.IsAdmin &&
+		authCtx.SupportOrganizationID != "" &&
+		authCtx.SupportOrganizationID == authCtx.ActiveOrganizationID
 }
 
 type RequestContext struct {
@@ -57,7 +79,6 @@ type RPCContext struct {
 const (
 	SessionTokenContextKey      contextKey = "sessionTokenKey"
 	SessionValueContextKey      contextKey = "sessionValueKey"
-	AdminOverrideContextKey     contextKey = "adminOverrideKey"
 	RequestContextKey           contextKey = "requestContextKey"
 	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
@@ -75,15 +96,6 @@ func SetSessionTokenInContext(ctx context.Context, value string) context.Context
 
 func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(SessionTokenContextKey).(string)
-	return value, ok
-}
-
-func SetAdminOverrideInContext(ctx context.Context, value string) context.Context {
-	return context.WithValue(ctx, AdminOverrideContextKey, value)
-}
-
-func GetAdminOverrideFromContext(ctx context.Context) (string, bool) {
-	value, ok := ctx.Value(AdminOverrideContextKey).(string)
 	return value, ok
 }
 

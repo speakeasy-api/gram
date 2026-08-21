@@ -40,6 +40,7 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
@@ -269,6 +270,11 @@ export class Gram extends ClientSDK {
   private _mcpServers?: McpServers;
   get mcpServers(): McpServers {
     return (this._mcpServers ??= new McpServers(this._options));
+  }
+
+  private _metaMcp?: MetaMcp;
+  get metaMcp(): MetaMcp {
+    return (this._metaMcp ??= new MetaMcp(this._options));
   }
 
   private _modelKeys?: ModelKeys;

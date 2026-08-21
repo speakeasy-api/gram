@@ -14,6 +14,11 @@ const (
 	TokensCountKey                      = attribute.Key("speakeasy.tokens.count")
 	TokensCodecKey                      = attribute.Key("speakeasy.tokens.codec")
 	OriginalInstrumentationScopeNameKey = attribute.Key("speakeasy.original_instrumentation_scope.name")
+	DirectoryIDKey                      = attribute.Key("directory.id")
+	DirectoryAttributeKey               = attribute.Key("directory.attribute")
+	DirectoryGroupIDsKey                = attribute.Key("directory.group.ids")
+	DirectoryGroupNamesKey              = attribute.Key("directory.group.names")
+	GramUserRolesKey                    = attribute.Key("speakeasy.user.roles")
 )
 
 func OrganizationID(v string) attribute.KeyValue { return OrganizationIDKey.String(v) }
@@ -35,3 +40,19 @@ func TokensCodec(v string) attribute.KeyValue { return TokensCodecKey.String(v) 
 func OriginalInstrumentationScopeName(v string) attribute.KeyValue {
 	return OriginalInstrumentationScopeNameKey.String(v)
 }
+
+func DirectoryID(v string) attribute.KeyValue { return DirectoryIDKey.String(v) }
+
+func DirectoryAttribute(key string) attribute.Key {
+	return attribute.Key(string(DirectoryAttributeKey) + "." + key)
+}
+
+func DirectoryGroupIDs(v []string) attribute.KeyValue {
+	return DirectoryGroupIDsKey.StringSlice(v)
+}
+
+func DirectoryGroupNames(v []string) attribute.KeyValue {
+	return DirectoryGroupNamesKey.StringSlice(v)
+}
+
+func GramUserRoles(v []string) attribute.KeyValue { return GramUserRolesKey.StringSlice(v) }

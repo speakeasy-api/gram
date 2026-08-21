@@ -40,6 +40,7 @@ const FEATURES: AdminOrganizationFeatures = {
   custom_model_keys_enabled: true,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
+  session_portability_enabled: false,
   sso_enabled: true,
   scim_enabled: false,
 };

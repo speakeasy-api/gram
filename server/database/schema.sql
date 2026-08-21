@@ -1735,6 +1735,23 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   -- refresh. Optional, since not all metadata hosts emit one.
   client_id_metadata_etag TEXT,
 
+  -- Client authentication method this client declared at registration (RFC
+  -- 7591) or in its CIMD document, e.g. private_key_jwt. Durable server-side
+  -- state: the token endpoint must be able to tell that a client committed to
+  -- authenticating, or an impersonator could omit the assertion and be
+  -- handled as a public client. NULL means the row predates this column and
+  -- the effective method is derived from the row as it always has been: a
+  -- stored client_secret_hash still requires the matching symmetric secret,
+  -- otherwise the client is public ('none').
+  token_endpoint_auth_method TEXT,
+  -- Where this client's public keys for verifying signed assertions (RFC
+  -- 7523) come from: an inline JWKS document from the client metadata, or a
+  -- remote key set location. At most one may be set (see the source CHECK
+  -- below). The related rule that private_key_jwt requires one of the two is
+  -- conditional on an enum-like value and enforced in application code.
+  client_jwks JSONB,
+  client_jwks_uri TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1759,6 +1776,11 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
       client_id_metadata_uri <> ''
       AND client_id = client_id_metadata_uri
     )
+  ),
+  -- RFC 7591 §2 and the CIMD draft forbid a client from supplying jwks and
+  -- jwks_uri together, since that leaves the authoritative key set undefined.
+  CONSTRAINT user_session_clients_client_jwks_source_check CHECK (
+    num_nonnulls(client_jwks, client_jwks_uri) <= 1
   )
 );
 
@@ -4468,6 +4490,66 @@ CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
 
+-- Meta MCP servers expose an explicitly managed set of MCP servers through a
+-- dedicated runtime. This identity remains separate from mcp_servers so
+-- gateway-specific behavior can evolve without changing existing backends.
+-- Meta MCP servers carry no slug: URL addressability and routing identity
+-- belong to mcp_endpoints rows that reference them.
+CREATE TABLE IF NOT EXISTS meta_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT meta_mcp_servers_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
+ON meta_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_id_key
+ON meta_mcp_servers (project_id, id);
+
+CREATE TABLE IF NOT EXISTS meta_mcp_server_members (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  meta_mcp_server_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT meta_mcp_server_members_pkey PRIMARY KEY (id),
+  CONSTRAINT meta_mcp_server_members_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT meta_mcp_server_members_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT meta_mcp_server_members_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_idx
+ON meta_mcp_server_members (meta_mcp_server_id, sort_order, created_at, id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS meta_mcp_server_members_mcp_server_id_idx
+ON meta_mcp_server_members (mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_mcp_server_id_key
+ON meta_mcp_server_members (meta_mcp_server_id, mcp_server_id)
+WHERE deleted IS FALSE;
+
 -- Join table linking servers to collections (for catalog publishing)
 CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
   published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4548,7 +4630,7 @@ CREATE TABLE IF NOT EXISTS mcp_environment_configs (
   CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
 );
 
--- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
+-- MCP Endpoints: addressable slugs for an MCP or Meta MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain endpoint (resolved by the
 -- composite (custom_domain_id, slug)).
@@ -4557,7 +4639,8 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   project_id uuid NOT NULL,
 
   custom_domain_id uuid,
-  mcp_server_id uuid NOT NULL,
+  mcp_server_id uuid,
+  meta_mcp_server_id uuid,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 128),
   is_domain_root BOOLEAN,
 
@@ -4569,7 +4652,9 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   CONSTRAINT mcp_endpoints_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_endpoints_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_endpoints_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE,
   CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_endpoints_backend_exclusivity_check CHECK (num_nonnulls(mcp_server_id, meta_mcp_server_id) = 1),
   CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL)
 );
 
@@ -4579,6 +4664,10 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_mcp_server_id_idx
 ON mcp_endpoints (mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_endpoints_meta_mcp_server_id_idx
+ON mcp_endpoints (meta_mcp_server_id)
 WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_project_id_id_key

@@ -1077,6 +1077,7 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 			"grant_types_supported":                 []string{"authorization_code"},
 			"response_types_supported":              []string{"code"},
 			"token_endpoint_auth_methods_supported": []string{"client_secret_basic"},
+			"code_challenge_methods_supported":      []string{"S256"},
 		}
 		if mutate != nil {
 			mutate(doc)

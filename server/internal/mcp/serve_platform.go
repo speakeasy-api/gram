@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -104,7 +106,11 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)))
+	// Resolved once per request; the initialize handler overwrites InEffect
+	// with the negotiated answer, which is the one sanctioned mutation.
+	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -167,15 +173,33 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
-	// The two managed-only toolsets are rollout variants of each other: an org
-	// reaches exactly one, never both. The attachment decision in the
+	// The two managed-only toolsets are rollout variants of each other: a
+	// thread reaches exactly one, never both. The attachment decision in the
 	// assistants service resolves the same variant, but the assistant token
 	// lives inside the runner VM, so the serve path re-resolves rather than
 	// trusting attachment. A variant that cannot be resolved falls back to
 	// legacy, matching attachment, so an outage never leaves the managed
 	// assistant with no toolset at all.
+	//
+	// The rollout is scoped to dashboard threads, so the calling thread's
+	// source kind is part of the decision — the same managed assistant serves
+	// Slack, cron and wake turns on the legacy toolsets. The principal carries
+	// the thread it was minted for, which is what makes that resolvable here
+	// without trusting anything the runner sends.
+	//
+	// A source kind that cannot be read — a thread deleted mid-turn, a database
+	// blip — falls back to the flag alone, which is how this decision was made
+	// before the rollout was scoped to the dashboard. Reporting it as
+	// not-dashboard instead would 404 the Platform MCP toolset that bootstrap
+	// attached to a dashboard thread, stripping the assistant of every tool it
+	// has mid-turn; the reverse error only costs a non-dashboard thread its
+	// tools on an organization that is already on the variant, and neither
+	// error can reach an organization that is not.
+	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID, *authCtx.ProjectID)
+	dashboardScoped := !resolvedSourceKind || sourceKind == bgtriggers.DefinitionSlugDashboard
+
 	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil {
+	if s.features != nil && dashboardScoped {
 		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {
@@ -190,6 +214,25 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	}
 
 	return nil
+}
+
+// threadSourceKind reads the surface the calling thread was opened from,
+// reporting false when it cannot be read — a thread deleted mid-turn, or a
+// database blip.
+//
+// Scoped to the request's project so a thread id belonging to another project
+// cannot decide which toolset this one is served, even though the id comes
+// from a signed principal rather than the request body.
+func (s *Service) threadSourceKind(ctx context.Context, threadID, projectID uuid.UUID) (string, bool) {
+	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, assistantrepo.GetAssistantThreadSourceKindParams{
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
+		return "", false
+	}
+	return sourceKind, true
 }
 
 // wantedToolsetSlug maps a resolved rollout variant to the single managed-only
@@ -209,10 +252,13 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
-	protocolVersionHeader string,
+	protocolVersion *mcpversions.Resolution,
 ) (json.RawMessage, error) {
-	// Census parity with the hosted dispatch.
-	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfacePlatform)
+	// Count this request on the same census as the hosted dispatch. The
+	// version dimension must be Declared, not InEffect: the census exists to
+	// show what clients actually send, and RecordMCPRequest buckets an empty
+	// or unrecognized declaration into its "none"/"other" series.
+	s.metrics.RecordMCPRequest(ctx, protocolVersion.Declared, req.Method, mcpmetrics.SurfacePlatform)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
@@ -225,7 +271,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -237,26 +283,31 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest) (json.RawMessage, error) {
-	// This path answers ServedPlatformToolset unconditionally and does not
-	// otherwise read the request params. Parsing them purely for telemetry is
-	// the point: without it the platform surface is the one inbound path where
-	// the client's requested revision is invisible, which reads as a hole in
-	// the data rather than as "platform clients don't negotiate". Malformed
-	// params must not fail the handshake, so a parse error is logged and the
-	// requested version is simply left unrecorded.
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+	// Malformed params must not fail the handshake, so a parse error is
+	// logged, the requested version is left unrecorded, and negotiation
+	// proceeds from an absent request — answering the unversioned default.
 	params, _, err := parseInitializeParams(req.Params)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
 	}
 
-	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
-	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	// Genuine version negotiation, mirroring the hosted surface: echo the
+	// requested revision when this surface supports it, otherwise answer the
+	// newest supported one. The answer is written back into the request's
+	// resolution because entry-time resolution saw a handshake with no
+	// declared version; anything downstream of dispatch must see the
+	// negotiated value.
+	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	protocolVersion.InEffect = negotiated
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: mcpversions.ServedPlatformToolset,
+			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},

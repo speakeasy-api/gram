@@ -1742,13 +1742,15 @@ type CustomDomainMcpEndpointResponseBody struct {
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
 	// The url-friendly slug of the project the endpoint belongs to
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
-	// The ID of the parent MCP server
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// The display name of the parent MCP server. May be empty if the parent has no
+	// The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// The display name of the parent server. May be empty if the parent has no
 	// configured name.
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The url-friendly slug of the parent MCP server. May be empty if the parent
-	// has no configured slug.
+	// has no configured slug or is a meta MCP server.
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Whether this endpoint is mapped to the custom-domain root
 	IsDomainRoot bool `form:"is_domain_root" json:"is_domain_root" xml:"is_domain_root"`

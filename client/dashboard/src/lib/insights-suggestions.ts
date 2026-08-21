@@ -93,6 +93,13 @@ export interface InsightsSuggestion {
  */
 export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
   {
+    title: "What can I do with the assistant?",
+    label: "Session tool browser",
+    icon: "wrench",
+    prompt:
+      "What tools do you have available in this session? Search your tools and show me what you can do.",
+  },
+  {
     title: "Any secrets or PII in chats?",
     label: "Sensitive-data scan",
     icon: "shield",

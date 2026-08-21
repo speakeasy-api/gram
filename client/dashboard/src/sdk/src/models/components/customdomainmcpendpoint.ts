@@ -21,17 +21,21 @@ export type CustomDomainMcpEndpoint = {
    */
   isDomainRoot: boolean;
   /**
-   * The ID of the parent MCP server
+   * The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
    */
-  mcpServerId: string;
+  mcpServerId?: string | undefined;
   /**
-   * The display name of the parent MCP server. May be empty if the parent has no configured name.
+   * The display name of the parent server. May be empty if the parent has no configured name.
    */
   mcpServerName?: string | undefined;
   /**
-   * The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.
+   * The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug or is a meta MCP server.
    */
   mcpServerSlug?: string | undefined;
+  /**
+   * The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+   */
+  metaMcpServerId?: string | undefined;
   /**
    * The ID of the project the endpoint belongs to
    */
@@ -58,9 +62,10 @@ export const CustomDomainMcpEndpoint$inboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     is_domain_root: z.boolean(),
-    mcp_server_id: z.string(),
+    mcp_server_id: z.optional(z.string()),
     mcp_server_name: z.optional(z.string()),
     mcp_server_slug: z.optional(z.string()),
+    meta_mcp_server_id: z.optional(z.string()),
     project_id: z.string(),
     project_name: z.string(),
     project_slug: z.string(),
@@ -72,6 +77,7 @@ export const CustomDomainMcpEndpoint$inboundSchema: z.ZodMiniType<
       "mcp_server_id": "mcpServerId",
       "mcp_server_name": "mcpServerName",
       "mcp_server_slug": "mcpServerSlug",
+      "meta_mcp_server_id": "metaMcpServerId",
       "project_id": "projectId",
       "project_name": "projectName",
       "project_slug": "projectSlug",

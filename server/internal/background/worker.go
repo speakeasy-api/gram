@@ -195,6 +195,7 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
@@ -615,60 +616,82 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
-	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
+
+	return &Workers{
+		main:              temporalWorker,
+		riskAnalysis:      riskWorker,
+		aiUsage:           aiUsageWorker,
+		skillEfficacy:     skillEfficacyWorker,
+		env:               env,
+		logger:            logger,
+		opts:              opts,
+		hasSkillSuggester: activities.skillSuggestionAnalyzer != nil,
+	}
+}
+
+// registerSchedules installs the fleet's recurring Temporal schedules and the
+// one-shot startup kicks that belong with them. Every schedule is best-effort:
+// a failure is logged and the worker still comes up, because a missing sweep
+// degrades a background pipeline rather than the request path.
+func (w *Workers) registerSchedules(ctx context.Context) {
+	env, logger, opts := w.env, w.logger, w.opts
+
+	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+	if err := AddOpenRouterCreditsMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddOpenRouterDailySpendSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add openrouter daily spend schedule", attr.SlogError(err))
+	if err := AddOpenRouterDailySpendSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add openrouter daily spend schedule", attr.SlogError(err))
 	}
 
-	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add device integration sync schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddAIUsagePollerCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
-	}
-
-	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
+	if err := AddWeeklyUsageSummarySchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddProcessOutboxSchedule(context.Background(), env); err != nil {
+	if err := AddRefreshBillingUsageSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
+	if err := AddProcessOutboxSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add relay outbox to svix schedule", attr.SlogError(err))
+		}
 	}
 
-	if err := AddAssistantRuntimeJanitorSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	}
+
+	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build
@@ -677,81 +700,79 @@ func NewTemporalWorker(
 	// per-admission recycle.
 	if opts.AssistantsCore != nil {
 		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
-			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
-				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			if err := KickAssistantRuntimeImageRecycle(ctx, env, imageRef); err != nil {
+				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
 			}
 		}
 	}
 
-	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	if err := AddOutboxGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	if err := AddPublishOutboxSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
+	if err := AddPublishOutboxGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox gc schedule", attr.SlogError(err))
 	}
 
-	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddIdentityMapSyncSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add identity map sync schedule", attr.SlogError(err))
+	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
 	}
 
-	if err := AddSpendRuleEvaluationSchedule(context.Background(), env); err != nil {
+	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
+	if err := AddSkillObservationReconciliationSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
-	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	if err := AddSkillEfficacySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill efficacy sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	if err := AddChatAnalysisSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add chat analysis sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddRemoteSessionRefreshSchedule(context.Background(), env); err != nil {
+	if err := AddRemoteSessionRefreshSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add remote session refresh schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add remote session refresh schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddTrialDemotionSchedule(context.Background(), env); err != nil {
+	if err := AddTrialDemotionSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add trial demotion schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add trial demotion schedule", attr.SlogError(err))
 		}
 	}
 
-	if activities.skillSuggestionAnalyzer != nil {
-		if err := AddSkillSuggestionSweepSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add skill suggestion sweep schedule", attr.SlogError(err))
+	if w.hasSkillSuggester {
+		if err := AddSkillSuggestionSweepSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add skill suggestion sweep schedule", attr.SlogError(err))
 		}
 	}
 
 	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
-		if err := AddCustomDomainHealthSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add custom domain health schedule", attr.SlogError(err))
+		if err := AddCustomDomainHealthSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add custom domain health schedule", attr.SlogError(err))
 		}
 	}
 
 	if opts.PluginPublisher != nil {
-		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		if err := AddPluginGeneratorRolloutSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add plugin generator rollout schedule", attr.SlogError(err))
 		}
 	}
-
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker, skillEfficacy: skillEfficacyWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -783,11 +804,20 @@ type Workers struct {
 	riskAnalysis  worker.Worker
 	aiUsage       worker.Worker
 	skillEfficacy worker.Worker
+
+	// Retained so Run can install the recurring schedules; see
+	// registerSchedules.
+	env               *tenv.Environment
+	logger            *slog.Logger
+	opts              *WorkerOptions
+	hasSkillSuggester bool
 }
 
-// Run starts dedicated workers, then blocks running the main worker until
-// interruptCh receives.
+// Run registers the recurring schedules, starts the dedicated workers, then
+// blocks running the main worker until interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
+	w.registerSchedules(context.Background())
+
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
@@ -810,6 +840,12 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 }
 
 // Start starts all workers without blocking. Pair with Stop (used by tests).
+//
+// Unlike Run, this deliberately does not register the recurring schedules. A
+// test builds a throwaway namespace per test case and only exercises the
+// workflow it started; installing ~20 scheduler workflows in each of those
+// namespaces made the shared dev server, not the code under test, the
+// bottleneck.
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)

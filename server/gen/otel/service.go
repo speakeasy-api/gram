@@ -17,6 +17,8 @@ import (
 
 // Receives OpenTelemetry signals from LLM providers and harnesses.
 type Service interface {
+	// Endpoint to receive OTEL logs data from LLM providers and harnesses.
+	Logs(context.Context, *LogsPayload, io.ReadCloser) (err error)
 	// Endpoint to receive OTEL traces data from LLM providers and harnesses.
 	Traces(context.Context, *TracesPayload, io.ReadCloser) (err error)
 }
@@ -41,7 +43,16 @@ const ServiceName = "otel"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"traces"}
+var MethodNames = [2]string{"logs", "traces"}
+
+// LogsPayload is the payload type of the otel service logs method.
+type LogsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Encoding applied to the OTLP request body. Supported values are gzip and
+	// identity.
+	ContentEncoding *string
+}
 
 // TracesPayload is the payload type of the otel service traces method.
 type TracesPayload struct {

@@ -174,6 +174,11 @@ export function getSession(): Promise<AdminSessionInfo> {
   return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
 }
 
+export function organizationDashboardUrl(organizationId: string): string {
+  const query = new URLSearchParams({ organization_id: organizationId });
+  return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
@@ -501,6 +506,7 @@ export type AdminOrganizationFeatures = {
   custom_model_keys_enabled: boolean;
   platform_mcp_enabled: boolean;
   remote_session_auto_refresh_enabled: boolean;
+  session_portability_enabled: boolean;
   sso_enabled: boolean;
   scim_enabled: boolean;
 };
@@ -511,6 +517,7 @@ export type AdminOrganizationFeatureName =
   | "custom_model_keys"
   | "platform_mcp"
   | "remote_session_auto_refresh"
+  | "session_portability"
   | "sso"
   | "scim";
 

@@ -551,7 +551,8 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 
 	endpoint, err := mcpendpointsrepo.New(conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: registration.McpEndpointID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
-	require.Equal(t, registration.McpServerID.UUID, endpoint.McpServerID)
+	require.True(t, endpoint.McpServerID.Valid)
+	require.Equal(t, registration.McpServerID.UUID, endpoint.McpServerID.UUID)
 	require.True(t, strings.HasPrefix(endpoint.Slug, "org-"), "endpoint slug must be organization-prefixed")
 
 	storedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
@@ -1026,7 +1027,7 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
