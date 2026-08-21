@@ -57,11 +57,13 @@ type CheckRemoteSessionClientBindingForUserSessionIssuerParams struct {
 }
 
 // Tenant-scoped binding probe: does this user_session_issuer, in this
-// project, hold a live binding to this remote_session_client? Mirrors the
-// tenancy predicate of ListRemoteSessionClientsForUserSessionIssuer (project
-// clients plus org-level clients of the project's org). Used to authorize
-// lifecycle actions on a shared credential from any bound surface without
-// consulting the credential's provenance issuer.
+// project, hold a live binding to this remote_session_client? The tenancy
+// predicate is a deliberate superset of
+// ListRemoteSessionClientsForUserSessionIssuer: project clients, org-level
+// clients of the project's org, plus tenantless platform-global clients,
+// which lifecycle actions must reach even though ListClients does not offer
+// them. Used to authorize lifecycle actions on a shared credential from any
+// bound surface without consulting the credential's provenance issuer.
 func (q *Queries) CheckRemoteSessionClientBindingForUserSessionIssuer(ctx context.Context, arg CheckRemoteSessionClientBindingForUserSessionIssuerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, checkRemoteSessionClientBindingForUserSessionIssuer,
 		arg.RemoteSessionClientID,

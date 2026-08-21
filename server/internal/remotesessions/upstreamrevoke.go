@@ -144,14 +144,17 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 	return creds
 }
 
-// SoftDeleteSubjectSessions tombstones every upstream grant a subject holds
-// in the given project, inside the caller's transaction, and returns the
-// credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
-// transaction commits.
+// SoftDeleteSubjectSessions tombstones every upstream grant the subject holds
+// on clients bound to the revoking session's issuer, inside the caller's
+// transaction, and returns the credentials to hand to
+// [UpstreamRevoker.RevokeAllDetached] once that transaction commits.
 //
 // The stored user_session_issuer_id is provenance from INSERT, not a lookup
-// key, so a grant minted by a different issuer in the same project is still
-// tombstoned, including when that issuer has since been soft-deleted.
+// key: scope comes from the requesting issuer's tenant-scoped client
+// bindings, so a grant minted through a different (even since-soft-deleted)
+// issuer on a bound client is still tombstoned. Grants on clients bound only
+// to sibling issuers are deliberately left alone — those issuers' Gram
+// sessions are still live and revoke through their own bindings.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
 // it commits or rolls back with the revocation that triggered it; the upstream
