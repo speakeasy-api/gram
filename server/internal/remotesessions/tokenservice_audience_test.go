@@ -28,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, uuid.UUID, urn.SessionSubject) {
+func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, *testInstance, uuid.UUID, urn.SessionSubject) {
 	t.Helper()
 
 	ctx, ti := newTestService(t)
@@ -122,14 +122,14 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 	subject := urn.NewUserSubject("refresh-subject-" + slugSuffix)
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, client.ID)
 
-	return ctx, mgr, client.ID, subject
+	return ctx, mgr, ti, client.ID, subject
 }
 
 func TestResolveAccessToken_RefreshIncludesAudience(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
+	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestResolveAccessToken_RefreshOmitsAudienceWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
+	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)

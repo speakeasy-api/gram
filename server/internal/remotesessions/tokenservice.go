@@ -575,6 +575,7 @@ func refreshSessionTokens(
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
 		Scopes:                 scopes,
+		BackfillResource:       conv.ToPGTextEmpty(resource), // query's COALESCE keeps a stored binding; "" maps to NULL
 		ExpectedUpdatedAt:      sess.UpdatedAt,
 	})
 	if err != nil {
