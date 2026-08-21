@@ -330,6 +330,9 @@ func (s *Scanner) ScanForEnforcement(
 	}) {
 		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
 	}
+	hasQuarantinePolicy := slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return p.Action == "quarantine" && inMessageScope(p)
+	})
 
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context - sibling
@@ -337,9 +340,10 @@ func (s *Scanner) ScanForEnforcement(
 	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
 	var (
-		blockWinner atomic.Pointer[ScanResult] // hard deny; short-circuits the fan-out
-		warnWinner  atomic.Pointer[ScanResult] // challenge; kept only if no block matches
-		matchErr    = errors.New("risk policy block")
+		quarantineWinner atomic.Pointer[ScanResult] // session circuit; highest precedence
+		blockWinner      atomic.Pointer[ScanResult] // hard deny; kept only if no quarantine matches
+		warnWinner       atomic.Pointer[ScanResult] // challenge; kept only if no hard deny matches
+		matchErr         = errors.New("risk policy enforcing match")
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
@@ -370,13 +374,17 @@ func (s *Scanner) ScanForEnforcement(
 			if result == nil {
 				return nil
 			}
-			// Enforce block > warn precedence. A block match short-circuits the
-			// fan-out (cancels siblings) and always wins; a warn match is recorded
-			// but must NOT cancel siblings, so a still-running block policy can
-			// override it. Without this the first goroutine to finish wins, and a
-			// matching block could be silently downgraded to a challenge.
+			// Enforce quarantine > block > warn precedence. Only quarantine
+			// short-circuits the fan-out; block and warn matches must not cancel
+			// siblings, so a still-running quarantine policy can override them.
+			if result.Action == "quarantine" {
+				if quarantineWinner.CompareAndSwap(nil, result) {
+					return matchErr
+				}
+				return nil
+			}
 			if result.Action == "block" {
-				if blockWinner.CompareAndSwap(nil, result) {
+				if blockWinner.CompareAndSwap(nil, result) && !hasQuarantinePolicy {
 					return matchErr
 				}
 				return nil
@@ -400,6 +408,10 @@ func (s *Scanner) ScanForEnforcement(
 	if err := g.Wait(); err != nil && !errors.Is(err, matchErr) {
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("risk policy fan-out: %w", err)
+	}
+	if hit := quarantineWinner.Load(); hit != nil {
+		s.recordScan(ctx, projectID.String(), "quarantined", time.Since(start))
+		return hit, nil
 	}
 	if hit := blockWinner.Load(); hit != nil {
 		s.recordScan(ctx, projectID.String(), "blocked", time.Since(start))

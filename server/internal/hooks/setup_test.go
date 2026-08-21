@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -221,6 +222,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		authzEngine,
+		audit.NewLogger(),
 		nil,
 		nil,
 		nil,

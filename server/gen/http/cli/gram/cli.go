@@ -155,7 +155,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -2370,6 +2370,17 @@ func ParseEndpoint(
 		riskDeleteRiskPolicySessionTokenFlag     = riskDeleteRiskPolicyFlags.String("session-token", "", "")
 		riskDeleteRiskPolicyProjectSlugInputFlag = riskDeleteRiskPolicyFlags.String("project-slug-input", "", "")
 
+		riskListSessionQuarantinesFlags                = flag.NewFlagSet("list-session-quarantines", flag.ExitOnError)
+		riskListSessionQuarantinesApikeyTokenFlag      = riskListSessionQuarantinesFlags.String("apikey-token", "", "")
+		riskListSessionQuarantinesSessionTokenFlag     = riskListSessionQuarantinesFlags.String("session-token", "", "")
+		riskListSessionQuarantinesProjectSlugInputFlag = riskListSessionQuarantinesFlags.String("project-slug-input", "", "")
+
+		riskReleaseSessionQuarantineFlags                = flag.NewFlagSet("release-session-quarantine", flag.ExitOnError)
+		riskReleaseSessionQuarantineBodyFlag             = riskReleaseSessionQuarantineFlags.String("body", "REQUIRED", "")
+		riskReleaseSessionQuarantineApikeyTokenFlag      = riskReleaseSessionQuarantineFlags.String("apikey-token", "", "")
+		riskReleaseSessionQuarantineSessionTokenFlag     = riskReleaseSessionQuarantineFlags.String("session-token", "", "")
+		riskReleaseSessionQuarantineProjectSlugInputFlag = riskReleaseSessionQuarantineFlags.String("project-slug-input", "", "")
+
 		riskListRiskResultsFlags                = flag.NewFlagSet("list-risk-results", flag.ExitOnError)
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
@@ -4069,6 +4080,8 @@ func ParseEndpoint(
 	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
 	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
+	riskListSessionQuarantinesFlags.Usage = riskListSessionQuarantinesUsage
+	riskReleaseSessionQuarantineFlags.Usage = riskReleaseSessionQuarantineUsage
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsForAgentFlags.Usage = riskListRiskResultsForAgentUsage
 	riskUnmaskRiskResultFlags.Usage = riskUnmaskRiskResultUsage
@@ -5911,6 +5924,12 @@ func ParseEndpoint(
 
 			case "delete-risk-policy":
 				epf = riskDeleteRiskPolicyFlags
+
+			case "list-session-quarantines":
+				epf = riskListSessionQuarantinesFlags
+
+			case "release-session-quarantine":
+				epf = riskReleaseSessionQuarantineFlags
 
 			case "list-risk-results":
 				epf = riskListRiskResultsFlags
@@ -8042,6 +8061,12 @@ func ParseEndpoint(
 			case "delete-risk-policy":
 				endpoint = c.DeleteRiskPolicy()
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
+			case "list-session-quarantines":
+				endpoint = c.ListSessionQuarantines()
+				data, err = riskc.BuildListSessionQuarantinesPayload(*riskListSessionQuarantinesApikeyTokenFlag, *riskListSessionQuarantinesSessionTokenFlag, *riskListSessionQuarantinesProjectSlugInputFlag)
+			case "release-session-quarantine":
+				endpoint = c.ReleaseSessionQuarantine()
+				data, err = riskc.BuildReleaseSessionQuarantinePayload(*riskReleaseSessionQuarantineBodyFlag, *riskReleaseSessionQuarantineApikeyTokenFlag, *riskReleaseSessionQuarantineSessionTokenFlag, *riskReleaseSessionQuarantineProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
 				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
@@ -18468,6 +18493,8 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
+	fmt.Fprintln(os.Stderr, `    list-session-quarantines: List active session quarantines for the current project.`)
+	fmt.Fprintln(os.Stderr, `    release-session-quarantine: Release an active session quarantine.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
 	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
@@ -18651,6 +18678,52 @@ func riskDeleteRiskPolicyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-policy --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListSessionQuarantinesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-session-quarantines", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active session quarantines for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-session-quarantines --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskReleaseSessionQuarantineUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk release-session-quarantine", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Release an active session quarantine.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk release-session-quarantine --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsUsage() {

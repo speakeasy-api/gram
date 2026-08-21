@@ -481,6 +481,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
@@ -596,6 +597,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
@@ -707,6 +709,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddSessionQuarantineReassertSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add session quarantine reassert schedule", attr.SlogError(err))
 	}
 
 	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
