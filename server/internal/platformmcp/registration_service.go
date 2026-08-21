@@ -92,11 +92,12 @@ func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker
 		readiness: nil,
 		telemetry: noopLifecycleTelemetry{},
 		budgets: OperationBudgets{
-			Catalog:      OperationBudget{Connection: nil, Organization: nil},
-			Registration: OperationBudget{Connection: nil, Organization: nil},
-			Handoff:      OperationBudget{Connection: nil, Organization: nil},
-			SetupStart:   OperationBudget{Connection: nil, Organization: nil},
-			Repair:       OperationBudget{Connection: nil, Organization: nil},
+			Catalog:           OperationBudget{Connection: nil, Organization: nil},
+			Registration:      OperationBudget{Connection: nil, Organization: nil},
+			Handoff:           OperationBudget{Connection: nil, Organization: nil},
+			SetupStart:        OperationBudget{Connection: nil, Organization: nil},
+			Repair:            OperationBudget{Connection: nil, Organization: nil},
+			LifecycleMetadata: OperationBudget{Connection: nil, Organization: nil},
 		},
 	}
 }
@@ -151,7 +152,17 @@ func (s *RegistrationService) WithLifecycleMetadata(metadata *LifecycleMetadataS
 }
 
 func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
-	if s == nil || s.lifecycleMetadata == nil {
+	if s == nil || s.gate == nil || s.lifecycleMetadata == nil || !s.budgets.LifecycleMetadata.valid() {
+		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.LifecycleMetadata.Allow(ctx, principal); err != nil {
+		return UpdateMCPMetadataResult{}, err
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return UpdateMCPMetadataResult{}, fmt.Errorf("check metadata update gate: %w", err)
+	}
+	if !enabled {
 		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
 	}
 	return s.lifecycleMetadata.Update(ctx, principal, input)
@@ -427,13 +438,18 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if displayName == "" {
 		displayName = inspection.CanonicalURL
 	}
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.ContainsAny(displayName, "\r\n") {
+		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
+	}
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
 	request := CatalogRegistrationRequest{
-		ProjectSlug:      project.Slug,
-		SourceKind:       directRemoteSourceKind,
-		CatalogProvider:  directRemoteProviderKey,
-		CatalogReference: inspection.CanonicalURL,
-		IdempotencyKey:   input.IdempotencyKey,
-		InputHash:        catalogRegistrationInputHash(project.Slug, directRemoteSourceKind, directRemoteProviderKey, inspection.CanonicalURL),
+		ProjectSlug:       project.Slug,
+		SourceKind:        directRemoteSourceKind,
+		CatalogProvider:   directRemoteProviderKey,
+		CatalogReference:  inspection.CanonicalURL,
+		ConfigurationHash: configurationHash,
+		IdempotencyKey:    input.IdempotencyKey,
+		InputHash:         catalogRegistrationInputHash(project.Slug, directRemoteSourceKind, directRemoteProviderKey, inspection.CanonicalURL, configurationHash),
 	}
 	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
 	if err != nil {

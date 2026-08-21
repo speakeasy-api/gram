@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -55,7 +54,6 @@ type UpdateMCPMetadataResult struct {
 // attachments.
 type LifecycleMetadataService struct {
 	db      *pgxpool.Pool
-	audit   *audit.Logger
 	updater LifecycleMetadataUpdater
 	key     []byte
 	now     func() time.Time
@@ -74,15 +72,15 @@ type LifecycleMetadataUpdate struct {
 	Name           string
 }
 
-func NewLifecycleMetadataService(db *pgxpool.Pool, auditLogger *audit.Logger, updater LifecycleMetadataUpdater, keyMaterial string) (*LifecycleMetadataService, error) {
-	if db == nil || auditLogger == nil || updater == nil || keyMaterial == "" {
+func NewLifecycleMetadataService(db *pgxpool.Pool, updater LifecycleMetadataUpdater, keyMaterial string) (*LifecycleMetadataService, error) {
+	if db == nil || updater == nil || keyMaterial == "" {
 		return nil, ErrLifecycleMetadataInvalid
 	}
-	return &LifecycleMetadataService{db: db, audit: auditLogger, updater: updater, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now}, nil
+	return &LifecycleMetadataService{db: db, updater: updater, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now}, nil
 }
 
 func (s *LifecycleMetadataService) Update(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
-	if s == nil || s.db == nil || s.audit == nil || s.updater == nil || len(s.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || strings.TrimSpace(input.Name) == "" || input.ExpectedVersion == "" || input.IdempotencyKey == "" {
+	if s == nil || s.db == nil || s.updater == nil || len(s.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || strings.TrimSpace(input.Name) == "" || len(strings.TrimSpace(input.Name)) > 256 || strings.ContainsAny(input.Name, "\r\n") || input.ExpectedVersion == "" || input.IdempotencyKey == "" {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
 	if len(input.IdempotencyKey) > 128 {
@@ -164,7 +162,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 	if err != nil {
 		return UpdateMCPMetadataResult{}, err
 	}
-	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.RemoteMcpServerOwned || !registration.UserSessionIssuerOwned || !registration.McpServerOwned || !registration.McpEndpointOwned || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
 	server, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: resolvedProject.ID})
@@ -226,7 +224,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 
 func (s *LifecycleMetadataService) currentResult(ctx context.Context, principal Principal, project ResolvedProject, registrationID, mcpID uuid.UUID, receipt OperationReceipt) (UpdateMCPMetadataResult, error) {
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
-	if err != nil || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
+	if err != nil || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.RemoteMcpServerOwned || !registration.UserSessionIssuerOwned || !registration.McpServerOwned || !registration.McpEndpointOwned || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: project.ID})

@@ -24,6 +24,8 @@ const (
 	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
 	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
 	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
+	LifecycleConnectionLimitName      = "platform-mcp-lifecycle-connection"
+	LifecycleOrganizationLimitName    = "platform-mcp-lifecycle-organization"
 )
 
 const (
@@ -147,7 +149,8 @@ type OperationBudgets struct {
 	// obtain the version token its next write needs, and metering the read
 	// separately would only let a loop spend twice as much reaching the same
 	// write.
-	Skills OperationBudget
+	Skills            OperationBudget
+	LifecycleMetadata OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -211,5 +214,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
 }

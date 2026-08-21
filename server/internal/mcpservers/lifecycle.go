@@ -38,6 +38,8 @@ type LifecycleUpdateInput struct {
 	ToolVariationsGroupID uuid.NullUUID
 }
 
+const maxLifecycleMCPServerNameBytes = 256
+
 // UpdateMCPServerLifecycleInTransaction updates only the name-derived slug and
 // visibility of a locked MCP server. It synchronizes auto-derived plugin display
 // names and writes the normal MCP update audit event, but it never creates,
@@ -50,8 +52,8 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 	name := existing.Name
 	if input.Name != nil {
 		trimmed := strings.TrimSpace(*input.Name)
-		if trimmed == "" {
-			return repo.McpServer{}, fmt.Errorf("MCP server name must be non-empty")
+		if trimmed == "" || len(trimmed) > maxLifecycleMCPServerNameBytes || strings.ContainsAny(trimmed, "\r\n") {
+			return repo.McpServer{}, fmt.Errorf("MCP server name must be non-empty, at most %d bytes, and contain no line breaks", maxLifecycleMCPServerNameBytes)
 		}
 		name = conv.ToPGText(trimmed)
 	}
