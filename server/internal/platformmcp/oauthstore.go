@@ -61,6 +61,59 @@ func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client platform
 	return mapOAuthWriteError(err)
 }
 
+func (s *PostgresOAuthStore) UpsertClientFromCIMD(ctx context.Context, document platformoauth.ClientMetadataDocument) (platformoauth.Client, error) {
+	if s == nil || s.db == nil || document.ClientID == "" || document.Name == "" || len(document.RedirectURIs) == 0 {
+		return platformoauth.Client{}, platformoauth.ErrNotFound
+	}
+	row, err := platformrepo.New(s.db).UpsertPlatformMCPOAuthClientFromCIMD(ctx, platformrepo.UpsertPlatformMCPOAuthClientFromCIMDParams{
+		ClientID:             document.ClientID,
+		ClientName:           document.Name,
+		RedirectUris:         document.RedirectURIs,
+		CacheTtlSeconds:      document.CacheTTL.Seconds(),
+		ClientIDMetadataEtag: text(document.ETag),
+	})
+	if err != nil {
+		// No rows means the DO UPDATE guard refused a secret-bearing or
+		// revoked client that shares this client_id. Reporting it as
+		// not-found keeps an anomalous collision an unknown-client rejection
+		// rather than a 500.
+		return platformoauth.Client{}, mapOAuthReadError(err)
+	}
+	return clientFromRow(row), nil
+}
+
+func (s *PostgresOAuthStore) RefreshClientMetadataCache(ctx context.Context, cache platformoauth.ClientMetadataCache) (platformoauth.Client, error) {
+	if s == nil || s.db == nil || cache.ClientID == "" {
+		return platformoauth.Client{}, platformoauth.ErrNotFound
+	}
+	row, err := platformrepo.New(s.db).UpdatePlatformMCPOAuthClientCIMDCache(ctx, platformrepo.UpdatePlatformMCPOAuthClientCIMDCacheParams{
+		ClientID:             cache.ClientID,
+		CacheTtlSeconds:      cache.CacheTTL.Seconds(),
+		ClientIDMetadataEtag: text(cache.ETag),
+	})
+	if err != nil {
+		return platformoauth.Client{}, mapOAuthReadError(err)
+	}
+	return clientFromRow(row), nil
+}
+
+// clientFromRow projects a registry row onto the OAuth client contract. The
+// metadata columns are carried through so the authorize path can decide
+// freshness and conditional revalidation without a second read.
+func clientFromRow(row platformrepo.PlatformMcpOauthClient) platformoauth.Client {
+	return platformoauth.Client{
+		ID:                     row.ClientID,
+		SecretHash:             row.ClientSecretHash.String,
+		Name:                   row.ClientName,
+		RedirectURIs:           row.RedirectUris,
+		SecretExpiresAt:        timePointer(row.ClientSecretExpiresAt),
+		RevokedAt:              timePointer(row.RevokedAt),
+		MetadataURI:            row.ClientIDMetadataUri.String,
+		MetadataCacheExpiresAt: row.ClientIDMetadataCacheExpiresAt.Time,
+		MetadataETag:           row.ClientIDMetadataEtag.String,
+	}
+}
+
 func (s *PostgresOAuthStore) GetClient(ctx context.Context, clientID string) (platformoauth.Client, error) {
 	if s == nil || s.db == nil {
 		return platformoauth.Client{}, platformoauth.ErrNotFound
@@ -69,7 +122,7 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, clientID string) (pl
 	if err != nil {
 		return platformoauth.Client{}, mapOAuthReadError(err)
 	}
-	return platformoauth.Client{ID: row.ClientID, SecretHash: row.ClientSecretHash.String, Name: row.ClientName, RedirectURIs: row.RedirectUris, SecretExpiresAt: timePointer(row.ClientSecretExpiresAt)}, nil
+	return clientFromRow(row), nil
 }
 
 func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, now time.Time) error {

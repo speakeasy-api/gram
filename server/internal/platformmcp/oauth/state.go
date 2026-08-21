@@ -43,6 +43,59 @@ type Client struct {
 	RedirectURIs    []string
 	SecretExpiresAt *time.Time
 	RevokedAt       *time.Time
+
+	// MetadataURI is the Client ID Metadata Document URL this client was
+	// resolved from. Empty for a dynamically registered client, and equal to
+	// ID otherwise — the draft requires the document's client_id to be the
+	// URL it was fetched from — so it doubles as the discriminator telling
+	// the two kinds of client apart without parsing ID.
+	MetadataURI string
+
+	// MetadataCacheExpiresAt is when the cached document stops being fresh.
+	// Until then the stored client is served with no upstream request. Zero
+	// means nothing is cached and the next authorization must fetch.
+	MetadataCacheExpiresAt time.Time
+
+	// MetadataETag is the validator from the last successful fetch, replayed
+	// in If-None-Match. Empty means the next refresh is unconditional.
+	MetadataETag string
+}
+
+// ClientMetadataDocument is a validated Client ID Metadata Document ready to
+// be written to the client registry, plus the cache bookkeeping the fetch
+// that produced it yielded.
+type ClientMetadataDocument struct {
+	// ClientID is the document URL, which is also the client identifier.
+	ClientID string
+
+	// Name is the document's client_name, shown on the consent page.
+	Name string
+
+	// RedirectURIs are the document's redirect_uris, already validated
+	// against the origin-binding policy.
+	RedirectURIs []string
+
+	// CacheTTL is how long the document stays fresh, already clamped to the
+	// resolver's bounds.
+	CacheTTL time.Duration
+
+	// ETag is the validator to persist. Empty stores NULL, so the next
+	// refresh is unconditional rather than replaying a stale validator.
+	ETag string
+}
+
+// ClientMetadataCache is the bookkeeping to record when a document host
+// answered 304: the stored name and redirect URIs are current by definition,
+// so only the freshness window and the validator move.
+type ClientMetadataCache struct {
+	// ClientID is the document URL identifying the row to refresh.
+	ClientID string
+
+	// CacheTTL is the new freshness window, already clamped.
+	CacheTTL time.Duration
+
+	// ETag is the validator to persist, empty for none.
+	ETag string
 }
 
 type Connection struct {
@@ -119,6 +172,22 @@ type AuthorizeConnectionInput struct {
 // Store defines the state transitions the Platform MCP authorization server requires.
 type Store interface {
 	RegisterClient(ctx context.Context, client Client) error
+
+	// UpsertClientFromCIMD writes the client a validated Client ID Metadata
+	// Document describes, keyed on the document URL the caller presented as
+	// its client_id. It is the only write that may replace an existing
+	// client's name and redirect URIs, because for a CIMD client the
+	// document — not a one-time registration — is the authority on both.
+	// Implementations must refuse to overwrite a secret-bearing or revoked
+	// client and report ErrNotFound when they do.
+	UpsertClientFromCIMD(ctx context.Context, document ClientMetadataDocument) (Client, error)
+
+	// RefreshClientMetadataCache records a 304 against a stored document:
+	// the freshness window and validator move, the metadata does not. It
+	// carries the same refusal as UpsertClientFromCIMD for a client that is
+	// no longer an updatable metadata-resolved one.
+	RefreshClientMetadataCache(ctx context.Context, cache ClientMetadataCache) (Client, error)
+
 	GetClient(ctx context.Context, clientID string) (Client, error)
 	RevokeClient(ctx context.Context, clientID string, now time.Time) error
 	RegisterConnection(ctx context.Context, connection Connection) error
@@ -170,6 +239,44 @@ func (s *InMemoryStore) RegisterClient(_ context.Context, client Client) error {
 	}
 	s.clients[client.ID] = client
 	return nil
+}
+
+func (s *InMemoryStore) UpsertClientFromCIMD(_ context.Context, document ClientMetadataDocument) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if existing, ok := s.clients[document.ClientID]; ok {
+		if existing.SecretHash != "" || existing.RevokedAt != nil {
+			return Client{}, ErrNotFound
+		}
+	}
+	client := Client{
+		ID:                     document.ClientID,
+		SecretHash:             "",
+		Name:                   document.Name,
+		RedirectURIs:           document.RedirectURIs,
+		SecretExpiresAt:        nil,
+		RevokedAt:              nil,
+		MetadataURI:            document.ClientID,
+		MetadataCacheExpiresAt: time.Now().Add(document.CacheTTL),
+		MetadataETag:           document.ETag,
+	}
+	s.clients[client.ID] = client
+	return client, nil
+}
+
+func (s *InMemoryStore) RefreshClientMetadataCache(_ context.Context, cache ClientMetadataCache) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, ok := s.clients[cache.ClientID]
+	if !ok || client.MetadataURI == "" || client.SecretHash != "" || client.RevokedAt != nil {
+		return Client{}, ErrNotFound
+	}
+	client.MetadataCacheExpiresAt = time.Now().Add(cache.CacheTTL)
+	client.MetadataETag = cache.ETag
+	s.clients[cache.ClientID] = client
+	return client, nil
 }
 
 func (s *InMemoryStore) GetClient(_ context.Context, clientID string) (Client, error) {

@@ -2,6 +2,8 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,9 +20,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 type memoryCache struct {
@@ -493,15 +499,18 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
-		BaseURL:       base,
-		Cache:         &memoryCache{values: map[string]any{}},
-		Store:         platformoauth.NewInMemoryStore(),
-		Identity:      testIdentity{},
-		Gate:          allowGate{},
-		Authorizer:    allowAuthorizer{},
-		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
-		Signer:        sessiontokens.NewSigner("test-key"),
-		Encryption:    testEncryption(t),
+		BaseURL:        base,
+		Logger:         testenv.NewLogger(t),
+		MeterProvider:  testenv.NewMeterProvider(t),
+		Cache:          &memoryCache{values: map[string]any{}},
+		Store:          platformoauth.NewInMemoryStore(),
+		Identity:       testIdentity{},
+		Gate:           allowGate{},
+		Authorizer:     allowAuthorizer{},
+		Organizations:  testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:         sessiontokens.NewSigner("test-key"),
+		Encryption:     testEncryption(t),
+		GuardianPolicy: guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 	})
 	require.NoError(t, err)
 	return service
@@ -513,4 +522,215 @@ func testEncryption(t *testing.T) *encryption.Client {
 	client, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 	return client
+}
+
+// clientMetadataDocument is the Client ID Metadata Document a test host
+// serves. Only the members this authorization server honours are set; the
+// resolver requires client_id to equal the URL the document was fetched from.
+func clientMetadataDocument(clientID string, redirectURIs []string) string {
+	document := map[string]any{
+		"client_id":                  clientID,
+		"client_name":                "Test Agent",
+		"redirect_uris":              redirectURIs,
+		"token_endpoint_auth_method": "none",
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
+}
+
+// newMetadataDocumentHost serves a Client ID Metadata Document over HTTPS and
+// returns its URL plus the number of times the document was fetched. The
+// resolver refuses plaintext and never follows redirects, so a TLS server
+// whose certificate the guardian policy trusts is the only way to exercise
+// the path.
+func newMetadataDocumentHost(t *testing.T, redirectURIs []string) (string, *atomic.Int64, *x509.CertPool) {
+	t.Helper()
+
+	var fetches atomic.Int64
+	var clientID string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(clientMetadataDocument(clientID, redirectURIs)))
+	}))
+	t.Cleanup(server.Close)
+	clientID = server.URL + "/client-metadata"
+
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
+	return clientID, &fetches, roots
+}
+
+// newMetadataOAuthHTTP builds a server that admits any spec-valid document so
+// tests can host one locally. Admission itself is covered separately, against
+// the production policy.
+func newMetadataOAuthHTTP(t *testing.T, roots *x509.CertPool) *OAuthHTTP {
+	t.Helper()
+
+	base, err := url.Parse("https://gram.example")
+	require.NoError(t, err)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithTLSRootCAs(roots))
+	require.NoError(t, err)
+	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		BaseURL:                   base,
+		Logger:                    testenv.NewLogger(t),
+		MeterProvider:             testenv.NewMeterProvider(t),
+		Cache:                     &memoryCache{values: map[string]any{}},
+		Store:                     platformoauth.NewInMemoryStore(),
+		Identity:                  testIdentity{},
+		Gate:                      allowGate{},
+		Authorizer:                allowAuthorizer{},
+		Organizations:             testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:                    sessiontokens.NewSigner("test-key"),
+		Encryption:                testEncryption(t),
+		GuardianPolicy:            policy,
+		TestOnlyCIMDAdmissionMode: admission.ModeOpen,
+	})
+	require.NoError(t, err)
+	return service
+}
+
+func authorizeRequest(clientID, redirectURI string) *http.Request {
+	query := url.Values{}
+	query.Set("response_type", "code")
+	query.Set("client_id", clientID)
+	query.Set("redirect_uri", redirectURI)
+	query.Set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+	query.Set("code_challenge_method", "S256")
+	query.Set("state", "client-state")
+	return httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?"+query.Encode(), nil)
+}
+
+func TestOAuthHTTPAdvertisesClientIDMetadataDocumentSupport(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	response := httptest.NewRecorder()
+	service.AuthorizationServerHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp", nil))
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &metadata))
+	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
+	require.Contains(t, metadata["token_endpoint_auth_methods_supported"], "none",
+		"a CIMD client is a public client and selects its auth method from this list")
+}
+
+func TestOAuthHTTPAuthorizeResolvesClientIDMetadataDocument(t *testing.T) {
+	t.Parallel()
+
+	clientID, fetches, roots := newMetadataDocumentHost(t, []string{"http://localhost:4321/callback"})
+	service := newMetadataOAuthHTTP(t, roots)
+
+	response := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(response, authorizeRequest(clientID, "http://localhost:4321/callback"))
+
+	require.Equal(t, http.StatusFound, response.Code, response.Body.String())
+	require.Contains(t, response.Header().Get("Location"), "https://idp.example/authorize")
+	require.Equal(t, int64(1), fetches.Load())
+
+	// The document is projected onto a client the rest of the flow can read
+	// back by client_id, which is what the consent and token legs do.
+	stored, err := service.store.GetClient(t.Context(), clientID)
+	require.NoError(t, err)
+	require.Equal(t, "Test Agent", stored.Name)
+	require.Equal(t, []string{"http://localhost:4321/callback"}, stored.RedirectURIs)
+	require.Empty(t, stored.SecretHash, "a metadata document client is always public")
+	require.Equal(t, clientID, stored.MetadataURI, "the document URL is the discriminator for a metadata-resolved client")
+	require.NotEmpty(t, stored.MetadataCacheExpiresAt, "the freshness window is recorded alongside the projection")
+}
+
+func TestOAuthHTTPAuthorizeServesMetadataClientFromCacheWithinFreshness(t *testing.T) {
+	t.Parallel()
+
+	clientID, fetches, roots := newMetadataDocumentHost(t, []string{"http://localhost:4321/callback"})
+	service := newMetadataOAuthHTTP(t, roots)
+
+	first := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(first, authorizeRequest(clientID, "http://localhost:4321/callback"))
+	require.Equal(t, http.StatusFound, first.Code, first.Body.String())
+
+	second := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(second, authorizeRequest(clientID, "http://localhost:4321/callback"))
+	require.Equal(t, http.StatusFound, second.Code, second.Body.String())
+
+	require.Equal(t, int64(1), fetches.Load(),
+		"a second authorization inside the freshness window must not refetch the document")
+}
+
+func TestOAuthHTTPAuthorizeAcceptsVariableLoopbackPortForMetadataClient(t *testing.T) {
+	t.Parallel()
+
+	clientID, _, roots := newMetadataDocumentHost(t, []string{"http://localhost:4321/callback"})
+	service := newMetadataOAuthHTTP(t, roots)
+
+	first := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(first, authorizeRequest(clientID, "http://localhost:4321/callback"))
+	require.Equal(t, http.StatusFound, first.Code, first.Body.String())
+
+	// RFC 8252 §7.3: a native app binds whatever loopback port is free, so a
+	// later authorization from the same client arrives on a different one.
+	second := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(second, authorizeRequest(clientID, "http://localhost:59122/callback"))
+	require.Equal(t, http.StatusFound, second.Code, second.Body.String())
+}
+
+func TestOAuthHTTPAuthorizeRejectsUnregisteredRedirectForRegisteredClient(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	require.NoError(t, service.store.RegisterClient(t.Context(), platformoauth.Client{
+		ID:              "client-1",
+		Name:            "Dynamically registered",
+		RedirectURIs:    []string{"http://localhost:4321/callback"},
+		SecretHash:      "",
+		SecretExpiresAt: nil,
+		RevokedAt:       nil,
+	}))
+
+	// A dynamically registered client keeps byte-exact matching: its redirect
+	// URIs are whatever an unauthenticated caller posted once, not a live
+	// statement from an origin the server can re-read.
+	response := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(response, authorizeRequest("client-1", "http://localhost:59122/callback"))
+
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client"`)
+}
+
+func TestOAuthHTTPAuthorizeDeniesUnlistedMetadataDocument(t *testing.T) {
+	t.Parallel()
+
+	clientID, fetches, _ := newMetadataDocumentHost(t, []string{"http://localhost:4321/callback"})
+	service := newTestOAuthHTTP(t)
+
+	response := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(response, authorizeRequest(clientID, "http://localhost:4321/callback"))
+
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client"`)
+	require.Contains(t, response.Body.String(), "client policy")
+	require.Equal(t, int64(0), fetches.Load(),
+		"an unlisted document URL must be denied before any outbound fetch")
+}
+
+func TestOAuthHTTPAuthorizeFailsClosedWhenMetadataHostIsUnreachable(t *testing.T) {
+	t.Parallel()
+
+	roots := x509.NewCertPool()
+	service := newMetadataOAuthHTTP(t, roots)
+
+	// A syntactically valid document URL whose host does not resolve: the
+	// spec says a fetch failure aborts the authorization request, and the
+	// wire response must stay generic and retryable.
+	response := httptest.NewRecorder()
+	service.AuthorizeHandler().ServeHTTP(response, authorizeRequest("https://metadata.invalid/client-metadata", "http://localhost:4321/callback"))
+
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Contains(t, response.Body.String(), `"temporarily_unavailable"`)
 }

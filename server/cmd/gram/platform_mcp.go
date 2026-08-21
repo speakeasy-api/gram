@@ -110,17 +110,20 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
-		BaseURL:       config.ServerURL,
-		Environment:   config.Environment,
-		Cache:         cache.NewRedisCacheAdapter(config.Redis),
-		Store:         oauthStore,
-		Identity:      config.Identity,
-		Gate:          gate,
-		Authorizer:    authorizer,
-		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
-		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
-		Encryption:    config.Encryption,
-		Telemetry:     oauthTelemetry,
+		BaseURL:        config.ServerURL,
+		Environment:    config.Environment,
+		Logger:         config.Logger,
+		MeterProvider:  config.MeterProvider,
+		Cache:          cache.NewRedisCacheAdapter(config.Redis),
+		Store:          oauthStore,
+		Identity:       config.Identity,
+		Gate:           gate,
+		Authorizer:     authorizer,
+		Organizations:  platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
+		Signer:         sessiontokens.NewSigner(config.JWTSigningKey),
+		Encryption:     config.Encryption,
+		GuardianPolicy: config.GuardianPolicy,
+		Telemetry:      oauthTelemetry,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -322,17 +325,20 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
-		BaseURL:       config.ServerURL,
-		Environment:   config.Environment,
-		Cache:         cache.NewRedisCacheAdapter(config.Redis),
-		Store:         oauthStore,
-		Identity:      config.Identity,
-		Gate:          gate,
-		Authorizer:    authorizer,
-		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
-		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
-		Encryption:    config.Encryption,
-		Telemetry:     oauthTelemetry,
+		BaseURL:        config.ServerURL,
+		Environment:    config.Environment,
+		Logger:         config.Logger,
+		MeterProvider:  config.MeterProvider,
+		Cache:          cache.NewRedisCacheAdapter(config.Redis),
+		Store:          oauthStore,
+		Identity:       config.Identity,
+		Gate:           gate,
+		Authorizer:     authorizer,
+		Organizations:  platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
+		Signer:         sessiontokens.NewSigner(config.JWTSigningKey),
+		Encryption:     config.Encryption,
+		GuardianPolicy: config.GuardianPolicy,
+		Telemetry:      oauthTelemetry,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)

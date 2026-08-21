@@ -11,23 +11,29 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -37,6 +43,18 @@ const (
 	platformAccessTokenLifetime  = time.Hour
 	platformRefreshTokenLifetime = 30 * 24 * time.Hour
 )
+
+// platformCIMDAdmissionMode is the admission policy this authorization server
+// applies to URL-shaped client identifiers. Unlike a customer's user-session
+// issuer, Platform MCP is a single Gram-owned authorization server with no
+// per-issuer configuration and no custom-URL table, so the mode is a constant
+// and admission.OutcomeCheckCustom — the branch asking the caller to consult
+// an issuer's own URLs — is a denial here rather than a database lookup.
+//
+// ModePresets admits the reviewed vendor catalog, which is the whole point:
+// the clients that reach this endpoint are the agent harnesses Gram supports,
+// and every one of them is a catalog entry.
+const platformCIMDAdmissionMode = admission.ModePresets
 
 //go:embed oauth_page.html
 var oauthPageHTML string
@@ -96,38 +114,52 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // OAuthHTTP serves the Platform MCP-owned authorization server. It deliberately does
 // not import hosted MCP runtime or persistence packages.
 type OAuthHTTP struct {
-	baseURL       *url.URL
-	environment   string
-	cache         cache.TypedCacheObject[oauthChallenge]
-	store         platformoauth.Store
-	identity      BrowserIdentity
-	gate          Gate
-	authorizer    Authorizer
-	organizations OrganizationSelector
-	signer        *sessiontokens.Signer
-	credentials   *CredentialCodec
-	issuer        string
-	audience      string
-	telemetry     OAuthTelemetry
-	now           func() time.Time
+	baseURL          *url.URL
+	environment      string
+	logger           *slog.Logger
+	cache            cache.TypedCacheObject[oauthChallenge]
+	clientMetadata   *cimd.Resolver
+	admissionMetrics *admission.Metrics
+	admissionMode    admission.Mode
+	store            platformoauth.Store
+	identity         BrowserIdentity
+	gate             Gate
+	authorizer       Authorizer
+	organizations    OrganizationSelector
+	signer           *sessiontokens.Signer
+	credentials      *CredentialCodec
+	issuer           string
+	audience         string
+	telemetry        OAuthTelemetry
+	now              func() time.Time
 }
 
 type OAuthHTTPConfig struct {
-	BaseURL       *url.URL
-	Environment   string
-	Cache         cache.Cache
-	Store         platformoauth.Store
-	Identity      BrowserIdentity
-	Gate          Gate
-	Authorizer    Authorizer
-	Organizations OrganizationSelector
-	Signer        *sessiontokens.Signer
-	Encryption    *encryption.Client
-	Telemetry     OAuthTelemetry
+	BaseURL        *url.URL
+	Environment    string
+	Logger         *slog.Logger
+	MeterProvider  metric.MeterProvider
+	Cache          cache.Cache
+	Store          platformoauth.Store
+	Identity       BrowserIdentity
+	Gate           Gate
+	Authorizer     Authorizer
+	Organizations  OrganizationSelector
+	Signer         *sessiontokens.Signer
+	Encryption     *encryption.Client
+	GuardianPolicy *guardian.Policy
+	Telemetry      OAuthTelemetry
+
+	// TestOnlyCIMDAdmissionMode overrides the admission policy applied to
+	// URL-shaped client identifiers. Production composition leaves it empty,
+	// selecting platformCIMDAdmissionMode; tests set admission.ModeOpen so a
+	// document can be served from a local HTTPS test server rather than from
+	// a catalog vendor's real one.
+	TestOnlyCIMDAdmissionMode admission.Mode
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
-	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
+	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil || config.Logger == nil || config.MeterProvider == nil || config.GuardianPolicy == nil {
 		return nil, errors.New("platform oauth http configuration is incomplete")
 	}
 	credentials, err := NewCredentialCodec(config.Encryption)
@@ -139,21 +171,26 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build platform oauth issuer: %w", err)
 	}
+	logger := config.Logger.With(attr.SlogComponent("platform-mcp-oauth"))
 	return &OAuthHTTP{
-		baseURL:       &baseURL,
-		environment:   config.Environment,
-		cache:         cache.NewTypedObjectCache[oauthChallenge](nil, config.Cache, cache.SuffixNone),
-		store:         config.Store,
-		identity:      config.Identity,
-		gate:          config.Gate,
-		authorizer:    config.Authorizer,
-		organizations: config.Organizations,
-		signer:        config.Signer,
-		credentials:   credentials,
-		issuer:        issuer,
-		audience:      issuer,
-		telemetry:     config.Telemetry,
-		now:           time.Now,
+		baseURL:          &baseURL,
+		environment:      config.Environment,
+		logger:           logger,
+		cache:            cache.NewTypedObjectCache[oauthChallenge](nil, config.Cache, cache.SuffixNone),
+		clientMetadata:   cimd.NewResolver(config.GuardianPolicy, config.MeterProvider, logger),
+		admissionMetrics: admission.NewMetrics(config.MeterProvider, logger),
+		admissionMode:    conv.Default(config.TestOnlyCIMDAdmissionMode, platformCIMDAdmissionMode),
+		store:            config.Store,
+		identity:         config.Identity,
+		gate:             config.Gate,
+		authorizer:       config.Authorizer,
+		organizations:    config.Organizations,
+		signer:           config.Signer,
+		credentials:      credentials,
+		issuer:           issuer,
+		audience:         issuer,
+		telemetry:        config.Telemetry,
+		now:              time.Now,
 	}, nil
 }
 
@@ -203,6 +240,16 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"grant_types_supported":                 usersessions.SupportedGrantTypes,
 			"token_endpoint_auth_methods_supported": usersessions.SupportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
+
+			// Advertises inbound Client ID Metadata Document support
+			// (draft-ietf-oauth-client-id-metadata-document-02 §6). Clients
+			// that implement CIMD present their document URL as client_id and
+			// skip dynamic registration entirely; the ones that do not keep
+			// using /register, which stays open. Always true: this server
+			// admits the reviewed catalog unconditionally, so unlike a
+			// customer issuer there is no configuration under which claiming
+			// support would steer a client into a guaranteed-failure flow.
+			"client_id_metadata_document_supported": true,
 		})
 	})
 }
@@ -263,8 +310,18 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
-		client, err := s.store.GetClient(r.Context(), request.ClientID)
-		if err != nil || !s.clientRedirectAllowed(client, request.RedirectURI) {
+		// A URL-shaped client_id is resolved from its Client ID Metadata
+		// Document here and nowhere else: the consent and token legs re-read
+		// the client by client_id, so the row has to exist before the flow
+		// leaves /authorize. Resolution failures are surfaced inline rather
+		// than redirected, per RFC 6749 §4.1.2.1 — the redirect_uri of an
+		// unresolved client cannot be trusted.
+		client, err := s.resolveAuthorizeClient(r.Context(), request.ClientID)
+		if err != nil {
+			s.writeClientResolveError(r.Context(), w, err)
+			return
+		}
+		if !s.clientRedirectAllowed(client, request.RedirectURI) {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
 			return
 		}
@@ -942,8 +999,176 @@ func (s *OAuthHTTP) url(segment string) string {
 	return s.issuer + "/" + segment
 }
 
+// clientRedirectAllowed reports whether a request may be redirected to
+// redirectURI for this client. The RFC 8252 §7.3 variable-loopback-port
+// exception is granted to metadata-resolved clients only, which MetadataURI
+// identifies; dynamically registered clients keep byte-exact matching.
 func (s *OAuthHTTP) clientRedirectAllowed(client platformoauth.Client, redirectURI string) bool {
-	return slices.Contains(client.RedirectURIs, redirectURI)
+	return oauthwire.RedirectURIMatches(client.RedirectURIs, redirectURI, client.MetadataURI != "")
+}
+
+// errClientMetadataFetch marks a transport-level document fetch failure. The
+// wrapped cause may name internal network conditions (guardian SSRF denials,
+// DNS errors), so handlers log it and render a generic OAuth error rather
+// than echoing it to the client.
+var errClientMetadataFetch = errors.New("client metadata document fetch failed")
+
+// resolveAuthorizeClient resolves the registered client behind a presented
+// client_id. An opaque identifier is a plain registry lookup; a URL-shaped one
+// is a Client ID Metadata Document reference, admitted against the reviewed
+// catalog, then fetched and validated whenever its cached copy has lapsed.
+//
+// Error contract, in the order callers must check it:
+//
+//   - *admission.DenialError: the catalog refused this client_id before any
+//     fetch ran; render invalid_client with the error's own Description
+//   - *oauthwire.Error: a spec or policy rejection carrying a client-safe
+//     code and description
+//   - errClientMetadataFetch: document fetch failure; log it, render generic
+//   - platformoauth.ErrNotFound / ErrRevoked: unknown client
+func (s *OAuthHTTP) resolveAuthorizeClient(ctx context.Context, clientID string) (platformoauth.Client, error) {
+	if !cimd.IsClientIDURL(clientID) {
+		client, err := s.store.GetClient(ctx, clientID)
+		if err != nil {
+			return platformoauth.Client{}, fmt.Errorf("get platform oauth client: %w", err)
+		}
+		return client, nil
+	}
+
+	// Admission runs before the resolver, so a denied client_id costs a map
+	// lookup — no outbound request, no fetch timeout. It also applies its own
+	// length bound ahead of the resolver's, keeping an oversized URL off the
+	// registry lookup below.
+	decision := admission.Evaluate(s.admissionMode, clientID)
+	if decision.Outcome == admission.OutcomeAdmit {
+		s.admissionMetrics.RecordAdmitted(ctx, s.admissionMode, decision.Admit)
+	} else {
+		// OutcomeCheckCustom asks the caller to consult an issuer's own
+		// allowlist. This server has none, so the catalog is the whole
+		// policy and a miss is final.
+		reason := decision.Denial
+		if decision.Outcome == admission.OutcomeCheckCustom {
+			reason = admission.DenialNotListed
+		}
+		s.admissionMetrics.RecordDenied(ctx, s.admissionMode, reason)
+		// The presented client_id goes in the log and never in a metric
+		// dimension: it is the URL an operator needs when diagnosing a
+		// catalog miss, and it is exactly the value too unbounded to be a
+		// metric label.
+		s.logger.InfoContext(ctx, "platform mcp cimd admission denied",
+			attr.SlogOAuthClientID(admission.TruncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(s.admissionMode),
+			attr.SlogCIMDAdmissionOutcome(reason),
+		)
+		return platformoauth.Client{}, &admission.DenialError{Mode: s.admissionMode, Reason: reason}
+	}
+
+	// The stored client is the document projection AND its cache, so it is
+	// read before the fetch rather than only written after one. A miss is the
+	// ordinary first-contact case, not an error; it leaves the cache state
+	// zero, which forces a full fetch and is what keeps a cache-hit outcome
+	// from ever arriving without a stored client to serve.
+	var cached *platformoauth.Client
+	switch existing, err := s.store.GetClient(ctx, clientID); {
+	case err == nil:
+		cached = &existing
+	case errors.Is(err, platformoauth.ErrNotFound), errors.Is(err, platformoauth.ErrRevoked):
+	default:
+		return platformoauth.Client{}, fmt.Errorf("get platform oauth cimd client: %w", err)
+	}
+
+	// Only a metadata-resolved client is a cache. A secret-bearing row that
+	// somehow shares this client_id must still force a fetch: its metadata
+	// never came from a document, and the upsert's guard refuses to rewrite
+	// it anyway. A client with no expiry still contributes its validator —
+	// the two are independent, and clearing only the expiry is a request to
+	// revalidate now, not to discard what revalidation needs.
+	var state cimd.CacheState
+	if cached != nil && cached.MetadataURI != "" {
+		state = cimd.CacheState{ExpiresAt: cached.MetadataCacheExpiresAt, ETag: cached.MetadataETag}
+	}
+
+	result, err := s.clientMetadata.Resolve(ctx, clientID, state)
+	if err != nil {
+		// Fail closed on every refresh failure, leaving the stored client as
+		// it was: -02 §5.1 says a fetch failure SHOULD abort the authorization
+		// request, so an expired document is never served stale to keep a
+		// flow alive.
+		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
+			return platformoauth.Client{}, fmt.Errorf("resolve client metadata document: %w", err)
+		}
+		return platformoauth.Client{}, fmt.Errorf("%w: %w", errClientMetadataFetch, err)
+	}
+
+	if result.Outcome != cimd.CacheOutcomeRefreshed && cached == nil {
+		// Unreachable: the resolver reports a cache outcome only for cache
+		// state this function passed in, and it passes none without a stored
+		// client. Checked rather than dereferenced because the alternative is
+		// a panic on an unauthenticated endpoint.
+		return platformoauth.Client{}, fmt.Errorf("client metadata resolver reported %q outcome with no stored client", result.Outcome)
+	}
+
+	switch result.Outcome {
+	case cimd.CacheOutcomeCached:
+		return *cached, nil
+	case cimd.CacheOutcomeNotModified:
+		client, err := s.store.RefreshClientMetadataCache(ctx, platformoauth.ClientMetadataCache{
+			ClientID: clientID,
+			CacheTTL: result.TTL,
+			ETag:     result.ETag,
+		})
+		if err != nil {
+			// Not-found means the client stopped being an updatable
+			// metadata-resolved one between the read and the write; treat it
+			// as unknown rather than serving the client the 304 was about.
+			return platformoauth.Client{}, fmt.Errorf("refresh platform oauth client metadata cache: %w", err)
+		}
+		return client, nil
+	case cimd.CacheOutcomeRefreshed:
+		client, err := s.store.UpsertClientFromCIMD(ctx, platformoauth.ClientMetadataDocument{
+			ClientID:     clientID,
+			Name:         result.Document.ClientName,
+			RedirectURIs: result.Document.RedirectURIs,
+			CacheTTL:     result.TTL,
+			ETag:         result.ETag,
+		})
+		if err != nil {
+			return platformoauth.Client{}, fmt.Errorf("upsert platform oauth cimd client: %w", err)
+		}
+		return client, nil
+	default:
+		return platformoauth.Client{}, fmt.Errorf("unknown client metadata resolve outcome %q", result.Outcome)
+	}
+}
+
+// writeClientResolveError renders a client resolution failure as an inline
+// OAuth error. Every branch is a rejection the client may see except the
+// transport failure, whose cause is logged and replaced with a generic
+// retryable response.
+func (s *OAuthHTTP) writeClientResolveError(ctx context.Context, w http.ResponseWriter, err error) {
+	if denial, ok := errors.AsType[*admission.DenialError](err); ok {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", denial.Description())
+		return
+	}
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		writeOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		return
+	}
+	if errors.Is(err, errClientMetadataFetch) {
+		// A fetch failure is transient from the client's perspective — the
+		// document host may just be briefly unreachable — so signal
+		// retry-later rather than a permanent invalid_client that would make
+		// SDKs stop retrying.
+		s.logger.InfoContext(ctx, "platform mcp client metadata document fetch failed", attr.SlogError(err))
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not fetch client metadata document")
+		return
+	}
+	if errors.Is(err, platformoauth.ErrNotFound) || errors.Is(err, platformoauth.ErrRevoked) {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
+		return
+	}
+	s.logger.ErrorContext(ctx, "resolve platform mcp oauth client", attr.SlogError(err))
+	writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not resolve client")
 }
 
 func clientCredentials(r *http.Request) (string, string) {
