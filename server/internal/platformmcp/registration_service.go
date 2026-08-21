@@ -78,6 +78,7 @@ type RegistrationService struct {
 	dashboardURL               *url.URL
 	identityProviderAttachment CatalogIdentityProviderAttachment
 	directRemoteInspector      DirectRemoteInspector
+	lifecycleMetadata          *LifecycleMetadataService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 }
@@ -137,6 +138,23 @@ func (s *RegistrationService) WithDirectRemoteInspector(inspector DirectRemoteIn
 		s.directRemoteInspector = inspector
 	}
 	return s
+}
+
+// WithLifecycleMetadata enables narrow, Platform-owned MCP display-name updates.
+// The command is injected from server composition to share the dashboard domain
+// implementation without importing mcpservers into Platform MCP.
+func (s *RegistrationService) WithLifecycleMetadata(metadata *LifecycleMetadataService) *RegistrationService {
+	if s != nil {
+		s.lifecycleMetadata = metadata
+	}
+	return s
+}
+
+func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
+	if s == nil || s.lifecycleMetadata == nil {
+		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleMetadata.Update(ctx, principal, input)
 }
 
 // WithDashboardURL supplies the configured dashboard origin used only to build
